@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# moni
 
-## Getting Started
+子ども・保護者・投資家/起業家を対象にした、本番向け起業支援アプリの土台です。
 
-First, run the development server:
+## 実装済み
+
+- Next.js + TypeScript + Tailwind
+- Supabase接続対応
+- Googleログイン（Supabase OAuth）
+- メールログイン（Magic Link）
+- 6機能UI（記事、AIメンター、マッチング、プログラム、ピッチ、チャット/通話デモ）
+- 対象別ビュー切替（子ども / 保護者 / 投資家）
+
+## ローカル起動
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`http://localhost:3000` を開く。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### ローカル起動（安定版: EMFILE対策）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+開発環境によっては `too many open files (EMFILE)` が出ることがあります。その場合は polling を使う起動に切り替えてください。
 
-## Learn More
+```bash
+npm run dev:local
+```
 
-To learn more about Next.js, take a look at the following resources:
+`http://127.0.0.1:3002` を開く。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 本番相当で起動（build/start）
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+npm run start:local
+```
 
-## Deploy on Vercel
+## Supabase設定
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. `.env.example` を `.env.local` にコピー
+2. `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定
+3. Supabase SQL Editor で `supabase/schema.sql` を実行
+4. Supabase Auth > Providers で Google を有効化
+5. Google Cloud Console で OAuthクライアントを作成し、SupabaseにClient ID/Secretを設定
+6. Redirect URL をSupabase指定URLと `http://localhost:3000` に合わせる
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 公開（Vercel推奨）
+
+- VercelにリポジトリをImportしてデプロイ
+- VercelのEnvironment Variablesに以下を設定
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `OPENAI_API_KEY`（使う場合のみ）
+- Supabase Auth > URL Configuration の Site URL をVercelのURLに設定
+- Google Provider の Redirect URL も同様に本番URLに合わせる
+
+## 現在のDB接続状況
+
+- 記事機能: Supabase `articles` へ読み書き対応
+- 記事機能: 投資家側で `draft/published` 切替対応
+- ピッチ機能: Supabase `pitches` へ読み書き対応（応援数更新含む）
+- チャット機能: Supabase `chat_messages` へ送信/取得 + Realtime受信
+- 既読/未読: Supabase `chat_reads` で最終既読時刻を保持
+- 対象ロール・プロフィール: Supabase `profiles`（表示名/目標）へ保存/読込対応
+- マッチング機能: Supabase `profiles.goal` 検索で実データマッチング
+- AIメンター: `/api/mentor` 経由でAI応答（`OPENAI_API_KEY` 未設定時は安全フォールバック）
+- 通話: JitsiルームURLを生成して即参加可能
+
+## 次の実装優先（本番化）
+
+- Presence付きRealtimeチャット（入室中ユーザー表示）
+- 通話SDK（Daily or Agora）実装
+- 管理者ロールと審査ワークフロー
+- 子ども向けAI安全フィルタ（モデレーション + NGワード制御）
