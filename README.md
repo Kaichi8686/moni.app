@@ -7,7 +7,7 @@
 - Next.js + TypeScript + Tailwind
 - Supabase接続対応
 - Googleログイン（Supabase OAuth）
-- メールログイン（Magic Link）
+- メールログイン（Magic Link / Email+Password）
 - 6機能UI（記事、AIメンター、マッチング、プログラム、ピッチ、チャット/通話デモ）
 - 対象別ビュー切替（子ども / 保護者 / 投資家）
 
@@ -53,6 +53,7 @@ npm run start:local
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - `OPENAI_API_KEY`（使う場合のみ）
+  - `OPENAI_MODEL`（任意。未設定時は `gpt-4.1-mini`）
 - Supabase Auth > URL Configuration の Site URL をVercelのURLに設定
 - Google Provider の Redirect URL も同様に本番URLに合わせる
 
@@ -66,6 +67,7 @@ npm run start:local
 - 対象ロール・プロフィール: Supabase `profiles`（表示名/目標）へ保存/読込対応
 - マッチング機能: Supabase `profiles.goal` 検索で実データマッチング
 - AIメンター: `/api/mentor` 経由でAI応答（`OPENAI_API_KEY` 未設定時は安全フォールバック）
+- AIメンター（アイデア相談）: 課題定義→仮説→検証→次アクションの思考フレームを自動適用
 - 通話: JitsiルームURLを生成して即参加可能
 
 ## 次の実装優先（本番化）

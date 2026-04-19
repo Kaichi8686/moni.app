@@ -18,13 +18,30 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#fafafa",
 };
 
 export const metadata: Metadata = {
   metadataBase: siteUrl ? new URL(siteUrl) : undefined,
-  title: "moni",
-  description: "子ども・保護者・投資家をつなぐ起業支援アプリ",
+  title: "moni — 学生の企画と実行を加速",
+  description:
+    "起業・探究に本気の学生向け。AIで壁打ち、タイムラインで発信、検索とチャットで仲間とつながり、知恵袋とピッチで検証。行動と記録をひとつの場所に。",
+  openGraph: siteUrl
+    ? {
+        type: "website",
+        locale: "ja_JP",
+        url: siteUrl,
+        siteName: "moni",
+        title: "moni — 学生の企画と実行を加速",
+        description:
+          "企画を実行と記録に変える。AI・タイムライン・マッチング・知恵袋・ピッチがひとつの場所に。",
+      }
+    : undefined,
+  twitter: {
+    card: "summary_large_image",
+    title: "moni — 学生の企画と実行を加速",
+    description: "企画を実行と記録に変える学生向けプラットフォーム。",
+  },
   applicationName: "moni",
   appleWebApp: {
     capable: true,
@@ -52,7 +69,7 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-dvh min-h-[100dvh] flex flex-col bg-[var(--background)] touch-manipulation">
+      <body className="min-h-dvh min-h-[100dvh] flex flex-col touch-manipulation">
         {children}
       </body>
     </html>

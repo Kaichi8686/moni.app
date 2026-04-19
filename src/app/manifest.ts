@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "moni",
     short_name: "moni",
-    description: "子ども・保護者・投資家をつなぐ起業支援アプリ",
+    description: "起業・探究に本気の学生向け。企画の壁打ちから仲間・実行・記録まで。",
     start_url: "/",
     scope: "/",
     display: "standalone",

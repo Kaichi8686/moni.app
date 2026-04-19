@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+/* デザインシステム: 制限されたパレット・8pxベースの余白意識・タイポ階層 */
 :root {
-  --background: #f6f4ff;
-  --foreground: #262626;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+  --border: rgba(24, 24, 27, 0.08);
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --ring: rgba(79, 70, 229, 0.22);
 }
 
 @theme inline {
@@ -14,35 +21,48 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* アプリはインスタ風ライト UI 固定（ダークでも同じトーン） */
+    /* ライトUI固定（ダークでも同じトーン） */
     --background: #fafafa;
-    --foreground: #262626;
+    --foreground: #18181b;
   }
 }
 
 html {
   overflow-x: clip;
   -webkit-text-size-adjust: 100%;
-  /* iOS セーフエリア（ノッチ・ホームバー）。固定ナビは page 側で bottom を処理済み */
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
 
 body {
   background-color: var(--background);
-  background-image: linear-gradient(
-    165deg,
-    #faf8ff 0%,
-    #fff7f0 32%,
-    #f0f7ff 65%,
-    #f5f5f7 100%
-  );
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(79, 70, 229, 0.06), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(24, 24, 27, 0.03), transparent 45%),
+    linear-gradient(180deg, #fafafa 0%, #f4f4f5 100%);
   background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
-  /* iOS Safari の古い 100vh ずれ対策 */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  letter-spacing: -0.011em;
   min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
-  -webkit-tap-highlight-color: rgba(0, 149, 246, 0.15);
+  -webkit-tap-highlight-color: rgba(79, 70, 229, 0.12);
+}
+
+::selection {
+  background-color: rgba(79, 70, 229, 0.18);
+  color: #1e1b4b;
+}
+
+/* マーケLP表示中のみスムーズスクロール（アニメーション嫌い対策つき） */
+html.moni-landing-active {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.moni-landing-active {
+    scroll-behavior: auto;
+  }
 }

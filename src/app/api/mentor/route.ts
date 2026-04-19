@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 
 const blockedWords = ["自傷", "暴力", "死にたい", "いじめ"];
+const ideaKeywords = ["アイデア", "仮説", "検証", "課題", "ソリューション", "ピッチ", "MVP", "実験", "ニーズ"];
 
 function containsBlockedWord(text: string) {
   return blockedWords.some((word) => text.includes(word));
+}
+
+function shouldUseIdeaMode(messages: MentorApiMessage[]) {
+  const joined = messages
+    .slice(-8)
+    .map((m) => m.content.toLowerCase())
+    .join("\n");
+  return ideaKeywords.some((kw) => joined.includes(kw.toLowerCase()));
+}
+
+function latestUserText(messages: MentorApiMessage[]) {
+  const last = [...messages].reverse().find((m) => m.role === "user");
+  return last?.content?.trim() ?? "";
 }
 
 export type MentorApiMessage = { role: "user" | "assistant"; content: string };
@@ -34,6 +48,10 @@ export async function POST(req: Request) {
     }
 
     const history = messages.slice(-24);
+    const totalChars = history.reduce((acc, m) => acc + m.content.length, 0);
+    if (totalChars > 6000) {
+      return NextResponse.json({ error: "入力が長すぎます。要点を短くして送ってください。" }, { status: 400 });
+    }
 
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
@@ -44,7 +62,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const system = `あなたは子ども・若者とLINEやDMで話しているような、人間らしい日本語で返す相手です。
+    const systemBase = `あなたは子ども・若者とLINEやDMで話しているような、人間らしい日本語で返す相手です。
 
 【話し方】
 - です・ます調で、堅すぎず軽すぎない。ロボットっぽい言い回し（「〜について回答します」「以下の点に留意」など）は使わない。
@@ -59,6 +77,29 @@ export async function POST(req: Request) {
 
 【安全】
 - 危険・違法・深刻な心身の問題は丁寧に断り、大人や専門家に相談するよう促す。`;
+    const useIdeaMode = shouldUseIdeaMode(history);
+    const ideaModeInstruction = `
+
+【アイデア作成モード】
+- アイデア相談のときは、次の思考順で整理する:
+  1) 課題定義（誰の、どんな困りごとか）
+  2) 仮説（なぜその解決が効くか）
+  3) 検証（最小で何を確かめるか）
+  4) 次アクション（24時間以内にやる1歩）
+- 断定しすぎず、検証可能な表現を使う。
+- 回答は長すぎない。必要なら短い見出しや箇条書きを使って読みやすくする。
+- 相談者がすでに案を持っている場合は、否定よりも改善案を示す。`;
+    const ideaResponseTemplate = `
+
+【回答フォーマット（アイデア相談時）】
+- 課題定義:
+- 仮説:
+- 検証:
+- 次アクション(24h):
+- 代替案(任意):`;
+    const system = `${systemBase}${useIdeaMode ? `${ideaModeInstruction}\n${ideaResponseTemplate}` : ""}`;
+    const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
+    const userFocus = latestUserText(history);
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -66,13 +107,22 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(25_000),
       body: JSON.stringify({
-        model: "gpt-4.1-mini",
+        model,
         messages: [{ role: "system", content: system }, ...history],
         max_tokens: 900,
-        temperature: 0.88,
+        temperature: useIdeaMode ? 0.62 : 0.88,
         frequency_penalty: 0.25,
         presence_penalty: 0.08,
+        ...(useIdeaMode
+          ? {
+              metadata: {
+                mode: "idea",
+                focus: userFocus.slice(0, 120),
+              },
+            }
+          : {}),
       }),
     });
 
