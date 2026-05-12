@@ -52,6 +52,22 @@ export default function AuthCallbackPage() {
         }
       }
 
+      // メール確認リンクが #access_token / #refresh_token を付ける構成のとき（implicit）
+      const hashRaw = window.location.hash.replace(/^#/, "");
+      if (hashRaw) {
+        const hp = new URLSearchParams(hashRaw);
+        const access_token = hp.get("access_token");
+        const refresh_token = hp.get("refresh_token");
+        if (access_token && refresh_token) {
+          const { error: hashErr } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (hashErr) {
+            setNote(`ログインに失敗: ${hashErr.message}`);
+            return;
+          }
+          window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+        }
+      }
+
       const { data, error } = await supabase.auth.getSession();
       if (error) {
         setNote(`セッション取得に失敗: ${error.message}`);

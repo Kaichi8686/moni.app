@@ -54,6 +54,8 @@ npm run start:local
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - `OPENAI_API_KEY`（使う場合のみ）
   - `OPENAI_MODEL`（任意。未設定時は `gpt-4.1-mini`）
+  - `DAILY_API_KEY`（Daily REST API key）
+  - `DAILY_DOMAIN`（例: `your-team.daily.co`）
 - Supabase Auth > URL Configuration の Site URL をVercelのURLに設定
 - Google Provider の Redirect URL も同様に本番URLに合わせる
 
@@ -68,7 +70,7 @@ npm run start:local
 - マッチング機能: Supabase `profiles.goal` 検索で実データマッチング
 - AIメンター: `/api/mentor` 経由でAI応答（`OPENAI_API_KEY` 未設定時は安全フォールバック）
 - AIメンター（アイデア相談）: 課題定義→仮説→検証→次アクションの思考フレームを自動適用
-- 通話: JitsiルームURLを生成して即参加可能
+- 通話: Dailyでアプリ内通話（チャット画面内で参加）
 
 ## 次の実装優先（本番化）
 

@@ -7,6 +7,7 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles add column if not exists goal text;
+alter table public.profiles add column if not exists avatar_url text;
 
 create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),
@@ -221,7 +222,45 @@ alter table public.follows enable row level security;
 
 create policy "read follows" on public.follows for select using (true);
 create policy "insert own follows" on public.follows for insert with check (auth.uid() = follower_id);
+-- 承認フロー: following 側が pending の follow_requests に対応する行を INSERT する
+create policy "insert follows when approving follow request" on public.follows for insert with check (
+  auth.uid() = following_id
+  and exists (
+    select 1
+    from public.follow_requests fr
+    where fr.follower_id = follower_id
+      and fr.following_id = following_id
+      and fr.status = 'pending'
+  )
+);
 create policy "delete own follows" on public.follows for delete using (auth.uid() = follower_id);
+
+create table if not exists public.follow_requests (
+  id uuid primary key default gen_random_uuid(),
+  follower_id uuid not null references auth.users (id) on delete cascade,
+  following_id uuid not null references auth.users (id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  unique (follower_id, following_id)
+);
+
+alter table public.follow_requests enable row level security;
+
+create policy "read own follow requests" on public.follow_requests for select using (
+  auth.uid() = follower_id or auth.uid() = following_id
+);
+create policy "insert own follow requests" on public.follow_requests for insert with check (
+  auth.uid() = follower_id and status = 'pending'
+);
+create policy "update own incoming follow requests" on public.follow_requests for update using (
+  auth.uid() = following_id
+);
+create policy "delete own pending follow requests" on public.follow_requests for delete using (
+  auth.uid() = follower_id and status = 'pending'
+);
+
+alter table public.projects add column if not exists business_type text check (business_type in ('maker', 'software', 'social'));
 
 -- 画像バケット（公開読み取り・自分のフォルダにのみアップロード）
 insert into storage.buckets (id, name, public)
