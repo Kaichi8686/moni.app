@@ -48,7 +48,16 @@ type Ctx = {
   movePhase: (phaseId: string, deltaDays: number) => Promise<void>;
   resizePhase: (phaseId: string, deltaDays: number) => Promise<void>;
   updateIssueStatus: (issueId: string, status: Issue["status"]) => Promise<void>;
-  createIssue: (input: { title: string; status: Issue["status"]; priority: Issue["priority"] }) => Promise<void>;
+  createIssue: (input: {
+    title: string;
+    description?: string;
+    status: Issue["status"];
+    priority: Issue["priority"];
+  }) => Promise<void>;
+  updateIssue: (
+    issueId: string,
+    patch: { title?: string; description?: string | null; priority?: Issue["priority"] },
+  ) => Promise<void>;
 };
 
 const WorkspaceCtx = createContext<Ctx | null>(null);
@@ -213,11 +222,17 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   );
 
   const createIssue = useCallback(
-    async (input: { title: string; status: Issue["status"]; priority: Issue["priority"] }) => {
+    async (input: {
+      title: string;
+      description?: string;
+      status: Issue["status"];
+      priority: Issue["priority"];
+    }) => {
       if (!supabase || !canEdit || !uid) return;
       const { error: err } = await supabase.from("project_issues").insert({
         project_id: projectId,
         title: input.title.trim(),
+        description: (input.description ?? "").trim(),
         status: input.status,
         priority: input.priority,
         labels: [],
@@ -226,6 +241,20 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       await reload();
     },
     [canEdit, projectId, reload, uid],
+  );
+
+  const updateIssue = useCallback(
+    async (issueId: string, patch: { title?: string; description?: string | null; priority?: Issue["priority"] }) => {
+      if (!supabase || !canEdit) return;
+      const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (patch.title !== undefined) row.title = patch.title.trim();
+      if (patch.description !== undefined) row.description = patch.description === null ? "" : String(patch.description).trim();
+      if (patch.priority !== undefined) row.priority = patch.priority;
+      const { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err) throw new Error(err.message);
+      await reload();
+    },
+    [canEdit, reload],
   );
 
   const value = useMemo(
@@ -245,6 +274,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         resizePhase,
         updateIssueStatus,
         createIssue,
+        updateIssue,
       }) satisfies Ctx,
     [
       projectId,
@@ -259,8 +289,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       createPhase,
       movePhase,
       resizePhase,
-      updateIssueStatus,
-      createIssue,
+        updateIssueStatus,
+        createIssue,
+        updateIssue,
     ],
   );
 

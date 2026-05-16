@@ -31,10 +31,12 @@ export function KanbanBoard({
   issues,
   nameByUserId,
   onStatusChange,
+  onIssueOpen,
 }: {
   issues: Issue[];
   nameByUserId: Record<string, string>;
   onStatusChange: (issueId: string, status: IssueStatus) => void;
+  onIssueOpen?: (issue: Issue) => void;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -58,7 +60,12 @@ export function KanbanBoard({
             {issues
               .filter((i) => (c === "backlog" ? i.status === "backlog" || i.status === "cancelled" : i.status === c))
               .map((i) => (
-                <IssueCard key={i.id} issue={i} assigneeName={i.assigneeId ? nameByUserId[i.assigneeId] : undefined} />
+                <IssueCard
+                  key={i.id}
+                  issue={i}
+                  assigneeName={i.assigneeId ? nameByUserId[i.assigneeId] : undefined}
+                  onOpen={onIssueOpen}
+                />
               ))}
           </Col>
         ))}
