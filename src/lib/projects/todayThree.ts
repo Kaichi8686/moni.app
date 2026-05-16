@@ -28,7 +28,7 @@ function metaConsult(meta: ProjectTaskMeta): boolean {
     /\u76f8\u8ac7|\u805e\u304f|\u983c\u3080|\u8cea\u554f/.test(meta.consultHint ?? "");
 }
 
-/** 今日の3つ: いちばん重要 / すぐ終わる / 相談・頼る */
+/** 今日やるタスクのおすすめ3件（優先・短時間・相談） */
 export function pickTodayThree(tasks: TaskLikeForPick[]): {
   important: TaskLikeForPick | null;
   quick: TaskLikeForPick | null;

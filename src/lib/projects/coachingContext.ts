@@ -1,13 +1,13 @@
 export type CoachingContext = {
-  /** 叶えたいこと（短文） */
+  /** 達成したいこと（短文・任意） */
   dreamStatement?: string;
-  /** いま困っていること */
+  /** 困っていること（任意） */
   stuckNow?: string;
-  /** ざっくり期限のメモ（例: 夏まで・3か月以内） */
+  /** 期限の目安（例: 夏まで・3か月以内） */
   roughDeadline?: string;
   /** オンボーディングを済ませた日時 ISO */
   onboardingDoneAt?: string;
-  /** 週次ふりかえり（軽量・任意） */
+  /** 週のメモ（任意） */
   weeklyReview?: {
     done?: string;
     learned?: string;

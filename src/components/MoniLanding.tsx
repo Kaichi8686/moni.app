@@ -299,7 +299,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
             <ol className="mx-auto mt-14 grid max-w-3xl gap-7 sm:gap-9">
               {[
                 { step: "01", title: "Googleで登録", body: "学校・個人のメールどちらでも可。ユーザーネームと、探究・ビジネスの関心を書きます。" },
-                { step: "02", title: "進捗を1つ投稿 or 知恵袋で質問", body: "「いま詰まっていること」を一文にすると、返ってきやすいです。" },
+                { step: "02", title: "進捗を1つ投稿 or 知恵袋で質問", body: "困っていることを一文にすると、返ってきやすいです。" },
                 { step: "03", title: "検索で仲間をフォローし、DMで具体化", body: "誰に何を依頼するか、期限はいつか。議題まで落とします。" },
                 { step: "04", title: "AIと整理し、ピッチや記事に落とす", body: "壁打ちの内容をピッチ・記事・発表資料の骨子に。" },
                 { step: "05", title: "知恵袋・投稿で振り返り", body: "いいね数より「次の行動が決まったか」で振り返ると成長が見えます。" },

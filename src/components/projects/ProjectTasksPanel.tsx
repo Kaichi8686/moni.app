@@ -501,7 +501,7 @@ export function ProjectTasksPanel({
           <div className="mt-2 space-y-1">
             <p className="text-sm font-semibold leading-snug text-zinc-900">{task.title}</p>
             {task.roadmap_step_id && roadmapStepTitles[task.roadmap_step_id] ? (
-              <p className="text-[10px] font-medium text-indigo-800">マイルストーン: {roadmapStepTitles[task.roadmap_step_id]}</p>
+              <p className="text-[10px] font-medium text-indigo-800">ロードマップの段階: {roadmapStepTitles[task.roadmap_step_id]}</p>
             ) : null}
           </div>
         ) : (
@@ -516,7 +516,7 @@ export function ProjectTasksPanel({
               if (row) void saveTaskCoachFields(row, { todaySlot: slot });
             }}
           >
-            「今日の3つ」のこの枠に固定
+            「この枠に固定」
           </button>
         ) : null}
       </div>
@@ -584,10 +584,10 @@ export function ProjectTasksPanel({
               ) : null}
               {roadmapLabel ? (
                 <span className="max-w-full truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-indigo-900">
-                  マイルストーン: {roadmapLabel}
+                  ロードマップの段階: {roadmapLabel}
                 </span>
               ) : (
-                <span className="rounded-md bg-zinc-50 px-1.5 py-0.5 text-zinc-400">マイルストーン未割当</span>
+                <span className="rounded-md bg-zinc-50 px-1.5 py-0.5 text-zinc-400">段階に未割り当て</span>
               )}
             </div>
             {canEdit ? (
@@ -607,10 +607,10 @@ export function ProjectTasksPanel({
                       }
                     }}
                   >
-                    <option value="not_started">これから</option>
-                    <option value="in_progress">いま動いている</option>
-                    <option value="blocked">いま詰まっている</option>
-                    <option value="waiting">待ち</option>
+                    <option value="not_started">未着手</option>
+                    <option value="in_progress">進行中</option>
+                    <option value="blocked">中断</option>
+                    <option value="waiting">保留</option>
                     <option value="done">完了</option>
                   </select>
                 </label>
@@ -627,7 +627,7 @@ export function ProjectTasksPanel({
                         void patchTaskStatus(task, "blocked", code);
                       }}
                     >
-                      <option value="">選ぶとヒントが出ます</option>
+                      <option value="">理由を選ぶと提案が表示されます</option>
                       {BLOCKED_REASON_OPTIONS.map((o) => (
                         <option key={o.code} value={o.code}>
                           {o.label}
@@ -649,13 +649,13 @@ export function ProjectTasksPanel({
           ) : null}
           {meta.whyThisMatters?.trim() ? (
             <p className="text-[12px] leading-relaxed text-zinc-600">
-              <span className="font-semibold text-zinc-800">この一歩の意味: </span>
+              <span className="font-semibold text-zinc-800">目的・メモ: </span>
               {meta.whyThisMatters}
             </p>
           ) : null}
           {workSt === "blocked" && blockedHint && meta.blockedReasonCode ? (
-            <div className="rounded-xl border border-amber-100 bg-amber-50/90 px-3 py-2 text-[12px] text-amber-950">
-              <p className="font-semibold">止まっているのは前提です。次の候補：</p>
+              <div className="rounded-xl border border-amber-100 bg-amber-50/90 px-3 py-2 text-[12px] text-amber-950">
+              <p className="font-semibold">次に試せること</p>
               <p className="mt-1 leading-relaxed">{blockedHint.message}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {blockedHint.links.map((l) =>
@@ -701,10 +701,10 @@ export function ProjectTasksPanel({
 
           {canEdit ? (
             <details className="rounded-xl border border-zinc-100 bg-zinc-50/50 px-3 py-2">
-              <summary className="cursor-pointer text-[12px] font-semibold text-zinc-800">伴走メモ（時間・意味・完了条件）</summary>
+              <summary className="cursor-pointer text-[12px] font-semibold text-zinc-800">詳細（所要時間・完了条件・メモ）</summary>
               <div className="mt-3 space-y-2 pb-1">
                 <label className="block text-[11px] font-semibold text-zinc-700">
-                  目安時間
+                  所要時間の目安
                   <select
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
                     value={meta.estimatedMinutes ?? ""}
@@ -739,11 +739,11 @@ export function ProjectTasksPanel({
                   />
                 </label>
                 <label className="block text-[11px] font-semibold text-zinc-700">
-                  このタスクの意味
+                  このタスクの目的（任意）
                   <textarea
                     className="mt-1 min-h-[52px] w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
                     defaultValue={meta.whyThisMatters ?? ""}
-                    placeholder="なぜこれが効くか（任意）"
+                    placeholder="なぜこの作業をするか（任意）"
                     disabled={coachBusyId === task.id}
                     onBlur={(e) => {
                       const v = e.target.value.trim();
@@ -753,11 +753,11 @@ export function ProjectTasksPanel({
                   />
                 </label>
                 <label className="block text-[11px] font-semibold text-zinc-700">
-                  相談のヒント（任意）
+                  相談メモ（任意）
                   <input
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-sm"
                     defaultValue={meta.consultHint ?? ""}
-                    placeholder="誰に／何を聞くか"
+                    placeholder="誰に相談するか、何を聞くか"
                     disabled={coachBusyId === task.id}
                     onBlur={(e) => {
                       const v = e.target.value.trim();
@@ -855,12 +855,12 @@ export function ProjectTasksPanel({
 
   const onboardingIdeas = useMemo(() => {
     const d = onboardDream.trim() || projectTitle;
-    const s = onboardStuck.trim() || "いまの不安や不明点";
-    const dl = onboardDeadline.trim() || "ゴールの時期";
+    const s = onboardStuck.trim() || "困っていること";
+    const dl = onboardDeadline.trim() || "期限の目安";
     return [
-      `${dl}までに「${d}」へ近づくため、まず「${s}」を15分だけ言語化する`,
-      `${d} のために必要な情報リストを3つ書き出す`,
-      `${dl} を見ながら、ロードマップの最初のマイルストーンだけ決める`,
+      `${dl}までに「${d}」に近づくため、「${s}」を15分だけ書き出す`,
+      `${d} に必要なことを3つリストにする`,
+      `${dl} を確認し、ロードマップの最初の段階だけ決める`,
     ];
   }, [onboardDream, onboardStuck, onboardDeadline, projectTitle]);
 
@@ -868,30 +868,34 @@ export function ProjectTasksPanel({
 
   return (
     <section id="schedule" className="mx-auto w-full max-w-lg space-y-5 pb-4">
+      <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-[13px] leading-relaxed text-zinc-700">
+        このタブでは<strong className="font-semibold text-zinc-900">タスク</strong>と<strong className="font-semibold text-zinc-900">スケジュール</strong>
+        をまとめます。ロードマップの各段階にタスクを紐づけられます。
+      </p>
       <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/40 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">夢ホーム</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">プロジェクト概要</p>
         <h2 className="mt-1 text-lg font-bold leading-tight text-zinc-900">{dreamHeadline}</h2>
         {dreamWhy ? <p className="mt-2 text-[13px] leading-relaxed text-zinc-700">{dreamWhy}</p> : null}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
           <span className="rounded-full bg-white px-2.5 py-1 text-indigo-950 ring-1 ring-indigo-100">
-            ここまで進みました{" "}
-            {milestoneTotal > 0 ? `マイルストーン ${milestoneDoneCount}/${milestoneTotal}` : "（マイルストーン未作成）"}
+            ロードマップの進捗{" "}
+            {milestoneTotal > 0 ? `完了 ${milestoneDoneCount} / 全 ${milestoneTotal} 段階` : "（ロードマップがまだありません）"}
           </span>
           {nextMilestoneTitle ? (
-            <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-white">次のマイルストーン: {nextMilestoneTitle}</span>
+            <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-white">次に進める段階: {nextMilestoneTitle}</span>
           ) : null}
           {taskStats.blocked > 0 ? (
             <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100">
-              いま詰まっている {taskStats.blocked}
+              中断中のタスク {taskStats.blocked}
             </span>
           ) : null}
           {taskStats.waiting > 0 ? (
-            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-900 ring-1 ring-sky-100">待ち {taskStats.waiting}</span>
+            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-900 ring-1 ring-sky-100">保留 {taskStats.waiting}</span>
           ) : null}
         </div>
         {showOnboardingCue ? (
           <div className="mt-3 rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5">
-            <p className="text-[12px] font-semibold text-zinc-900">まずは3つだけ入力すると、伴走がしやすくなります</p>
+            <p className="text-[12px] font-semibold text-zinc-900">最初に目標などを入力できます（任意・あとから変更可）</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -911,21 +915,21 @@ export function ProjectTasksPanel({
       <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <p className="text-[11px] font-semibold text-zinc-500">今日の3つ</p>
-            <p className="mt-0.5 text-[11px] text-zinc-600">いちばん大事な一つ・すぐ終わる一つ・相談／頼る一つ</p>
+            <p className="text-[11px] font-semibold text-zinc-500">今日やるタスク（おすすめ3件）</p>
+            <p className="mt-0.5 text-[11px] text-zinc-600">優先したい1件・短時間で終わる1件・相談したい1件</p>
           </div>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {renderTodayCard("いちばん大事な1つ", "今日はこれだけでも前進です", todayThree.important, "important")}
-          {renderTodayCard("すぐ終わる1つ", "短時間で達成感をつくる", todayThree.quick, "quick")}
-          {renderTodayCard("相談・頼る1つ", "一人で抱えない", todayThree.consult, "consult")}
+          {renderTodayCard("優先したい1件", "今日まず手を付けるなら", todayThree.important, "important")}
+          {renderTodayCard("短時間で終わる1件", "すぐできるものから", todayThree.quick, "quick")}
+          {renderTodayCard("相談したい1件", "一人で決めずに済ませる", todayThree.consult, "consult")}
         </div>
       </div>
 
       <details className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
         <summary className="cursor-pointer list-none rounded-2xl px-4 py-3 text-sm font-semibold text-zinc-800 marker:content-none [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
-            今週のふりかえり（軽く）
+            今週のメモ（やったこと・気づき・来週）
             <span className="text-xs font-normal text-zinc-400">開く</span>
           </span>
         </summary>
@@ -938,7 +942,7 @@ export function ProjectTasksPanel({
             <textarea
               className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
               defaultValue={weeklyBase.done ?? ""}
-              placeholder="一行でもOK"
+              placeholder="簡単で大丈夫です"
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v === (weeklyBase.done ?? "").trim()) return;
@@ -976,7 +980,7 @@ export function ProjectTasksPanel({
             <textarea
               className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
               defaultValue={weeklyBase.next ?? ""}
-              placeholder="次の一歩だけでも"
+              placeholder="来週の予定（簡単でOK）"
               onBlur={(e) => {
                 const v = e.target.value.trim();
                 if (v === (weeklyBase.next ?? "").trim()) return;
@@ -994,7 +998,7 @@ export function ProjectTasksPanel({
       </details>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-        <p className="text-[11px] font-semibold text-zinc-500">記録・完了ログ</p>
+        <p className="text-[11px] font-semibold text-zinc-500">最近完了したタスク</p>
         <ul className="mt-2 space-y-2">
           {doneTasks.slice(0, 5).map((t) => {
             const m = parseTaskMeta(t.meta);
@@ -1002,14 +1006,14 @@ export function ProjectTasksPanel({
             return (
               <li key={t.id} className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-[12px]">
                 <p className="font-semibold text-zinc-800">{t.title}</p>
-                {ref ? <p className="mt-1 text-zinc-600">学び・メモ: {ref}</p> : null}
+                {ref ? <p className="mt-1 text-zinc-600">メモ: {ref}</p> : null}
                 <p className="mt-0.5 text-[10px] text-zinc-400">
                   {new Date(t.updated_at).toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </p>
               </li>
             );
           })}
-          {doneTasks.length === 0 ? <li className="text-[13px] text-zinc-500">まだありません。ひとつ完了するとここに残ります。</li> : null}
+          {doneTasks.length === 0 ? <li className="text-[13px] text-zinc-500">まだありません。タスクを完了するとここに表示されます。</li> : null}
         </ul>
       </div>
 
@@ -1045,7 +1049,7 @@ export function ProjectTasksPanel({
           className="sticky top-0 z-[5] rounded-2xl border border-zinc-200 bg-white/95 p-3 shadow-md backdrop-blur-sm"
         >
           <p className="text-xs font-semibold text-zinc-700">タスクを追加</p>
-          <p className="mt-0.5 text-[11px] text-zinc-500">夢に直結する「次の一歩」を、動ける言い方で。</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500">内容は短く書くと進めやすくなります。</p>
           <div className="mt-2 flex flex-col gap-2">
             <input
               className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
@@ -1087,7 +1091,7 @@ export function ProjectTasksPanel({
         <>
           {taskStats.active === 0 ? (
             <p className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center text-[13px] text-zinc-500">
-              未完了のタスクはありません。ロードマップから一歩だけ置くか、上から追加してください。
+              未完了のタスクはありません。ロードマップからタスクを追加するか、上のフォームから追加してください。
             </p>
           ) : (
             <>
@@ -1149,7 +1153,7 @@ export function ProjectTasksPanel({
           <div className="max-h-[min(90dvh,640px)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
             <div className="sticky top-0 flex items-center justify-between border-b border-zinc-100 bg-white px-4 py-3">
               <h2 id="coach-onboard-title" className="text-sm font-bold text-zinc-900">
-                はじめの3つ
+                はじめての入力（3項目）
               </h2>
               <button type="button" className="rounded-full p-2 text-lg text-zinc-500 hover:bg-zinc-100" onClick={() => setOnboardingOpen(false)} aria-label="閉じる">
                 ×
@@ -1157,7 +1161,7 @@ export function ProjectTasksPanel({
             </div>
             <form className="space-y-4 px-4 py-4" onSubmit={(e) => void submitOnboarding(e)}>
               <label className="block">
-                <span className="text-xs font-semibold text-zinc-700">叶えたい夢・ゴール</span>
+                <span className="text-xs font-semibold text-zinc-700">達成したいこと</span>
                 <input
                   className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
                   value={onboardDream}
@@ -1166,16 +1170,16 @@ export function ProjectTasksPanel({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold text-zinc-700">いま困っていること・モヤモヤ</span>
+                <span className="text-xs font-semibold text-zinc-700">困っていること（任意）</span>
                 <textarea
                   className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
                   value={onboardStuck}
                   onChange={(e) => setOnboardStuck(e.target.value)}
-                  placeholder="うまく言えなくてもOKです"
+                  placeholder="思いつく範囲でかまいません"
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold text-zinc-700">いつ頃までに（ざっくり）</span>
+                <span className="text-xs font-semibold text-zinc-700">いつ頃までに達成したいか（ざっくり）</span>
                 <input
                   className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
                   value={onboardDeadline}
@@ -1184,7 +1188,7 @@ export function ProjectTasksPanel({
                 />
               </label>
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-3">
-                <p className="text-[11px] font-semibold text-indigo-900">叩き台（そのままタスクにしてもOK）</p>
+                <p className="text-[11px] font-semibold text-indigo-900">タスクの例（コピーして使っても大丈夫です）</p>
                 <ul className="mt-2 list-inside list-disc space-y-1 text-[12px] leading-relaxed text-indigo-950">
                   {onboardingIdeas.map((line) => (
                     <li key={line}>{line}</li>
@@ -1192,10 +1196,10 @@ export function ProjectTasksPanel({
                 </ul>
               </div>
               <button type="submit" className="w-full rounded-xl bg-indigo-700 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-800">
-                保存してはじめる
+                保存して閉じる
               </button>
               <button type="button" className="w-full rounded-xl border border-zinc-200 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50" onClick={() => void skipOnboarding()}>
-                入力せず閉じる
+                閉じる（入力しない）
               </button>
             </form>
           </div>
@@ -1212,23 +1216,20 @@ export function ProjectTasksPanel({
           <div className="max-h-[min(92dvh,680px)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
             <div className="border-b border-zinc-100 px-4 py-4">
               <h2 id="celebrate-title" className="text-base font-bold text-zinc-900">
-                進みましたね
+                「{celebrateTask.title}」を完了にしました
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-700">
-                「{celebrateTask.title}」を完了にしました。ここまで来られたこと、そのものが前進です。
-              </p>
               <label className="mt-4 block">
-                <span className="text-xs font-semibold text-zinc-600">学び・一言メモ（任意）</span>
+                <span className="text-xs font-semibold text-zinc-600">メモ（任意）</span>
                 <textarea
                   className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
                   value={celebrateReflection}
                   onChange={(e) => setCelebrateReflection(e.target.value)}
-                  placeholder="気づきがあれば一行だけ"
+                  placeholder="気づいたことを書いても大丈夫です"
                 />
               </label>
             </div>
             <div className="space-y-3 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">次に進む一歩（候補）</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">次にやる候補</p>
               <ul className="space-y-2">
                 {celebrationSuggestions.map((sug) => (
                   <li key={sug} className="flex flex-col gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1239,7 +1240,7 @@ export function ProjectTasksPanel({
                         className="shrink-0 rounded-lg bg-indigo-700 px-3 py-1.5 text-[11px] font-bold text-white"
                         onClick={() => void createTaskFromTitle(sug, focusRoadmapStepId)}
                       >
-                        これをタスクにする
+                        この内容でタスクを追加
                       </button>
                     ) : null}
                   </li>
@@ -1251,7 +1252,7 @@ export function ProjectTasksPanel({
                   className="flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white"
                   onClick={() => void closeCelebration(true)}
                 >
-                  メモを残して閉じる
+                  メモを保存して閉じる
                 </button>
                 <button type="button" className="flex-1 rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold text-zinc-800" onClick={() => void closeCelebration(false)}>
                   閉じる

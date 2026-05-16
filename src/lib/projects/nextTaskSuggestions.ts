@@ -3,7 +3,7 @@ import type { TaskLikeForPick } from "@/lib/projects/todayThree";
 
 export type RoadmapStepRef = { id: string; title: string; status: string };
 
-/** ルールベースで「次の一歩」候補タイトルを返す（最大3件） */
+/** ルールベースで次のタスク候補タイトルを返す（最大3件） */
 export function suggestNextTaskTitles(params: {
   completedTitle: string;
   tasks: TaskLikeForPick[];
@@ -36,9 +36,9 @@ export function suggestNextTaskTitles(params: {
   const nextStep =
     roadmapSteps.find((s) => s.status === "todo") ??
     roadmapSteps.find((s) => s.status === "doing" && s.id !== focus?.id);
-  if (nextStep) pushUnique(`${nextStep.title} の最初の一歩を決める（15分）`);
-  pushUnique("進め方をチャットで一言シェアする");
-  pushUnique("今日やったことを一言メモする");
+  if (nextStep) pushUnique(`${nextStep.title} で、最初にやることを決める（15分）`);
+  pushUnique("プロジェクトのチャットで状況を書く");
+  pushUnique("今日やったことを短くメモする");
 
   return titles.slice(0, 3);
 }

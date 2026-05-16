@@ -31,7 +31,7 @@ export type ProjectRow = {
   recruitment_message: string;
   created_at: string;
   updated_at: string;
-  /** 伴走UI・オンボーディング（JSON）。カラム未適用時は欠落しうる */
+  /** オンボーディングなど（JSON）。カラム未適用時は欠落しうる */
   coaching_context?: unknown;
 };
 
@@ -42,7 +42,7 @@ export type ProjectMemberRow = {
   joined_at: string;
 };
 
-/** project_tasks.meta に保存（タスク画面の入力種別・回答・伴走フィールド） */
+/** project_tasks.meta に保存（タスク画面の入力種別・回答・追加フィールド） */
 export type ProjectTaskMeta = {
   inputKind?: "choice" | "text" | "none";
   choiceOptions?: string[];
@@ -57,11 +57,11 @@ export type ProjectTaskMeta = {
   estimatedMinutes?: 5 | 15 | 30 | 60;
   /** 完了の判断基準（短文） */
   completionCriteria?: string;
-  /** このタスクが意味すること・なぜそれが効くか */
+  /** このタスクの目的や理由（短文・任意） */
   whyThisMatters?: string;
   /** 完了直後の一言メモ・学び */
   lastReflection?: string;
-  /** 「今日の3つ」のどれに固定するか（任意） */
+  /** 「今日やるタスク（おすすめ）」のどれに固定するか（任意） */
   todaySlot?: TodayThreeSlot;
   /** 相談系タスクのヒント（任意・検索用） */
   consultHint?: string;

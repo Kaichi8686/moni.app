@@ -165,9 +165,9 @@ export function ProjectRoadmapPanel({
     (stepId: string): string | null => {
       const rel = tasks.filter((t) => t.roadmap_step_id === stepId);
       const blockedFirst = rel.find((t) => normalizeTaskStatus(t.status) === "blocked");
-      if (blockedFirst) return `いま詰まっている: ${blockedFirst.title}`;
+      if (blockedFirst) return `中断中のタスク: ${blockedFirst.title}`;
       const active = rel.find((t) => normalizeTaskStatus(t.status) !== "done");
-      if (active) return `次の一歩: ${active.title}`;
+      if (active) return `次のタスク: ${active.title}`;
       return null;
     },
     [tasks],
@@ -352,11 +352,11 @@ export function ProjectRoadmapPanel({
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">夢 → マイルストーン → タスク</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">ロードマップ（全体の流れ）</p>
             <p className="mt-1 truncate text-sm font-bold text-zinc-900">{project.name}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">
-              この画面は「全体の地図」です。細かい実行は<span className="font-semibold text-zinc-800">タスク</span>
-              タブで、今日の一歩に落とします。
+              ゴールまでの<span className="font-semibold text-zinc-800">段階</span>
+              を並べます。日々の作業は「<span className="font-semibold text-zinc-800">タスク・予定</span>」タブで管理します。
             </p>
             <p className="mt-1 inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-900 ring-1 ring-indigo-100">
               {businessTypeLabelJa(project.business_type ?? null)}
@@ -385,7 +385,7 @@ export function ProjectRoadmapPanel({
         ) : null}
         {focusStep ? (
           <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/80 px-3 py-2.5">
-            <p className="text-[11px] font-semibold text-indigo-800">次はここ</p>
+            <p className="text-[11px] font-semibold text-indigo-800">いま進める段階</p>
             <p className="mt-0.5 text-sm font-semibold text-indigo-950">{focusStep.title}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-indigo-900/80">
               {focusStep.status === "done"
@@ -530,7 +530,7 @@ export function ProjectRoadmapPanel({
                           <span className="rounded-md bg-white/80 px-1.5 py-0.5 ring-1 ring-zinc-200">具体タスク {tc}件</span>
                           {blockedHere > 0 ? (
                             <span className="rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-100">
-                              いま詰まり {blockedHere}
+                              中断中 {blockedHere}
                             </span>
                           ) : null}
                         </div>
@@ -681,7 +681,7 @@ export function ProjectRoadmapPanel({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold text-zinc-600">このマイルストーンの完了条件</span>
+                <span className="text-xs font-semibold text-zinc-600">この段階の完了条件</span>
                 <textarea
                   className={`mt-1 min-h-[3.5rem] ${inputClass}`}
                   value={detailDraft.completion_criteria}

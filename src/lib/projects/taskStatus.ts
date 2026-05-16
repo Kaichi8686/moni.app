@@ -20,13 +20,13 @@ export function toDbTaskStatus(s: TaskWorkStatus): TaskWorkStatus {
 export function taskStatusLabelJa(s: TaskWorkStatus): string {
   switch (s) {
     case "not_started":
-      return "これから";
+      return "未着手";
     case "in_progress":
-      return "いま動いている";
+      return "進行中";
     case "blocked":
-      return "いま詰まっている";
+      return "中断";
     case "waiting":
-      return "待ち";
+      return "保留";
     case "done":
       return "完了";
     default:

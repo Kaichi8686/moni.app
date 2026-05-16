@@ -34,7 +34,7 @@ type MessageRow = {
 const primaryTabs: Array<{ key: TabKey; label: string }> = [
   { key: "chat", label: "チャット" },
   { key: "roadmap", label: "ロードマップ" },
-  { key: "schedule", label: "タスク" },
+  { key: "schedule", label: "タスク・予定" },
   { key: "documents", label: "ドキュメント" },
 ];
 
@@ -277,7 +277,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     if (schemaMsgs.length > 0) {
       let banner = `一部機能がまだ使えません（${schemaMsgs.join("・")}）。Supabaseで apply_project_space_upgrade.sql を実行してください。`;
       if (schemaMsgs.some((m) => m.includes("タスク"))) {
-        banner += " タスクの拡張ステータス・伴走UIは apply_project_coaching_phase1.sql も適用してください。";
+        banner += " タスクの状態（中断・保留など）と追加項目を使う場合は apply_project_coaching_phase1.sql も適用してください。";
       }
       setSyncBanner(banner);
     }
