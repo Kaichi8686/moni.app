@@ -8,14 +8,29 @@ import { supabase } from "@/lib/supabase";
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { ProjectRoadmapPanel, pickFocusStep, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
+import { ProjectHomePanel } from "@/components/projects/ProjectHomePanel";
+import { ProjectRoadmapPanel, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
 import { ProjectTasksPanel, type TaskPanelRow } from "@/components/projects/ProjectTasksPanel";
+import { pickFocusStep } from "@/lib/projects/roadmapFocus";
 import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectScheduleCalendar } from "@/components/projects/ProjectScheduleCalendar";
-import { parseCoachingContext, mergeCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
+import {
+  parseCoachingContext,
+  mergeCoachingContext,
+  type CoachingContext,
+  type OnboardingBusinessCategoryKey,
+  type OnboardingProgressStage,
+  type OnboardingTeamSize,
+} from "@/lib/projects/coachingContext";
+import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboardingWizard";
+import { buildStudentRoadmapTemplateRowsWithProgress } from "@/lib/projects/studentRoadmapTemplates";
+import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
+import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
+import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
+import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
 
 type Props = { projectId: string };
-type TabKey = "chat" | "documents" | "roadmap" | "schedule" | "members";
+type TabKey = "home" | "chat" | "documents" | "roadmap" | "schedule" | "members";
 type ChatMode = "group" | "dm";
 
 type ProjectDocumentRow = { id: string; title: string; content: string; updated_at: string; updated_by: string | null };
@@ -32,6 +47,7 @@ type MessageRow = {
 
 /** メインタブ（モック: チャット / ロードマップ / タスク / ドキュメント）。メンバーはヘッダーから */
 const primaryTabs: Array<{ key: TabKey; label: string }> = [
+  { key: "home", label: "ホーム" },
   { key: "chat", label: "チャット" },
   { key: "roadmap", label: "ロードマップ" },
   { key: "schedule", label: "タスク・予定" },
@@ -77,7 +93,7 @@ function friendlyProjectFetchMessage(error: { code?: string; message?: string })
 export function ProjectSpaceDetail({ projectId }: Props) {
   const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("chat");
+  const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [chatMode, setChatMode] = useState<ChatMode>("group");
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   const [members, setMembers] = useState<ProjectMemberRow[]>([]);
@@ -116,6 +132,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [dissolveOpen, setDissolveOpen] = useState(false);
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectDeleting, setProjectDeleting] = useState(false);
+  const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferTargetId, setTransferTargetId] = useState("");
   const [editNameDraft, setEditNameDraft] = useState("");
@@ -158,6 +175,13 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     return !isOwner && !isMember;
   }, [selectedProject, isOwner, isMember]);
   const canUseProjectRoom = useMemo(() => Boolean(selectedProject && (isOwner || isMember)), [selectedProject, isOwner, isMember]);
+  const showProjectOnboarding = useMemo(() => {
+    if (loading || !selectedProject || !canUseProjectRoom || !canEditProjectSettings) return false;
+    const ctx = parseCoachingContext(selectedProject.coaching_context);
+    if (ctx.onboardingDoneAt) return false;
+    if (roadmapSteps.length > 0) return false;
+    return true;
+  }, [loading, selectedProject, canUseProjectRoom, canEditProjectSettings, roadmapSteps.length]);
   const currentMessages = useMemo(() => (chatMode === "group" ? groupMessages : directMessages), [chatMode, directMessages, groupMessages]);
   const dmMessages = useMemo(() => {
     return currentMessages.filter((m) => {
@@ -302,6 +326,131 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       await load();
     },
     [load, selectedProject],
+  );
+
+  const recordTeamActivity = useCallback(async (): Promise<BumpTeamActivityStreakResult | null> => {
+    if (!supabase || !selectedProject) return null;
+    try {
+      return await bumpTeamActivityStreak(supabase, selectedProject.id);
+    } catch {
+      return null;
+    }
+  }, [selectedProject, supabase]);
+
+  const completeProjectTask = useCallback(
+    async (taskId: string) => {
+      if (!supabase || !selectedProject) return;
+      setActionErr("");
+      const existing = projectTasks.find((x) => x.id === taskId);
+      if (existing && normalizeTaskStatus(existing.status) === "done") return;
+
+      const prevWeek = countWeekCompletedTasksJapan(projectTasks);
+      const goal = parseCoachingContext(selectedProject.coaching_context).weeklyCompletionGoal;
+
+      const { error } = await supabase
+        .from("project_tasks")
+        .update({ status: "done", updated_at: new Date().toISOString() })
+        .eq("id", taskId)
+        .eq("project_id", selectedProject.id);
+      if (error) {
+        setActionErr(error.message);
+        return;
+      }
+      const bump = await recordTeamActivity();
+      await load();
+
+      maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, goal);
+      if (bump?.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
+    },
+    [load, recordTeamActivity, selectedProject, projectTasks],
+  );
+
+  const skipProjectOnboarding = useCallback(async () => {
+    await saveProjectCoaching({ onboardingDoneAt: new Date().toISOString() });
+  }, [saveProjectCoaching]);
+
+  const completeProjectOnboarding = useCallback(
+    async (data: {
+      category: OnboardingBusinessCategoryKey;
+      dreamText: string;
+      progressStage: OnboardingProgressStage;
+      teamSize: OnboardingTeamSize;
+    }) => {
+      if (!supabase || !selectedProject) return;
+      setOnboardingSubmitting(true);
+      setActionErr("");
+      try {
+        const prev = parseCoachingContext(selectedProject.coaching_context);
+        const dreamTrim = data.dreamText.trim();
+        const next = mergeCoachingContext(prev, {
+          onboardingDoneAt: new Date().toISOString(),
+          dreamStatement: dreamTrim || prev.dreamStatement,
+          onboardingBusinessCategory: data.category,
+          onboardingProgressStage: data.progressStage,
+          onboardingTeamSize: data.teamSize,
+        });
+        const { error: uErr } = await supabase
+          .from("projects")
+          .update({ coaching_context: next, updated_at: new Date().toISOString() })
+          .eq("id", selectedProject.id);
+        if (uErr) {
+          setActionErr(uErr.message);
+          return;
+        }
+        const rows = buildStudentRoadmapTemplateRowsWithProgress(selectedProject.id, data.category, data.progressStage);
+        const { error: iErr } = await supabase.from("project_roadmap_steps").insert(rows);
+        if (iErr) {
+          setActionErr(iErr.message);
+          return;
+        }
+        await load();
+      } finally {
+        setOnboardingSubmitting(false);
+      }
+    },
+    [load, selectedProject],
+  );
+
+  const addSuggestedDailyTasks = useCallback(
+    async (items: Array<{ title: string; minutes: number }>) => {
+      if (!supabase || !selectedProject || !uid) return;
+      setActionErr("");
+      const stepId = pickFocusStep(roadmapSteps)?.id ?? null;
+      const normalizeEstimate = (m: number): 5 | 15 | 30 | 60 => {
+        if (m <= 7) return 5;
+        if (m <= 22) return 15;
+        if (m <= 45) return 30;
+        return 60;
+      };
+      for (const item of items.slice(0, 3)) {
+        const title = item.title.trim().slice(0, 200);
+        if (!title) continue;
+        const est = normalizeEstimate(item.minutes);
+        const meta = { inputKind: "none", answerVisibility: "shared", estimatedMinutes: est };
+        const { error } = await supabase.from("project_tasks").insert({
+          project_id: selectedProject.id,
+          title,
+          description: "",
+          status: "not_started",
+          priority: "medium",
+          created_by: uid,
+          assignee_id: null,
+          due_date: null,
+          roadmap_step_id: stepId,
+          ai_generated: true,
+          meta,
+        });
+        if (error) {
+          setActionErr(error.message);
+          return;
+        }
+      }
+      setInviteNotice("AI提案をタスクに追加しました。");
+      window.setTimeout(() => setInviteNotice(""), 2800);
+      setActiveTab("schedule");
+      await load();
+    },
+    [load, selectedProject, uid, roadmapSteps],
   );
 
   useEffect(() => {
@@ -736,10 +885,16 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   }
 
   const contentWidthClass =
-    activeTab === "documents" ? "max-w-6xl" : activeTab === "schedule" ? "max-w-xl" : "max-w-lg";
+    activeTab === "documents"
+      ? "max-w-6xl"
+      : activeTab === "schedule"
+        ? "max-w-xl"
+        : activeTab === "home"
+          ? "max-w-lg"
+          : "max-w-lg";
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-[#f0f0f2]">
+    <div className="startup-project-shell flex min-h-[100dvh] flex-col">
       <header className="sticky top-0 z-30 border-b border-zinc-200/90 bg-white/95 shadow-sm backdrop-blur-md">
         <div className={`mx-auto w-full ${contentWidthClass} px-3 pt-3`}>
           <div className="flex items-start gap-2">
@@ -904,13 +1059,13 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`relative flex-1 px-1 pb-2.5 pt-2 text-center text-xs font-semibold transition sm:text-sm ${
-                  activeTab === tab.key ? "text-indigo-800" : "text-zinc-500 hover:text-zinc-700"
+                className={`relative flex-1 px-1 pb-2.5 pt-2 text-center text-xs font-semibold transition duration-200 ease-out sm:text-sm ${
+                  activeTab === tab.key ? "text-[#1A1A1A]" : "text-zinc-500 hover:text-zinc-700"
                 }`}
               >
                 {tab.label}
                 {activeTab === tab.key ? (
-                  <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-indigo-700" aria-hidden />
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-[#FF5C35]" aria-hidden />
                 ) : null}
               </button>
             ))}
@@ -1177,6 +1332,33 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      {activeTab === "home" && selectedProject ? (
+        <ProjectHomePanel
+          project={selectedProject}
+          coaching={parseCoachingContext(selectedProject.coaching_context)}
+          steps={roadmapSteps}
+          tasks={projectTasks}
+          memberNames={memberNames}
+          canEdit={Boolean(isMember || isOwner)}
+          onOpenRoadmap={() => setActiveTab("roadmap")}
+          onOpenTasks={() => setActiveTab("schedule")}
+          onOpenWeeklyMemo={() => {
+            window.location.hash = "weekly-review";
+            setActiveTab("schedule");
+          }}
+          onShareTeam={async () => {
+            const r = await shareOrCopyProject(selectedProject.name, selectedProject.id);
+            if (r === "failed") setInviteNotice("共有・コピーに失敗しました。");
+            else if (r === "copied") setInviteNotice("文章ごとコピーしました。");
+            else setInviteNotice("共有を開きました。");
+            window.setTimeout(() => setInviteNotice(""), 3200);
+          }}
+          onCompleteTask={(id) => void completeProjectTask(id)}
+          onAddAiTodoSuggestions={(items) => void addSuggestedDailyTasks(items)}
+          onSaveCoaching={(patch) => saveProjectCoaching(patch)}
+        />
+      ) : null}
+
       {activeTab === "roadmap" && selectedProject ? (
         <ProjectRoadmapPanel
           projectId={selectedProject.id}
@@ -1186,6 +1368,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           tasks={projectTasks}
           members={members}
           memberNames={memberNames}
+          onRecordTeamActivity={() => recordTeamActivity()}
           onReload={() => void load()}
           onError={(msg) => setActionErr(msg)}
         />
@@ -1208,6 +1391,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           uid={uid}
           canEdit={Boolean(isMember || isOwner)}
           memberNames={memberNames}
+          onRecordTeamActivity={() => recordTeamActivity()}
           onReload={() => void load()}
           onError={(msg) => setActionErr(msg)}
           roadmapStepTitles={Object.fromEntries(roadmapSteps.map((s) => [s.id, s.title]))}
@@ -1489,6 +1673,15 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {showProjectOnboarding && selectedProject ? (
+        <ProjectOnboardingWizard
+          projectName={selectedProject.name}
+          submitting={onboardingSubmitting}
+          onSkip={() => void skipProjectOnboarding()}
+          onComplete={(data) => void completeProjectOnboarding(data)}
+        />
       ) : null}
     </div>
   );

@@ -10,6 +10,11 @@
   --accent: #4f46e5;
   --accent-hover: #4338ca;
   --ring: rgba(79, 70, 229, 0.22);
+  --startup-bg: #fafaf8;
+  --startup-accent: #ff5c35;
+  --startup-in-progress: #fff3d6;
+  --startup-done: #e8f5e9;
+  --startup-text: #1a1a1a;
 }
 
 @theme inline {
@@ -112,4 +117,26 @@ html.moni-landing-active {
 .gdocs-editor-body a {
   color: #1a73e8;
   text-decoration: underline;
+}
+
+/* プロジェクトルーム（スタートアップ学生向けリデザイン） */
+.startup-project-shell {
+  --startup-bg: #fafaf8;
+  --startup-accent: #ff5c35;
+  --startup-in-progress: #fff3d6;
+  --startup-done: #e8f5e9;
+  --startup-text: #1a1a1a;
+  background-color: var(--startup-bg);
+  font-family: var(--font-noto-jp), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  color: var(--startup-text);
+}
+
+.startup-project-shell .startup-font-mono {
+  font-family: var(--font-dm-mono), var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-project-shell * {
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type {
   BlockedReasonCode,
@@ -17,6 +17,10 @@ import { applyTodaySlotOverrides, pickTodayThree, type TaskLikeForPick } from "@
 import { suggestNextTaskTitles, type RoadmapStepRef } from "@/lib/projects/nextTaskSuggestions";
 import type { CoachingContext } from "@/lib/projects/coachingContext";
 import { BLOCKED_REASON_OPTIONS, blockedRestartHint } from "@/lib/projects/blockedHints";
+import type { BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
+import { todayKeyJapan } from "@/lib/projects/teamActivityStreak";
+import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
+import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
 
 export type TaskPanelRow = {
   id: string;
@@ -128,6 +132,7 @@ type Props = {
   memberNames: Record<string, string>;
   roadmapStepTitles?: Record<string, string>;
   onReload: () => void;
+  onRecordTeamActivity?: () => Promise<BumpTeamActivityStreakResult | null | void>;
   onError: (msg: string) => void;
   schedules: CalendarSchedule[];
   scheduleSaving: boolean;
@@ -158,6 +163,7 @@ export function ProjectTasksPanel({
   memberNames,
   roadmapStepTitles = {},
   onReload,
+  onRecordTeamActivity,
   onError,
   schedules,
   scheduleSaving,
@@ -176,6 +182,24 @@ export function ProjectTasksPanel({
   const [onboardStuck, setOnboardStuck] = useState("");
   const [onboardDeadline, setOnboardDeadline] = useState("");
   const [coachBusyId, setCoachBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalizeHash = () => window.location.hash.replace(/^#/, "");
+    const apply = () => {
+      if (normalizeHash() !== "weekly-review") return;
+      const el = document.getElementById("weekly-review");
+      if (el instanceof HTMLDetailsElement) {
+        el.open = true;
+        window.requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    };
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
 
   const dreamHeadline = coachingContext.dreamStatement?.trim() || projectTitle;
   const dreamWhy = projectDescription?.trim() || coachingContext.stuckNow?.trim() || "";
@@ -277,6 +301,7 @@ export function ProjectTasksPanel({
     const client = supabase;
     if (!client || !canSubmitTask(task)) return;
     const snap = { ...task };
+    const prevWeek = countWeekCompletedTasksJapan(tasks);
     setBusyIds((prev) => new Set(prev).add(task.id));
     try {
       const { error } = await client
@@ -287,7 +312,10 @@ export function ProjectTasksPanel({
         })
         .eq("id", task.id);
       if (error) throw new Error(error.message);
+      const bump = (await Promise.resolve(onRecordTeamActivity?.())) ?? null;
       await onReload();
+      maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, coachingContext.weeklyCompletionGoal);
+      if (bump && "changed" in bump && bump.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
       setCelebrateTask(snap);
       setCelebrateReflection("");
     } catch (e) {
@@ -311,6 +339,7 @@ export function ProjectTasksPanel({
       answeredAt: new Date().toISOString(),
     });
     const snap = { ...task };
+    const prevWeek = countWeekCompletedTasksJapan(tasks);
     setBusyIds((prev) => new Set(prev).add(task.id));
     try {
       const { error } = await client
@@ -322,7 +351,10 @@ export function ProjectTasksPanel({
         })
         .eq("id", task.id);
       if (error) throw new Error(error.message);
+      const bump = (await Promise.resolve(onRecordTeamActivity?.())) ?? null;
       await onReload();
+      maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, coachingContext.weeklyCompletionGoal);
+      if (bump && "changed" in bump && bump.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
       setCelebrateTask(snap);
       setCelebrateReflection("");
     } catch (e) {
@@ -340,6 +372,8 @@ export function ProjectTasksPanel({
     const client = supabase;
     if (!client) return;
     await runBusy(task.id, async () => {
+      const prevWeek = countWeekCompletedTasksJapan(tasks);
+      const prevDone = normalizeTaskStatus(task.status) === "done";
       const patch: TaskMetaPatch =
         nextStatus === "blocked" && blockedCode
           ? { blockedReasonCode: blockedCode }
@@ -356,6 +390,11 @@ export function ProjectTasksPanel({
         })
         .eq("id", task.id);
       if (error) throw new Error(error.message);
+      if (nextStatus === "done" && !prevDone) {
+        const bump = (await Promise.resolve(onRecordTeamActivity?.())) ?? null;
+        maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, coachingContext.weeklyCompletionGoal);
+        if (bump && "changed" in bump && bump.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
+      }
     });
   }
 
@@ -865,6 +904,10 @@ export function ProjectTasksPanel({
   }, [onboardDream, onboardStuck, onboardDeadline, projectTitle]);
 
   const weeklyBase = coachingContext.weeklyReview ?? {};
+  const tokyoDayKey = todayKeyJapan();
+  const weekDoneCount = useMemo(() => countWeekCompletedTasksJapan(tasks), [tasks, tokyoDayKey]);
+  const weeklyGoal = coachingContext.weeklyCompletionGoal;
+  const streakDays = coachingContext.teamActivityStreak ?? 0;
 
   return (
     <section id="schedule" className="mx-auto w-full max-w-lg space-y-5 pb-4">
@@ -893,6 +936,48 @@ export function ProjectTasksPanel({
             <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-900 ring-1 ring-sky-100">保留 {taskStats.waiting}</span>
           ) : null}
         </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+          <span className="font-semibold text-zinc-800">今週（月曜・東京）</span>
+          のタスク完了{" "}
+          <span className="startup-font-mono font-semibold text-indigo-950">{weekDoneCount}</span>
+          {weeklyGoal != null ? (
+            <>
+              {" "}
+              / 目標 <span className="startup-font-mono font-semibold text-indigo-950">{weeklyGoal}</span>
+              {weekDoneCount >= weeklyGoal ? (
+                <span className="ml-1 font-semibold text-emerald-700">（達成）</span>
+              ) : null}
+            </>
+          ) : null}
+          <span className="text-zinc-400"> · </span>
+          連続活動 <span className="startup-font-mono font-semibold text-indigo-950">{streakDays}</span> 日
+        </p>
+        {canEdit ? (
+          <div className="mt-2 rounded-xl border border-indigo-100/80 bg-white/70 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-zinc-500">週の完了目標（ホームと共通）</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[3, 5, 8, 10, 15].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => void onSaveCoaching({ weeklyCompletionGoal: n })}
+                  className={`min-h-[30px] rounded-lg px-2.5 text-[10px] font-semibold transition ${
+                    weeklyGoal === n ? "bg-indigo-600 text-white" : "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
+                  }`}
+                >
+                  {n}件
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => void onSaveCoaching({ weeklyCompletionGoal: 0 })}
+                className="min-h-[30px] rounded-lg border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50"
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+        ) : null}
         {showOnboardingCue ? (
           <div className="mt-3 rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5">
             <p className="text-[12px] font-semibold text-zinc-900">最初に目標などを入力できます（任意・あとから変更可）</p>
@@ -926,7 +1011,7 @@ export function ProjectTasksPanel({
         </div>
       </div>
 
-      <details className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <details id="weekly-review" className="rounded-2xl border border-zinc-200 bg-white shadow-sm scroll-mt-4">
         <summary className="cursor-pointer list-none rounded-2xl px-4 py-3 text-sm font-semibold text-zinc-800 marker:content-none [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
             今週のメモ（やったこと・気づき・来週）
