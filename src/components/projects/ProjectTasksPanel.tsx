@@ -905,7 +905,10 @@ export function ProjectTasksPanel({
 
   const weeklyBase = coachingContext.weeklyReview ?? {};
   const tokyoDayKey = todayKeyJapan();
-  const weekDoneCount = useMemo(() => countWeekCompletedTasksJapan(tasks), [tasks, tokyoDayKey]);
+  const weekDoneCount = useMemo(() => {
+    void tokyoDayKey;
+    return countWeekCompletedTasksJapan(tasks);
+  }, [tasks, tokyoDayKey]);
   const weeklyGoal = coachingContext.weeklyCompletionGoal;
   const streakDays = coachingContext.teamActivityStreak ?? 0;
 

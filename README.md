@@ -48,12 +48,15 @@ npm run start:local
 
 ## 公開（Vercel推奨）
 
+- GitHub Actions で `lint` / `build` を回す場合は、`docs/github-actions-ci.yml` を `.github/workflows/ci.yml` にコピーしてコミットしてください（リポジトリに push するトークンに **`workflow` スコープ**が必要です。無い場合は Vercel のビルドや手元の `npm run build` で十分です）。
 - VercelにリポジトリをImportしてデプロイ
 - VercelのEnvironment Variablesに以下を設定
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - `OPENAI_API_KEY`（使う場合のみ）
   - `OPENAI_MODEL`（任意。未設定時は `gpt-4.1-mini`）
+  - `ANTHROPIC_API_KEY`（プロジェクトの AI コーチ。未設定ならサンプル応答）
+  - `ANTHROPIC_MODEL`（任意。未設定時はサーバー既定モデル）
   - `DAILY_API_KEY`（Daily REST API key）
   - `DAILY_DOMAIN`（例: `your-team.daily.co`）
 - Supabase Auth > URL Configuration の Site URL をVercelのURLに設定
@@ -71,6 +74,7 @@ npm run start:local
 - AIメンター: `/api/mentor` 経由でAI応答（`OPENAI_API_KEY` 未設定時は安全フォールバック）
 - AIメンター（アイデア相談）: 課題定義→仮説→検証→次アクションの思考フレームを自動適用
 - 通話: Dailyでアプリ内通話（チャット画面内で参加）
+- プロジェクトルーム: ホーム（今日・週ダッシュ・ストリーク）／ロードマップ／タスク・予定／オンボード／`coaching_context` に週目標・メモを保存
 
 ## 次の実装優先（本番化）
 

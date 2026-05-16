@@ -152,6 +152,7 @@ export function ProjectRoadmapPanel({
   const doneSteps = useMemo(() => orderedSteps.filter((s) => s.status === "done"), [orderedSteps]);
 
   const stepStats = useMemo(() => {
+    void tokyoDayRoll;
     return {
       total: orderedSteps.length,
       todo: orderedSteps.filter((s) => s.status === "todo").length,
@@ -508,7 +509,10 @@ export function ProjectRoadmapPanel({
   };
 
   const coachingSnap = useMemo(() => parseCoachingContext(project.coaching_context), [project.coaching_context]);
-  const weekTaskDoneCount = useMemo(() => countWeekCompletedTasksJapan(tasks), [tasks, tokyoDayRoll]);
+  const weekTaskDoneCount = useMemo(() => {
+    void tokyoDayRoll;
+    return countWeekCompletedTasksJapan(tasks);
+  }, [tasks, tokyoDayRoll]);
 
   return (
     <section className="space-y-4">

@@ -335,7 +335,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     } catch {
       return null;
     }
-  }, [selectedProject, supabase]);
+  }, [selectedProject]);
 
   const completeProjectTask = useCallback(
     async (taskId: string) => {

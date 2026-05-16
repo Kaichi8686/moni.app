@@ -107,6 +107,7 @@ export function ProjectHomePanel({
   const nextStreakTarget = nextStreakBadgeThreshold(streakDays);
 
   const weekCompleted = useMemo(() => {
+    void tokyoDayKey;
     const cutoff = startOfWeekMondayJapanMs();
     return tasks
       .filter((t) => normalizeTaskStatus(t.status) === "done" && new Date(t.updated_at).getTime() >= cutoff)
@@ -114,6 +115,7 @@ export function ProjectHomePanel({
   }, [tasks, tokyoDayKey]);
 
   const memberWeekContributions = useMemo(() => {
+    void tokyoDayKey;
     const cutoff = startOfWeekMondayJapanMs();
     const counts = new Map<string, number>();
     for (const t of tasks) {
@@ -133,6 +135,7 @@ export function ProjectHomePanel({
   }, [tasks, memberNames, tokyoDayKey]);
 
   const teamFeedLines = useMemo(() => {
+    void tokyoDayKey;
     const cutoff = startOfWeekMondayJapanMs();
     const done = [...tasks]
       .filter((t) => normalizeTaskStatus(t.status) === "done" && new Date(t.updated_at).getTime() >= cutoff)
@@ -167,6 +170,7 @@ export function ProjectHomePanel({
   }, [coaching.weeklyReview]);
 
   const milestoneDaysUntil = useMemo(() => {
+    void tokyoDayKey;
     const due = focus?.due_date;
     return diffCalendarDaysFromTodayJapan(due ?? null);
   }, [focus?.due_date, tokyoDayKey]);
