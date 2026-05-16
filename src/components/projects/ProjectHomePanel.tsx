@@ -6,7 +6,7 @@ import type { CoachingContext } from "@/lib/projects/coachingContext";
 import { roadmapDonePercent, pickFocusStep } from "@/lib/projects/roadmapFocus";
 import { focusPhaseIndex1Based, pickPrimaryTodayTask } from "@/lib/projects/todayFocus";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
-import { startOfWeekMondayJapanMs, todayKeyJapan } from "@/lib/projects/teamActivityStreak";
+import { startOfWeekMondayJapanMs, todayKeyJapan, diffCalendarDaysFromTodayJapan } from "@/lib/projects/teamActivityStreak";
 import { burstCelebration } from "@/lib/ui/confetti";
 import type { TaskPanelRow } from "@/components/projects/ProjectTasksPanel";
 import type { RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
@@ -168,12 +168,8 @@ export function ProjectHomePanel({
 
   const milestoneDaysUntil = useMemo(() => {
     const due = focus?.due_date;
-    if (!due) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const d = new Date(`${due.slice(0, 10)}T00:00:00`);
-    return Math.ceil((d.getTime() - today.getTime()) / 86400000);
-  }, [focus?.due_date]);
+    return diffCalendarDaysFromTodayJapan(due ?? null);
+  }, [focus?.due_date, tokyoDayKey]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
 

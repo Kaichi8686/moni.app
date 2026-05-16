@@ -1368,6 +1368,8 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           tasks={projectTasks}
           members={members}
           memberNames={memberNames}
+          canEdit={Boolean(isMember || isOwner)}
+          onSaveCoaching={(patch) => saveProjectCoaching(patch)}
           onRecordTeamActivity={() => recordTeamActivity()}
           onReload={() => void load()}
           onError={(msg) => setActionErr(msg)}

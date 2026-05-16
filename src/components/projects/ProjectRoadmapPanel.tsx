@@ -13,10 +13,10 @@ import {
   buildStudentRoadmapTemplateRows,
   type StudentRoadmapCategoryKey,
 } from "@/lib/projects/studentRoadmapTemplates";
-import { parseCoachingContext } from "@/lib/projects/coachingContext";
+import { parseCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
 import { parseTaskMeta } from "@/lib/projects/taskMeta";
 import type { BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
-import { todayKeyJapan } from "@/lib/projects/teamActivityStreak";
+import { todayKeyJapan, diffCalendarDaysFromTodayJapan } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
 import { burstCelebration } from "@/lib/ui/confetti";
 import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
@@ -41,6 +41,8 @@ type Props = {
   tasks: TaskPanelRow[];
   members: ProjectMemberRow[];
   memberNames: Record<string, string>;
+  canEdit?: boolean;
+  onSaveCoaching?: (patch: Partial<CoachingContext>) => Promise<void>;
   onRecordTeamActivity?: () => Promise<BumpTeamActivityStreakResult | null | void>;
   onReload: () => void;
   onError: (msg: string) => void;
@@ -48,10 +50,8 @@ type Props = {
 
 function isStepOverdue(step: RoadmapStepFull): boolean {
   if (step.status === "done" || !step.due_date) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(`${step.due_date.slice(0, 10)}T00:00:00`);
-  return due < today;
+  const d = diffCalendarDaysFromTodayJapan(step.due_date);
+  return d != null && d < 0;
 }
 
 function statusBadge(step: RoadmapStepFull): { label: string; className: string } {
@@ -101,6 +101,8 @@ export function ProjectRoadmapPanel({
   tasks,
   members,
   memberNames,
+  canEdit = false,
+  onSaveCoaching,
   onRecordTeamActivity,
   onReload,
   onError,
@@ -144,6 +146,7 @@ export function ProjectRoadmapPanel({
     [orderedSteps, focusStep],
   );
   const doneRate = useMemo(() => roadmapDonePercent(steps), [steps]);
+  const tokyoDayRoll = todayKeyJapan();
 
   const activeSteps = useMemo(() => orderedSteps.filter((s) => s.status !== "done"), [orderedSteps]);
   const doneSteps = useMemo(() => orderedSteps.filter((s) => s.status === "done"), [orderedSteps]);
@@ -156,7 +159,7 @@ export function ProjectRoadmapPanel({
       done: orderedSteps.filter((s) => s.status === "done").length,
       overdue: orderedSteps.filter((s) => isStepOverdue(s)).length,
     };
-  }, [orderedSteps]);
+  }, [orderedSteps, tokyoDayRoll]);
 
   const blockedCountByStep = useCallback(
     (stepId: string) =>
@@ -435,7 +438,11 @@ export function ProjectRoadmapPanel({
         })
         .eq("id", detailId);
       if (error) throw new Error(error.message);
-      if (detailDraft.status === "done" && prev !== "done" && shouldCelebrate()) burstCelebration();
+      if (detailDraft.status === "done" && prev !== "done") {
+        const bump = (await Promise.resolve(onRecordTeamActivity?.())) ?? null;
+        if (bump && "changed" in bump && bump.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
+        if (shouldCelebrate()) burstCelebration();
+      }
     });
 
   const addChildTask = (stepId: string) =>
@@ -501,8 +508,7 @@ export function ProjectRoadmapPanel({
   };
 
   const coachingSnap = useMemo(() => parseCoachingContext(project.coaching_context), [project.coaching_context]);
-  const tokyoDayKey = todayKeyJapan();
-  const weekTaskDoneCount = useMemo(() => countWeekCompletedTasksJapan(tasks), [tasks, tokyoDayKey]);
+  const weekTaskDoneCount = useMemo(() => countWeekCompletedTasksJapan(tasks), [tasks, tokyoDayRoll]);
 
   return (
     <section className="space-y-4">
@@ -548,6 +554,36 @@ export function ProjectRoadmapPanel({
             連続活動 <span className="startup-font-mono text-zinc-900">{coachingSnap.teamActivityStreak ?? 0}</span> 日
           </span>
         </div>
+        {canEdit && onSaveCoaching ? (
+          <div className="mt-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-zinc-500">週の完了目標（ホーム・タスクと共通）</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[3, 5, 8, 10, 15].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void onSaveCoaching({ weeklyCompletionGoal: n })}
+                  className={`min-h-[30px] rounded-lg px-2.5 text-[10px] font-semibold transition disabled:opacity-50 ${
+                    coachingSnap.weeklyCompletionGoal === n
+                      ? "bg-[#FF5C35] text-white shadow-sm"
+                      : "border border-zinc-200 bg-white text-zinc-800 hover:bg-white"
+                  }`}
+                >
+                  {n}件
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void onSaveCoaching({ weeklyCompletionGoal: 0 })}
+                className="min-h-[30px] rounded-lg border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-zinc-600 hover:bg-white disabled:opacity-50"
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+        ) : null}
         {stepStats.total > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
             <span className="rounded-full bg-[#FFF3D6] px-2.5 py-1 text-orange-950 ring-1 ring-orange-100">

@@ -24,6 +24,19 @@ export function startOfWeekMondayJapanMs(now = new Date()): number {
   return new Date(`${my}-${pad2(mm)}-${pad2(md)}T00:00:00+09:00`).getTime();
 }
 
+/** 今日（東京）から due（YYYY-MM-DD）までの暦日数。期限当日は 0、明日は 1。無効なら null */
+export function diffCalendarDaysFromTodayJapan(dueDateStr: string | null | undefined, now = new Date()): number | null {
+  if (!dueDateStr) return null;
+  const dueKey = dueDateStr.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueKey)) return null;
+  const todayKey = todayKeyJapan(now);
+  const [ty, tm, td] = todayKey.split("-").map(Number);
+  const [dy, dm, dd] = dueKey.split("-").map(Number);
+  const todayMs = Date.UTC(ty, tm - 1, td);
+  const dueMs = Date.UTC(dy, dm - 1, dd);
+  return Math.round((dueMs - todayMs) / 86400000);
+}
+
 /** タスク完了などチーム活動があった日に 1 日 1 回だけ適用するパッチ */
 export function computeTeamStreakPatch(prev: CoachingContext): Partial<CoachingContext> {
   const today = todayKeyJapan();
