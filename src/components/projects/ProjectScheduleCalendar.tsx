@@ -11,6 +11,20 @@ export type CalendarSchedule = {
   attendees: string[] | null;
 };
 
+/** 課題の期限をカレンダーに載せる用（dueDate は ISO） */
+export type CalendarIssueEntry = {
+  id: string;
+  title: string;
+  dueDate: string;
+  status?: string;
+};
+
+type DayItem =
+  | { kind: "schedule"; schedule: CalendarSchedule }
+  | { kind: "issue"; issue: CalendarIssueEntry };
+
+const ISSUE_BAR_CLASS = "bg-[#5E6AD2]/90";
+
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
 const EVENT_BAR_CLASS = [
   "bg-rose-400/90",
@@ -73,14 +87,31 @@ function hashColor(id: string): (typeof EVENT_BAR_CLASS)[number] {
   return EVENT_BAR_CLASS[h % EVENT_BAR_CLASS.length];
 }
 
+function issueDueDateKey(dueDateIso: string): string | null {
+  const d = new Date(dueDateIso);
+  if (Number.isNaN(d.getTime())) return null;
+  return dateKeyLocal(d);
+}
+
+const issueStatusLabel: Record<string, string> = {
+  backlog: "バックログ",
+  todo: "やること",
+  in_progress: "進行中",
+  in_review: "レビュー",
+  done: "完了",
+  cancelled: "中止",
+};
+
 type Props = {
   schedules: CalendarSchedule[];
+  issues?: CalendarIssueEntry[];
+  onIssueClick?: (issueId: string) => void;
   onSave: (payload: { title: string; description: string; startsAt: string; endsAt: string; attendees: string }) => Promise<void>;
   saving?: boolean;
   canEdit?: boolean;
 };
 
-export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = true }: Props) {
+export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, onSave, saving, canEdit = true }: Props) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string | null>(() => dateKeyLocal(new Date()));
   const [form, setForm] = useState({
@@ -92,20 +123,38 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = t
   });
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, CalendarSchedule[]>();
+    const map = new Map<string, DayItem[]>();
+    const push = (key: string, item: DayItem) => {
+      const list = map.get(key) ?? [];
+      const id = item.kind === "schedule" ? item.schedule.id : item.issue.id;
+      if (!list.some((x) => (x.kind === "schedule" ? x.schedule.id : x.issue.id) === id && x.kind === item.kind)) {
+        list.push(item);
+      }
+      map.set(key, list);
+    };
     for (const ev of schedules) {
-      const keys = eachDateKeyInRange(ev.starts_at, ev.ends_at);
-      for (const k of keys) {
-        const list = map.get(k) ?? [];
-        if (!list.some((x) => x.id === ev.id)) list.push(ev);
-        map.set(k, list);
+      for (const k of eachDateKeyInRange(ev.starts_at, ev.ends_at)) {
+        push(k, { kind: "schedule", schedule: ev });
       }
     }
+    for (const iss of issues) {
+      const k = issueDueDateKey(iss.dueDate);
+      if (k) push(k, { kind: "issue", issue: iss });
+    }
     for (const [, list] of map) {
-      list.sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+      list.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === "schedule" ? -1 : 1;
+        if (a.kind === "schedule" && b.kind === "schedule") {
+          return new Date(a.schedule.starts_at).getTime() - new Date(b.schedule.starts_at).getTime();
+        }
+        if (a.kind === "issue" && b.kind === "issue") {
+          return a.issue.title.localeCompare(b.issue.title, "ja");
+        }
+        return 0;
+      });
     }
     return map;
-  }, [schedules]);
+  }, [schedules, issues]);
 
   const monthCells = useMemo(() => buildMonthGrid(viewDate), [viewDate]);
 
@@ -118,10 +167,15 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = t
     [viewDate],
   );
 
-  const selectedDayEvents = useMemo(() => {
+  const selectedDayItems = useMemo(() => {
     if (!selectedKey) return [];
     return eventsByDay.get(selectedKey) ?? [];
   }, [eventsByDay, selectedKey]);
+
+  const calendarIssues = useMemo(
+    () => issues.filter((i) => issueDueDateKey(i.dueDate) !== null),
+    [issues],
+  );
 
   const goPrevMonth = useCallback(() => {
     setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
@@ -194,6 +248,19 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = t
         </button>
       </div>
 
+      {(schedules.length > 0 || calendarIssues.length > 0) && (
+        <div className="flex flex-wrap gap-3 border-b border-zinc-100 bg-white/80 px-3 py-2 text-[10px] text-zinc-500 sm:px-4">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-4 rounded bg-emerald-400/90" aria-hidden />
+            予定
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={`h-2 w-4 rounded ${ISSUE_BAR_CLASS}`} aria-hidden />
+            課題（期限）
+          </span>
+        </div>
+      )}
+
       {/* 曜日 */}
       <div className="grid grid-cols-7 border-b border-zinc-100 bg-zinc-50/90 px-1 py-2">
         {WEEKDAYS_JA.map((w, i) => (
@@ -233,16 +300,25 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = t
                 {cell.getDate()}
               </span>
               <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
-                {list.slice(0, 3).map((ev) => (
-                  <span
-                    key={ev.id}
-                    className={`truncate rounded px-1 py-0.5 text-[9px] font-medium text-white shadow-sm sm:text-[10px] ${hashColor(ev.id)}`}
-                  >
-                    {ev.title}
-                  </span>
-                ))}
-                {list.length > 3 ? (
-                  <span className="text-[9px] font-medium text-zinc-400">+{list.length - 3}</span>
+                {list.slice(0, 4).map((item) =>
+                  item.kind === "schedule" ? (
+                    <span
+                      key={`s-${item.schedule.id}`}
+                      className={`truncate rounded px-1 py-0.5 text-[9px] font-medium text-white shadow-sm sm:text-[10px] ${hashColor(item.schedule.id)}`}
+                    >
+                      {item.schedule.title}
+                    </span>
+                  ) : (
+                    <span
+                      key={`i-${item.issue.id}`}
+                      className={`truncate rounded px-1 py-0.5 text-[9px] font-medium text-white shadow-sm sm:text-[10px] ${ISSUE_BAR_CLASS}`}
+                    >
+                      {item.issue.title}
+                    </span>
+                  ),
+                )}
+                {list.length > 4 ? (
+                  <span className="text-[9px] font-medium text-zinc-400">+{list.length - 4}</span>
                 ) : null}
               </div>
             </button>
@@ -262,27 +338,53 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = t
             })}
           </p>
           <ul className="mt-2 space-y-2">
-            {selectedDayEvents.length === 0 ? (
-              <li className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-4 text-center text-sm text-zinc-500">この日の予定はまだありません</li>
+            {selectedDayItems.length === 0 ? (
+              <li className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-4 text-center text-sm text-zinc-500">
+                この日の予定・課題（期限）はありません
+              </li>
             ) : (
-              selectedDayEvents.map((s) => (
-                <li key={s.id} className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 shadow-sm">
-                  <div className="flex items-start gap-2">
-                    <span className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${hashColor(s.id)}`} aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-zinc-900">{s.title}</p>
-                      <p className="text-[11px] text-zinc-500">
-                        {new Date(s.starts_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                        {s.ends_at ? ` – ${new Date(s.ends_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}` : ""}
-                      </p>
-                      {s.description ? <p className="mt-1 text-sm text-zinc-700">{s.description}</p> : null}
-                      {s.attendees && s.attendees.length > 0 ? (
-                        <p className="mt-1 text-[11px] text-zinc-400">{s.attendees.join(" · ")}</p>
-                      ) : null}
+              selectedDayItems.map((item) =>
+                item.kind === "schedule" ? (
+                  <li key={`s-${item.schedule.id}`} className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 shadow-sm">
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${hashColor(item.schedule.id)}`} aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">予定</p>
+                        <p className="font-semibold text-zinc-900">{item.schedule.title}</p>
+                        <p className="text-[11px] text-zinc-500">
+                          {new Date(item.schedule.starts_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                          {item.schedule.ends_at
+                            ? ` – ${new Date(item.schedule.ends_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
+                            : ""}
+                        </p>
+                        {item.schedule.description ? <p className="mt-1 text-sm text-zinc-700">{item.schedule.description}</p> : null}
+                        {item.schedule.attendees && item.schedule.attendees.length > 0 ? (
+                          <p className="mt-1 text-[11px] text-zinc-400">{item.schedule.attendees.join(" · ")}</p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))
+                  </li>
+                ) : (
+                  <li key={`i-${item.issue.id}`} className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2 shadow-sm">
+                    <button
+                      type="button"
+                      className="flex w-full items-start gap-2 text-left"
+                      onClick={() => onIssueClick?.(item.issue.id)}
+                      disabled={!onIssueClick}
+                    >
+                      <span className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${ISSUE_BAR_CLASS}`} aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#5E6AD2]">課題（期限）</p>
+                        <p className="font-semibold text-zinc-900">{item.issue.title}</p>
+                        {item.issue.status ? (
+                          <p className="text-[11px] text-zinc-500">{issueStatusLabel[item.issue.status] ?? item.issue.status}</p>
+                        ) : null}
+                        {onIssueClick ? <p className="mt-1 text-[11px] font-medium text-[#5E6AD2]">タップして詳細</p> : null}
+                      </div>
+                    </button>
+                  </li>
+                ),
+              )
             )}
           </ul>
         </div>

@@ -114,7 +114,19 @@ export default function WorkspaceIssues() {
       </div>
 
       {area === "schedule" ? (
-        <ProjectScheduleCalendar schedules={schedules} onSave={createSchedule} saving={scheduleSaving} canEdit={canEdit} />
+        <ProjectScheduleCalendar
+          schedules={schedules}
+          issues={issues
+            .filter((i) => i.dueDate)
+            .map((i) => ({ id: i.id, title: i.title, dueDate: i.dueDate!, status: i.status }))}
+          onIssueClick={(id) => {
+            const issue = issues.find((x) => x.id === id);
+            if (issue) setSelected(issue);
+          }}
+          onSave={createSchedule}
+          saving={scheduleSaving}
+          canEdit={canEdit}
+        />
       ) : null}
 
       {area === "tasks" ? (
