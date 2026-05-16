@@ -105,14 +105,14 @@ export default function WorkspaceRoadmapView() {
       {mergedPhases.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
           <p className="text-sm font-medium text-gray-800">まだフェーズがありません</p>
-          <p className="mt-2 text-sm text-gray-500">ビジネスの種類に合わせたテンプレートから、すぐに始められます。</p>
+          <p className="mt-2 text-sm text-gray-500">自分でフェーズを入力するか、アシストから例を読み込めます。</p>
           {canEdit ? (
             <button
               type="button"
               onClick={() => setAddOpen(true)}
               className="mt-4 rounded-lg border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50"
             >
-              テンプレートを選ぶ
+              フェーズを追加する
             </button>
           ) : null}
         </div>
