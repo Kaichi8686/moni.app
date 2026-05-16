@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { WorkspaceSchedulePanel } from "@/components/projects/workspace/WorkspaceSchedulePanel";
 import { IssueList } from "@/components/issues/IssueList";
 import { KanbanBoard } from "@/components/issues/KanbanBoard";
 import { IssueModal } from "@/components/issues/IssueModal";
@@ -23,7 +23,7 @@ export default function WorkspaceIssues() {
   const { projectId, issues, project, updateIssueStatus, createIssue, updateIssue, canEdit } = useProjectWorkspace();
   const createOpen = useWorkspaceUiStore((s) => s.createIssueOpen);
   const setCreateOpen = useWorkspaceUiStore((s) => s.setCreateIssueOpen);
-  const [view, setView] = useState<"list" | "kanban">("list");
+  const [view, setView] = useState<"list" | "kanban" | "due">("list");
   const [selected, setSelected] = useState<Issue | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -38,6 +38,15 @@ export default function WorkspaceIssues() {
     for (const mem of project?.members ?? []) m[mem.id] = mem.name;
     return m;
   }, [project?.members]);
+
+  const displayedIssues = useMemo(() => {
+    if (view !== "due") return issues;
+    const now = Date.now();
+    return issues
+      .filter((i) => i.dueDate && i.status !== "done" && i.status !== "cancelled")
+      .filter((i) => new Date(i.dueDate!).getTime() >= now - 86400000)
+      .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
+  }, [issues, view]);
 
   function openCreate() {
     setCreateErr("");
@@ -74,20 +83,26 @@ export default function WorkspaceIssues() {
   }
 
   return (
-    <div className="space-y-5">
-      <WorkspaceSchedulePanel projectId={projectId} variant="embedded" defaultCollapsed={false} />
-
-      <section className="space-y-4" aria-label="課題一覧">
-      <h2 className="text-sm font-semibold text-[#1A1A1A]">課題</h2>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-[#1A1A1A]">課題</h2>
+        <Link
+          href={`/projects/${projectId}/roadmap`}
+          className="text-[12px] font-medium text-[#5E6AD2] hover:underline"
+        >
+          ロードマップ・予定 →
+        </Link>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={view}
-            onChange={(e) => setView(e.target.value as "list" | "kanban")}
+            onChange={(e) => setView(e.target.value as "list" | "kanban" | "due")}
             className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[12px]"
           >
             <option value="list">リスト</option>
             <option value="kanban">カンバン</option>
+            <option value="due">期限順</option>
           </select>
           {canEdit ? (
             <button
@@ -98,13 +113,22 @@ export default function WorkspaceIssues() {
               ＋ 課題を追加
             </button>
           ) : null}
-          <span className="text-[11px] text-[#6B7280]">カンバンは左の「⠿」を掴んで列を移動</span>
+          {view === "kanban" ? (
+            <span className="text-[11px] text-[#6B7280]">カンバンは左の「⠿」を掴んで列を移動</span>
+          ) : view === "due" ? (
+            <span className="text-[11px] text-[#6B7280]">未完了で期限が設定されている課題</span>
+          ) : null}
         </div>
       </div>
-      {view === "list" ? (
-        <IssueList issues={issues} nameByUserId={names} onRowClick={(i) => setSelected(i)} />
+      {view === "kanban" ? (
+        <KanbanBoard
+          issues={issues}
+          nameByUserId={names}
+          onStatusChange={(id, s) => void updateIssueStatus(id, s)}
+          onIssueOpen={(i) => setSelected(i)}
+        />
       ) : (
-        <KanbanBoard issues={issues} nameByUserId={names} onStatusChange={(id, s) => void updateIssueStatus(id, s)} onIssueOpen={(i) => setSelected(i)} />
+        <IssueList issues={displayedIssues} nameByUserId={names} onRowClick={(i) => setSelected(i)} />
       )}
       <IssueModal
         issue={selected}
@@ -238,7 +262,6 @@ export default function WorkspaceIssues() {
           </form>
         </div>
       ) : null}
-      </section>
     </div>
   );
 }
