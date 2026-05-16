@@ -22,7 +22,7 @@ export default function WorkspaceOverview() {
         <h2 className="text-sm font-semibold text-[#1A1A1A]">進捗サマリー</h2>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
           <div>
-            <p className="text-[12px] font-medium text-[#6B7280]">Issue 完了率</p>
+            <p className="text-[12px] font-medium text-[#6B7280]">課題の完了率</p>
             <ProgressBar value={pct} className="mt-2 max-w-xs" />
             <p className="mt-1 text-[12px] text-[#6B7280]">
               {issues.filter((i) => i.status === "done").length} / {issues.length} 件
@@ -44,12 +44,12 @@ export default function WorkspaceOverview() {
       <section className="rounded-md border border-[#E5E7EB] bg-white p-4">
         <h2 className="text-sm font-semibold text-[#1A1A1A]">フェーズ</h2>
         <ul className="mt-2 space-y-2 text-[13px] text-[#6B7280]">
-          {phases.length === 0 ? <li>フェーズがまだありません。Roadmap から追加してください。</li> : null}
+          {phases.length === 0 ? <li>フェーズがまだありません。ロードマップから追加してください。</li> : null}
           {phases.map((p) => (
             <li key={p.id} className="flex justify-between gap-2 border-b border-[#F7F8F8] py-1">
               <span className="font-medium text-[#1A1A1A]">{p.title}</span>
               <span className="shrink-0 text-[11px]">
-                {p.issues.filter((i) => i.status === "done").length}/{p.issues.length} issues
+                {p.issues.filter((i) => i.status === "done").length}/{p.issues.length} 件の課題
               </span>
             </li>
           ))}

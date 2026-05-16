@@ -9,8 +9,8 @@ import { IssueCard } from "@/components/issues/IssueCard";
 const cols: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done"];
 
 const colLabel: Record<IssueStatus, string> = {
-  backlog: "Backlog",
-  todo: "Todo",
+  backlog: "バックログ",
+  todo: "やること",
   in_progress: "進行中",
   in_review: "レビュー",
   done: "完了",
@@ -21,7 +21,7 @@ function Col({ id, title, children }: { id: string; title: string; children: Rea
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div ref={setNodeRef} className={`min-w-[200px] flex-1 rounded-md border bg-[#F7F8F8] p-2 ${isOver ? "border-[#5E6AD2] ring-2 ring-[#5E6AD2]/20" : "border-[#E5E7EB]"}`}>
-      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">{title}</p>
+      <p className="mb-2 px-1 text-[11px] font-semibold text-[#6B7280]">{title}</p>
       <div className="flex min-h-[120px] flex-col gap-2">{children}</div>
     </div>
   );

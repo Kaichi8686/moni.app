@@ -67,7 +67,7 @@ export default function WorkspaceIssues() {
       {createOpen && canEdit ? (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 p-4" onClick={() => setCreateOpen(false)}>
           <form className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={(e) => void onCreateIssue(e)}>
-            <h3 className="text-base font-semibold">Issue を作成</h3>
+            <h3 className="text-base font-semibold">課題を作成</h3>
             <input
               className="mt-3 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-sm"
               placeholder="タイトル"

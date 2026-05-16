@@ -33,7 +33,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
       <Command
         className="w-full max-w-lg overflow-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        label="Command Menu"
+        label="コマンドメニュー"
       >
         <Command.Input
           placeholder="コマンドを検索…"
@@ -60,7 +60,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
                     setOpen(false);
                   }}
                 >
-                  Roadmap を開く
+                  ロードマップを開く
                 </Command.Item>
                 <Command.Item
                   className="cursor-pointer rounded-md px-2 py-2 text-[13px] aria-selected:bg-[#F7F8F8]"
@@ -69,7 +69,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
                     setOpen(false);
                   }}
                 >
-                  Issues を開く
+                  課題一覧を開く
                 </Command.Item>
                 <Command.Item
                   className="cursor-pointer rounded-md px-2 py-2 text-[13px] aria-selected:bg-[#F7F8F8]"
@@ -78,7 +78,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
                     setOpen(false);
                   }}
                 >
-                  Overview を開く
+                  概要を開く
                 </Command.Item>
               </>
             ) : null}
@@ -91,7 +91,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
                 setOpen(false);
               }}
             >
-              Issue を作成（Issues 画面で有効）
+              課題を作成（課題タブで有効）
             </Command.Item>
           </Command.Group>
         </Command.List>

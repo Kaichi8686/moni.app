@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import { CircleDot, GanttChartSquare, LayoutDashboard, Users } from "lucide-react";
 
 const tabs = [
-  { id: "overview", label: "Overview", href: (id: string) => `/projects/${id}/overview`, icon: LayoutDashboard },
-  { id: "roadmap", label: "Roadmap", href: (id: string) => `/projects/${id}/roadmap`, icon: GanttChartSquare },
-  { id: "issues", label: "Issues", href: (id: string) => `/projects/${id}/issues`, icon: CircleDot },
-  { id: "members", label: "Members", href: (id: string) => `/projects/${id}/members`, icon: Users },
+  { id: "overview", label: "概要", href: (id: string) => `/projects/${id}/overview`, icon: LayoutDashboard },
+  { id: "roadmap", label: "ロードマップ", href: (id: string) => `/projects/${id}/roadmap`, icon: GanttChartSquare },
+  { id: "issues", label: "課題", href: (id: string) => `/projects/${id}/issues`, icon: CircleDot },
+  { id: "members", label: "メンバー", href: (id: string) => `/projects/${id}/members`, icon: Users },
 ] as const;
 
 export function ProjectTabs({ projectId }: { projectId: string }) {

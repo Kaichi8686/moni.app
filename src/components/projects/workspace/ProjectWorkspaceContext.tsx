@@ -277,7 +277,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 className="text-[13px] font-medium text-[#6B7280] hover:text-[#1A1A1A]"
                 onClick={() => router.push("/projects")}
               >
-                ← Projects
+                ← プロジェクト一覧
               </button>
               {project ? (
                 <>
@@ -297,13 +297,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 className="rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition-all duration-150 hover:bg-[#F7F8F8]"
                 onClick={() => void copyProjectInviteUrl(projectId)}
               >
-                Share
+                共有
               </button>
               <Link
                 href={`/projects/${projectId}/members`}
                 className="rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition-all duration-150 hover:bg-[#F7F8F8]"
               >
-                Settings
+                設定
               </Link>
             </div>
           </div>

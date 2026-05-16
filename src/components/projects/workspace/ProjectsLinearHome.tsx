@@ -192,8 +192,8 @@ export function ProjectsLinearHome() {
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white px-4 py-3">
           <div>
-            <h1 className="text-lg font-semibold">Projects</h1>
-            <p className="text-[12px] text-[#6B7280]">Linear スタイルのワークスペース</p>
+            <h1 className="text-lg font-semibold">プロジェクト</h1>
+            <p className="text-[12px] text-[#6B7280]">一覧・進捗・ロードマップ・課題をまとめて管理</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -208,16 +208,16 @@ export function ProjectsLinearHome() {
               onChange={(e) => setFilter(e.target.value as Filter)}
               className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[12px]"
             >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
+              <option value="all">すべて</option>
+              <option value="active">進行中</option>
+              <option value="completed">完了</option>
             </select>
             <button
               type="button"
               className="rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#4F5BBD]"
               onClick={() => setModal(true)}
             >
-              New project +
+              ＋ 新規プロジェクト
             </button>
           </div>
         </header>

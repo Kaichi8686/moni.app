@@ -44,7 +44,7 @@ export function ProjectCard({
         href={`/projects/${project.id}/overview`}
         className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] opacity-0 transition-all duration-150 ease-out hover:bg-white group-hover:opacity-100"
       >
-        Open
+        開く
       </Link>
     </div>
   );

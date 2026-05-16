@@ -12,8 +12,8 @@ const projectLabels: Record<ProjectStatus, string> = {
 };
 
 const issueLabels: Record<IssueStatus, string> = {
-  backlog: "Backlog",
-  todo: "Todo",
+  backlog: "バックログ",
+  todo: "やること",
   in_progress: "進行中",
   in_review: "レビュー",
   done: "完了",

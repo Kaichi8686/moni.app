@@ -4,15 +4,15 @@ import Link from "next/link";
 import { FolderKanban, Inbox, LayoutGrid } from "lucide-react";
 
 const nav = [
-  { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "Inbox", href: "/projects?view=inbox", icon: Inbox },
-  { label: "Views", href: "/projects?view=views", icon: LayoutGrid },
+  { label: "プロジェクト", href: "/projects", icon: FolderKanban },
+  { label: "受信箱", href: "/projects?view=inbox", icon: Inbox },
+  { label: "ビュー", href: "/projects?view=views", icon: LayoutGrid },
 ] as const;
 
 export function ProjectSidebar() {
   return (
     <aside className="hidden w-[200px] shrink-0 flex-col border-r border-[#E5E7EB] bg-white lg:flex">
-      <div className="p-3 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">Workspace</div>
+      <div className="p-3 text-[11px] font-semibold tracking-wide text-[#6B7280]">ワークスペース</div>
       <nav className="flex flex-col gap-0.5 px-2 pb-4">
         {nav.map((item) => {
           const Icon = item.icon;

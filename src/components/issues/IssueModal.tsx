@@ -25,7 +25,7 @@ export function IssueModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#E5E7EB] px-4 py-3">
-          <h2 className="text-base font-semibold">Issue</h2>
+          <h2 className="text-base font-semibold">課題</h2>
           <button type="button" className="rounded-md p-2 text-[#6B7280] hover:bg-[#F7F8F8]" onClick={onClose} aria-label="閉じる">
             ×
           </button>

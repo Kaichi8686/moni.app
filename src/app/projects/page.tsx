@@ -3,7 +3,7 @@ import { ProjectsLinearHome } from "@/components/projects/workspace/ProjectsLine
 
 export const metadata: Metadata = {
   title: "プロジェクト | moni",
-  description: "Linear スタイルのプロジェクトワークスペース",
+  description: "プロジェクトの一覧・進捗・ロードマップ・課題をまとめて管理します。",
 };
 
 export default function ProjectsPage() {
