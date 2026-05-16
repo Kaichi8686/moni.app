@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { copyProjectInviteUrl } from "@/lib/projects/inviteLink";
-import type { Issue, Phase, Project } from "@/lib/workspace/types";
+import type { Issue, IssueStatus, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import {
   buildMembers,
   mapIssueRow,
@@ -53,10 +53,19 @@ type Ctx = {
     description?: string;
     status: Issue["status"];
     priority: Issue["priority"];
+    assigneeId?: string | null;
+    dueDate?: string | null;
   }) => Promise<void>;
   updateIssue: (
     issueId: string,
-    patch: { title?: string; description?: string | null; priority?: Issue["priority"] },
+    patch: {
+      title?: string;
+      description?: string | null;
+      priority?: Priority;
+      status?: IssueStatus;
+      assigneeId?: string | null;
+      dueDate?: string | null;
+    },
   ) => Promise<void>;
 };
 
@@ -119,7 +128,18 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       const { data: profs } = await client.from("profiles").select("id,display_name,avatar_url").in("id", ids);
       const profileMap: Record<string, ProfileLite> = {};
       for (const p of (profs ?? []) as ProfileLite[]) profileMap[p.id] = p;
-      const members = buildMembers(memberRows, profileMap, row.owner_id);
+      let members = buildMembers(memberRows, profileMap, row.owner_id);
+      const memberIds = new Set(members.map((m) => m.id));
+      if (!memberIds.has(row.owner_id)) {
+        const po = profileMap[row.owner_id];
+        const ownerMember: Member = {
+          id: row.owner_id,
+          name: po?.display_name?.trim() || "オーナー",
+          avatarUrl: po?.avatar_url ?? undefined,
+          role: "owner",
+        };
+        members = [ownerMember, ...members];
+      }
 
       let phaseRows: PhaseRowDb[] = [];
       let issueRows: IssueRowDb[] = [];
@@ -227,6 +247,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       description?: string;
       status: Issue["status"];
       priority: Issue["priority"];
+      assigneeId?: string | null;
+      dueDate?: string | null;
     }) => {
       if (!supabase || !canEdit || !uid) return;
       const { error: err } = await supabase.from("project_issues").insert({
@@ -235,6 +257,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         description: (input.description ?? "").trim(),
         status: input.status,
         priority: input.priority,
+        assignee_id: input.assigneeId ?? null,
+        due_date: input.dueDate ?? null,
         labels: [],
       });
       if (err) throw new Error(err.message);
@@ -244,12 +268,25 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   );
 
   const updateIssue = useCallback(
-    async (issueId: string, patch: { title?: string; description?: string | null; priority?: Issue["priority"] }) => {
+    async (
+      issueId: string,
+      patch: {
+        title?: string;
+        description?: string | null;
+        priority?: Priority;
+        status?: IssueStatus;
+        assigneeId?: string | null;
+        dueDate?: string | null;
+      },
+    ) => {
       if (!supabase || !canEdit) return;
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (patch.title !== undefined) row.title = patch.title.trim();
       if (patch.description !== undefined) row.description = patch.description === null ? "" : String(patch.description).trim();
       if (patch.priority !== undefined) row.priority = patch.priority;
+      if (patch.status !== undefined) row.status = patch.status;
+      if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
+      if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
       const { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
       if (err) throw new Error(err.message);
       await reload();

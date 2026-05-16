@@ -2,6 +2,8 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { format, parseISO } from "date-fns";
+import { ja } from "date-fns/locale";
 import { GripVertical } from "lucide-react";
 import type { Issue } from "@/lib/workspace/types";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
@@ -45,6 +47,11 @@ export function IssueCard({
             <PriorityIcon priority={issue.priority} />
             <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-[#1A1A1A]">{issue.title}</p>
           </div>
+          {issue.dueDate ? (
+            <p className="mt-1 text-[11px] text-[#6B7280]">
+              期限 {format(parseISO(issue.dueDate), "M/d", { locale: ja })}
+            </p>
+          ) : null}
           <div className="mt-2 flex items-center justify-between gap-2">
             <IssueStatusBadge status={issue.status} />
             <Avatar name={assigneeName ?? "?"} url={undefined} />

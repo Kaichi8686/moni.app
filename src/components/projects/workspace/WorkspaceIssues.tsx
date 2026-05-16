@@ -6,7 +6,17 @@ import { IssueList } from "@/components/issues/IssueList";
 import { KanbanBoard } from "@/components/issues/KanbanBoard";
 import { IssueModal } from "@/components/issues/IssueModal";
 import { useWorkspaceUiStore } from "@/lib/workspace/store";
-import type { Issue } from "@/lib/workspace/types";
+import type { Issue, IssueStatus, Priority } from "@/lib/workspace/types";
+
+const ISSUE_STATUS_OPTIONS: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"];
+const issueStatusLabelJa: Record<IssueStatus, string> = {
+  backlog: "バックログ",
+  todo: "やること",
+  in_progress: "進行中",
+  in_review: "レビュー",
+  done: "完了",
+  cancelled: "中止",
+};
 
 export default function WorkspaceIssues() {
   const { issues, project, updateIssueStatus, createIssue, updateIssue, canEdit } = useProjectWorkspace();
@@ -16,6 +26,10 @@ export default function WorkspaceIssues() {
   const [selected, setSelected] = useState<Issue | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [draftStatus, setDraftStatus] = useState<IssueStatus>("backlog");
+  const [draftPriority, setDraftPriority] = useState<Priority>("medium");
+  const [draftAssigneeId, setDraftAssigneeId] = useState("");
+  const [draftDue, setDraftDue] = useState("");
   const [createErr, setCreateErr] = useState("");
 
   const names = useMemo(() => {
@@ -28,6 +42,10 @@ export default function WorkspaceIssues() {
     setCreateErr("");
     setDraftTitle("");
     setDraftDescription("");
+    setDraftStatus("backlog");
+    setDraftPriority("medium");
+    setDraftAssigneeId("");
+    setDraftDue("");
     setCreateOpen(true);
   }
 
@@ -39,11 +57,15 @@ export default function WorkspaceIssues() {
       await createIssue({
         title: draftTitle,
         description: draftDescription,
-        status: "backlog",
-        priority: "medium",
+        status: draftStatus,
+        priority: draftPriority,
+        assigneeId: draftAssigneeId.trim() || null,
+        dueDate: draftDue.trim() ? `${draftDue.trim()}T00:00:00.000Z` : null,
       });
       setDraftTitle("");
       setDraftDescription("");
+      setDraftAssigneeId("");
+      setDraftDue("");
       setCreateOpen(false);
     } catch (er) {
       setCreateErr(er instanceof Error ? er.message : "作成に失敗しました");
@@ -83,10 +105,17 @@ export default function WorkspaceIssues() {
         issue={selected}
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        assigneeName={selected?.assigneeId ? names[selected.assigneeId] : undefined}
+        members={project?.members ?? []}
         canEdit={canEdit}
         onSave={async (id, patch) => {
-          await updateIssue(id, patch);
+          await updateIssue(id, {
+            title: patch.title,
+            description: patch.description,
+            priority: patch.priority,
+            status: patch.status,
+            assigneeId: patch.assigneeId,
+            dueDate: patch.dueDate,
+          });
         }}
       />
 
@@ -126,6 +155,72 @@ export default function WorkspaceIssues() {
               onChange={(e) => setDraftDescription(e.target.value)}
               rows={4}
             />
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-[12px] font-medium text-[#6B7280]" htmlFor="new-issue-status">
+                  ステータス
+                </label>
+                <select
+                  id="new-issue-status"
+                  className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
+                  value={draftStatus}
+                  onChange={(e) => setDraftStatus(e.target.value as IssueStatus)}
+                >
+                  {ISSUE_STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {issueStatusLabelJa[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#6B7280]" htmlFor="new-issue-priority">
+                  優先度
+                </label>
+                <select
+                  id="new-issue-priority"
+                  className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
+                  value={draftPriority}
+                  onChange={(e) => setDraftPriority(e.target.value as Priority)}
+                >
+                  <option value="no_priority">なし</option>
+                  <option value="urgent">急</option>
+                  <option value="high">高</option>
+                  <option value="medium">中</option>
+                  <option value="low">低</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[12px] font-medium text-[#6B7280]" htmlFor="new-issue-assignee">
+                  担当
+                </label>
+                <select
+                  id="new-issue-assignee"
+                  className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
+                  value={draftAssigneeId}
+                  onChange={(e) => setDraftAssigneeId(e.target.value)}
+                >
+                  <option value="">未割り当て</option>
+                  {(project?.members ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[12px] font-medium text-[#6B7280]" htmlFor="new-issue-due">
+                  期限（任意）
+                </label>
+                <input
+                  id="new-issue-due"
+                  type="date"
+                  className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
+                  value={draftDue}
+                  onChange={(e) => setDraftDue(e.target.value)}
+                />
+              </div>
+            </div>
             {createErr ? <p className="mt-2 text-[13px] text-red-600">{createErr}</p> : null}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-sm" onClick={() => setCreateOpen(false)}>
