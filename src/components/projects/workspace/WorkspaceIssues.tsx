@@ -1,13 +1,15 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import Link from "next/link";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { ProjectScheduleCalendar } from "@/components/projects/ProjectScheduleCalendar";
 import { IssueList } from "@/components/issues/IssueList";
 import { KanbanBoard } from "@/components/issues/KanbanBoard";
 import { IssueModal } from "@/components/issues/IssueModal";
 import { useWorkspaceUiStore } from "@/lib/workspace/store";
 import type { Issue, IssueStatus, Priority } from "@/lib/workspace/types";
+
+type IssuesArea = "tasks" | "schedule";
 
 const ISSUE_STATUS_OPTIONS: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"];
 const issueStatusLabelJa: Record<IssueStatus, string> = {
@@ -20,9 +22,11 @@ const issueStatusLabelJa: Record<IssueStatus, string> = {
 };
 
 export default function WorkspaceIssues() {
-  const { projectId, issues, project, updateIssueStatus, createIssue, updateIssue, canEdit } = useProjectWorkspace();
+  const { issues, project, schedules, scheduleSaving, updateIssueStatus, createIssue, updateIssue, createSchedule, canEdit } =
+    useProjectWorkspace();
   const createOpen = useWorkspaceUiStore((s) => s.createIssueOpen);
   const setCreateOpen = useWorkspaceUiStore((s) => s.setCreateIssueOpen);
+  const [area, setArea] = useState<IssuesArea>("tasks");
   const [view, setView] = useState<"list" | "kanban" | "due">("list");
   const [selected, setSelected] = useState<Issue | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -84,52 +88,77 @@ export default function WorkspaceIssues() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-[#1A1A1A]">課題</h2>
-        <Link
-          href={`/projects/${projectId}/roadmap`}
-          className="text-[12px] font-medium text-[#5E6AD2] hover:underline"
+      <div className="flex flex-wrap gap-1 rounded-md bg-[#F7F8F8] p-1" role="tablist" aria-label="課題エリア">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={area === "tasks"}
+          className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition ${
+            area === "tasks" ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#6B7280] hover:text-[#1A1A1A]"
+          }`}
+          onClick={() => setArea("tasks")}
         >
-          ロードマップ・予定 →
-        </Link>
+          課題
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={area === "schedule"}
+          className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition ${
+            area === "schedule" ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#6B7280] hover:text-[#1A1A1A]"
+          }`}
+          onClick={() => setArea("schedule")}
+        >
+          予定
+        </button>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={view}
-            onChange={(e) => setView(e.target.value as "list" | "kanban" | "due")}
-            className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[12px]"
-          >
-            <option value="list">リスト</option>
-            <option value="kanban">カンバン</option>
-            <option value="due">期限順</option>
-          </select>
-          {canEdit ? (
-            <button
-              type="button"
-              className="rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#4F5BBD]"
-              onClick={openCreate}
-            >
-              ＋ 課題を追加
-            </button>
-          ) : null}
+
+      {area === "schedule" ? (
+        <ProjectScheduleCalendar schedules={schedules} onSave={createSchedule} saving={scheduleSaving} canEdit={canEdit} />
+      ) : null}
+
+      {area === "tasks" ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={view}
+                onChange={(e) => setView(e.target.value as "list" | "kanban" | "due")}
+                className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[12px]"
+              >
+                <option value="list">リスト</option>
+                <option value="kanban">カンバン</option>
+                <option value="due">期限順</option>
+              </select>
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#4F5BBD]"
+                  onClick={openCreate}
+                >
+                  ＋ 課題を追加
+                </button>
+              ) : null}
+              {view === "kanban" ? (
+                <span className="text-[11px] text-[#6B7280]">カンバンは左の「⠿」を掴んで列を移動</span>
+              ) : view === "due" ? (
+                <span className="text-[11px] text-[#6B7280]">未完了で期限が設定されている課題</span>
+              ) : null}
+            </div>
+          </div>
           {view === "kanban" ? (
-            <span className="text-[11px] text-[#6B7280]">カンバンは左の「⠿」を掴んで列を移動</span>
-          ) : view === "due" ? (
-            <span className="text-[11px] text-[#6B7280]">未完了で期限が設定されている課題</span>
-          ) : null}
-        </div>
-      </div>
-      {view === "kanban" ? (
-        <KanbanBoard
-          issues={issues}
-          nameByUserId={names}
-          onStatusChange={(id, s) => void updateIssueStatus(id, s)}
-          onIssueOpen={(i) => setSelected(i)}
-        />
-      ) : (
-        <IssueList issues={displayedIssues} nameByUserId={names} onRowClick={(i) => setSelected(i)} />
-      )}
+            <KanbanBoard
+              issues={issues}
+              nameByUserId={names}
+              onStatusChange={(id, s) => void updateIssueStatus(id, s)}
+              onIssueOpen={(i) => setSelected(i)}
+            />
+          ) : (
+            <IssueList issues={displayedIssues} nameByUserId={names} onRowClick={(i) => setSelected(i)} />
+          )}
+        </>
+      ) : null}
+
       <IssueModal
         issue={selected}
         open={Boolean(selected)}

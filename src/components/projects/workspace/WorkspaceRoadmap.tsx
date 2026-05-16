@@ -1,7 +1,7 @@
 "use client";
 
-import { WorkspaceSchedulePanel } from "@/components/projects/workspace/WorkspaceSchedulePanel";
+import WorkspaceCoachingRoadmap from "@/components/projects/workspace/WorkspaceCoachingRoadmap";
 
 export default function WorkspaceRoadmap() {
-  return <WorkspaceSchedulePanel />;
+  return <WorkspaceCoachingRoadmap />;
 }
