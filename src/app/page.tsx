@@ -218,7 +218,7 @@ function formatFeedTime(iso: string): string {
 const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   ja: {
     projects: "仲間と動かす。プロジェクトをここから。",
-    posts: "今日やることと活動ログを確認",
+    posts: "友だちの近況をひと目で",
     articles: "記事",
     mentor: "AIに相談して次の一歩を決めよう",
     discovery: "質問・アイデア相談",
@@ -227,7 +227,7 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   },
   en: {
     projects: "Build together. Your projects start here.",
-    posts: "Today focus and activity log",
+    posts: "Friends and updates at a glance",
     articles: "Articles",
     mentor: "Talk to AI and plan your next step",
     discovery: "Ideas Q&A",
@@ -237,8 +237,8 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
 };
 
 const featureItems: Array<{ key: FeaturePage; icon: string }> = [
-  { key: "projects", icon: "▦" },
   { key: "posts", icon: "⌂" },
+  { key: "projects", icon: "▦" },
   { key: "chat", icon: "⌕" },
   { key: "account", icon: "◉" },
 ];
@@ -246,21 +246,21 @@ const featureItems: Array<{ key: FeaturePage; icon: string }> = [
 const featureLabels: Record<Language, Record<FeaturePage, string>> = {
   ja: {
     projects: "プロジェクト",
-    posts: "コミュニティ",
+    posts: "ホーム",
     articles: "記事",
     mentor: "AI",
     discovery: "知恵袋",
-    chat: "探す",
-    account: "マイページ",
+    chat: "検索",
+    account: "プロフィール",
   },
   en: {
     projects: "Projects",
-    posts: "Community",
+    posts: "Home",
     articles: "Articles",
     mentor: "AI",
     discovery: "Ideas",
-    chat: "Explore",
-    account: "My",
+    chat: "Search",
+    account: "Profile",
   },
 };
 
@@ -676,11 +676,11 @@ export default function Home() {
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
   const bottomNavButtonClass = (page: FeaturePage) =>
-    `flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] leading-tight tracking-wide transition ${
-      activePage === page ? "font-semibold text-sky-500" : "font-medium text-zinc-500 hover:text-zinc-800"
+    `flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] leading-tight tracking-wide transition sm:gap-1 sm:py-2 sm:text-[11px] ${
+      activePage === page ? "font-semibold text-zinc-900" : "font-medium text-zinc-400 hover:text-zinc-700"
     }`;
   const [role, setRole] = useState<AppRole>("child");
-  const [activePage, setActivePage] = useState<FeaturePage>("projects");
+  const [activePage, setActivePage] = useState<FeaturePage>("posts");
   const [communityView, setCommunityView] = useState<"progress" | "qna">("progress");
   const [language, setLanguage] = useState<Language>("ja");
   const [displayName, setDisplayName] = useState("");
@@ -3135,8 +3135,8 @@ export default function Home() {
     }
     trackOpsEvent("onboarding_completed");
     setOnboardingCompleted(true);
-    setActivePage("projects");
-    setAuthMessage("オンボーディング完了。まずはプロジェクトを1つ作って動き出しましょう。");
+    setActivePage("posts");
+    setAuthMessage("オンボーディング完了。ホームでつながりを楽しみましょう。");
   }
 
   function generateIdeaBlueprint() {
@@ -3940,8 +3940,8 @@ export default function Home() {
                 }
                 trackOpsEvent("onboarding_completed");
                 setOnboardingCompleted(true);
-                setActivePage("projects");
-                setAuthMessage("まずはプロジェクトを1つ作って始めましょう。");
+                setActivePage("posts");
+                setAuthMessage("まずはホームで近況を見たり、投稿してみましょう。");
               }}
             >
               いったんスキップして始める
@@ -3958,7 +3958,7 @@ export default function Home() {
     <div
       id="moni-app"
       className={`relative min-h-[100dvh] min-h-screen pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased ${
-        communityFullBleed ? "bg-white" : "bg-zinc-100"
+        communityFullBleed ? "bg-white" : "bg-[#fafafa]"
       }`}
     >
       <input
@@ -3968,29 +3968,14 @@ export default function Home() {
         className="hidden"
         onChange={onAvatarFileChange}
       />
-      {!communityFullBleed ? (
-        <>
-          <div className="pointer-events-none absolute -left-24 top-16 h-80 w-80 rounded-full bg-sky-300/[0.07] blur-3xl" />
-          <div className="pointer-events-none absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-sky-400/[0.05] blur-3xl" />
-          <div className="pointer-events-none absolute bottom-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-zinc-400/[0.05] blur-3xl" />
-        </>
-      ) : null}
       <div
         className={
           communityFullBleed
             ? "relative flex min-h-[100dvh] w-full flex-col"
-            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-5 sm:px-5 sm:py-4 lg:gap-6 lg:px-6 xl:px-8 ${
-                activePage === "projects" ? "" : "lg:grid-cols-[min(17rem,22vw)_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]"
-              }`
+            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3`
         }
       >
-        <aside
-          className={
-            activePage === "projects" || communityFullBleed
-              ? "hidden border border-zinc-200 bg-white"
-              : "hidden border border-zinc-200 bg-white sm:mb-0 sm:block sm:rounded-2xl lg:sticky lg:top-4 lg:h-fit lg:self-start"
-          }
-        >
+        <aside className="hidden" aria-hidden="true">
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
               type="button"
@@ -4026,25 +4011,18 @@ export default function Home() {
         <div className={communityFullBleed ? "flex min-h-0 min-w-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
           {!communityFullBleed ? (
           <>
-          <header className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5">
-            <div className="min-w-0">
-              <h1 className="font-sans text-2xl font-bold tracking-tight text-zinc-900">
-                moni
-              </h1>
-              <p className="mt-0.5 text-[11px] font-medium tracking-wide text-zinc-500">
-                {language === "ja" ? "For you timeline · 子ども/保護者/起業家" : "For you timeline · kids/parents/builders"}
-              </p>
-            </div>
-            <div className="flex max-w-[65%] shrink-0 items-center justify-end gap-2">
+          <header className="flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+            <h1 className="font-sans text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">moni</h1>
+            <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
               {!session && canUseSupabase ? (
                 <Link
                   href="/login"
-                  className="shrink-0 rounded-xl border border-zinc-900 bg-zinc-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800"
+                  className="shrink-0 rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-800"
                 >
-                  ログイン / 登録
+                  ログイン
                 </Link>
               ) : null}
-              <div className="min-w-0 truncate text-right text-xs text-zinc-500">
+              <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
                 {sessionEmail ? sessionEmail : accountText.loginStatus}
               </div>
             </div>
@@ -6216,7 +6194,7 @@ export default function Home() {
                     {peerProfileProjects.map((p) => (
                       <li key={`peer-proj-${p.id}`}>
                         <Link
-                          href={`/projects/${p.id}`}
+                          href={`/projects/${p.id}/overview`}
                           className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md"
                           onClick={() => setActiveProfileMember(null)}
                         >
@@ -6305,16 +6283,16 @@ export default function Home() {
       </div>
 
       <nav
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200/90 bg-white/95 shadow-[0_-8px_24px_-20px_rgba(15,23,42,0.5)] backdrop-blur pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 border-t border-[#dbdbdb] bg-white pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5"
         aria-label="メイン機能の切り替え"
       >
-        <div className="mx-auto flex w-full max-w-full flex-nowrap justify-between gap-0 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-2 [&::-webkit-scrollbar]:hidden">
+        <div className="mx-auto flex w-full max-w-full flex-nowrap justify-between gap-0 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-2 [&::-webkit-scrollbar]:hidden">
           {featureItems.map((item) => (
             <button
               key={item.key}
-              className={`keep-bottom-nav relative min-w-[3.5rem] shrink-0 sm:min-w-0 sm:flex-1 ${bottomNavButtonClass(item.key)} ${
+              className={`keep-bottom-nav relative min-w-[3.25rem] shrink-0 sm:min-w-0 sm:flex-1 ${bottomNavButtonClass(item.key)} ${
                 activePage === item.key
-                  ? "after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-7 after:-translate-x-1/2 after:rounded-full after:bg-sky-500"
+                  ? "after:pointer-events-none after:absolute after:bottom-0 after:left-1/2 after:h-[2px] after:w-8 after:-translate-x-1/2 after:rounded-full after:bg-zinc-900"
                   : ""
               }`}
               type="button"
@@ -6326,8 +6304,8 @@ export default function Home() {
               aria-label={featureLabels[language][item.key]}
               title={featureLabels[language][item.key]}
             >
-              <span className="text-[1.35rem] leading-none">{item.icon}</span>
-              <span className="max-w-[4.75rem] truncate leading-tight">{featureLabels[language][item.key]}</span>
+              <span className="text-[1.45rem] leading-none sm:text-[1.35rem]">{item.icon}</span>
+              <span className="hidden max-w-[4.75rem] truncate leading-tight sm:inline">{featureLabels[language][item.key]}</span>
             </button>
           ))}
         </div>

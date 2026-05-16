@@ -29,10 +29,10 @@ type Props = {
 };
 
 const sidebarItems: { key: AppFeatureKey; label: string; icon: string }[] = [
+  { key: "posts", label: "ホーム", icon: "⌂" },
   { key: "projects", label: "プロジェクト", icon: "▦" },
-  { key: "posts", label: "コミュニティ", icon: "⌂" },
-  { key: "chat", label: "探す", icon: "⌕" },
-  { key: "account", label: "マイページ", icon: "◉" },
+  { key: "chat", label: "検索", icon: "⌕" },
+  { key: "account", label: "プロフィール", icon: "◉" },
 ];
 
 function hashIndex(id: string, mod: number): number {
@@ -271,7 +271,7 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
     setShowAdvancedFields(false);
     setBusy(false);
     void load();
-    if (data?.id) router.push(`/projects/${data.id as string}`);
+    if (data?.id) router.push(`/projects/${data.id as string}/overview`);
   }
 
   if (!hasSession) {
@@ -312,9 +312,6 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
             </button>
           ))}
         </nav>
-        <div className="mt-auto space-y-1 border-t border-zinc-100 p-2 text-[11px] text-zinc-400">
-          <p>Templates / Data など（将来）</p>
-        </div>
       </aside>
 
       <div className="min-w-0 flex-1 bg-white">
@@ -389,7 +386,7 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
               return (
                 <div key={p.id} className="group relative">
                   <Link
-                    href={`/projects/${p.id}`}
+                    href={`/projects/${p.id}/overview`}
                     prefetch
                     className="relative z-10 flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:shadow-lg active:opacity-90"
                   >

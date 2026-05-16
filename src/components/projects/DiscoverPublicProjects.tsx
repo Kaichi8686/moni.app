@@ -285,7 +285,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
 
               <div className="mt-5 flex flex-col gap-2">
                 <Link
-                  href={`/projects/${detail.id}`}
+                  href={`/projects/${detail.id}/overview`}
                   className="flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
                 >
                   プロジェクト画面を開く

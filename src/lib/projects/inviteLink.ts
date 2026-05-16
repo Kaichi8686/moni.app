@@ -12,7 +12,7 @@ export function projectPageAbsoluteUrl(projectId: string): string {
     if (env) origin = env;
   }
   if (!origin) origin = "https://dream-spark-pro.vercel.app";
-  return `${origin}/projects/${encodeURIComponent(projectId)}`;
+  return `${origin}/projects/${encodeURIComponent(projectId)}/overview`;
 }
 
 export function projectInviteShareText(projectName: string, projectId: string): string {

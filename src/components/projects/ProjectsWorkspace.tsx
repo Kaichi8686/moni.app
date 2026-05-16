@@ -457,7 +457,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
                       <p className="line-clamp-2 text-sm text-zinc-600">{p.description}</p>
                       <p className="mt-1 text-xs text-zinc-500">{p.visibility === "public" ? "公開" : "非公開"} ・ {p.category} ・ {(p.tags ?? []).join(", ")}</p>
                     </div>
-                    <Link href={`/projects/${p.id}`} className={button}>
+                    <Link href={`/projects/${p.id}/overview`} className={button}>
                       開く
                     </Link>
                   </div>

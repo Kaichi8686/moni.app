@@ -1,15 +1,8 @@
-import type { Metadata } from "next";
-import { ProjectSpaceDetail } from "@/components/projects/ProjectSpaceDetail";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "プロジェクト詳細 | moni",
-};
+type Props = { params: Promise<{ projectId: string }> };
 
-type Props = {
-  params: Promise<{ projectId: string }>;
-};
-
-export default async function ProjectDetailPage({ params }: Props) {
+export default async function ProjectDetailRedirect({ params }: Props) {
   const { projectId } = await params;
-  return <ProjectSpaceDetail projectId={projectId} />;
+  redirect(`/projects/${projectId}/overview`);
 }

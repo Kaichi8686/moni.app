@@ -15,6 +15,11 @@
   --startup-in-progress: #fff3d6;
   --startup-done: #e8f5e9;
   --startup-text: #1a1a1a;
+  /* Linear-like workspace (参考トークン) */
+  --linear-accent: #5e6ad2;
+  --linear-accent-hover: #4f5bbd;
+  --linear-border: #e5e7eb;
+  --linear-muted: #6b7280;
 }
 
 @theme inline {
