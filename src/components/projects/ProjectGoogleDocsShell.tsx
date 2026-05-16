@@ -147,9 +147,12 @@ export function ProjectGoogleDocsShell({
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const documentsRef = useRef(documents);
-  documentsRef.current = documents;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveHint, setSaveHint] = useState("すべての変更をクラウドに保存しました");
+
+  useEffect(() => {
+    documentsRef.current = documents;
+  }, [documents]);
 
   const exec = useCallback((command: string, value?: string) => {
     editorRef.current?.focus();
@@ -188,7 +191,7 @@ export function ProjectGoogleDocsShell({
     if (!el || activeDocId === null) return;
     const row = documentsRef.current.find((d) => d.id === activeDocId);
     el.innerHTML = initialHtmlFromStored(row?.content ?? "");
-    setSaveHint("すべての変更をクラウドに保存しました");
+    queueMicrotask(() => setSaveHint("すべての変更をクラウドに保存しました"));
   }, [activeDocId]);
 
   /** 初回ロードで一覧が後から届いたとき（空エディタを埋める） */
@@ -253,8 +256,10 @@ export function ProjectGoogleDocsShell({
   };
 
   return (
-    <section className="grid gap-0 md:grid-cols-[272px_1fr] md:gap-3">
-      <div className="min-h-0 rounded-none border-0 bg-white md:rounded-lg md:border md:border-[#dadce0] md:p-3 md:shadow-sm">{sidebar}</div>
+    <section className="flex min-h-0 flex-1 flex-col gap-0 md:grid md:min-h-[min(72dvh,720px)] md:grid-cols-[minmax(0,260px)_1fr] md:gap-3">
+      <div className="max-h-[min(38vh,280px)] min-h-0 shrink-0 overflow-y-auto rounded-none border-0 bg-white md:max-h-none md:overflow-hidden md:rounded-lg md:border md:border-[#dadce0] md:p-3 md:shadow-sm">
+        {sidebar}
+      </div>
 
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border-0 bg-white md:rounded-lg md:border md:border-[#dadce0] md:shadow-sm">
         <MenuBar />
@@ -508,7 +513,7 @@ export function ProjectGoogleDocsShell({
               suppressContentEditableWarning
               onInput={onEditorInput}
               onBlur={() => flushToParent()}
-              className="gdocs-editor-body min-h-[1056px] w-full border border-[#dadce0] bg-white px-[96px] pb-[96px] pt-[72px] outline-none print:border-0 print:shadow-none"
+              className="gdocs-editor-body min-h-[min(70vh,560px)] w-full border border-[#dadce0] bg-white px-4 pb-12 pt-8 outline-none sm:min-h-[720px] sm:px-12 sm:pb-16 sm:pt-12 md:px-[72px] md:pb-[72px] md:pt-[56px] print:border-0 print:shadow-none"
             />
           </div>
         </div>

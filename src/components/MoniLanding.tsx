@@ -54,9 +54,10 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
 
   useEffect(() => {
     document.documentElement.classList.add("moni-landing-active");
-    onScroll();
+    const raf = requestAnimationFrame(() => onScroll());
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      cancelAnimationFrame(raf);
       document.documentElement.classList.remove("moni-landing-active");
       window.removeEventListener("scroll", onScroll);
     };

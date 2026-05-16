@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MoniLanding } from "@/components/MoniLanding";
+import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
+import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { ProjectTabGlide } from "@/components/projects/ProjectTabGlide";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -170,7 +172,8 @@ function createMentorWelcomeMessage(): MentorChatMessage {
 }
 
 type DmPeerRow = { room_id: string; peer_id: string; peer_name: string };
-type GroupRoomRow = { room_id: string; room_name: string; owner_id: string };
+type GroupRoomRow = { room_id: string; room_name: string; owner_id?: string };
+type ExploreSegment = "friends" | "projects";
 type TalkRoomMeta = { previewText: string; timeLabel: string; unread: number };
 type OpsEvent = { id: string; name: string; at: string; page: FeaturePage; userId: string | null };
 type ReportEntry = {
@@ -626,6 +629,42 @@ const DEMO_FEED: FeedPost[] = [
   },
 ];
 
+function CommunityConnectChips({
+  onProjects,
+  onDiscover,
+  onValidation,
+}: {
+  onProjects: () => void;
+  onDiscover: () => void;
+  onValidation: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        className="min-h-[36px] rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+        onClick={onProjects}
+      >
+        プロジェクト
+      </button>
+      <button
+        type="button"
+        className="min-h-[36px] rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+        onClick={onDiscover}
+      >
+        探す
+      </button>
+      <button
+        type="button"
+        className="min-h-[36px] rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-100"
+        onClick={onValidation}
+      >
+        おためし検証
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const cardClass =
@@ -666,9 +705,6 @@ export default function Home() {
   const [matchGoal, setMatchGoal] = useState("");
   const [matches, setMatches] = useState<MatchMember[]>(DEMO_MEMBERS);
   const [matchNotice, setMatchNotice] = useState("");
-  const [exploreTab, setExploreTab] = useState<"friends" | "projects">("friends");
-  const [groupDeleteAskId, setGroupDeleteAskId] = useState<string | null>(null);
-  const [groupDeleting, setGroupDeleting] = useState(false);
   const [selectedAiType, setSelectedAiType] = useState<AiMatchType | null>(null);
   const [activeProfileMember, setActiveProfileMember] = useState<MatchMember | null>(null);
   const [peerProfileProjects, setPeerProfileProjects] = useState<PeerProjectSummary[]>([]);
@@ -822,6 +858,7 @@ export default function Home() {
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>(() => (supabaseEnabled ? [] : DEMO_FEED));
   const [postCaption, setPostCaption] = useState("");
   const [postFile, setPostFile] = useState<File | null>(null);
+  const [postComposerOpen, setPostComposerOpen] = useState(false);
   const [postUploadPreview, setPostUploadPreview] = useState<string | null>(null);
   const [postPosting, setPostPosting] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
@@ -1019,6 +1056,11 @@ export default function Home() {
   const [dmPeers, setDmPeers] = useState<DmPeerRow[]>([]);
   const [groupRooms, setGroupRooms] = useState<GroupRoomRow[]>([]);
   const [groupRoomDraft, setGroupRoomDraft] = useState("");
+  const [groupDeleteTarget, setGroupDeleteTarget] = useState<GroupRoomRow | null>(null);
+  const [groupDeleting, setGroupDeleting] = useState(false);
+  const [feedDeleteTarget, setFeedDeleteTarget] = useState<FeedPost | null>(null);
+  const [feedDeleting, setFeedDeleting] = useState(false);
+  const [exploreSegment, setExploreSegment] = useState<ExploreSegment>("friends");
   const [talkMeta, setTalkMeta] = useState<Record<string, TalkRoomMeta>>({});
   const [opsEvents, setOpsEvents] = useState<OpsEvent[]>([]);
   const [reports, setReports] = useState<ReportEntry[]>([]);
@@ -1034,6 +1076,43 @@ export default function Home() {
 
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
+
+  const goProjectsTab = useCallback(() => setActivePage("projects"), []);
+  const goDiscoverTab = useCallback(() => {
+    setActivePage("chat");
+    setChatSubView("list");
+  }, []);
+  const goValidationTab = useCallback(() => {
+    setActivePage("mentor");
+    setMentorSubTab("validation");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    const community = params.get("community");
+    const mentor = params.get("mentor");
+    if (
+      tab === "posts" ||
+      tab === "articles" ||
+      tab === "mentor" ||
+      tab === "chat" ||
+      tab === "account" ||
+      tab === "projects"
+    ) {
+      setActivePage(tab);
+    }
+    if (community === "qna" || community === "progress") {
+      setActivePage("posts");
+      setCommunityView(community);
+    }
+    if (mentor === "validation") {
+      setActivePage("mentor");
+      setMentorSubTab("validation");
+    }
+    if (tab === "chat") setChatSubView("list");
+  }, []);
 
   const loadRole = useCallback(async (userId: string) => {
     if (!supabase) return;
@@ -1539,7 +1618,7 @@ export default function Home() {
     if (groupErr && groupErr.code !== "42P01" && groupErr.code !== "PGRST205") {
       setAuthMessage(`グループ一覧の取得に失敗: ${groupErr.message}`);
     }
-    const groups = ((groupRows ?? []) as Array<{ room_id: string; room_name: string; owner_id: string }>).map((g) => ({
+    const groups = ((groupRows ?? []) as Array<{ room_id: string; room_name: string; owner_id?: string }>).map((g) => ({
       room_id: g.room_id,
       room_name: g.room_name || "グループ",
       owner_id: g.owner_id,
@@ -1838,26 +1917,34 @@ export default function Home() {
     setAuthMessage(`グループ「${name}」を作成しました。`);
   }
 
-  async function deleteGroupRoom(roomId: string) {
-    if (!supabase || !session) {
-      setAuthMessage("ログインが必要です。");
+  async function deleteGroupRoom() {
+    if (!groupDeleteTarget || !session) return;
+    if (groupDeleteTarget.owner_id && groupDeleteTarget.owner_id !== session.user.id) {
+      setAuthMessage("このグループを削除する権限がありません。");
+      setGroupDeleteTarget(null);
       return;
     }
     setGroupDeleting(true);
     try {
-      const { error } = await supabase.from("chat_group_rooms").delete().eq("room_id", roomId).eq("owner_id", session.user.id);
-      if (error) {
-        setAuthMessage(`グループ削除に失敗: ${error.message}`);
-        return;
+      if (supabase) {
+        const { error } = await supabase
+          .from("chat_group_rooms")
+          .delete()
+          .eq("room_id", groupDeleteTarget.room_id)
+          .eq("owner_id", session.user.id);
+        if (error) {
+          setAuthMessage(`グループ削除に失敗: ${error.message}`);
+          return;
+        }
       }
-      setGroupRooms((prev) => prev.filter((g) => g.room_id !== roomId));
-      if (activeRoomId === roomId) {
+      setGroupRooms((prev) => prev.filter((g) => g.room_id !== groupDeleteTarget.room_id));
+      if (activeRoomId === groupDeleteTarget.room_id) {
         setActiveRoomId("global");
         setChatSubView("list");
       }
-      setGroupDeleteAskId(null);
+      setGroupDeleteTarget(null);
       setAuthMessage("グループを削除しました。");
-      await refreshTalkList();
+      void refreshTalkListRef.current?.();
     } finally {
       setGroupDeleting(false);
     }
@@ -2536,18 +2623,24 @@ export default function Home() {
         return;
       }
       const mapped: MatchMember[] = (data ?? []).map((row) => {
-        const avatarRaw = (row as { avatar_url?: string | null }).avatar_url;
+        const id = row.id as string;
+        const dbAvatar = (row.avatar_url as string | null) ?? null;
         return {
-          id: row.id as string,
+          id,
           name: (row.display_name as string | null) || "ユーザー",
           goal: (row.goal as string | null) || "目標未設定",
           strength: row.role === "investor" ? "投資/事業経験" : row.role === "parent" ? "保護者視点" : "子ども起業家",
-          avatarUrl: typeof avatarRaw === "string" && avatarRaw.trim() ? avatarRaw.trim() : null,
+          avatarUrl: dbAvatar || readStoredAvatarUrl(id),
           aiType:
-            row.role === "investor" ? "marketer" : row.role === "parent" ? "idea" : inferAiTypeFromMember({
-              goal: (row.goal as string | null) || "",
-              strength: row.role === "investor" ? "投資/事業経験" : row.role === "parent" ? "保護者視点" : "子ども起業家",
-            }),
+            row.role === "investor"
+              ? "marketer"
+              : row.role === "parent"
+                ? "idea"
+                : inferAiTypeFromMember({
+                    goal: (row.goal as string | null) || "",
+                    strength:
+                      row.role === "investor" ? "投資/事業経験" : row.role === "parent" ? "保護者視点" : "子ども起業家",
+                  }),
         };
       });
       const typed = selectedAiType ? mapped.filter((m) => m.aiType === selectedAiType) : mapped;
@@ -3305,6 +3398,7 @@ export default function Home() {
     if (postUploadPreview) URL.revokeObjectURL(postUploadPreview);
     setPostUploadPreview(null);
     if (postFileInputRef.current) postFileInputRef.current.value = "";
+    setPostComposerOpen(false);
   }
 
   async function createFeedPost(event: FormEvent) {
@@ -3403,26 +3497,32 @@ export default function Home() {
   }
 
   async function deleteFeedPost(post: FeedPost) {
-    if (post.authorId === "local") {
-      setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
-      if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
-      return;
+    setFeedDeleting(true);
+    try {
+      if (post.authorId === "local") {
+        setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
+        if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
+        return;
+      }
+      if (!session || session.user.id !== post.authorId) return;
+      if (!supabase || !canUseSupabase) {
+        setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
+        if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
+        return;
+      }
+      const { error } = await supabase.from("posts").delete().eq("id", post.id);
+      if (error) {
+        setAuthMessage(`投稿の削除に失敗: ${error.message}`);
+        return;
+      }
+      if (post.storagePath) {
+        await supabase.storage.from("post-images").remove([post.storagePath]);
+      }
+      await loadPosts();
+    } finally {
+      setFeedDeleting(false);
+      setFeedDeleteTarget(null);
     }
-    if (!session || session.user.id !== post.authorId) return;
-    if (!supabase || !canUseSupabase) {
-      setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
-      if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
-      return;
-    }
-    const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (error) {
-      setAuthMessage(`投稿の削除に失敗: ${error.message}`);
-      return;
-    }
-    if (post.storagePath) {
-      await supabase.storage.from("post-images").remove([post.storagePath]);
-    }
-    await loadPosts();
   }
 
   async function addFeedComment(post: FeedPost) {
@@ -3852,8 +3952,15 @@ export default function Home() {
     );
   }
 
+  const communityFullBleed = activePage === "posts";
+
   return (
-    <div id="moni-app" className="relative min-h-[100dvh] min-h-screen bg-zinc-100 pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased">
+    <div
+      id="moni-app"
+      className={`relative min-h-[100dvh] min-h-screen pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased ${
+        communityFullBleed ? "bg-white" : "bg-zinc-100"
+      }`}
+    >
       <input
         ref={avatarInputRef}
         type="file"
@@ -3861,17 +3968,25 @@ export default function Home() {
         className="hidden"
         onChange={onAvatarFileChange}
       />
-      <div className="pointer-events-none absolute -left-24 top-16 h-80 w-80 rounded-full bg-sky-300/[0.07] blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-sky-400/[0.05] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-zinc-400/[0.05] blur-3xl" />
+      {!communityFullBleed ? (
+        <>
+          <div className="pointer-events-none absolute -left-24 top-16 h-80 w-80 rounded-full bg-sky-300/[0.07] blur-3xl" />
+          <div className="pointer-events-none absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-sky-400/[0.05] blur-3xl" />
+          <div className="pointer-events-none absolute bottom-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-zinc-400/[0.05] blur-3xl" />
+        </>
+      ) : null}
       <div
-        className={`relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-5 sm:px-5 sm:py-4 lg:gap-6 lg:px-6 xl:px-8 ${
-          activePage === "projects" ? "" : "lg:grid-cols-[min(17rem,22vw)_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]"
-        }`}
+        className={
+          communityFullBleed
+            ? "relative flex min-h-[100dvh] w-full flex-col"
+            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-5 sm:px-5 sm:py-4 lg:gap-6 lg:px-6 xl:px-8 ${
+                activePage === "projects" ? "" : "lg:grid-cols-[min(17rem,22vw)_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)]"
+              }`
+        }
       >
         <aside
           className={
-            activePage === "projects"
+            activePage === "projects" || communityFullBleed
               ? "hidden border border-zinc-200 bg-white"
               : "hidden border border-zinc-200 bg-white sm:mb-0 sm:block sm:rounded-2xl lg:sticky lg:top-4 lg:h-fit lg:self-start"
           }
@@ -3908,7 +4023,9 @@ export default function Home() {
           </div>
         </aside>
 
-        <div className="space-y-3 sm:space-y-4">
+        <div className={communityFullBleed ? "flex min-h-0 min-w-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
+          {!communityFullBleed ? (
+          <>
           <header className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5">
             <div className="min-w-0">
               <h1 className="font-sans text-2xl font-bold tracking-tight text-zinc-900">
@@ -3957,8 +4074,16 @@ export default function Home() {
               ))}
             </div>
           ) : null}
+          </>
+          ) : null}
 
-          <main className="grid gap-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:grid-cols-1">
+          <main
+            className={
+              communityFullBleed
+                ? "flex min-h-0 flex-1 flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))]"
+                : "grid gap-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:grid-cols-1"
+            }
+          >
         <section className={activePage === "projects" ? "" : "hidden"}>
           {activePage === "projects" ? (
             <ProjectTabGlide
@@ -4369,8 +4494,12 @@ export default function Home() {
             ) : null}
         </section>
 
-        <section className={`${cardClass} overflow-hidden p-0 ${activePage === "posts" && communityView === "progress" ? "" : "hidden"}`}>
-          <div className="border-b border-zinc-200 px-5 py-4">
+        <section
+          className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white ${
+            activePage === "posts" && communityView === "progress" ? "" : "hidden"
+          }`}
+        >
+          <div className="shrink-0 border-b border-zinc-200 px-4 py-3 sm:px-5 sm:py-4">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold">コミュニティ</h3>
             </div>
@@ -4399,65 +4528,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="border-b border-zinc-100 bg-zinc-50/80 px-5 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">つながる</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100"
-                onClick={() => setActivePage("projects")}
-              >
-                プロジェクト
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100"
-                onClick={() => setActivePage("chat")}
-              >
-                探す
-              </button>
-            </div>
-          </div>
-
-          <form className="space-y-3 border-b border-zinc-200 px-5 py-4" onSubmit={(e) => void createFeedPost(e)}>
-            <p className="text-xs font-semibold text-zinc-800">いまどうしてる？</p>
-            <textarea
-              className={`min-h-[5.5rem] w-full ${inputClass}`}
-              placeholder="いまどうしてる？"
-              value={postCaption}
-              onChange={(e) => setPostCaption(e.target.value)}
-              maxLength={280}
-            />
-            <div className="flex items-end justify-between gap-2">
-              <input
-                ref={postFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={onPostFileChange}
-              />
-              <span className="text-xs text-zinc-500">{postCaption.length}/280</span>
-              <button
-                type="button"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-900 bg-zinc-900 text-xl font-semibold text-white transition hover:bg-zinc-800"
-                onClick={() => postFileInputRef.current?.click()}
-                aria-label="画像を選択"
-                title="画像を選択"
-              >
-                ＋
-              </button>
-            </div>
-            {postUploadPreview ? (
-              <div className="overflow-hidden rounded-lg border border-[#dbdbdb] bg-[#fafafa]">
-                {/* eslint-disable-next-line @next/next/no-img-element -- ユーザー選択ファイルのプレビュー */}
-                <img src={postUploadPreview} alt="" className="max-h-72 w-full object-cover" />
-              </div>
-            ) : null}
-            <button className={primaryButtonClass} type="submit" disabled={postPosting || (!postFile && !postCaption.trim())}>
-              {postPosting ? "投稿中…" : "投稿する"}
-            </button>
-          </form>
-
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           <ul className="divide-y divide-zinc-200">
             {feedPosts.map((post) => (
               <li key={post.id} className="px-0 py-0 transition hover:bg-zinc-50/70">
@@ -4486,7 +4557,7 @@ export default function Home() {
                     <button
                       type="button"
                       className="shrink-0 text-xs font-semibold text-rose-500 hover:underline"
-                      onClick={() => void deleteFeedPost(post)}
+                      onClick={() => setFeedDeleteTarget(post)}
                     >
                       削除
                     </button>
@@ -4567,33 +4638,22 @@ export default function Home() {
           </ul>
 
           {feedPosts.length === 0 && canUseSupabase ? (
-            <div className="px-5 py-6 text-center">
-              <p className="text-sm text-zinc-600">まだ投稿がありません。まずは1件、進捗を書いてみましょう。</p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  className={primaryButtonClass}
-                  onClick={() => {
-                    if (!postCaption.trim()) setPostCaption("今日やったこと：\n次にやること：\n困っていること：");
-                    trackOpsEvent("first_post_started");
-                  }}
-                >
-                  テンプレで最初の投稿を書く
-                </button>
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={() => {
-                    setCommunityView("qna");
-                    setIdeaChieNewTitle("この進捗の次にやるべきことは？");
-                    setIdeaChieNewBody(postCaption.trim() ? `現在の進捗: ${postCaption}\n困っている点: ` : "現在の進捗: \n困っている点: ");
-                    trackOpsEvent("first_question_started");
-                  }}
-                >
-                  質問を作って相談する
-                </button>
-              </div>
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-zinc-600">まだ投稿がありません。</p>
+              <p className="mt-1 text-xs text-zinc-500">右下の ＋ から進捗を投稿できます。</p>
             </div>
+          ) : null}
+          </div>
+
+          {!postComposerOpen ? (
+            <button
+              type="button"
+              className="absolute bottom-5 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-3xl font-light leading-none text-white shadow-[0_4px_20px_rgba(0,0,0,0.25)] transition hover:bg-zinc-800 active:scale-95"
+              onClick={() => setPostComposerOpen(true)}
+              aria-label="投稿を作成"
+            >
+              ＋
+            </button>
           ) : null}
         </section>
 
@@ -5042,7 +5102,9 @@ export default function Home() {
         </section>
 
         <section
-          className={`overflow-hidden rounded-xl border border-[#eff3f4] bg-white shadow-sm ${activePage === "posts" && communityView === "qna" ? "" : "hidden"}`}
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-white ${
+            activePage === "posts" && communityView === "qna" ? "" : "hidden"
+          }`}
         >
           {/* Twitter/X 風ヘッダー */}
           <div className="sticky top-0 z-10 border-b border-[#eff3f4] bg-white/90 px-4 py-3 backdrop-blur-md">
@@ -5059,26 +5121,6 @@ export default function Home() {
                 onClick={() => setCommunityView("progress")}
               >
                 進捗へ
-              </button>
-            </div>
-          </div>
-
-          <div className="border-b border-[#eff3f4] bg-[#f7f9f9]/80 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#536471]">つながる</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-[#cfd9de] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#0f1419] transition hover:bg-[#f7f9f9]"
-                onClick={() => setActivePage("projects")}
-              >
-                プロジェクト
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-[#cfd9de] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#0f1419] transition hover:bg-[#f7f9f9]"
-                onClick={() => setActivePage("chat")}
-              >
-                探す
               </button>
             </div>
           </div>
@@ -5325,30 +5367,7 @@ export default function Home() {
                 ) : ideaChieQuestions.length === 0 ? (
                   <div className="px-4 py-12 text-center">
                     <p className="text-[15px] text-[#536471]">まだ質問がありません。最初の投稿で次の一手が見えます。</p>
-                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-full bg-sky-500 px-5 py-2.5 text-[15px] font-bold text-white shadow-sm transition hover:bg-sky-600"
-                        onClick={() => {
-                          setIdeaChieNewTitle("このアイデアを最初に試すなら、何から始めるべき？");
-                          setIdeaChieNewBody("対象: \n今の状況: \n困っていること: ");
-                          trackOpsEvent("first_question_started");
-                        }}
-                      >
-                        テンプレで書く
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-full border border-[#cfd9de] bg-white px-5 py-2.5 text-[15px] font-bold text-[#0f1419] transition hover:bg-[#f7f9f9]"
-                        onClick={() => {
-                          setActivePage("chat");
-                          setChatSubView("list");
-                          trackOpsEvent("search_started");
-                        }}
-                      >
-                        仲間を探す
-                      </button>
-                    </div>
+                    <p className="mt-3 text-[13px] text-[#536471]">上のフォームから質問を投稿できます。</p>
                   </div>
                 ) : (
                   <ul className="divide-y divide-[#eff3f4]">
@@ -5410,139 +5429,129 @@ export default function Home() {
         <section className={`${cardClass} ${activePage === "chat" && chatSubView === "list" ? "" : "hidden"}`}>
           <div>
             <h3 className="text-base font-semibold">探す</h3>
-            <p className="mt-1 text-xs text-zinc-500">
-              友達検索と公開プロジェクトの応募。参加中の一覧は「プロジェクト」タブ。個別のやりとりはメッセージまたは各プロジェクトのチャットを利用してください。
-            </p>
+            <p className="mt-1 text-xs text-zinc-500">友達と公開プロジェクトを探せます。メッセージは下の一覧から。</p>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/90 p-1">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`min-h-[44px] rounded-xl px-3 text-sm font-semibold transition ${
-                exploreTab === "friends" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:bg-white/70"
+              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
+                exploreSegment === "friends"
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
               }`}
-              onClick={() => setExploreTab("friends")}
+              onClick={() => setExploreSegment("friends")}
             >
               友達
             </button>
             <button
               type="button"
-              className={`min-h-[44px] rounded-xl px-3 text-sm font-semibold transition ${
-                exploreTab === "projects" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:bg-white/70"
+              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
+                exploreSegment === "projects"
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
               }`}
-              onClick={() => setExploreTab("projects")}
+              onClick={() => setExploreSegment("projects")}
             >
               プロジェクト
             </button>
           </div>
 
-          {exploreTab === "projects" ? <DiscoverPublicProjects className="mt-4" /> : null}
-
-          {exploreTab === "friends" ? (
-            <>
-              <div className="mt-4 grid gap-3">
-                <form onSubmit={runMatching} className="rounded-xl border border-[#e5e7eb] bg-white p-3">
-                  <p className="text-sm font-semibold text-[#262626]">友達を検索</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {(Object.keys(AI_MATCH_TYPE_META) as AiMatchType[]).map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                          selectedAiType === type
-                            ? "border-[#0095f6] bg-[#e8f4ff] text-[#0f4c81]"
-                            : "border-[#d1d5db] bg-white text-[#4b5563] hover:bg-[#f9fafb]"
-                        }`}
-                        onClick={() => setSelectedAiType((prev) => (prev === type ? null : type))}
-                      >
-                        {AI_MATCH_TYPE_META[type].label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      className={`min-w-0 flex-1 ${inputClass}`}
-                      placeholder="例: 教育 アプリ 発表 が得意な人"
-                      value={matchGoal}
-                      onChange={(e) => setMatchGoal(e.target.value)}
-                    />
-                    <button className={primaryButtonClass} type="submit">
-                      絞り込む
-                    </button>
-                  </div>
-                </form>
+          {exploreSegment === "friends" ? (
+            <div className="mt-3">
+              <form onSubmit={runMatching} className="rounded-xl border border-[#e5e7eb] bg-white p-3">
+                <p className="text-sm font-semibold text-[#262626]">友達を探す</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(Object.keys(AI_MATCH_TYPE_META) as AiMatchType[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      selectedAiType === type
+                        ? "border-[#0095f6] bg-[#e8f4ff] text-[#0f4c81]"
+                        : "border-[#d1d5db] bg-white text-[#4b5563] hover:bg-[#f9fafb]"
+                    }`}
+                    onClick={() => setSelectedAiType((prev) => (prev === type ? null : type))}
+                  >
+                    {AI_MATCH_TYPE_META[type].label}
+                  </button>
+                ))}
               </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className={`flex-1 ${inputClass}`}
+                  placeholder="例: 教育 アプリ 発表 が得意な人"
+                  value={matchGoal}
+                  onChange={(e) => setMatchGoal(e.target.value)}
+                />
+                <button className={primaryButtonClass} type="submit">
+                  絞り込む
+                </button>
+              </div>
+            </form>
               {matchNotice ? <p className="mt-2 text-sm text-[#8e8e8e]">{matchNotice}</p> : null}
               <ul className="mt-3 space-y-2 text-sm">
                 {matches.map((m) => {
                   const isSelf = Boolean(m.id && session?.user?.id && m.id === session.user.id);
                   const followDisabled = !m.id || isSelf;
+                  const isFollowing = Boolean(m.id && followingIds.includes(m.id));
+                  const isPending = Boolean(m.id && outgoingRequestIds.includes(m.id));
                   const followLabel = !m.id
-                    ? "—"
+                    ? "フォロー不可"
                     : isSelf
                       ? "自分"
-                      : followingIds.includes(m.id)
+                      : isFollowing
                         ? "フォロー中"
-                        : outgoingRequestIds.includes(m.id)
-                          ? "承認待ち"
+                        : isPending
+                          ? "申請中"
                           : "フォロー";
-                  const initial = (m.name.trim().charAt(0) || "?").toUpperCase();
-                  const following = Boolean(m.id && followingIds.includes(m.id));
-                  const pendingReq = Boolean(m.id && outgoingRequestIds.includes(m.id));
                   return (
-                    <li key={m.id ?? `${m.name}-${m.goal}`} className="relative overflow-hidden rounded-xl border border-[#dbdbdb] bg-white">
+                    <li
+                      key={m.id ?? `${m.name}-${m.goal}`}
+                      className="relative overflow-hidden rounded-xl border border-[#dbdbdb] bg-white"
+                    >
                       <button
                         type="button"
-                        className="flex w-full gap-3 p-3 pr-[7.25rem] text-left transition hover:bg-zinc-50/90"
+                        className={`absolute right-2 top-2 z-10 min-h-[32px] rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
+                          isFollowing || isPending
+                            ? "border-zinc-300 bg-zinc-50 text-zinc-700"
+                            : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
+                        }`}
+                        disabled={followDisabled}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!m.id || isSelf) return;
+                          void toggleFollow(m.id);
+                        }}
+                      >
+                        {followLabel}
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-start gap-3 p-3 pr-[5.5rem] text-left transition hover:bg-zinc-50/90"
                         onClick={() => setActiveProfileMember(m)}
                       >
-                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-zinc-200 ring-2 ring-white">
-                          {m.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- Supabase profile URL
-                            <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-sky-500 to-indigo-600 text-lg font-bold text-white">
-                              {initial}
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
+                        <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="sm" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
                             <span className="font-semibold text-[#262626]">{m.name}</span>
                             <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-semibold text-[#3730a3]">
                               {AI_MATCH_TYPE_META[m.aiType ?? inferAiTypeFromMember(m)].label}
                             </span>
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-sm leading-snug text-zinc-700">{m.goal}</p>
-                        </div>
+                          </span>
+                          <p className="mt-1 line-clamp-2 text-sm text-zinc-700">{m.goal}</p>
+                        </span>
                       </button>
-                      <div className="pointer-events-none absolute right-2 top-2 flex flex-col items-end gap-1">
-                        <button
-                          type="button"
-                          className={`pointer-events-auto min-h-[36px] min-w-[5.5rem] rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
-                            following
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                              : pendingReq
-                                ? "border-amber-200 bg-amber-50 text-amber-950"
-                                : "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
-                          }`}
-                          disabled={followDisabled}
-                          aria-label={followLabel}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!m.id || isSelf) return;
-                            void toggleFollow(m.id);
-                          }}
-                        >
-                          {followLabel}
-                        </button>
-                      </div>
                     </li>
                   );
                 })}
               </ul>
-            </>
-          ) : null}
+            </div>
+          ) : (
+            <div className="mt-3">
+              <DiscoverPublicProjects showSectionHeader />
+            </div>
+          )}
         </section>
 
         <section className={`${cardClass} ${activePage === "mentor" && mentorSubTab === "validation" ? "" : "hidden"}`}>
@@ -5784,50 +5793,47 @@ export default function Home() {
                     unread: 0,
                   };
                   const initial = (row.room_name?.trim()?.charAt(0) || "G").toUpperCase();
-                  const canDeleteGroup = Boolean(session && row.owner_id === session.user.id);
+                  const canDeleteGroup = Boolean(session?.user?.id && row.owner_id === session.user.id);
                   return (
-                    <div key={row.room_id} className="relative flex items-stretch border-b border-[#efefef] bg-white">
+                    <div key={row.room_id} className="flex items-stretch border-b border-[#efefef] bg-white">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition hover:bg-[#fafafa] active:bg-[#efefef]"
+                      onClick={() => {
+                        setActiveRoomId(row.room_id);
+                        setChatSubView("room");
+                      }}
+                    >
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white" aria-hidden>
+                        {initial}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="truncate text-[15px] font-semibold text-[#262626]">{row.room_name}</p>
+                          {meta.timeLabel ? (
+                            <span className="shrink-0 text-[11px] tabular-nums text-[#8e8e8e]">{meta.timeLabel}</span>
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-between gap-2">
+                          <p className="truncate text-[13px] leading-snug text-[#8e8e8e]">{meta.previewText}</p>
+                          {meta.unread > 0 ? (
+                            <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[#ff3b30] px-1.5 text-[11px] font-bold text-white">
+                              {meta.unread > 99 ? "99" : meta.unread}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </button>
+                    {canDeleteGroup ? (
                       <button
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 pr-[4.5rem] text-left transition hover:bg-[#fafafa] active:bg-[#efefef]"
-                        onClick={() => {
-                          setActiveRoomId(row.room_id);
-                          setChatSubView("room");
-                        }}
+                        className="shrink-0 border-l border-[#efefef] px-3 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                        onClick={() => setGroupDeleteTarget(row)}
+                        aria-label={`${row.room_name}を削除`}
                       >
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white" aria-hidden>
-                          {initial}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <p className="truncate text-[15px] font-semibold text-[#262626]">{row.room_name}</p>
-                            {meta.timeLabel ? (
-                              <span className="shrink-0 text-[11px] tabular-nums text-[#8e8e8e]">{meta.timeLabel}</span>
-                            ) : null}
-                          </div>
-                          <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <p className="truncate text-[13px] leading-snug text-[#8e8e8e]">{meta.previewText}</p>
-                            {meta.unread > 0 ? (
-                              <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[#ff3b30] px-1.5 text-[11px] font-bold text-white">
-                                {meta.unread > 99 ? "99" : meta.unread}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
+                        削除
                       </button>
-                      {canDeleteGroup ? (
-                        <button
-                          type="button"
-                          className="flex w-14 shrink-0 items-center justify-center border-l border-[#efefef] text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
-                          aria-label={`${row.room_name}を削除`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setGroupDeleteAskId(row.room_id);
-                          }}
-                        >
-                          削除
-                        </button>
-                      ) : null}
+                    ) : null}
                     </div>
                   );
                 })}
@@ -6121,46 +6127,6 @@ export default function Home() {
           )}
         </section>
       </main>
-      {groupDeleteAskId ? (
-        <div
-          className="fixed inset-0 z-[96] flex items-center justify-center bg-black/50 p-4"
-          role="presentation"
-          onClick={() => !groupDeleting && setGroupDeleteAskId(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="group-delete-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="group-delete-title" className="text-base font-bold text-rose-900">
-              グループを削除しますか？
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-              このグループのトーク一覧から消えます。オーナーのみ削除できます。
-            </p>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                disabled={groupDeleting}
-                className={secondaryButtonClass}
-                onClick={() => setGroupDeleteAskId(null)}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                disabled={groupDeleting}
-                className="min-h-[44px] rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                onClick={() => void deleteGroupRoom(groupDeleteAskId)}
-              >
-                {groupDeleting ? "削除中…" : "削除する"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {profilePortalReady && activeProfileMember
         ? createPortal(
             <div
@@ -6185,16 +6151,13 @@ export default function Home() {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="shrink-0 space-y-4 border-b border-zinc-100 px-5 pb-6 pt-2">
               <div className="flex items-start gap-4">
-                <div className="relative flex h-[76px] w-[76px] shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-amber-200 via-rose-300 to-indigo-400 text-[28px] font-bold uppercase text-white shadow-md ring-4 ring-white">
-                  {activeProfileMember.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={activeProfileMember.avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center">
-                      {(activeProfileMember.name.trim().charAt(0) || "?").slice(0, 1)}
-                    </span>
-                  )}
-                </div>
+                <MemberAvatarBubble
+                  userId={activeProfileMember.id}
+                  name={activeProfileMember.name}
+                  avatarUrl={activeProfileMember.avatarUrl}
+                  size="lg"
+                  className="ring-4 ring-white shadow-md"
+                />
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -6374,6 +6337,161 @@ export default function Home() {
           border-color: #111827;
         }
       `}</style>
+
+      {postComposerOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="post-composer-title"
+          onClick={() => !postPosting && resetPostComposer()}
+        >
+          <div
+            className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 id="post-composer-title" className="text-base font-bold text-zinc-900">
+                進捗を投稿
+              </h3>
+              <button
+                type="button"
+                className="rounded-full p-2 text-lg text-zinc-500 hover:bg-zinc-100"
+                onClick={() => !postPosting && resetPostComposer()}
+                aria-label="閉じる"
+              >
+                ×
+              </button>
+            </div>
+            <form className="mt-4 space-y-3" onSubmit={(e) => void createFeedPost(e)}>
+              <label className="block text-xs font-semibold text-zinc-700" htmlFor="post-composer-body">
+                いまどうしてる？
+              </label>
+              <textarea
+                id="post-composer-body"
+                className={`min-h-[5.5rem] w-full ${inputClass}`}
+                placeholder="進捗や気づきを書いてみよう"
+                value={postCaption}
+                onChange={(e) => setPostCaption(e.target.value)}
+                maxLength={280}
+                autoFocus
+              />
+              {postUploadPreview ? (
+                <div className="overflow-hidden rounded-lg border border-[#dbdbdb] bg-[#fafafa]">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- ユーザー選択ファイルのプレビュー */}
+                  <img src={postUploadPreview} alt="" className="max-h-56 w-full object-cover" />
+                </div>
+              ) : null}
+              <input
+                ref={postFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                capture="environment"
+                className="hidden"
+                onChange={onPostFileChange}
+              />
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs text-zinc-500">{postCaption.length}/280</span>
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+                    onClick={() => postFileInputRef.current?.click()}
+                    disabled={postPosting}
+                    aria-label="写真を選ぶ"
+                  >
+                    <span aria-hidden>📷</span>
+                    写真
+                  </button>
+                  <button
+                    className={`${primaryButtonClass} min-h-[44px] shrink-0`}
+                    type="submit"
+                    disabled={postPosting || (!postFile && !postCaption.trim())}
+                  >
+                    {postPosting ? "投稿中…" : "投稿する"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {feedDeleteTarget ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="feed-delete-title"
+          onClick={() => !feedDeleting && setFeedDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="feed-delete-title" className="text-base font-bold text-rose-900">
+              投稿を削除しますか？
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              この操作は取り消せません。本当に削除する場合は、もう一度「削除する」を押してください。
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 disabled:opacity-50"
+                disabled={feedDeleting}
+                onClick={() => setFeedDeleteTarget(null)}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                disabled={feedDeleting}
+                onClick={() => void deleteFeedPost(feedDeleteTarget)}
+              >
+                {feedDeleting ? "削除中…" : "削除する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {groupDeleteTarget ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={() => !groupDeleting && setGroupDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-rose-900">グループを削除しますか？</h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              「{groupDeleteTarget.room_name}」を削除すると元に戻せません。オーナーのみ実行できます。
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 disabled:opacity-50"
+                disabled={groupDeleting}
+                onClick={() => setGroupDeleteTarget(null)}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                disabled={groupDeleting}
+                onClick={() => void deleteGroupRoom()}
+              >
+                {groupDeleting ? "削除中…" : "削除する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

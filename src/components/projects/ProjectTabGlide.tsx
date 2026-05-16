@@ -4,19 +4,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { buildRoadmapTemplateRows, PROJECT_LINE_META } from "@/lib/projects/roadmapTemplates";
-import {
-  PROJECT_CARD_ICON_BGS,
-  hashProjectVisualIndex,
-  projectThumbEmoji,
-  projectLineShortLabel,
-} from "@/lib/projects/cardChrome";
+import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
 
 export type AppFeatureKey = "projects" | "posts" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
 type SortKey = "newest" | "oldest" | "name";
+
+const ICON_BG = [
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-violet-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+];
 
 type Props = {
   displayName: string;
@@ -31,6 +34,12 @@ const sidebarItems: { key: AppFeatureKey; label: string; icon: string }[] = [
   { key: "chat", label: "探す", icon: "⌕" },
   { key: "account", label: "マイページ", icon: "◉" },
 ];
+
+function hashIndex(id: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % mod;
+}
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
 const PROJECT_LIST_SELECT =
@@ -376,36 +385,24 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
             </button>
 
             {displayList.map((p) => {
-              const c = PROJECT_CARD_ICON_BGS[hashProjectVisualIndex(p.id, PROJECT_CARD_ICON_BGS.length)];
-              const thumb = (p.thumbnail_url ?? "").trim();
+              const c = ICON_BG[hashIndex(p.id, ICON_BG.length)];
               return (
                 <div key={p.id} className="group relative">
                   <Link
                     href={`/projects/${p.id}`}
                     prefetch
-                    className="relative z-10 flex aspect-square flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white text-center shadow-md transition hover:shadow-lg active:opacity-90"
+                    className="relative z-10 flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:shadow-lg active:opacity-90"
                   >
-                    <div className="relative h-[52%] min-h-0 w-full shrink-0 overflow-hidden bg-zinc-100">
-                      {thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- user or admin URL
-                        <img src={thumb} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className={`flex h-full w-full items-center justify-center ${c} text-3xl text-white shadow-inner`} aria-hidden>
-                          {projectThumbEmoji(p.business_type)}
-                        </div>
-                      )}
+                    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${c} text-2xl text-white shadow-sm`} aria-hidden>
+                      {(p.name.trim().charAt(0) || "P").toUpperCase()}
                     </div>
-                    <div className="flex min-h-0 flex-1 flex-col justify-center px-2 py-2">
-                      <p className="line-clamp-2 w-full text-sm font-semibold leading-snug text-zinc-900">{p.name}</p>
-                      <p className="mt-1 line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
-                        {projectLineShortLabel(p.business_type)}
-                      </p>
-                      <p className="mt-0.5 line-clamp-1 w-full text-[11px] text-zinc-500">
-                        {p.visibility === "public" ? "公開" : "非公開"}
-                        {currentUserId && p.owner_id === currentUserId ? " ・ オーナー" : ""}
-                        {joinedIds.has(p.id) ? " ・ メンバー" : ""}
-                      </p>
-                    </div>
+                    <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{p.name}</p>
+                    <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">{projectLineShortLabel(p.business_type)}</p>
+                    <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                      {p.visibility === "public" ? "公開" : "非公開"}
+                      {currentUserId && p.owner_id === currentUserId ? " ・ オーナー" : ""}
+                      {joinedIds.has(p.id) ? " ・ メンバー" : ""}
+                    </p>
                     <div className="pointer-events-none absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
                       <span className="rounded bg-white/90 px-1.5 text-[10px] text-zinc-500">⋯</span>
                     </div>

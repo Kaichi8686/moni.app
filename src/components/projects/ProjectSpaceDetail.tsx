@@ -2,31 +2,33 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { uploadProjectImage, validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { ProjectRoadmapPanel, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
+import { ProjectRoadmapPanel, pickFocusStep, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
 import { ProjectTasksPanel, type TaskPanelRow } from "@/components/projects/ProjectTasksPanel";
 import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectScheduleCalendar } from "@/components/projects/ProjectScheduleCalendar";
+import { parseCoachingContext, mergeCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
 
 type Props = { projectId: string };
 type TabKey = "chat" | "documents" | "roadmap" | "schedule" | "members";
 type ChatMode = "group" | "dm";
 
-type ProjectDocumentRow = {
-  id: string;
-  title: string;
-  content: string;
-  updated_at: string;
-  updated_by: string | null;
-  created_at: string;
-};
+type ProjectDocumentRow = { id: string; title: string; content: string; updated_at: string; updated_by: string | null };
 type ProjectTaskLite = TaskPanelRow;
 type ScheduleRow = { id: string; title: string; description: string; starts_at: string; ends_at: string | null; attendees: string[] | null };
-type MessageRow = { id: string; sender_id: string; receiver_id?: string | null; body: string; created_at: string };
+type MessageRow = {
+  id: string;
+  sender_id: string;
+  receiver_id?: string | null;
+  body: string;
+  attachment_url?: string | null;
+  created_at: string;
+};
 
 /** メインタブ（モック: チャット / ロードマップ / タスク / ドキュメント）。メンバーはヘッダーから */
 const primaryTabs: Array<{ key: TabKey; label: string }> = [
@@ -60,13 +62,6 @@ function plainTextFromDocContent(htmlOrText: string): string {
   return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function formatDocStamp(iso: string | undefined) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 function friendlyProjectFetchMessage(error: { code?: string; message?: string }): string {
   const code = error.code ?? "";
   const msg = (error.message ?? "").toLowerCase();
@@ -91,6 +86,10 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [directMessages, setDirectMessages] = useState<MessageRow[]>([]);
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
+  const chatImageInputRef = useRef<HTMLInputElement>(null);
+  const [chatImageFile, setChatImageFile] = useState<File | null>(null);
+  const [chatImagePreview, setChatImagePreview] = useState<string | null>(null);
+  const [chatImageUploading, setChatImageUploading] = useState(false);
   const [documents, setDocuments] = useState<ProjectDocumentRow[]>([]);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docTitle, setDocTitle] = useState("");
@@ -112,21 +111,20 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [inviteNotice, setInviteNotice] = useState("");
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [editProjectOpen, setEditProjectOpen] = useState(false);
+  const [groupProfileOpen, setGroupProfileOpen] = useState(false);
+  const [transferOwnerOpen, setTransferOwnerOpen] = useState(false);
   const [dissolveOpen, setDissolveOpen] = useState(false);
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectDeleting, setProjectDeleting] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState("");
   const [editNameDraft, setEditNameDraft] = useState("");
   const [editThumbDraft, setEditThumbDraft] = useState("");
-  const [editDescDraft, setEditDescDraft] = useState("");
+  const [editDescriptionDraft, setEditDescriptionDraft] = useState("");
   const [editCategoryDraft, setEditCategoryDraft] = useState("");
-  const [editTagsDraft, setEditTagsDraft] = useState("");
-  const [editBusinessDraft, setEditBusinessDraft] = useState<"maker" | "software" | "social">("software");
-  const [editRecruitTargetDraft, setEditRecruitTargetDraft] = useState("");
-  const [editRecruitMsgDraft, setEditRecruitMsgDraft] = useState("");
-  const [ownerTransferOpen, setOwnerTransferOpen] = useState(false);
-  const [ownerTransferPick, setOwnerTransferPick] = useState<string | null>(null);
-  const [ownerTransferSaving, setOwnerTransferSaving] = useState(false);
+  const [editBusinessTypeDraft, setEditBusinessTypeDraft] = useState<"maker" | "software" | "social">("software");
+  const [editRecruitmentTargetDraft, setEditRecruitmentTargetDraft] = useState("");
+  const [editRecruitmentMessageDraft, setEditRecruitmentMessageDraft] = useState("");
   const headerMenuRef = useRef<HTMLDivElement>(null);
 
   const activeDoc = useMemo(() => documents.find((d) => d.id === activeDocId) ?? null, [documents, activeDocId]);
@@ -210,18 +208,18 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     const [{ data: memberRows }, { data: requestRows }, groupRes, dmRes, docRes, roadmapRes, scheduleRes, tasksRes] = await Promise.all([
       supabase.from("project_members").select("*").eq("project_id", normalizedId).order("joined_at", { ascending: true }),
       supabase.from("project_join_requests").select("id,requester_id,message,status").eq("project_id", normalizedId).order("created_at", { ascending: false }),
-      supabase.from("project_chat_messages").select("id,sender_id,body,created_at").eq("project_id", normalizedId).order("created_at", { ascending: true }).limit(200),
-      supabase.from("project_direct_messages").select("id,sender_id,receiver_id,body,created_at").eq("project_id", normalizedId).order("created_at", { ascending: true }).limit(200),
-      supabase.from("project_documents").select("id,title,content,updated_at,updated_by,created_at").eq("project_id", normalizedId).order("updated_at", { ascending: false }),
+      supabase.from("project_chat_messages").select("id,sender_id,body,attachment_url,created_at").eq("project_id", normalizedId).order("created_at", { ascending: true }).limit(200),
+      supabase.from("project_direct_messages").select("id,sender_id,receiver_id,body,attachment_url,created_at").eq("project_id", normalizedId).order("created_at", { ascending: true }).limit(200),
+      supabase.from("project_documents").select("id,title,content,updated_at,updated_by").eq("project_id", normalizedId).order("updated_at", { ascending: false }),
       supabase
         .from("project_roadmap_steps")
-        .select("id,title,status,position,description,due_date,owner_id,notes,created_at,updated_at")
+        .select("id,title,status,position,description,due_date,owner_id,notes,completion_criteria,created_at,updated_at")
         .eq("project_id", normalizedId)
         .order("position", { ascending: true }),
       supabase.from("project_schedules").select("id,title,description,starts_at,ends_at,attendees").eq("project_id", normalizedId).order("starts_at", { ascending: true }),
       supabase
         .from("project_tasks")
-        .select("id,title,description,status,priority,due_date,roadmap_step_id,meta,updated_at")
+        .select("id,title,description,status,priority,due_date,assignee_id,created_by,roadmap_step_id,meta,updated_at")
         .eq("project_id", normalizedId),
     ]);
 
@@ -235,10 +233,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     setDirectMessages((dmRes.data ?? []) as MessageRow[]);
 
     if (isSchemaError(docRes.error)) schemaMsgs.push("ドキュメント");
-    const docRows = ((docRes.data ?? []) as ProjectDocumentRow[]).map((d) => ({
-      ...d,
-      created_at: d.created_at || d.updated_at,
-    }));
+    const docRows = (docRes.data ?? []) as ProjectDocumentRow[];
     setDocuments(docRows);
     if (!activeDocId && docRows.length > 0) {
       setActiveDocId(docRows[0].id);
@@ -255,7 +250,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     } else {
       const retry = await supabase
         .from("project_tasks")
-        .select("id,title,description,status,priority,due_date,roadmap_step_id,updated_at")
+        .select("id,title,description,status,priority,due_date,assignee_id,created_by,roadmap_step_id,updated_at")
         .eq("project_id", normalizedId);
       if (!retry.error) {
         taskRows = (retry.data ?? []).map((r) => ({ ...(r as ProjectTaskLite), meta: {} }));
@@ -280,11 +275,34 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     }
 
     if (schemaMsgs.length > 0) {
-      setSyncBanner(`一部機能がまだ使えません（${schemaMsgs.join("・")}）。Supabaseで apply_project_space_upgrade.sql を実行してください。`);
+      let banner = `一部機能がまだ使えません（${schemaMsgs.join("・")}）。Supabaseで apply_project_space_upgrade.sql を実行してください。`;
+      if (schemaMsgs.some((m) => m.includes("タスク"))) {
+        banner += " タスクの拡張ステータス・伴走UIは apply_project_coaching_phase1.sql も適用してください。";
+      }
+      setSyncBanner(banner);
     }
 
     setLoading(false);
   }, [activeDocId, projectId]);
+
+  const saveProjectCoaching = useCallback(
+    async (patch: Partial<CoachingContext>) => {
+      if (!supabase || !selectedProject) return;
+      setActionErr("");
+      const prev = parseCoachingContext(selectedProject.coaching_context);
+      const next = mergeCoachingContext(prev, patch);
+      const { error } = await supabase
+        .from("projects")
+        .update({ coaching_context: next, updated_at: new Date().toISOString() })
+        .eq("id", selectedProject.id);
+      if (error) {
+        setActionErr(error.message);
+        return;
+      }
+      await load();
+    },
+    [load, selectedProject],
+  );
 
   useEffect(() => {
     void load();
@@ -337,19 +355,72 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [headerMenuOpen]);
 
-  async function sendMessage() {
-    if (!supabase || !uid || !selectedProject || !chatDraft.trim()) return;
-    if (chatMode === "group") {
-      const { error } = await supabase.from("project_chat_messages").insert({ project_id: selectedProject.id, sender_id: uid, body: chatDraft.trim() });
-      if (error) setActionErr(error.message);
-    } else if (selectedPeerId) {
-      const { error } = await supabase
-        .from("project_direct_messages")
-        .insert({ project_id: selectedProject.id, sender_id: uid, receiver_id: selectedPeerId, body: chatDraft.trim() });
-      if (error) setActionErr(error.message);
+  function clearChatImage() {
+    setChatImageFile(null);
+    if (chatImagePreview) URL.revokeObjectURL(chatImagePreview);
+    setChatImagePreview(null);
+    if (chatImageInputRef.current) chatImageInputRef.current.value = "";
+  }
+
+  function onChatImageChange(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (chatImagePreview) URL.revokeObjectURL(chatImagePreview);
+    if (!f) {
+      setChatImageFile(null);
+      setChatImagePreview(null);
+      return;
     }
-    setChatDraft("");
-    await load();
+    const err = validateProjectImageFile(f);
+    if (err) {
+      setActionErr(err);
+      e.target.value = "";
+      return;
+    }
+    setChatImageFile(f);
+    setChatImagePreview(URL.createObjectURL(f));
+  }
+
+  async function sendMessage() {
+    if (!supabase || !uid || !selectedProject) return;
+    const text = chatDraft.trim();
+    if (!text && !chatImageFile) return;
+
+    setChatImageUploading(true);
+    setActionErr("");
+    try {
+      let attachmentUrl: string | null = null;
+      if (chatImageFile) {
+        const uploaded = await uploadProjectImage(supabase, uid, "project-chat", selectedProject.id, chatImageFile);
+        attachmentUrl = uploaded.publicUrl;
+      }
+      const body = text || (attachmentUrl ? "（画像）" : "");
+      if (chatMode === "group") {
+        const { error } = await supabase.from("project_chat_messages").insert({
+          project_id: selectedProject.id,
+          sender_id: uid,
+          body,
+          attachment_url: attachmentUrl,
+        });
+        if (error) throw new Error(error.message);
+      } else if (selectedPeerId) {
+        const payload: Record<string, unknown> = {
+          project_id: selectedProject.id,
+          sender_id: uid,
+          receiver_id: selectedPeerId,
+          body,
+        };
+        if (attachmentUrl) payload.attachment_url = attachmentUrl;
+        const { error } = await supabase.from("project_direct_messages").insert(payload);
+        if (error) throw new Error(error.message);
+      }
+      setChatDraft("");
+      clearChatImage();
+      await load();
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : "送信に失敗しました。");
+    } finally {
+      setChatImageUploading(false);
+    }
   }
 
   async function createDocument() {
@@ -368,7 +439,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       const { data, error } = await supabase
         .from("project_documents")
         .insert({ project_id: selectedProject.id, title: "新しいドキュメント", content: "", updated_by: uid })
-        .select("id,title,content,updated_at,updated_by,created_at")
+        .select("id,title,content,updated_at,updated_by")
         .single();
       if (error) {
         setActionErr(error.message);
@@ -400,7 +471,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       else {
         setDocuments((prev) =>
           prev.map((d) =>
-            d.id === activeDocId ? { ...d, title, content: docContent, updated_at: now, updated_by: uid, created_at: d.created_at } : d,
+            d.id === activeDocId ? { ...d, title, content: docContent, updated_at: now, updated_by: uid } : d,
           ),
         );
       }
@@ -465,60 +536,47 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     if (!selectedProject) return;
     setEditNameDraft(selectedProject.name);
     setEditThumbDraft(selectedProject.thumbnail_url?.trim() ?? "");
-    setEditDescDraft(selectedProject.description ?? "");
+    setEditDescriptionDraft(selectedProject.description ?? "");
     setEditCategoryDraft(selectedProject.category ?? "");
-    setEditTagsDraft((selectedProject.tags ?? []).join(", "));
-    const bt = selectedProject.business_type;
-    setEditBusinessDraft(bt === "maker" || bt === "social" || bt === "software" ? bt : "software");
-    setEditRecruitTargetDraft(selectedProject.recruitment_target ?? "");
-    setEditRecruitMsgDraft(selectedProject.recruitment_message ?? "");
-    setEditProjectOpen(true);
+    setEditBusinessTypeDraft(
+      selectedProject.business_type === "maker" || selectedProject.business_type === "social"
+        ? selectedProject.business_type
+        : "software",
+    );
+    setEditRecruitmentTargetDraft(selectedProject.recruitment_target ?? "");
+    setEditRecruitmentMessageDraft(selectedProject.recruitment_message ?? "");
+    setGroupProfileOpen(true);
   }
 
-  async function saveGroupProfile() {
+  async function saveProjectProfile() {
     if (!supabase || !selectedProject || !canEditProjectSettings) return;
+    const name = editNameDraft.trim();
+    if (!name) {
+      setActionErr("プロジェクト名を入力してください。");
+      return;
+    }
     setProjectSaving(true);
     setActionErr("");
     try {
-      const name = editNameDraft.trim();
-      if (name.length < 1 || name.length > 120) {
-        setActionErr("プロジェクト名は1〜120文字で入力してください。");
-        return;
-      }
-      const thumb = editThumbDraft.trim();
-      if (thumb && !/^https:\/\//i.test(thumb)) {
-        setActionErr("写真URLは https で始まる必要があります。");
-        return;
-      }
-      const tags = editTagsDraft
-        .split(/[,、]/)
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .slice(0, 32);
-      const description = editDescDraft.trim();
-      if (description.length > 12000) {
-        setActionErr("説明文が長すぎます（12000文字以内）。");
-        return;
-      }
+      const thumbnail_url = editThumbDraft.trim() || null;
       const { error } = await supabase
         .from("projects")
         .update({
           name,
-          thumbnail_url: thumb || null,
-          description,
+          thumbnail_url,
+          description: editDescriptionDraft.trim(),
           category: editCategoryDraft.trim() || "探究",
-          tags,
-          business_type: editBusinessDraft,
-          recruitment_target: editRecruitTargetDraft.trim(),
-          recruitment_message: editRecruitMsgDraft.trim(),
+          business_type: editBusinessTypeDraft,
+          recruitment_target: editRecruitmentTargetDraft.trim(),
+          recruitment_message: editRecruitmentMessageDraft.trim(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedProject.id);
       if (error) setActionErr(error.message);
       else {
-        setEditProjectOpen(false);
-        setInviteNotice("保存しました。");
-        window.setTimeout(() => setInviteNotice(""), 2600);
+        setGroupProfileOpen(false);
+        setInviteNotice("グループプロフィールを保存しました。");
+        window.setTimeout(() => setInviteNotice(""), 3200);
         await load();
       }
     } finally {
@@ -526,25 +584,30 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     }
   }
 
-  async function submitOwnerTransfer() {
-    if (!supabase || !selectedProject || !uid || !ownerTransferPick || !isOwner) return;
-    setOwnerTransferSaving(true);
+  async function transferProjectOwner() {
+    if (!supabase || !selectedProject || !uid || !isOwner) return;
+    if (!transferTargetId) {
+      setActionErr("引き継ぎ先のメンバーを選んでください。");
+      return;
+    }
+    setTransferBusy(true);
     setActionErr("");
     try {
       const { error } = await supabase.rpc("transfer_project_owner", {
         p_project_id: selectedProject.id,
-        p_new_owner_id: ownerTransferPick,
+        p_new_owner_id: transferTargetId,
       });
-      if (error) setActionErr(error.message);
-      else {
-        setOwnerTransferOpen(false);
-        setOwnerTransferPick(null);
-        setInviteNotice("オーナーを移しました。");
-        window.setTimeout(() => setInviteNotice(""), 3200);
-        await load();
+      if (error) {
+        setActionErr(error.message);
+        return;
       }
+      setTransferOwnerOpen(false);
+      setTransferTargetId("");
+      setInviteNotice("オーナーを切り替えました。");
+      window.setTimeout(() => setInviteNotice(""), 3200);
+      await load();
     } finally {
-      setOwnerTransferSaving(false);
+      setTransferBusy(false);
     }
   }
 
@@ -790,8 +853,8 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                             role="menuitem"
                             className="flex w-full px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
                             onClick={() => {
-                              setHeaderMenuOpen(false);
                               openGroupProfileEditor();
+                              setHeaderMenuOpen(false);
                             }}
                           >
                             グループプロフィール
@@ -803,9 +866,9 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                             role="menuitem"
                             className="flex w-full px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
                             onClick={() => {
+                              setTransferTargetId("");
+                              setTransferOwnerOpen(true);
                               setHeaderMenuOpen(false);
-                              setOwnerTransferPick(null);
-                              setOwnerTransferOpen(true);
                             }}
                           >
                             オーナー切り替え
@@ -930,7 +993,20 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                       }`}
                     >
                       {!mine ? <p className="mb-1 text-[10px] font-semibold text-zinc-600">{memberNames[m.sender_id] ?? "メンバー"}</p> : null}
-                      <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                      {m.attachment_url ? (
+                        <a
+                          href={m.attachment_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mb-1 block overflow-hidden rounded-lg"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- チャット添付 */}
+                          <img src={m.attachment_url} alt="添付画像" className="max-h-52 w-full object-cover" />
+                        </a>
+                      ) : null}
+                      {m.body && m.body !== "（画像）" ? (
+                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                      ) : null}
                       <p className={`mt-1.5 text-[10px] ${mine ? "text-indigo-100" : "text-zinc-500"}`}>
                         {new Date(m.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                       </p>
@@ -953,34 +1029,72 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                   ↓ 最新
                 </button>
               </div>
+              {chatImagePreview ? (
+                <div className="relative mb-2 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- 選択プレビュー */}
+                  <img src={chatImagePreview} alt="" className="max-h-32 w-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white"
+                    onClick={clearChatImage}
+                    aria-label="画像を取り消す"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : null}
+              {chatImageUploading ? (
+                <p className="mb-2 text-center text-xs font-medium text-indigo-700">画像をアップロード中…</p>
+              ) : null}
               <form
-                className="relative"
+                className="flex items-end gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void sendMessage();
                 }}
               >
                 <input
-                  className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 py-3 pl-4 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none ring-indigo-300/0 transition focus:border-indigo-400 focus:bg-white focus:ring-2"
-                  value={chatDraft}
-                  onChange={(e) => setChatDraft(e.target.value)}
-                  placeholder="メッセージを送る…"
-                  aria-label="メッセージ"
+                  ref={chatImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  capture="environment"
+                  className="hidden"
+                  onChange={onChatImageChange}
+                  aria-hidden
                 />
                 <button
-                  type="submit"
-                  className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-indigo-700 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:opacity-40"
-                  disabled={!chatDraft.trim()}
-                  aria-label="送信"
+                  type="button"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-lg text-zinc-700 hover:bg-zinc-100 disabled:opacity-40"
+                  onClick={() => chatImageInputRef.current?.click()}
+                  disabled={chatImageUploading}
+                  aria-label="写真を選ぶ"
+                  title="写真を選ぶ"
                 >
-                  ↑
+                  📷
                 </button>
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 py-3 pl-4 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none ring-indigo-300/0 transition focus:border-indigo-400 focus:bg-white focus:ring-2"
+                    value={chatDraft}
+                    onChange={(e) => setChatDraft(e.target.value)}
+                    placeholder="メッセージを送る…"
+                    aria-label="メッセージ"
+                    disabled={chatImageUploading}
+                  />
+                  <button
+                    type="submit"
+                    className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-indigo-700 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:opacity-40"
+                    disabled={chatImageUploading || (!chatDraft.trim() && !chatImageFile)}
+                    aria-label="送信"
+                  >
+                    ↑
+                  </button>
+                </div>
               </form>
             </div>
           </section>
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      {activeTab === "documents" ? (
+        ) : activeTab === "documents" ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1 py-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-2">
         <ProjectGoogleDocsShell
           activeDocId={activeDocId}
           documents={documents.map((d) => ({ id: d.id, content: d.content ?? "" }))}
@@ -991,20 +1105,15 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           saving={docSaving}
           wordCount={docWordCount}
           updatedByLabel={
-            activeDoc
-              ? `最終更新 ${formatDocStamp(activeDoc.updated_at)} · 作成 ${formatDocStamp(activeDoc.created_at)} · ${activeDoc.updated_by ? memberNames[activeDoc.updated_by] ?? "メンバー" : "更新者未設定"}`
-              : "ドキュメントを選んでください"
+            activeDoc?.updated_by ? (memberNames[activeDoc.updated_by] ?? "メンバー") : "—"
           }
           sidebar={
-            <aside className="flex flex-col gap-3">
-              <div className="rounded-xl border border-[#dadce0] bg-[#f8f9fa] p-3">
-                <p className="text-[12px] font-semibold text-[#202124]">ドキュメント</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#5f6368]">
-                  左の一覧から開きます。保存でチームに反映されます。
-                </p>
-              </div>
-              <div className="flex items-center justify-between gap-2 border-b border-[#dadce0] pb-3">
-                <p className="text-[13px] font-medium text-[#202124]">一覧</p>
+            <aside className="flex min-h-0 flex-col space-y-3">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#dadce0] pb-3">
+                <div>
+                  <p className="text-[13px] font-semibold text-[#202124]">ドキュメント</p>
+                  <p className="text-[11px] text-[#5f6368]">{documents.length} 件</p>
+                </div>
                 <button
                   type="button"
                   disabled={docCreating}
@@ -1015,54 +1124,59 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                   {docCreating ? "作成中…" : "+ 新規"}
                 </button>
               </div>
-              {documents.length === 0 && !docCreating ? (
-                <div className="rounded-xl border border-dashed border-[#dadce0] bg-white px-3 py-6 text-center">
-                  <p className="text-[13px] font-medium text-[#202124]">まだドキュメントがありません</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-[#5f6368]">企画メモ・議事録・仕様などを共有しましょう。</p>
-                  <button
-                    type="button"
-                    onClick={() => void createDocument()}
-                    className="mt-3 rounded-full bg-[#1a73e8] px-4 py-2 text-[12px] font-semibold text-white shadow-sm"
-                  >
-                    最初のドキュメントを作る
-                  </button>
+              {documents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[#dadce0] bg-[#f8f9fa] px-3 py-8 text-center">
+                  <p className="text-sm font-medium text-[#202124]">ドキュメントがありません</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[#5f6368]">「+ 新規」で議事録や企画メモを作成できます。</p>
                 </div>
-              ) : null}
-              <ul className="max-h-[50vh] space-y-1 overflow-y-auto md:max-h-[55vh]">
-                {documents.map((d) => (
-                  <li key={d.id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveDocId(d.id)}
-                      className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2.5 text-left transition ${
-                        activeDocId === d.id
-                          ? "border-[#1a73e8] bg-[#e8f0fe] shadow-sm"
-                          : "border-transparent hover:bg-[#f1f3f4]"
-                      }`}
-                    >
-                      <span className="mt-0.5 shrink-0 text-[#5f6368]" aria-hidden>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#4285f4">
-                          <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-                        </svg>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={`block truncate text-[13px] leading-snug ${activeDocId === d.id ? "font-semibold text-[#174ea6]" : "text-[#202124]"}`}>
-                          {d.title || "無題のドキュメント"}
+              ) : (
+                <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+                  {documents.map((d) => (
+                    <li key={d.id}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveDocId(d.id)}
+                        className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2.5 text-left transition ${
+                          activeDocId === d.id
+                            ? "border-[#1a73e8] bg-[#e8f0fe] shadow-sm"
+                            : "border-transparent hover:bg-[#f1f3f4]"
+                        }`}
+                      >
+                        <span className="mt-0.5 shrink-0 text-[#5f6368]" aria-hidden>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#4285f4">
+                            <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                          </svg>
                         </span>
-                        <span className="mt-0.5 block text-[10px] leading-snug text-[#5f6368]">
-                          更新 {formatDocStamp(d.updated_at)}
+                        <span className="min-w-0 flex-1">
+                          <span className={`block truncate text-[13px] ${activeDocId === d.id ? "font-semibold text-[#174ea6]" : "text-[#202124]"}`}>
+                            {d.title || "無題のドキュメント"}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-[#5f6368]">
+                            更新{" "}
+                            {new Date(d.updated_at).toLocaleString("ja-JP", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          {d.updated_by ? (
+                            <span className="mt-0.5 block truncate text-[10px] text-[#80868b]">
+                              {memberNames[d.updated_by] ?? "メンバー"}
+                            </span>
+                          ) : null}
                         </span>
-                        <span className="block text-[10px] text-[#80868b]">作成 {formatDocStamp(d.created_at)}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </aside>
           }
         />
-      ) : null}
-
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {activeTab === "roadmap" && selectedProject ? (
         <ProjectRoadmapPanel
           projectId={selectedProject.id}
@@ -1080,11 +1194,23 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       {activeTab === "schedule" && selectedProject ? (
         <ProjectTasksPanel
           projectId={selectedProject.id}
+          projectTitle={selectedProject.name}
+          projectDescription={selectedProject.description ?? ""}
+          coachingContext={parseCoachingContext(selectedProject.coaching_context)}
+          roadmapStepsBrief={roadmapSteps.map((s) => ({ id: s.id, title: s.title, status: s.status }))}
+          focusRoadmapStepId={pickFocusStep(roadmapSteps)?.id ?? null}
+          nextMilestoneTitle={pickFocusStep(roadmapSteps)?.title ?? null}
+          milestoneDoneCount={roadmapSteps.filter((s) => s.status === "done").length}
+          milestoneTotal={roadmapSteps.length}
+          onSaveCoaching={(patch) => saveProjectCoaching(patch)}
+          onNavigateToChat={() => setActiveTab("chat")}
           tasks={projectTasks}
           uid={uid}
           canEdit={Boolean(isMember || isOwner)}
+          memberNames={memberNames}
           onReload={() => void load()}
           onError={(msg) => setActionErr(msg)}
+          roadmapStepTitles={Object.fromEntries(roadmapSteps.map((s) => [s.id, s.title]))}
           schedules={schedules}
           scheduleSaving={scheduleSaving}
           onSaveSchedule={(p) => submitSchedule(p)}
@@ -1194,19 +1320,19 @@ export function ProjectSpaceDetail({ projectId }: Props) {
         </div>
       ) : null}
 
-      {editProjectOpen && selectedProject ? (
+      {groupProfileOpen && selectedProject ? (
         <div
           className="fixed inset-0 z-[85] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          onClick={() => setEditProjectOpen(false)}
+          onClick={() => !projectSaving && setGroupProfileOpen(false)}
           role="presentation"
         >
           <div
-            className="max-h-[min(92dvh,720px)] w-full max-w-md overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
+            className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-zinc-900">グループプロフィール</h3>
-            <p className="mt-1 text-xs text-zinc-500">写真・名前・説明・ジャンルなどを編集できます（管理者・オーナー）。</p>
-            <label className="mt-4 block text-xs font-semibold text-zinc-700">名前</label>
+            <p className="mt-1 text-xs text-zinc-500">名前・写真・説明・系統・募集内容を編集できます。</p>
+            <label className="mt-4 block text-xs font-semibold text-zinc-700">プロジェクト名</label>
             <input
               className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
               value={editNameDraft}
@@ -1221,58 +1347,44 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             />
             <label className="mt-3 block text-xs font-semibold text-zinc-700">説明</label>
             <textarea
-              className="mt-1 min-h-[5rem] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={editDescDraft}
-              onChange={(e) => setEditDescDraft(e.target.value)}
-              placeholder="プロジェクトの概要"
+              className="mt-1 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={editDescriptionDraft}
+              onChange={(e) => setEditDescriptionDraft(e.target.value)}
             />
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">系統（ロードマップテンプレ）</label>
-            <div className="mt-2 grid gap-2">
-              {(["software", "maker", "social"] as const).map((bt) => (
-                <button
-                  key={bt}
-                  type="button"
-                  onClick={() => setEditBusinessDraft(bt)}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm font-medium transition ${
-                    editBusinessDraft === bt ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500" : "border-zinc-200 bg-white hover:border-zinc-300"
-                  }`}
-                >
-                  {bt === "software" ? "ソフトウェア" : bt === "maker" ? "ものづくり" : "ソーシャル"}
-                </button>
-              ))}
-            </div>
             <label className="mt-3 block text-xs font-semibold text-zinc-700">カテゴリ</label>
             <input
               className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              placeholder="例: 探究"
               value={editCategoryDraft}
               onChange={(e) => setEditCategoryDraft(e.target.value)}
             />
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">タグ（カンマ区切り）</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              placeholder="学校, アプリ, 環境"
-              value={editTagsDraft}
-              onChange={(e) => setEditTagsDraft(e.target.value)}
-            />
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">募集したい仲間</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={editRecruitTargetDraft}
-              onChange={(e) => setEditRecruitTargetDraft(e.target.value)}
-            />
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">メッセージ</label>
+            <label className="mt-3 block text-xs font-semibold text-zinc-700">何系のプロジェクトか</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={editBusinessTypeDraft}
+              onChange={(e) => setEditBusinessTypeDraft(e.target.value as "maker" | "software" | "social")}
+            >
+              <option value="software">ソフトウェア・アプリ</option>
+              <option value="maker">ものづくり・物販</option>
+              <option value="social">社会課題・コミュニティ</option>
+            </select>
+            <label className="mt-3 block text-xs font-semibold text-zinc-700">欲しい仲間・姿勢</label>
             <textarea
-              className="mt-1 min-h-[4rem] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={editRecruitMsgDraft}
-              onChange={(e) => setEditRecruitMsgDraft(e.target.value)}
-              placeholder="チームへのメッセージやビジョン"
+              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={editRecruitmentTargetDraft}
+              onChange={(e) => setEditRecruitmentTargetDraft(e.target.value)}
+            />
+            <label className="mt-3 block text-xs font-semibold text-zinc-700">理念・ビジョン</label>
+            <textarea
+              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={editRecruitmentMessageDraft}
+              onChange={(e) => setEditRecruitmentMessageDraft(e.target.value)}
             />
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700"
-                onClick={() => setEditProjectOpen(false)}
+                onClick={() => setGroupProfileOpen(false)}
+                disabled={projectSaving}
               >
                 キャンセル
               </button>
@@ -1280,7 +1392,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 type="button"
                 disabled={projectSaving}
                 className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                onClick={() => void saveGroupProfile()}
+                onClick={() => void saveProjectProfile()}
               >
                 {projectSaving ? "保存中…" : "保存"}
               </button>
@@ -1289,70 +1401,54 @@ export function ProjectSpaceDetail({ projectId }: Props) {
         </div>
       ) : null}
 
-      {ownerTransferOpen && selectedProject && isOwner ? (
+      {transferOwnerOpen && selectedProject ? (
         <div
-          className="fixed inset-0 z-[88] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          onClick={() => !ownerTransferSaving && setOwnerTransferOpen(false)}
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+          onClick={() => !transferBusy && setTransferOwnerOpen(false)}
           role="presentation"
         >
           <div
-            className="max-h-[min(85dvh,560px)] w-full max-w-md overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
+            className="w-full max-w-md rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="owner-transfer-title"
           >
-            <h3 id="owner-transfer-title" className="text-base font-bold text-zinc-900">
-              オーナーを移す
-            </h3>
+            <h3 className="text-base font-bold text-zinc-900">オーナー切り替え</h3>
             <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-              現在のオーナーだけが実行できます。メンバー一覧から新しいオーナーを選び、確認してください。あなたは管理者権限に変更されます。
+              引き継ぎ先はプロジェクトの既存メンバーから選びます。あなたは管理者になります。
             </p>
-            <ul className="mt-4 max-h-[45vh] space-y-2 overflow-y-auto">
+            <label className="mt-4 block text-xs font-semibold text-zinc-700">新しいオーナー</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={transferTargetId}
+              onChange={(e) => setTransferTargetId(e.target.value)}
+            >
+              <option value="">メンバーを選択…</option>
               {members
                 .filter((m) => m.user_id !== uid)
                 .map((m) => (
-                  <li key={m.user_id}>
-                    <button
-                      type="button"
-                      onClick={() => setOwnerTransferPick(m.user_id)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left text-sm transition ${
-                        ownerTransferPick === m.user_id ? "border-indigo-500 bg-indigo-50" : "border-zinc-200 bg-white hover:border-zinc-300"
-                      }`}
-                    >
-                      <span className="font-semibold text-zinc-900">{memberNames[m.user_id] ?? m.user_id.slice(0, 8)}</span>
-                      <span className="text-xs text-zinc-500">{m.role}</span>
-                    </button>
-                  </li>
+                  <option key={m.user_id} value={m.user_id}>
+                    {memberNames[m.user_id] ?? m.user_id.slice(0, 8)}
+                  </option>
                 ))}
-            </ul>
-            {members.filter((m) => m.user_id !== uid).length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">移譲できるメンバーがいません。</p>
-            ) : null}
-            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-zinc-100 pt-4">
+            </select>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                disabled={ownerTransferSaving}
-                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 disabled:opacity-50"
-                onClick={() => setOwnerTransferOpen(false)}
+                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700"
+                onClick={() => setTransferOwnerOpen(false)}
+                disabled={transferBusy}
               >
                 キャンセル
               </button>
               <button
                 type="button"
-                disabled={ownerTransferSaving || !ownerTransferPick}
+                disabled={transferBusy || !transferTargetId}
                 className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => {
-                  if (
-                    typeof window !== "undefined" &&
-                    !window.confirm("オーナーを移譲します。よろしいですか？この操作は取り消せません。")
-                  ) {
-                    return;
-                  }
-                  void submitOwnerTransfer();
+                  if (!window.confirm("オーナーを切り替えます。よろしいですか？")) return;
+                  void transferProjectOwner();
                 }}
               >
-                {ownerTransferSaving ? "実行中…" : "移譲する"}
+                {transferBusy ? "処理中…" : "切り替える"}
               </button>
             </div>
           </div>

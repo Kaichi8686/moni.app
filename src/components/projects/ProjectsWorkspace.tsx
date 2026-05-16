@@ -93,7 +93,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadProjects();
+    queueMicrotask(() => void loadProjects());
   }, [loadProjects]);
 
   const filteredProjects = useMemo(() => {
@@ -171,7 +171,8 @@ export function ProjectsWorkspace({ projectId }: Props) {
   }, []);
 
   useEffect(() => {
-    if (projectId) void loadProjectDetail(projectId);
+    if (!projectId) return;
+    queueMicrotask(() => void loadProjectDetail(projectId));
   }, [projectId, loadProjectDetail]);
 
   useEffect(() => {
@@ -370,7 +371,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
       title,
       description: suggestion?.description ?? "",
       priority: suggestion?.priority ?? "medium",
-      status: "todo",
+      status: "not_started",
       created_by: uid,
       ai_generated: aiGenerated,
     };

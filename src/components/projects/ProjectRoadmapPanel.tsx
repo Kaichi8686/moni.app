@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
+import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
 import { buildRoadmapTemplateRows, businessTypeLabelJa, ROADMAP_TEMPLATES, roadmapTemplateKey } from "@/lib/projects/roadmapTemplates";
 
 export type RoadmapStepFull = {
@@ -14,6 +16,7 @@ export type RoadmapStepFull = {
   due_date: string | null;
   owner_id: string | null;
   notes: string | null;
+  completion_criteria?: string | null;
 };
 
 type ProjectTaskLite = {
@@ -39,6 +42,40 @@ type Props = {
 
 function sortedSteps(steps: RoadmapStepFull[]) {
   return [...steps].sort((a, b) => a.position - b.position);
+}
+
+function isStepOverdue(step: RoadmapStepFull): boolean {
+  if (step.status === "done" || !step.due_date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${step.due_date.slice(0, 10)}T00:00:00`);
+  return due < today;
+}
+
+/** 進行中 → 期限切れ未完了 → 未着手 → 完了（各グループ内は期限・position） */
+function sortStepsForDisplay(steps: RoadmapStepFull[]): RoadmapStepFull[] {
+  const rank = (s: RoadmapStepFull) => {
+    if (s.status === "doing") return 0;
+    if (isStepOverdue(s)) return 1;
+    if (s.status === "todo") return 2;
+    return 3;
+  };
+  return [...steps].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    const da = a.due_date ?? "\uffff";
+    const db = b.due_date ?? "\uffff";
+    if (da !== db) return da.localeCompare(db);
+    return a.position - b.position;
+  });
+}
+
+function statusBadge(step: RoadmapStepFull): { label: string; className: string } {
+  if (step.status === "done") return { label: "完了", className: "bg-emerald-50 text-emerald-800 ring-emerald-100" };
+  if (step.status === "doing") return { label: "進行中", className: "bg-indigo-50 text-indigo-800 ring-indigo-100" };
+  if (isStepOverdue(step)) return { label: "期限切れ", className: "bg-rose-50 text-rose-800 ring-rose-100" };
+  return { label: "未着手", className: "bg-zinc-100 text-zinc-700 ring-zinc-200" };
 }
 
 /** 「いまここ」＝ 進行中があればその先頭、なければ未着手の先頭 */
@@ -70,6 +107,7 @@ export function ProjectRoadmapPanel({
   onError,
 }: Props) {
   const [filter, setFilter] = useState<RoadmapFilter>("all");
+  const [doneCollapsed, setDoneCollapsed] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -80,21 +118,58 @@ export function ProjectRoadmapPanel({
     due_date: string;
     owner_id: string;
     notes: string;
+    completion_criteria: string;
   } | null>(null);
   const [taskDraft, setTaskDraft] = useState<Record<string, string>>({});
+  const [taskDueDraft, setTaskDueDraft] = useState<Record<string, string>>({});
+  const [taskAssigneeDraft, setTaskAssigneeDraft] = useState<Record<string, string>>({});
+  const [taskInputKindDraft, setTaskInputKindDraft] = useState<Record<string, "none" | "choice" | "text">>({});
+  const [taskVisibilityDraft, setTaskVisibilityDraft] = useState<Record<string, "shared" | "private">>({});
   const [saving, setSaving] = useState(false);
 
   const focusStep = useMemo(() => pickFocusStep(steps), [steps]);
   const doneRate = useMemo(() => progressPercent(steps), [steps]);
 
+  const stepStats = useMemo(() => {
+    const list = sortedSteps(steps);
+    return {
+      total: list.length,
+      todo: list.filter((s) => s.status === "todo").length,
+      doing: list.filter((s) => s.status === "doing").length,
+      done: list.filter((s) => s.status === "done").length,
+      overdue: list.filter((s) => isStepOverdue(s)).length,
+    };
+  }, [steps]);
+
   const filtered = useMemo(() => {
     const list = sortedSteps(steps);
-    if (filter === "all") return list;
+    if (filter === "all") return sortStepsForDisplay(list);
     return list.filter((s) => s.status === filter);
   }, [steps, filter]);
 
+  const activeSteps = useMemo(() => filtered.filter((s) => s.status !== "done"), [filtered]);
+  const doneSteps = useMemo(() => filtered.filter((s) => s.status === "done"), [filtered]);
+
   const taskCountByStep = useCallback(
     (stepId: string) => tasks.filter((t) => t.roadmap_step_id === stepId).length,
+    [tasks],
+  );
+
+  const blockedCountByStep = useCallback(
+    (stepId: string) =>
+      tasks.filter((t) => t.roadmap_step_id === stepId && normalizeTaskStatus(t.status) === "blocked").length,
+    [tasks],
+  );
+
+  const nextHintForStep = useCallback(
+    (stepId: string): string | null => {
+      const rel = tasks.filter((t) => t.roadmap_step_id === stepId);
+      const blockedFirst = rel.find((t) => normalizeTaskStatus(t.status) === "blocked");
+      if (blockedFirst) return `いま詰まっている: ${blockedFirst.title}`;
+      const active = rel.find((t) => normalizeTaskStatus(t.status) !== "done");
+      if (active) return `次の一歩: ${active.title}`;
+      return null;
+    },
     [tasks],
   );
 
@@ -112,6 +187,7 @@ export function ProjectRoadmapPanel({
       due_date: detailStep.due_date ?? "",
       owner_id: detailStep.owner_id ?? "",
       notes: detailStep.notes ?? "",
+      completion_criteria: detailStep.completion_criteria ?? "",
     });
   }, [detailStep]);
 
@@ -185,7 +261,10 @@ export function ProjectRoadmapPanel({
       if (e2) throw new Error(e2.message);
     });
 
-  const patchStep = (id: string, patch: Partial<Pick<RoadmapStepFull, "title" | "description" | "status" | "due_date" | "owner_id" | "notes">>) =>
+  const patchStep = (
+    id: string,
+    patch: Partial<Pick<RoadmapStepFull, "title" | "description" | "status" | "due_date" | "owner_id" | "notes" | "completion_criteria">>,
+  ) =>
     run(async () => {
       if (!supabase) throw new Error("接続がありません。");
       const { error } = await supabase.from("project_roadmap_steps").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
@@ -204,6 +283,7 @@ export function ProjectRoadmapPanel({
           due_date: detailDraft.due_date || null,
           owner_id: detailDraft.owner_id || null,
           notes: detailDraft.notes,
+          completion_criteria: detailDraft.completion_criteria.trim(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", detailId);
@@ -215,18 +295,29 @@ export function ProjectRoadmapPanel({
       if (!supabase || !uid) throw new Error("ログインが必要です。");
       const title = (taskDraft[stepId] ?? "").trim();
       if (!title) return;
+      const inputKind = taskInputKindDraft[stepId] ?? "none";
+      const answerVisibility = taskVisibilityDraft[stepId] ?? "shared";
+      const dueRaw = (taskDueDraft[stepId] ?? "").trim();
+      const assignee = (taskAssigneeDraft[stepId] ?? "").trim() || null;
+      const meta: Record<string, unknown> = { inputKind, answerVisibility };
+      if (inputKind === "text") meta.placeholder = "回答を入力…";
+      if (inputKind === "choice") meta.choiceOptions = ["はい", "いいえ", "わからない"];
       const { error } = await supabase.from("project_tasks").insert({
         project_id: projectId,
         title,
         description: "",
-        status: "todo",
+        status: "not_started",
         priority: "medium",
         created_by: uid,
+        assignee_id: assignee,
+        due_date: dueRaw || null,
         roadmap_step_id: stepId,
         ai_generated: false,
+        meta,
       });
       if (error) throw new Error(error.message);
       setTaskDraft((prev) => ({ ...prev, [stepId]: "" }));
+      setTaskDueDraft((prev) => ({ ...prev, [stepId]: "" }));
     });
 
   function onAddStepSubmit(e: FormEvent) {
@@ -260,9 +351,14 @@ export function ProjectRoadmapPanel({
     <section className="space-y-4">
       <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの進め方</p>
-            <p className="mt-1 inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-900 ring-1 ring-indigo-100">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">夢 → マイルストーン → タスク</p>
+            <p className="mt-1 truncate text-sm font-bold text-zinc-900">{project.name}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">
+              この画面は「全体の地図」です。細かい実行は<span className="font-semibold text-zinc-800">タスク</span>
+              タブで、今日の一歩に落とします。
+            </p>
+            <p className="mt-1 inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-900 ring-1 ring-indigo-100">
               {businessTypeLabelJa(project.business_type ?? null)}
             </p>
           </div>
@@ -277,6 +373,16 @@ export function ProjectRoadmapPanel({
             style={{ width: `${doneRate}%` }}
           />
         </div>
+        {stepStats.total > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-indigo-900 ring-1 ring-indigo-100">進行中 {stepStats.doing}</span>
+            <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700 ring-1 ring-zinc-200">未着手 {stepStats.todo}</span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800 ring-1 ring-emerald-100">完了 {stepStats.done}</span>
+            {stepStats.overdue > 0 ? (
+              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-800 ring-1 ring-rose-100">要対応 {stepStats.overdue}</span>
+            ) : null}
+          </div>
+        ) : null}
         {focusStep ? (
           <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/80 px-3 py-2.5">
             <p className="text-[11px] font-semibold text-indigo-800">次はここ</p>
@@ -339,23 +445,32 @@ export function ProjectRoadmapPanel({
             {filtered.length === 0 ? (
               <li className="py-8 text-center text-sm text-zinc-500">この条件に該当するステップはありません。</li>
             ) : null}
-            {filtered.map((step, idx) => {
+            {(filter === "all" ? activeSteps : filtered).map((step, idx) => {
+              const sectionLen = filter === "all" ? activeSteps.length : filtered.length;
               const isFocus = focusStep?.id === step.id;
               const n = sortedSteps(steps).findIndex((s) => s.id === step.id) + 1;
               const tc = taskCountByStep(step.id);
+              const blockedHere = blockedCountByStep(step.id);
+              const nextHint = nextHintForStep(step.id);
+              const badge = statusBadge(step);
               const statusStyle =
                 step.status === "done"
                   ? "border-zinc-200 bg-zinc-50/90 opacity-[0.92]"
                   : step.status === "doing"
                     ? "border-indigo-400 bg-indigo-50/40 shadow-[0_0_0_1px_rgba(99,102,241,0.15)]"
-                    : "border-zinc-200 bg-white";
+                    : isStepOverdue(step)
+                      ? "border-rose-300 bg-rose-50/50"
+                      : "border-zinc-200 bg-white";
               const ringFocus = isFocus && step.status !== "done" ? "ring-2 ring-indigo-400/40" : "";
 
               return (
                 <li key={step.id} className="relative flex gap-3 pb-6 last:pb-0">
                   <div className="flex w-8 shrink-0 flex-col items-center">
-                    <div
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    <button
+                      type="button"
+                      aria-label={`${step.title}の詳細を見る`}
+                      onClick={() => setDetailId(step.id)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition hover:ring-2 hover:ring-indigo-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                         step.status === "done"
                           ? "bg-emerald-500 text-white"
                           : step.status === "doing"
@@ -364,19 +479,44 @@ export function ProjectRoadmapPanel({
                       }`}
                     >
                       {step.status === "done" ? "✓" : n}
-                    </div>
-                    {idx < filtered.length - 1 ? <div className="mt-1 w-px flex-1 bg-zinc-200" aria-hidden /> : null}
+                    </button>
+                    {idx < sectionLen - 1 ? <div className="mt-1 w-px flex-1 bg-zinc-200" aria-hidden /> : null}
                   </div>
-                  <div className={`min-w-0 flex-1 rounded-2xl border p-3 transition ${statusStyle} ${ringFocus}`}>
+                  <div
+                    className={`min-w-0 flex-1 rounded-2xl border p-3 transition ${statusStyle} ${ringFocus} cursor-pointer`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetailId(step.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDetailId(step.id);
+                      }
+                    }}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <button type="button" className="text-left" onClick={() => setDetailId(step.id)}>
-                          <span className="text-base font-semibold text-zinc-900">{step.title}</span>
+                        <button type="button" className="text-left" onClick={(e) => { e.stopPropagation(); setDetailId(step.id); }}>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-base font-semibold text-zinc-900">{step.title}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${badge.className}`}>{badge.label}</span>
+                          </span>
                           {step.description ? (
                             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600">{step.description}</p>
                           ) : (
-                            <p className="mt-1 text-[11px] text-zinc-400">説明を追加（タップ）</p>
+                            <p className="mt-1 text-[11px] text-zinc-400">目的・説明を追加（タップ）</p>
                           )}
+                          {step.completion_criteria?.trim() ? (
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">
+                              <span className="font-semibold text-zinc-600">完了条件: </span>
+                              {step.completion_criteria}
+                            </p>
+                          ) : null}
+                          {nextHint ? (
+                            <p className="mt-1 text-[11px] font-medium leading-snug text-indigo-900">{nextHint}</p>
+                          ) : step.notes?.trim() ? (
+                            <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500">メモ: {step.notes}</p>
+                          ) : null}
                         </button>
                         <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-zinc-600">
                           {step.due_date ? (
@@ -388,11 +528,17 @@ export function ProjectRoadmapPanel({
                             </span>
                           ) : null}
                           <span className="rounded-md bg-white/80 px-1.5 py-0.5 ring-1 ring-zinc-200">具体タスク {tc}件</span>
+                          {blockedHere > 0 ? (
+                            <span className="rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-100">
+                              いま詰まり {blockedHere}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                       <select
                         className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-800"
                         value={step.status}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => void patchStep(step.id, { status: e.target.value as RoadmapStepFull["status"] })}
                         disabled={saving}
                       >
@@ -401,7 +547,7 @@ export function ProjectRoadmapPanel({
                         <option value="done">完了</option>
                       </select>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-100/80 pt-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-100/80 pt-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         className="text-[11px] font-semibold text-indigo-700 hover:underline"
@@ -443,6 +589,46 @@ export function ProjectRoadmapPanel({
               );
             })}
           </ul>
+
+          {filter === "all" && doneSteps.length > 0 ? (
+            <div className="mt-1">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-left text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+                onClick={() => setDoneCollapsed((v) => !v)}
+                aria-expanded={!doneCollapsed}
+              >
+                <span>完了済み（{doneSteps.length}）</span>
+                <span aria-hidden>{doneCollapsed ? "▼" : "▲"}</span>
+              </button>
+              {!doneCollapsed ? (
+                <ul className="relative mt-2 space-y-2 pl-1">
+                  {doneSteps.map((step) => {
+                    const badge = statusBadge(step);
+                    const n = sortedSteps(steps).findIndex((s) => s.id === step.id) + 1;
+                    return (
+                      <li key={step.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50/90 px-3 py-2.5 text-left opacity-90 transition hover:bg-zinc-100"
+                          onClick={() => setDetailId(step.id)}
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+                            ✓
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-zinc-700">{step.title}</span>
+                            <span className="text-[10px] text-zinc-500">ステップ {n}</span>
+                          </span>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${badge.className}`}>{badge.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
 
           <form onSubmit={onAddStepSubmit} className="flex gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-3">
             <input
@@ -492,6 +678,16 @@ export function ProjectRoadmapPanel({
                   onChange={(e) => setDetailDraft((d) => (d ? { ...d, description: e.target.value } : d))}
                   disabled={saving}
                   placeholder="チームで共有するゴールや成果物を書く"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-zinc-600">このマイルストーンの完了条件</span>
+                <textarea
+                  className={`mt-1 min-h-[3.5rem] ${inputClass}`}
+                  value={detailDraft.completion_criteria}
+                  onChange={(e) => setDetailDraft((d) => (d ? { ...d, completion_criteria: e.target.value } : d))}
+                  disabled={saving}
+                  placeholder="例: ユーザー3人にヒアリングできた／LPのワイヤーが承認された、など"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -574,20 +770,81 @@ export function ProjectRoadmapPanel({
                     <li className="text-[11px] text-zinc-500">まだありません。下から追加してください。</li>
                   ) : null}
                 </ul>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-3 space-y-2">
                   <input
                     className={inputClass}
                     placeholder="例: ワイヤーフレーム作成"
                     value={taskDraft[detailStep.id] ?? ""}
                     onChange={(e) => setTaskDraft((prev) => ({ ...prev, [detailStep.id]: e.target.value }))}
                   />
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-[11px]">
+                      <span className="font-semibold text-zinc-600">期限</span>
+                      <input
+                        type="date"
+                        className={`mt-0.5 ${inputClass}`}
+                        value={taskDueDraft[detailStep.id] ?? ""}
+                        onChange={(e) => setTaskDueDraft((prev) => ({ ...prev, [detailStep.id]: e.target.value }))}
+                      />
+                    </label>
+                    <label className="block text-[11px]">
+                      <span className="font-semibold text-zinc-600">担当</span>
+                      <select
+                        className={`mt-0.5 ${inputClass}`}
+                        value={taskAssigneeDraft[detailStep.id] ?? ""}
+                        onChange={(e) => setTaskAssigneeDraft((prev) => ({ ...prev, [detailStep.id]: e.target.value }))}
+                      >
+                        <option value="">未設定</option>
+                        {members.map((m) => (
+                          <option key={m.user_id} value={m.user_id}>
+                            {memberNames[m.user_id] ?? m.user_id.slice(0, 8)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-[11px]">
+                      <span className="font-semibold text-zinc-600">質問形式</span>
+                      <select
+                        className={`mt-0.5 ${inputClass}`}
+                        value={taskInputKindDraft[detailStep.id] ?? "none"}
+                        onChange={(e) =>
+                          setTaskInputKindDraft((prev) => ({
+                            ...prev,
+                            [detailStep.id]: e.target.value as "none" | "choice" | "text",
+                          }))
+                        }
+                      >
+                        <option value="none">完了のみ</option>
+                        <option value="choice">選択式</option>
+                        <option value="text">自由記述</option>
+                      </select>
+                    </label>
+                    <label className="block text-[11px]">
+                      <span className="font-semibold text-zinc-600">回答の公開</span>
+                      <select
+                        className={`mt-0.5 ${inputClass}`}
+                        value={taskVisibilityDraft[detailStep.id] ?? "shared"}
+                        onChange={(e) =>
+                          setTaskVisibilityDraft((prev) => ({
+                            ...prev,
+                            [detailStep.id]: e.target.value as "shared" | "private",
+                          }))
+                        }
+                      >
+                        <option value="shared">全員に共有</option>
+                        <option value="private">投稿者のみ</option>
+                      </select>
+                    </label>
+                  </div>
                   <button
                     type="button"
-                    className="shrink-0 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    className="w-full rounded-xl bg-indigo-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                     disabled={saving || !(taskDraft[detailStep.id] ?? "").trim()}
                     onClick={() => void addChildTask(detailStep.id)}
                   >
-                    追加
+                    タスクを追加
                   </button>
                 </div>
               </div>
@@ -603,6 +860,40 @@ export function ProjectRoadmapPanel({
           </div>
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-50 to-indigo-50/40 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">つながる</p>
+        <p className="mt-1 text-sm font-semibold text-zinc-900">コミュニティ・仲間探し</p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-600">
+          進捗を共有したり、質問したり、仮説を検証したりできます。
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            href="/?tab=posts&community=progress"
+            className="min-h-[40px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+          >
+            進捗共有
+          </Link>
+          <Link
+            href="/?tab=posts&community=qna"
+            className="min-h-[40px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+          >
+            質問・相談
+          </Link>
+          <Link
+            href="/?tab=chat"
+            className="min-h-[40px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+          >
+            探す
+          </Link>
+          <Link
+            href="/?tab=mentor&mentor=validation"
+            className="min-h-[40px] rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-100"
+          >
+            おためし検証
+          </Link>
+        </div>
+      </div>
     </section>
   );
 }

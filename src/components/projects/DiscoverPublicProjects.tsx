@@ -1,60 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  PROJECT_CARD_ICON_BGS,
-  hashProjectVisualIndex,
-  projectThumbEmoji,
-  projectLineShortLabel,
-} from "@/lib/projects/cardChrome";
 import type { ProjectRow } from "@/lib/projects/types";
+import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
+import { businessTypeLabelJa, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 
-const LIST_SELECT =
+const PROJECT_SELECT =
   "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at";
 
-type BrowseProject = Pick<
-  ProjectRow,
-  | "id"
-  | "owner_id"
-  | "name"
-  | "description"
-  | "category"
-  | "tags"
-  | "thumbnail_url"
-  | "visibility"
-  | "business_type"
-  | "recruitment_target"
-  | "recruitment_message"
-  | "created_at"
-  | "updated_at"
->;
+type Props = {
+  showSectionHeader?: boolean;
+};
 
-function formatJaDate(iso: string | undefined): string {
-  if (!iso) return "";
+function formatLaunchedAt(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric" });
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
 }
 
-export function DiscoverPublicProjects({ className = "" }: { className?: string }) {
+export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
-  const [projects, setProjects] = useState<BrowseProject[]>([]);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const [detail, setDetail] = useState<BrowseProject | null>(null);
-  const [msgDraft, setMsgDraft] = useState("");
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 3200);
-  }, []);
+  const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
+  const [joinMsgDraft, setJoinMsgDraft] = useState("");
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -69,7 +46,7 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
 
       const pubRes = await supabase
         .from("projects")
-        .select(LIST_SELECT)
+        .select(PROJECT_SELECT)
         .eq("visibility", "public")
         .order("updated_at", { ascending: false })
         .limit(80);
@@ -79,14 +56,14 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
         return;
       }
 
-      const rows = (pubRes.data ?? []) as BrowseProject[];
-      const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter(Boolean))];
-      let nameMap: Record<string, string> = {};
+      const rows = (pubRes.data ?? []) as ProjectRow[];
+      const ownerIds = [...new Set(rows.map((p) => p.owner_id))];
+      const nameMap: Record<string, string> = {};
       if (ownerIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("id,display_name").in("id", ownerIds);
-        nameMap = Object.fromEntries(
-          (profs ?? []).map((p) => [p.id as string, ((p.display_name as string | null) || "ユーザー").trim() || "ユーザー"]),
-        );
+        const { data: profiles } = await supabase.from("profiles").select("id,display_name").in("id", ownerIds);
+        for (const p of profiles ?? []) {
+          nameMap[p.id as string] = ((p.display_name as string | null) ?? "").trim() || "オーナー";
+        }
       }
       setOwnerNames(nameMap);
 
@@ -122,14 +99,15 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
     return projects.filter((p) => {
       if (memberIds.has(p.id)) return false;
       if (!q) return true;
-      const tagStr = (p.tags ?? []).join(" ");
-      return `${p.name} ${p.description ?? ""} ${tagStr}`.toLowerCase().includes(q);
+      const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""}`;
+      return hay.toLowerCase().includes(q);
     });
   }, [projects, memberIds, query]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
-      showToast("ログインが必要です。");
+      setToast("ログインが必要です。");
+      window.setTimeout(() => setToast(""), 2800);
       return;
     }
     setBusyId(projectId);
@@ -138,16 +116,17 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
       const { error } = await supabase.from("project_join_requests").insert({
         project_id: projectId,
         requester_id: uid,
-        message: msgDraft.trim() || "参加したいです",
+        message: joinMsgDraft.trim() || "参加したいです",
       });
       if (error) {
-        showToast(error.message);
+        setToast(error.message);
         return;
       }
       setPendingIds((prev) => new Set(prev).add(projectId));
-      setMsgDraft("");
-      showToast("参加申請を送信しました。");
-      void load();
+      setDetailProject(null);
+      setJoinMsgDraft("");
+      setToast("参加申請を送信しました。");
+      window.setTimeout(() => setToast(""), 2800);
     } finally {
       setBusyId(null);
     }
@@ -155,87 +134,69 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
 
   if (!supabase) return null;
 
+  const detail = detailProject;
+  const detailPending = detail ? pendingIds.has(detail.id) : false;
+  const detailBusy = detail ? busyId === detail.id : false;
+
   return (
-    <div className={`rounded-2xl border border-[#e5e7eb] bg-white p-3 shadow-sm sm:p-4 ${className}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-[#262626]">公開プロジェクト</h4>
-          <p className="mt-1 text-[11px] leading-relaxed text-[#6b7280]">
-            まだ参加していない公開プロジェクトです。カードを開いて概要を確認し、応募できます。
+    <div>
+      {showSectionHeader ? (
+        <div className="mb-3">
+          <h4 className="text-sm font-semibold text-zinc-900">プロジェクトを探す</h4>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+            参加していない公開プロジェクトだけ表示。カードをタップして詳細を見られます。
           </p>
         </div>
-      </div>
+      ) : null}
 
-      <label className="sr-only" htmlFor="discover-project-query">
-        プロジェクト名・説明で検索
-      </label>
       <input
-        id="discover-project-query"
-        className="mt-3 w-full rounded-xl border border-[#e5e7eb] bg-[#fafafa] px-3 py-2.5 text-sm outline-none focus:border-[#93c5fd]"
-        placeholder="名前・タグ・説明で絞り込み…"
+        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-500/15"
+        placeholder="名前・説明・カテゴリで検索…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        aria-label="公開プロジェクトを検索"
       />
 
       {toast ? (
-        <p
-          className={`mt-2 text-xs font-medium ${toast.includes("送信") || toast.includes("しました") ? "text-emerald-700" : "text-rose-600"}`}
-          role="status"
-        >
-          {toast}
-        </p>
+        <p className={`mt-2 text-xs font-medium ${toast.includes("送信") ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
       ) : null}
 
       <div className="mt-3">
-        {loading ? <p className="py-8 text-center text-sm text-[#6b7280]">読み込み中…</p> : null}
+        {loading ? <p className="py-8 text-center text-sm text-zinc-500">読み込み中…</p> : null}
         {!loading && browseList.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[#e5e7eb] bg-[#fafafa] px-3 py-8 text-center text-sm text-[#6b7280]">
-            {uid ? "応募できる公開プロジェクトはありません（すべて参加済みか、検索に一致しません）。" : "ログインすると公開プロジェクトに応募できます。"}
+          <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600">
+            {uid ? "応募できる公開プロジェクトはありません。" : "ログインすると公開プロジェクトに応募できます。"}
           </p>
         ) : null}
-
         {!loading && browseList.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {browseList.map((p) => {
-              const pending = pendingIds.has(p.id);
-              const c = PROJECT_CARD_ICON_BGS[hashProjectVisualIndex(p.id, PROJECT_CARD_ICON_BGS.length)];
-              const thumb = (p.thumbnail_url ?? "").trim();
+              const c = PROJECT_ICON_BG[projectHashIndex(p.id, PROJECT_ICON_BG.length)];
+              const thumb = p.thumbnail_url?.trim();
               return (
                 <button
                   key={p.id}
                   type="button"
+                  className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:border-zinc-300 hover:shadow-lg active:scale-[0.98]"
                   onClick={() => {
-                    setDetail(p);
-                    setMsgDraft("");
+                    setDetailProject(p);
+                    setJoinMsgDraft("");
                   }}
-                  className="group relative flex aspect-square flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white text-left shadow-md transition hover:shadow-lg active:opacity-95"
                 >
-                  <div className="relative h-[52%] min-h-0 w-full shrink-0 overflow-hidden bg-zinc-100">
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl shadow-sm ring-1 ring-zinc-100">
                     {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- arbitrary URL
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={thumb} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <div className={`flex h-full w-full items-center justify-center ${c} text-3xl text-white shadow-inner`} aria-hidden>
-                        {projectThumbEmoji(p.business_type)}
-                      </div>
-                    )}
-                    {pending ? (
-                      <span className="absolute right-2 top-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-950 ring-1 ring-amber-200/80">
-                        申請済
+                      <span className={`flex h-full w-full items-center justify-center text-2xl text-white ${c}`}>
+                        {(p.name.trim().charAt(0) || "P").toUpperCase()}
                       </span>
-                    ) : null}
+                    )}
                   </div>
-                  <div className="flex min-h-0 flex-1 flex-col justify-center px-2 py-2">
-                    <p className="line-clamp-2 text-center text-[13px] font-semibold leading-snug text-zinc-900">{p.name}</p>
-                    <p className="mt-1 line-clamp-1 text-center text-[10px] font-semibold text-indigo-800">
-                      {projectLineShortLabel(p.business_type ?? null)}
-                    </p>
-                    <p className="mt-0.5 line-clamp-1 text-center text-[10px] text-zinc-500">
-                      {(p.category ?? "").trim() || "探究"}
-                      {" · "}
-                      {p.visibility === "public" ? "公開" : "非公開"}
-                    </p>
-                  </div>
+                  <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{p.name}</p>
+                  <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
+                    {projectLineShortLabel(p.business_type)}
+                  </p>
                 </button>
               );
             })}
@@ -245,118 +206,114 @@ export function DiscoverPublicProjects({ className = "" }: { className?: string 
 
       {detail ? (
         <div
-          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-          role="presentation"
-          onClick={() => setDetail(null)}
+          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="project-detail-title"
+          onClick={() => setDetailProject(null)}
         >
           <div
-            className="max-h-[min(92dvh,760px)] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="discover-project-detail-title"
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 z-[1] flex items-center justify-between gap-2 border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
-              <button type="button" className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-50" onClick={() => setDetail(null)}>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
+              <h3 id="project-detail-title" className="text-base font-bold text-zinc-900">
+                プロジェクト詳細
+              </h3>
+              <button
+                type="button"
+                className="rounded-full px-3 py-1 text-sm text-zinc-500 hover:bg-zinc-100"
+                onClick={() => setDetailProject(null)}
+              >
                 閉じる
               </button>
-              <Link
-                href={`/projects/${detail.id}`}
-                className="text-sm font-semibold text-indigo-700 hover:underline"
-                onClick={() => setDetail(null)}
-              >
-                詳細ページへ
-              </Link>
             </div>
 
-            <div className="space-y-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-              <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50">
-                {(detail.thumbnail_url ?? "").trim() ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={(detail.thumbnail_url ?? "").trim()} alt="" className="aspect-[21/9] w-full object-cover sm:aspect-[2/1]" />
-                ) : (
-                  <div
-                    className={`flex aspect-[21/9] w-full items-center justify-center text-5xl sm:aspect-[2/1] ${PROJECT_CARD_ICON_BGS[hashProjectVisualIndex(detail.id, PROJECT_CARD_ICON_BGS.length)]} text-white`}
-                  >
-                    {projectThumbEmoji(detail.business_type)}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h2 id="discover-project-detail-title" className="text-xl font-bold tracking-tight text-zinc-900">
-                  {detail.name}
-                </h2>
-                <p className="mt-1 text-xs text-zinc-500">
-                  発足 {formatJaDate(detail.created_at) || "情報なし"}
-                  {" · "}
-                  更新 {formatJaDate(detail.updated_at) || "—"}
-                </p>
-              </div>
-
-              <section className="rounded-xl border border-zinc-100 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">説明</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-                  {(detail.description ?? "").trim() || "未設定"}
-                </p>
-              </section>
-
-              <section className="rounded-xl border border-zinc-100 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">オーナー</h3>
-                <p className="mt-2 text-base font-semibold text-zinc-900">{ownerNames[detail.owner_id] ?? "情報なし"}</p>
-              </section>
-
-              <section className="rounded-xl border border-zinc-100 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">募集したい仲間</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-                  {(detail.recruitment_target ?? "").trim() || "未設定"}
-                </p>
-              </section>
-
-              <section className="rounded-xl border border-zinc-100 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">メッセージ</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
-                  {(detail.recruitment_message ?? "").trim() || "未設定"}
-                </p>
-              </section>
-
-              {(detail.tags ?? []).length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {(detail.tags ?? []).map((t) => (
-                    <span key={`${detail.id}-tag-${t}`} className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="border-t border-zinc-100 pt-4">
-                {!uid ? (
-                  <p className="text-center text-sm text-zinc-500">ログインすると参加申請できます。</p>
-                ) : pendingIds.has(detail.id) ? (
-                  <p className="text-center text-sm font-semibold text-amber-900">参加申請済みです。承認をお待ちください。</p>
-                ) : (
-                  <>
-                    <label className="block text-xs font-semibold text-zinc-700" htmlFor="discover-join-msg">
-                      一言メッセージ（任意）
-                    </label>
-                    <textarea
-                      id="discover-join-msg"
-                      className="mt-2 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                      rows={3}
-                      placeholder="参加したい理由や一言をどうぞ"
-                      value={msgDraft}
-                      onChange={(e) => setMsgDraft(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      disabled={busyId === detail.id}
-                      onClick={() => void submitJoin(detail.id)}
-                      className="mt-3 w-full min-h-[44px] rounded-xl bg-zinc-900 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            <div className="p-4">
+              <div className="flex gap-3">
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+                  {detail.thumbnail_url?.trim() ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span
+                      className={`flex h-full w-full items-center justify-center text-2xl text-white ${PROJECT_ICON_BG[projectHashIndex(detail.id, PROJECT_ICON_BG.length)]}`}
                     >
-                      {busyId === detail.id ? "送信中…" : "参加申請を送る"}
-                    </button>
-                  </>
+                      {(detail.name.trim().charAt(0) || "P").toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-bold text-zinc-900">{detail.name}</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">{businessTypeLabelJa(detail.business_type ?? null)}</p>
+                  {detail.category?.trim() ? (
+                    <p className="mt-1 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                      {detail.category}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <dl className="mt-4 space-y-3 text-sm">
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">説明</dt>
+                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                    {detail.description?.trim() || "未設定"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">発足</dt>
+                  <dd className="mt-1 text-zinc-800">{formatLaunchedAt(detail.created_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">オーナー</dt>
+                  <dd className="mt-1 text-zinc-800">{ownerNames[detail.owner_id] ?? "オーナー"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">欲しい仲間・姿勢</dt>
+                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                    {detail.recruitment_target?.trim() || "未設定"}
+                  </dd>
+                </div>
+                {(detail.recruitment_message ?? "").trim() ? (
+                  <div>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">理念・ビジョン</dt>
+                    <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{detail.recruitment_message}</dd>
+                  </div>
+                ) : null}
+              </dl>
+
+              <div className="mt-5 flex flex-col gap-2">
+                <Link
+                  href={`/projects/${detail.id}`}
+                  className="flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
+                >
+                  プロジェクト画面を開く
+                </Link>
+                {uid ? (
+                  detailPending ? (
+                    <p className="text-center text-sm font-medium text-amber-800">参加申請済みです</p>
+                  ) : (
+                    <>
+                      <textarea
+                        className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                        rows={2}
+                        placeholder="参加申請のメッセージ（任意）"
+                        value={joinMsgDraft}
+                        onChange={(e) => setJoinMsgDraft(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        disabled={detailBusy}
+                        onClick={() => void submitJoin(detail.id)}
+                        className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
+                      >
+                        {detailBusy ? "送信中…" : "参加申請を送る"}
+                      </button>
+                    </>
+                  )
+                ) : (
+                  <p className="text-center text-xs text-zinc-500">参加申請にはログインが必要です</p>
                 )}
               </div>
             </div>

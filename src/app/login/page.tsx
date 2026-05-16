@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
 
@@ -13,22 +13,18 @@ const primaryBtn =
 const secondaryBtn =
   "min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-45";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<"signup" | "signin">("signup");
+  const searchParams = useSearchParams();
+  const modeFromUrl = searchParams.get("mode") === "signin" ? "signin" : "signup";
+  const [tabPreference, setTabPreference] = useState<"signup" | "signin" | null>(null);
+  const tab = tabPreference ?? modeFromUrl;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const mode = new URLSearchParams(window.location.search).get("mode");
-      if (mode === "signin") setTab("signin");
-    }
-  }, []);
 
   useEffect(() => {
     if (!supabase || !supabaseEnabled) return;
@@ -167,7 +163,7 @@ export default function LoginPage() {
               tab === "signup" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
             }`}
             onClick={() => {
-              setTab("signup");
+              setTabPreference("signup");
               setMessage("");
             }}
           >
@@ -179,7 +175,7 @@ export default function LoginPage() {
               tab === "signin" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
             }`}
             onClick={() => {
-              setTab("signin");
+              setTabPreference("signin");
               setMessage("");
             }}
           >
@@ -292,5 +288,17 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-[50vh] items-center justify-center bg-zinc-50 px-4 text-sm text-zinc-600">読み込み中…</main>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
