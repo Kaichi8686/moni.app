@@ -77,9 +77,10 @@ type Props = {
   schedules: CalendarSchedule[];
   onSave: (payload: { title: string; description: string; startsAt: string; endsAt: string; attendees: string }) => Promise<void>;
   saving?: boolean;
+  canEdit?: boolean;
 };
 
-export function ProjectScheduleCalendar({ schedules, onSave, saving }: Props) {
+export function ProjectScheduleCalendar({ schedules, onSave, saving, canEdit = true }: Props) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string | null>(() => dateKeyLocal(new Date()));
   const [form, setForm] = useState({
@@ -287,7 +288,7 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving }: Props) {
         </div>
       ) : null}
 
-      {/* 追加フォーム（TimeTree の下部入力に近い位置） */}
+      {canEdit ? (
       <form className="border-t border-zinc-200 bg-white px-3 py-4 sm:px-4" onSubmit={(e) => void handleSubmit(e)}>
         <p className="mb-3 text-sm font-bold text-zinc-900">予定を追加</p>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -339,6 +340,7 @@ export function ProjectScheduleCalendar({ schedules, onSave, saving }: Props) {
           {saving ? "追加中…" : "予定を追加"}
         </button>
       </form>
+      ) : null}
     </div>
   );
 }

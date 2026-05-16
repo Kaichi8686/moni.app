@@ -19,6 +19,7 @@ import {
   type ProfileLite,
 } from "@/lib/workspace/mapRows";
 import { ProjectTabs } from "@/components/projects/ProjectTabs";
+import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 
 type ProjectDbRow = ProjectRow & {
   icon?: string | null;
@@ -35,9 +36,18 @@ type Ctx = {
   project: Project | null;
   phases: Phase[];
   issues: Issue[];
+  schedules: CalendarSchedule[];
+  scheduleSaving: boolean;
   uid: string | null;
   canEdit: boolean;
   reload: () => Promise<void>;
+  createSchedule: (payload: {
+    title: string;
+    description: string;
+    startsAt: string;
+    endsAt: string;
+    attendees: string;
+  }) => Promise<void>;
   createPhase: (input: {
     title: string;
     startDate: string;
@@ -90,6 +100,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [schedules, setSchedules] = useState<CalendarSchedule[]>([]);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(false);
 
@@ -113,6 +125,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         setProject(null);
         setPhases([]);
         setIssues([]);
+        setSchedules([]);
         setCanEdit(false);
         return;
       }
@@ -161,6 +174,12 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       }
       const { data: iss, error: issErr } = await client.from("project_issues").select("*").eq("project_id", projectId);
       if (!issErr) issueRows = (iss ?? []) as IssueRowDb[];
+      const { data: sched } = await client
+        .from("project_schedules")
+        .select("id,title,description,starts_at,ends_at,attendees")
+        .eq("project_id", projectId)
+        .order("starts_at", { ascending: true });
+      setSchedules((sched ?? []) as CalendarSchedule[]);
       const mappedIssues = issueRows.map(mapIssueRow);
       const nested = nestPhasesWithIssues(phaseRows, mappedIssues);
       setIssues(mappedIssues);
@@ -267,6 +286,36 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     [canEdit, projectId, reload, uid],
   );
 
+  const createSchedule = useCallback(
+    async (payload: {
+      title: string;
+      description: string;
+      startsAt: string;
+      endsAt: string;
+      attendees: string;
+    }) => {
+      if (!supabase || !canEdit || !uid || !payload.title.trim() || !payload.startsAt) return;
+      setScheduleSaving(true);
+      try {
+        const attendees = payload.attendees.split(/[,、]/).map((x) => x.trim()).filter(Boolean);
+        const { error: err } = await supabase.from("project_schedules").insert({
+          project_id: projectId,
+          title: payload.title.trim(),
+          description: payload.description.trim(),
+          starts_at: new Date(payload.startsAt).toISOString(),
+          ends_at: payload.endsAt ? new Date(payload.endsAt).toISOString() : null,
+          attendees,
+          created_by: uid,
+        });
+        if (err) throw new Error(err.message);
+        await reload();
+      } finally {
+        setScheduleSaving(false);
+      }
+    },
+    [canEdit, projectId, reload, uid],
+  );
+
   const updateIssue = useCallback(
     async (
       issueId: string,
@@ -303,6 +352,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         project,
         phases,
         issues,
+        schedules,
+        scheduleSaving,
         uid,
         canEdit,
         reload,
@@ -312,6 +363,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         updateIssueStatus,
         createIssue,
         updateIssue,
+        createSchedule,
       }) satisfies Ctx,
     [
       projectId,
@@ -320,15 +372,18 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       project,
       phases,
       issues,
+      schedules,
+      scheduleSaving,
       uid,
       canEdit,
       reload,
       createPhase,
       movePhase,
       resizePhase,
-        updateIssueStatus,
-        createIssue,
-        updateIssue,
+      updateIssueStatus,
+      createIssue,
+      updateIssue,
+      createSchedule,
     ],
   );
 

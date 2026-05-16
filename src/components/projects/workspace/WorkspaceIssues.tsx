@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { WorkspaceSchedulePanel } from "@/components/projects/workspace/WorkspaceSchedulePanel";
 import { IssueList } from "@/components/issues/IssueList";
 import { KanbanBoard } from "@/components/issues/KanbanBoard";
 import { IssueModal } from "@/components/issues/IssueModal";
@@ -19,7 +20,7 @@ const issueStatusLabelJa: Record<IssueStatus, string> = {
 };
 
 export default function WorkspaceIssues() {
-  const { issues, project, updateIssueStatus, createIssue, updateIssue, canEdit } = useProjectWorkspace();
+  const { projectId, issues, project, updateIssueStatus, createIssue, updateIssue, canEdit } = useProjectWorkspace();
   const createOpen = useWorkspaceUiStore((s) => s.createIssueOpen);
   const setCreateOpen = useWorkspaceUiStore((s) => s.setCreateIssueOpen);
   const [view, setView] = useState<"list" | "kanban">("list");
@@ -73,7 +74,11 @@ export default function WorkspaceIssues() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <WorkspaceSchedulePanel projectId={projectId} variant="embedded" defaultCollapsed={false} />
+
+      <section className="space-y-4" aria-label="課題一覧">
+      <h2 className="text-sm font-semibold text-[#1A1A1A]">課題</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -233,6 +238,7 @@ export default function WorkspaceIssues() {
           </form>
         </div>
       ) : null}
+      </section>
     </div>
   );
 }

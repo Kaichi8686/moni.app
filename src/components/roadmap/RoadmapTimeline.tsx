@@ -11,12 +11,13 @@ import { TimelineBar } from "@/components/roadmap/TimelineBar";
 
 type Props = {
   phases: Phase[];
+  compact?: boolean;
   onMovePhase: (phaseId: string, deltaDays: number) => void;
   onResizePhase: (phaseId: string, deltaDays: number) => void;
   onSelectPhase: (phase: Phase) => void;
 };
 
-export function RoadmapTimeline({ phases, onMovePhase, onResizePhase, onSelectPhase }: Props) {
+export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResizePhase, onSelectPhase }: Props) {
   const [zoom, setZoom] = useState<TimelineZoom>("month");
   const [anchor, setAnchor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,9 @@ export function RoadmapTimeline({ phases, onMovePhase, onResizePhase, onSelectPh
           ))}
         </ul>
       </div>
-      <div className="hidden min-h-[420px] flex-col rounded-md border border-[#E5E7EB] bg-white lg:flex">
+      <div
+        className={`hidden flex-col rounded-md border border-[#E5E7EB] bg-white lg:flex ${compact ? "min-h-[300px]" : "min-h-[420px]"}`}
+      >
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="flex min-h-0 flex-1">
           <div className="w-44 shrink-0 border-r border-[#E5E7EB] bg-[#FAFAFA] pt-[5.25rem] text-[12px] font-medium text-[#6B7280]">
