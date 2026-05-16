@@ -30,6 +30,16 @@ npm run dev:local
 
 `http://127.0.0.1:3002` を開く。
 
+### 手元で全部チェック（推奨）
+
+```bash
+npm run check
+# または
+./scripts/check.sh
+```
+
+`lint` → `typecheck`（`tsc --noEmit`）→ `build` の順です。
+
 ### 本番相当で起動（build/start）
 
 ```bash
@@ -48,7 +58,9 @@ npm run start:local
 
 ## 公開（Vercel推奨）
 
-- GitHub Actions で `lint` / `build` を回す場合は、`docs/github-actions-ci.yml` を `.github/workflows/ci.yml` にコピーしてコミットしてください（リポジトリに push するトークンに **`workflow` スコープ**が必要です。無い場合は Vercel のビルドや手元の `npm run build` で十分です）。
+- **Dependabot**: 週次で npm 依存の更新 PR が作られます（`.github/dependabot.yml`）。
+- **GitHub Actions（任意）**: 雛形は `docs/github-actions-ci.yml` です。`.github/workflows/ci.yml` に置くと main / PR / 手動（`workflow_dispatch`）で `lint` → `typecheck` → `build` が走ります。  
+  **注意:** 多くの Personal Access Token ではワークフロー更新が拒否されます。GitHub Web でファイルを追加するか、トークンに **`workflow` スコープ**（Fine-grained なら **Contents** と **Workflows** 書き込み）を付けてから push してください。不要なら Vercel のビルドと `npm run check` で代替できます。
 - VercelにリポジトリをImportしてデプロイ
 - VercelのEnvironment Variablesに以下を設定
   - `NEXT_PUBLIC_SUPABASE_URL`

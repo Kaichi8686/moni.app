@@ -1,7 +1,8 @@
-# GitHub に push する PAT に `workflow` スコープがある場合:
-#   このファイルを `.github/workflows/ci.yml` にコピーしてコミットすると、
-#   main / PR で lint と build が走ります。
-# 権限がない場合はこのままリポジトリに置いておき、手元や Vercel のビルドで検証してください。
+# 本番の CI はリポジトリ直下の `.github/workflows/ci.yml` と同期させています。
+# 手元で Actions を試す場合はそちらを編集してください。
+#
+# PAT で `.github/workflows/**` を push するには GitHub のトークンに `workflow` スコープが必要です。
+# 無い場合はこのリポジトリの `npm run check` または Vercel のビルドログで代替できます。
 
 name: CI
 
@@ -10,13 +11,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint-and-build:
+  lint-typecheck-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +33,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build
         run: npm run build

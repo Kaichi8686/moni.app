@@ -9,6 +9,8 @@
     "start": "next start",
     "start:local": "PORT=3002 HOSTNAME=127.0.0.1 next start -p 3002",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck && npm run build",
     "deploy:prod": "npx vercel --prod --yes"
   },
   "dependencies": {
