@@ -1,7 +1,7 @@
 "use client";
 
-import WorkspaceCoachingRoadmap from "@/components/projects/workspace/WorkspaceCoachingRoadmap";
+import WorkspaceRoadmapView from "@/components/projects/workspace/roadmap/WorkspaceRoadmapView";
 
 export default function WorkspaceRoadmap() {
-  return <WorkspaceCoachingRoadmap />;
+  return <WorkspaceRoadmapView />;
 }

@@ -4,22 +4,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { differenceInCalendarDays } from "date-fns";
-import type { Phase, ProjectStatus } from "@/lib/workspace/types";
+import type { ProjectStatus } from "@/lib/workspace/types";
+import type { PhaseStatus as RoadmapPhaseStatus } from "@/lib/roadmap/types";
 
-const statusBar: Record<ProjectStatus, string> = {
+const statusBar: Record<string, string> = {
   backlog: "bg-zinc-400",
   planned: "bg-sky-500",
-  in_progress: "bg-[#5E6AD2]",
+  in_progress: "bg-violet-500",
   paused: "bg-amber-400",
   completed: "bg-emerald-500",
   cancelled: "bg-red-400",
 };
 
-function phaseProgress(phase: Phase): number {
-  const all = phase.issues.length;
-  if (all === 0) return 0;
-  const done = phase.issues.filter((i) => i.status === "done").length;
-  return Math.round((done / all) * 100);
+export type TimelinePhaseLike = {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  status: ProjectStatus | RoadmapPhaseStatus | string;
+  issues?: { status: string }[];
+  tasks?: { status: string }[];
+};
+
+function phaseProgress(phase: TimelinePhaseLike): number {
+  const items = phase.tasks ?? phase.issues ?? [];
+  if (items.length === 0) return 0;
+  const done = items.filter((i) => i.status === "done").length;
+  return Math.round((done / items.length) * 100);
 }
 
 export function TimelineBar({
@@ -30,7 +41,7 @@ export function TimelineBar({
   onResizeEnd,
   onClick,
 }: {
-  phase: Phase;
+  phase: TimelinePhaseLike;
   anchor: Date;
   pxPerDay: number;
   riskLate?: boolean;

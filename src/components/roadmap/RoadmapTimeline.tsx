@@ -3,18 +3,18 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { addDays, differenceInCalendarDays } from "date-fns";
-import type { Phase } from "@/lib/workspace/types";
+import type { RoadmapPhase } from "@/lib/roadmap/types";
 import type { TimelineZoom } from "@/lib/workspace/types";
 import { pxPerDay } from "@/lib/workspace/timelineLayout";
 import { TimelineHeader } from "@/components/roadmap/TimelineHeader";
 import { TimelineBar } from "@/components/roadmap/TimelineBar";
 
 type Props = {
-  phases: Phase[];
+  phases: RoadmapPhase[];
   compact?: boolean;
   onMovePhase: (phaseId: string, deltaDays: number) => void;
   onResizePhase: (phaseId: string, deltaDays: number) => void;
-  onSelectPhase: (phase: Phase) => void;
+  onSelectPhase: (phase: RoadmapPhase) => void;
 };
 
 export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResizePhase, onSelectPhase }: Props) {
@@ -59,11 +59,17 @@ export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResize
         <p className="text-[12px] font-semibold text-[#1A1A1A]">フェーズ一覧</p>
         <ul className="space-y-2 text-[13px] text-[#6B7280]">
           {sorted.map((p) => (
-            <li key={p.id} className="flex justify-between gap-2 border-b border-[#F7F8F8] pb-2">
-              <span className="font-medium text-[#1A1A1A]">{p.title}</span>
-              <span className="shrink-0 text-[11px]">
-                {p.startDate.slice(0, 10)} → {p.endDate.slice(0, 10)}
-              </span>
+            <li key={p.id}>
+              <button
+                type="button"
+                className="flex w-full justify-between gap-2 border-b border-[#F7F8F8] pb-2 text-left"
+                onClick={() => onSelectPhase(p)}
+              >
+                <span className="font-medium text-[#1A1A1A]">{p.title}</span>
+                <span className="shrink-0 text-[11px] text-[#6B7280]">
+                  {p.startDate.slice(0, 10)} → {p.endDate.slice(0, 10)}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -92,8 +98,7 @@ export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResize
                 onToday={onToday}
               />
               {sorted.map((p) => {
-                const riskLate =
-                  p.status !== "completed" && p.status !== "cancelled" && new Date(p.endDate).getTime() < Date.now();
+                const riskLate = p.status !== "completed" && new Date(p.endDate).getTime() < Date.now();
                 return (
                   <TimelineBar
                     key={p.id}
