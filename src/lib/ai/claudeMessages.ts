@@ -13,6 +13,7 @@ export async function anthropicTextMessage(params: {
   user: string;
   maxTokens?: number;
   model?: string;
+  temperature?: number;
 }): Promise<AnthropicTextResult> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) {
@@ -34,6 +35,7 @@ export async function anthropicTextMessage(params: {
       body: JSON.stringify({
         model,
         max_tokens,
+        ...(typeof params.temperature === "number" ? { temperature: params.temperature } : {}),
         ...(params.system ? { system: params.system } : {}),
         messages: [{ role: "user", content: params.user }],
       }),

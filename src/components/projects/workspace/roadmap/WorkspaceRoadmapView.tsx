@@ -94,7 +94,13 @@ export default function WorkspaceRoadmapView() {
         をタップすると詳細が開きます。バー左端をドラッグすると期間を移動できます。
       </p>
 
-      <RoadmapTodayTodo phases={mergedPhases} issues={issues} projectId={projectId} canEdit={canEdit} />
+      <RoadmapTodayTodo
+        phases={mergedPhases}
+        issues={issues}
+        projectId={projectId}
+        projectName={roadmap.project?.name ?? wsProject?.name}
+        canEdit={canEdit}
+      />
 
       {mergedPhases.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
@@ -125,7 +131,7 @@ export default function WorkspaceRoadmapView() {
         onClose={() => setAddOpen(false)}
         projectStart={roadmap.project?.startDate}
         existingCount={mergedPhases.length}
-        onBulkAdd={(t) => wrap(() => roadmap.bulkCreateFromTemplate(t))}
+        onBulkAddPhases={(items, t) => wrap(() => roadmap.bulkCreatePhases(items, t))}
         onAddSingle={(input) => wrap(() => roadmap.createPhase(input))}
       />
 

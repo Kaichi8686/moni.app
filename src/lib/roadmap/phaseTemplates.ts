@@ -70,6 +70,76 @@ export const BUSINESS_TYPE_OPTIONS: { id: RoadmapBusinessType; label: string }[]
 
 const COLORS: PhaseColor[] = ["purple", "blue", "green", "amber", "red"];
 
+export type PhaseDraftRow = {
+  id: string;
+  enabled: boolean;
+  title: string;
+  goal: string;
+  startDate: string;
+  endDate: string;
+  durationDays: number;
+};
+
+function toDateInput(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function buildDraftPhasesFromTemplate(businessType: RoadmapBusinessType, projectStart: Date): PhaseDraftRow[] {
+  const items = PHASE_TEMPLATES[businessType] ?? PHASE_TEMPLATES.other;
+  let cursor = new Date(projectStart);
+  return items.map((item, idx) => {
+    const start = new Date(cursor);
+    const end = new Date(cursor);
+    end.setDate(end.getDate() + item.durationDays);
+    cursor = new Date(end);
+    cursor.setDate(cursor.getDate() + 1);
+    return {
+      id: `draft-${idx}-${item.title}`,
+      enabled: true,
+      title: item.title,
+      goal: item.goal,
+      startDate: toDateInput(start),
+      endDate: toDateInput(end),
+      durationDays: item.durationDays,
+    };
+  });
+}
+
+/** 有効な行だけ、開始日をつなげて並べ直す */
+export function chainDraftPhaseDates(rows: PhaseDraftRow[], anchorStart: Date): PhaseDraftRow[] {
+  let cursor = new Date(anchorStart);
+  return rows.map((row) => {
+    if (!row.enabled) return row;
+    const start = new Date(cursor);
+    const end = new Date(cursor);
+    end.setDate(end.getDate() + Math.max(1, row.durationDays));
+    cursor = new Date(end);
+    cursor.setDate(cursor.getDate() + 1);
+    return {
+      ...row,
+      startDate: toDateInput(start),
+      endDate: toDateInput(end),
+    };
+  });
+}
+
+export function newEmptyDraftRow(start: Date): PhaseDraftRow {
+  const end = new Date(start);
+  end.setDate(end.getDate() + 13);
+  return {
+    id: `draft-new-${Date.now()}`,
+    enabled: true,
+    title: "",
+    goal: "",
+    startDate: toDateInput(start),
+    endDate: toDateInput(end),
+    durationDays: 14,
+  };
+}
+
 export function buildPhasesFromTemplate(
   projectId: string,
   businessType: RoadmapBusinessType,

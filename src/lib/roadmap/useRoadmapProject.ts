@@ -189,7 +189,36 @@ export function useRoadmapProject(projectId: string) {
       await supabase.from("projects").update({ roadmap_business_type: businessType }).eq("id", projectId);
       await reload();
     },
-    [canEdit, project, projectId, reload],
+    [canEdit, project, projectId, phases, reload],
+  );
+
+  const bulkCreatePhases = useCallback(
+    async (
+      items: Array<{ title: string; goal?: string; startDate: string; endDate: string }>,
+      businessType?: RoadmapBusinessType,
+    ) => {
+      if (!supabase || !canEdit || items.length === 0) return;
+      const maxOrder = phases.reduce((m, p) => Math.max(m, p.order), -1);
+      const COLORS = ["purple", "blue", "green", "amber", "red"];
+      const rows = items.map((item, i) => ({
+        project_id: projectId,
+        title: item.title.trim(),
+        goal: (item.goal ?? "").trim(),
+        description: "",
+        status: phases.length === 0 && i === 0 ? "in_progress" : "planned",
+        start_date: new Date(item.startDate).toISOString(),
+        end_date: new Date(item.endDate).toISOString(),
+        color: COLORS[(maxOrder + 1 + i) % COLORS.length],
+        order: maxOrder + 1 + i,
+      }));
+      const { error: err } = await supabase.from("project_phases").insert(rows);
+      if (err) throw new Error(err.message);
+      if (businessType) {
+        await supabase.from("projects").update({ roadmap_business_type: businessType }).eq("id", projectId);
+      }
+      await reload();
+    },
+    [canEdit, phases, projectId, reload],
   );
 
   const createTask = useCallback(
@@ -261,6 +290,7 @@ export function useRoadmapProject(projectId: string) {
     deletePhase,
     createPhase,
     bulkCreateFromTemplate,
+    bulkCreatePhases,
     createTask,
     updateTask,
     toggleTaskToday,

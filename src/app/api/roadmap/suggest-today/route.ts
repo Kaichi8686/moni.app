@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { anthropicTextMessage } from "@/lib/ai/claudeMessages";
+import { pickLocalTodaySuggestion } from "@/lib/roadmap/todaySuggestions";
 
 type PhasePayload = {
   title?: string;
@@ -10,34 +11,62 @@ type PhasePayload = {
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { phases?: PhasePayload[] };
+    const body = (await req.json()) as {
+      phases?: PhasePayload[];
+      projectName?: string;
+      exclude?: string;
+      refreshKey?: number;
+    };
     const phases = body.phases ?? [];
+    const exclude = (body.exclude ?? "").trim();
     const active =
       phases.find((p) => p.status === "in_progress") ?? phases.find((p) => p.status === "planned") ?? phases[0];
 
     const pending =
-      active?.tasks?.filter((t) => t.status !== "done").map((t) => (t.title ?? "").trim()).filter(Boolean).slice(0, 5) ??
-      [];
+      active?.tasks
+        ?.filter((t) => t.status !== "done" && t.status !== "cancelled")
+        .map((t) => (t.title ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 5) ?? [];
+
+    const ctx = {
+      phaseTitle: active?.title,
+      phaseGoal: active?.goal,
+      pendingTasks: pending,
+      projectName: body.projectName,
+    };
+
+    const now = new Date();
+    const dayLabel = now.toLocaleDateString("ja-JP", { weekday: "long", month: "numeric", day: "numeric" });
 
     const user = `
-あなたはビジネスを始めた学生のメンターです。
-現在のフェーズ：「${active?.title ?? "未設定"}」
-フェーズのゴール：「${active?.goal ?? "未設定"}」
-未完了のタスク：${pending.length ? pending.join("、") : "なし"}
+あなたは高校生・大学生のビジネスチームのメンターです。
+今日は ${dayLabel} です（リフレッシュ番号: ${body.refreshKey ?? now.getTime()}）。
 
-今日30分でできる具体的なアクションを1つだけ、25文字以内で提案してください。
-理由や説明は不要です。アクションだけ答えてください。
+プロジェクト: ${body.projectName?.trim() || "（名前なし）"}
+現在のフェーズ: 「${active?.title ?? "未設定"}」
+フェーズのゴール: 「${active?.goal ?? "未設定"}」
+未完了の課題: ${pending.length ? pending.join("、") : "なし"}
+${exclude ? `前回と違う提案にしてください。前回は「${exclude.slice(0, 40)}」でした。` : ""}
+
+今日30分でできる具体的なアクションを1つだけ、22文字以内の日本語で提案してください。
+理由・説明・引用符は不要。行動の短文だけを1行で返してください。
 `.trim();
 
-    const ai = await anthropicTextMessage({ user, maxTokens: 120 });
+    const ai = await anthropicTextMessage({ user, maxTokens: 120, temperature: 0.85 });
 
     if (!ai.ok) {
-      const fallback = active?.goal?.slice(0, 40) ?? "今日やることを1つ、紙に書いて15分だけ取り組む";
-      return NextResponse.json({ suggestion: fallback, offline: true });
+      const suggestion = pickLocalTodaySuggestion(ctx, exclude);
+      return NextResponse.json({ suggestion, offline: true, source: "local" });
     }
 
-    const suggestion = ai.text.replace(/^["「]|["」]$/g, "").slice(0, 80);
-    return NextResponse.json({ suggestion: suggestion || "チームで今日のゴールを1行で決める" });
+    const suggestion = ai.text.replace(/^["「『]|["」』]$/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const final =
+      suggestion && suggestion !== exclude
+        ? suggestion
+        : pickLocalTodaySuggestion(ctx, exclude || suggestion);
+
+    return NextResponse.json({ suggestion: final, source: "ai" });
   } catch {
     return NextResponse.json({ error: "suggest-today failed" }, { status: 500 });
   }
