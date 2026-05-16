@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapTimeline } from "@/components/roadmap/RoadmapTimeline";
@@ -8,25 +8,52 @@ import { RoadmapAddPhaseModal } from "@/components/projects/workspace/roadmap/Ro
 import { RoadmapPhaseDetailPanel } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailPanel";
 import { RoadmapTodayTodo } from "@/components/projects/workspace/roadmap/RoadmapTodayTodo";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
-import type { RoadmapPhase } from "@/lib/roadmap/types";
+import {
+  endOfTodayIso,
+  mergeRoadmapPhasesWithIssues,
+  type RoadmapPhaseWithIssues,
+} from "@/lib/roadmap/mergeWithIssues";
 
 export default function WorkspaceRoadmapView() {
-  const { projectId, project: wsProject, loading: wsLoading } = useProjectWorkspace();
+  const {
+    projectId,
+    project: wsProject,
+    issues,
+    loading: wsLoading,
+    canEdit,
+    reload: wsReload,
+    createIssue,
+    updateIssueStatus,
+    updateIssue,
+  } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [addOpen, setAddOpen] = useState(false);
-  const [selected, setSelected] = useState<RoadmapPhase | null>(null);
+  const [selected, setSelected] = useState<RoadmapPhaseWithIssues | null>(null);
   const [actionError, setActionError] = useState("");
 
-  const selectedLive = selected ? roadmap.phases.find((p) => p.id === selected.id) ?? null : null;
+  const mergedPhases = useMemo(
+    () => mergeRoadmapPhasesWithIssues(roadmap.phases, issues),
+    [roadmap.phases, issues],
+  );
 
-  const wrap = useCallback(async (fn: () => Promise<void>) => {
-    setActionError("");
-    try {
-      await fn();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "操作に失敗しました");
-    }
-  }, []);
+  const selectedLive = selected ? mergedPhases.find((p) => p.id === selected.id) ?? null : null;
+
+  const syncReload = useCallback(async () => {
+    await Promise.all([roadmap.reload(), wsReload()]);
+  }, [roadmap, wsReload]);
+
+  const wrap = useCallback(
+    async (fn: () => Promise<void>) => {
+      setActionError("");
+      try {
+        await fn();
+        await syncReload();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "操作に失敗しました");
+      }
+    },
+    [syncReload],
+  );
 
   if (wsLoading || roadmap.loading) {
     return <p className="p-6 text-sm text-gray-500">読み込み中...</p>;
@@ -40,14 +67,14 @@ export default function WorkspaceRoadmapView() {
         <div>
           <h1 className="text-lg font-bold text-[#1A1A1A]">ロードマップ</h1>
           <p className="mt-1 text-sm text-[#6B7280]">
-            フェーズの流れと「今日やること」をここで管理します。課題の一覧は{" "}
+            フェーズの期間とゴールをここで管理。具体的な作業は{" "}
             <Link href={`/projects/${projectId}/issues`} className="font-medium text-violet-600 hover:underline">
               課題タブ
             </Link>
-            から。
+            と連動します。
           </p>
         </div>
-        {roadmap.canEdit ? (
+        {canEdit ? (
           <button
             type="button"
             onClick={() => setAddOpen(true)}
@@ -62,13 +89,13 @@ export default function WorkspaceRoadmapView() {
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</p>
       ) : null}
 
-      <RoadmapTodayTodo phases={roadmap.phases} canEdit={roadmap.canEdit} />
+      <RoadmapTodayTodo phases={mergedPhases} issues={issues} projectId={projectId} canEdit={canEdit} />
 
-      {roadmap.phases.length === 0 ? (
+      {mergedPhases.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
           <p className="text-sm font-medium text-gray-800">まだフェーズがありません</p>
           <p className="mt-2 text-sm text-gray-500">ビジネスの種類に合わせたテンプレートから、すぐに始められます。</p>
-          {roadmap.canEdit ? (
+          {canEdit ? (
             <button
               type="button"
               onClick={() => setAddOpen(true)}
@@ -80,7 +107,8 @@ export default function WorkspaceRoadmapView() {
         </div>
       ) : (
         <RoadmapTimeline
-          phases={roadmap.phases}
+          phases={mergedPhases}
+          canEdit={canEdit}
           onMovePhase={(id, d) => void wrap(() => roadmap.movePhase(id, d))}
           onResizePhase={(id, d) => void wrap(() => roadmap.resizePhase(id, d))}
           onSelectPhase={(p) => setSelected(p)}
@@ -91,23 +119,35 @@ export default function WorkspaceRoadmapView() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         projectStart={roadmap.project?.startDate}
-        existingCount={roadmap.phases.length}
+        existingCount={mergedPhases.length}
         onBulkAdd={(t) => wrap(() => roadmap.bulkCreateFromTemplate(t))}
         onAddSingle={(input) => wrap(() => roadmap.createPhase(input))}
       />
 
       {selectedLive ? (
         <RoadmapPhaseDetailPanel
+          projectId={projectId}
           phase={selectedLive}
           projectName={roadmap.project?.name ?? wsProject?.name ?? ""}
           projectDescription={roadmap.project?.description ?? wsProject?.description}
-          canEdit={roadmap.canEdit}
+          canEdit={canEdit}
           onClose={() => setSelected(null)}
           onUpdate={(patch) => wrap(() => roadmap.updatePhase(selectedLive.id, patch))}
           onDelete={() => wrap(() => roadmap.deletePhase(selectedLive.id))}
-          onToggleTaskDone={(id, status) => wrap(() => roadmap.updateTask(id, { status }))}
-          onToggleTaskToday={(id, next) => wrap(() => roadmap.toggleTaskToday(id, next))}
-          onCreateTask={(phaseId, title) => wrap(() => roadmap.createTask(phaseId, title))}
+          onToggleIssueDone={(id, status) => wrap(() => updateIssueStatus(id, status))}
+          onSetIssueDueToday={(id, today) =>
+            wrap(() => updateIssue(id, { dueDate: today ? endOfTodayIso() : null }))
+          }
+          onCreateIssue={(phaseId, title) =>
+            wrap(() =>
+              createIssue({
+                title,
+                status: "todo",
+                priority: "medium",
+                phaseId,
+              }),
+            )
+          }
         />
       ) : null}
     </div>

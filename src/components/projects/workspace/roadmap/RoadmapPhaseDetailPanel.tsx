@@ -3,25 +3,29 @@
 import { useEffect, useState } from "react";
 import { MoreHorizontal, X } from "lucide-react";
 import { RoadmapStatusBadge } from "@/components/projects/workspace/roadmap/RoadmapStatusBadge";
-import { RoadmapTaskList } from "@/components/projects/workspace/roadmap/RoadmapTaskList";
-import type { PhaseStatus, RoadmapPhase } from "@/lib/roadmap/types";
+import { RoadmapIssueList } from "@/components/projects/workspace/roadmap/RoadmapIssueList";
+import type { RoadmapPhaseWithIssues } from "@/lib/roadmap/mergeWithIssues";
+import type { PhaseStatus } from "@/lib/roadmap/types";
+import type { IssueStatus } from "@/lib/workspace/types";
 
 type Props = {
-  phase: RoadmapPhase;
+  projectId: string;
+  phase: RoadmapPhaseWithIssues;
   projectName: string;
   projectDescription?: string;
   canEdit: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<{ title: string; goal: string; status: PhaseStatus; startDate: string; endDate: string }>) => Promise<void>;
   onDelete: () => Promise<void>;
-  onToggleTaskDone: (taskId: string, status: "todo" | "done") => Promise<void>;
-  onToggleTaskToday: (taskId: string, next: boolean) => Promise<void>;
-  onCreateTask: (phaseId: string, title: string) => Promise<void>;
+  onToggleIssueDone: (issueId: string, status: IssueStatus) => Promise<void>;
+  onSetIssueDueToday: (issueId: string, today: boolean) => Promise<void>;
+  onCreateIssue: (phaseId: string, title: string) => Promise<void>;
 };
 
 const STATUS_OPTIONS: PhaseStatus[] = ["planned", "in_progress", "paused", "completed"];
 
 export function RoadmapPhaseDetailPanel({
+  projectId,
   phase,
   projectName,
   projectDescription,
@@ -29,9 +33,9 @@ export function RoadmapPhaseDetailPanel({
   onClose,
   onUpdate,
   onDelete,
-  onToggleTaskDone,
-  onToggleTaskToday,
-  onCreateTask,
+  onToggleIssueDone,
+  onSetIssueDueToday,
+  onCreateIssue,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [goalLoading, setGoalLoading] = useState(false);
@@ -187,13 +191,14 @@ export function RoadmapPhaseDetailPanel({
           </div>
         </div>
 
-        <RoadmapTaskList
+        <RoadmapIssueList
+          projectId={projectId}
           phaseId={phase.id}
-          tasks={phase.tasks}
+          issues={phase.linkedIssues}
           canEdit={canEdit}
-          onToggleDone={(id, status) => void onToggleTaskDone(id, status)}
-          onToggleToday={(id, next) => void onToggleTaskToday(id, next)}
-          onCreate={onCreateTask}
+          onToggleDone={(id, status) => void onToggleIssueDone(id, status)}
+          onSetDueToday={(id, today) => void onSetIssueDueToday(id, today)}
+          onCreate={onCreateIssue}
         />
       </aside>
     </>

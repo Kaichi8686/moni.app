@@ -65,6 +65,7 @@ type Ctx = {
     priority: Issue["priority"];
     assigneeId?: string | null;
     dueDate?: string | null;
+    phaseId?: string | null;
   }) => Promise<void>;
   updateIssue: (
     issueId: string,
@@ -268,10 +269,12 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       priority: Issue["priority"];
       assigneeId?: string | null;
       dueDate?: string | null;
+      phaseId?: string | null;
     }) => {
       if (!supabase || !canEdit || !uid) return;
       const { error: err } = await supabase.from("project_issues").insert({
         project_id: projectId,
+        phase_id: input.phaseId ?? null,
         title: input.title.trim(),
         description: (input.description ?? "").trim(),
         status: input.status,

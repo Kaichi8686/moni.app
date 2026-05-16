@@ -3,21 +3,30 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { addDays, differenceInCalendarDays } from "date-fns";
-import type { RoadmapPhase } from "@/lib/roadmap/types";
+import type { RoadmapPhaseWithIssues } from "@/lib/roadmap/mergeWithIssues";
+import { toTimelinePhase } from "@/lib/roadmap/mergeWithIssues";
 import type { TimelineZoom } from "@/lib/workspace/types";
 import { pxPerDay } from "@/lib/workspace/timelineLayout";
 import { TimelineHeader } from "@/components/roadmap/TimelineHeader";
 import { TimelineBar } from "@/components/roadmap/TimelineBar";
 
 type Props = {
-  phases: RoadmapPhase[];
+  phases: RoadmapPhaseWithIssues[];
+  canEdit?: boolean;
   compact?: boolean;
   onMovePhase: (phaseId: string, deltaDays: number) => void;
   onResizePhase: (phaseId: string, deltaDays: number) => void;
-  onSelectPhase: (phase: RoadmapPhase) => void;
+  onSelectPhase: (phase: RoadmapPhaseWithIssues) => void;
 };
 
-export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResizePhase, onSelectPhase }: Props) {
+export function RoadmapTimeline({
+  phases,
+  canEdit = true,
+  compact = false,
+  onMovePhase,
+  onResizePhase,
+  onSelectPhase,
+}: Props) {
   const [zoom, setZoom] = useState<TimelineZoom>("month");
   const [anchor, setAnchor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,9 +90,14 @@ export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResize
         <div className="flex min-h-0 flex-1">
           <div className="w-44 shrink-0 border-r border-[#E5E7EB] bg-[#FAFAFA] pt-[5.25rem] text-[12px] font-medium text-[#6B7280]">
             {sorted.map((p) => (
-              <div key={p.id} className="flex h-11 items-center border-b border-[#F7F8F8] px-3">
+              <button
+                key={p.id}
+                type="button"
+                className="flex h-11 w-full items-center border-b border-[#F7F8F8] px-3 text-left hover:bg-[#F7F8F8]"
+                onClick={() => onSelectPhase(p)}
+              >
                 <span className="truncate">{p.title}</span>
-              </div>
+              </button>
             ))}
           </div>
           <div ref={scrollRef} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
@@ -102,10 +116,11 @@ export function RoadmapTimeline({ phases, compact = false, onMovePhase, onResize
                 return (
                   <TimelineBar
                     key={p.id}
-                    phase={p}
+                    phase={toTimelinePhase(p)}
                     anchor={anchor}
                     pxPerDay={ppd}
                     riskLate={riskLate}
+                    canEdit={canEdit}
                     onResizeEnd={onResizePhase}
                     onClick={() => onSelectPhase(p)}
                   />
