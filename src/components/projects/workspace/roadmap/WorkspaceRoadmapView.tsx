@@ -132,7 +132,6 @@ export default function WorkspaceRoadmapView() {
         projectStart={roadmap.project?.startDate}
         existingCount={mergedPhases.length}
         onBulkAddPhases={(items, t) => wrap(() => roadmap.bulkCreatePhases(items, t))}
-        onAddSingle={(input) => wrap(() => roadmap.createPhase(input))}
       />
 
       {selectedLive ? (

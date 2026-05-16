@@ -58,15 +58,19 @@ export const PHASE_TEMPLATES: Record<RoadmapBusinessType, PhaseTemplateItem[]> =
   ],
 };
 
-export const BUSINESS_TYPE_OPTIONS: { id: RoadmapBusinessType; label: string }[] = [
-  { id: "food", label: "🍜 飲食・カフェ" },
-  { id: "retail", label: "👗 物販・EC" },
-  { id: "event", label: "🎪 イベント" },
-  { id: "education", label: "📖 教育・塾" },
-  { id: "app", label: "📱 アプリ・IT" },
-  { id: "research", label: "📚 探究・研究" },
-  { id: "other", label: "✏️ 自分で作る" },
+/** ロードマップ追加モーダルのアシスト用（自分入力が本体） */
+export const ASSIST_TEMPLATE_OPTIONS: { id: RoadmapBusinessType; label: string; hint: string }[] = [
+  { id: "food", label: "🍜 飲食・カフェ", hint: "6フェーズの例" },
+  { id: "retail", label: "👗 物販・EC", hint: "5フェーズの例" },
+  { id: "event", label: "🎪 イベント", hint: "5フェーズの例" },
+  { id: "education", label: "📖 教育・塾", hint: "5フェーズの例" },
+  { id: "app", label: "📱 アプリ・IT", hint: "5フェーズの例" },
+  { id: "research", label: "📚 探究・研究", hint: "5フェーズの例" },
+  { id: "other", label: "📋 汎用プラン", hint: "4フェーズの例" },
 ];
+
+/** @deprecated アシスト一覧は ASSIST_TEMPLATE_OPTIONS を使用 */
+export const BUSINESS_TYPE_OPTIONS = ASSIST_TEMPLATE_OPTIONS.map(({ id, label }) => ({ id, label }));
 
 const COLORS: PhaseColor[] = ["purple", "blue", "green", "amber", "red"];
 
