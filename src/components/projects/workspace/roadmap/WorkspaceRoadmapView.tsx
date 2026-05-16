@@ -89,6 +89,11 @@ export default function WorkspaceRoadmapView() {
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</p>
       ) : null}
 
+      <p className="rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2 text-[12px] text-violet-900">
+        タイムラインの<strong className="font-semibold">色付きバー</strong>または<strong className="font-semibold">左のフェーズ名</strong>
+        をタップすると詳細が開きます。バー左端をドラッグすると期間を移動できます。
+      </p>
+
       <RoadmapTodayTodo phases={mergedPhases} issues={issues} projectId={projectId} canEdit={canEdit} />
 
       {mergedPhases.length === 0 ? (

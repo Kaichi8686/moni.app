@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
-import { differenceInCalendarDays } from "date-fns";
+import { phaseBarLayout } from "@/lib/roadmap/timelineDates";
 import type { ProjectStatus } from "@/lib/workspace/types";
 import type { PhaseStatus as RoadmapPhaseStatus } from "@/lib/roadmap/types";
 
@@ -51,10 +51,9 @@ export function TimelineBar({
   onResizeEnd: (phaseId: string, deltaDays: number) => void;
   onClick: () => void;
 }) {
-  const start = new Date(phase.startDate);
-  const end = new Date(phase.endDate);
-  const left = differenceInCalendarDays(start, anchor) * pxPerDay;
-  const width = Math.max(24, (differenceInCalendarDays(end, start) + 1) * pxPerDay);
+  const { left, width } = phaseBarLayout(phase.startDate, phase.endDate, anchor, pxPerDay);
+  const progress = phaseProgress(phase);
+  const dateLabel = `${phase.startDate.slice(0, 10)} → ${phase.endDate.slice(0, 10)}`;
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: phase.id,
@@ -65,10 +64,12 @@ export function TimelineBar({
     left,
     width,
     opacity: isDragging ? 0.88 : 1,
+    zIndex: isDragging ? 20 : 1,
   };
 
   const [resizing, setResizing] = useState(false);
   const resizeStartX = useRef(0);
+  const draggedRef = useRef(false);
 
   useEffect(() => {
     if (!resizing) return;
@@ -82,15 +83,18 @@ export function TimelineBar({
     return () => window.removeEventListener("mouseup", onUp);
   }, [resizing, onResizeEnd, phase.id, pxPerDay]);
 
-  const onResizeDown = useCallback((e: React.MouseEvent) => {
-    if (!canEdit) return;
-    e.preventDefault();
-    e.stopPropagation();
-    resizeStartX.current = e.clientX;
-    setResizing(true);
-  }, [canEdit]);
+  const onResizeDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!canEdit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      resizeStartX.current = e.clientX;
+      setResizing(true);
+    },
+    [canEdit],
+  );
 
-  const barColor = riskLate ? "bg-red-500" : statusBar[phase.status] ?? "bg-[#5E6AD2]";
+  const barColor = riskLate ? "bg-red-500 ring-2 ring-red-300" : statusBar[phase.status] ?? "bg-violet-500";
 
   return (
     <div className="relative h-11 border-b border-[#F7F8F8]">
@@ -102,26 +106,37 @@ export function TimelineBar({
         {canEdit ? (
           <button
             type="button"
-            className="flex h-full w-5 shrink-0 cursor-grab items-center justify-center bg-black/10 active:cursor-grabbing"
+            className="flex h-full w-6 shrink-0 cursor-grab touch-none items-center justify-center bg-black/15 active:cursor-grabbing"
             {...listeners}
             {...attributes}
             aria-label="ドラッグして移動"
+            onPointerDown={() => {
+              draggedRef.current = false;
+            }}
+            onPointerMove={() => {
+              draggedRef.current = true;
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <GripVertical className="h-3 w-3 opacity-80" />
+            <GripVertical className="h-3.5 w-3.5 opacity-90" />
           </button>
         ) : null}
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-center truncate px-2 text-left hover:bg-black/5"
-          onClick={onClick}
-          title={`${phase.title} (${phase.startDate.slice(0, 10)} → ${phase.endDate.slice(0, 10)})`}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 truncate px-2 text-left hover:bg-black/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!draggedRef.current) onClick();
+            draggedRef.current = false;
+          }}
+          title={`${phase.title}（${dateLabel}）`}
         >
-          {phase.title} · {phaseProgress(phase)}%
+          <span className="truncate">{phase.title}</span>
+          <span className="shrink-0 text-[10px] font-normal text-white/85">{progress}%</span>
         </button>
         {canEdit ? (
           <span
-            className="flex h-full w-2 shrink-0 cursor-ew-resize items-stretch bg-white/25 hover:bg-white/40"
+            className="flex h-full w-3 shrink-0 cursor-ew-resize items-stretch bg-white/30 hover:bg-white/45"
             onMouseDown={onResizeDown}
             aria-label="期間を調整"
             role="separator"

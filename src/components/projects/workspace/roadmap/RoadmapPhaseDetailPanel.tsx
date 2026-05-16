@@ -84,7 +84,7 @@ export function RoadmapPhaseDetailPanel({
   return (
     <>
       <button type="button" className="fixed inset-0 z-40 bg-black/20 lg:bg-black/10" aria-label="閉じる" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
+      <aside className="fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
         <div className="flex items-center justify-between border-b p-4">
           <RoadmapStatusBadge status={phase.status} />
           <div className="flex items-center gap-1">

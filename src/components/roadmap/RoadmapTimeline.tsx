@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { addDays, differenceInCalendarDays } from "date-fns";
+import { addDays, differenceInCalendarDays, startOfMonth } from "date-fns";
 import type { RoadmapPhaseWithIssues } from "@/lib/roadmap/mergeWithIssues";
 import { toTimelinePhase } from "@/lib/roadmap/mergeWithIssues";
+import { phaseLocalDay, scrollLeftForPhase, timelineAnchorForPhases } from "@/lib/roadmap/timelineDates";
 import type { TimelineZoom } from "@/lib/workspace/types";
 import { pxPerDay } from "@/lib/workspace/timelineLayout";
 import { TimelineHeader } from "@/components/roadmap/TimelineHeader";
@@ -28,11 +29,41 @@ export function RoadmapTimeline({
   onSelectPhase,
 }: Props) {
   const [zoom, setZoom] = useState<TimelineZoom>("month");
-  const [anchor, setAnchor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
   const scrollRef = useRef<HTMLDivElement>(null);
   const ppd = pxPerDay(zoom);
-  const totalDays = zoom === "week" ? 42 : zoom === "quarter" ? 360 : 120;
+
+  const sorted = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
+
+  const totalDays = useMemo(() => {
+    const base = zoom === "week" ? 42 : zoom === "quarter" ? 360 : 150;
+    if (sorted.length === 0) return base;
+    let maxEnd = anchor.getTime();
+    for (const p of sorted) {
+      const end = phaseLocalDay(p.endDate).getTime();
+      const start = phaseLocalDay(p.startDate).getTime();
+      maxEnd = Math.max(maxEnd, end, start);
+    }
+    const span = differenceInCalendarDays(new Date(maxEnd), anchor) + 14;
+    return Math.max(base, span);
+  }, [anchor, sorted, zoom]);
+
   const width = totalDays * ppd;
+
+  const phaseFitKey = useMemo(() => sorted.map((p) => p.id).join(","), [sorted]);
+  const lastFitKey = useRef("");
+
+  useEffect(() => {
+    if (!phaseFitKey || phaseFitKey === lastFitKey.current) return;
+    lastFitKey.current = phaseFitKey;
+    const nextAnchor = timelineAnchorForPhases(sorted);
+    setAnchor(nextAnchor);
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el || sorted.length === 0) return;
+      el.scrollLeft = scrollLeftForPhase(sorted[0].startDate, nextAnchor, ppd);
+    });
+  }, [phaseFitKey, ppd, sorted]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -59,8 +90,6 @@ export function RoadmapTimeline({
       el.scrollTo({ left: Math.max(0, off - el.clientWidth / 2), behavior: "smooth" });
     });
   };
-
-  const sorted = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
 
   return (
     <>
@@ -97,6 +126,9 @@ export function RoadmapTimeline({
                 onClick={() => onSelectPhase(p)}
               >
                 <span className="truncate">{p.title}</span>
+                <span className="ml-1 shrink-0 text-[10px] font-normal text-[#9CA3AF]">
+                  {p.startDate.slice(5, 10)}
+                </span>
               </button>
             ))}
           </div>

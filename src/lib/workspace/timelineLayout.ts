@@ -2,7 +2,7 @@ import { addDays, differenceInCalendarDays, endOfMonth, format, startOfMonth } f
 import { ja } from "date-fns/locale";
 import type { TimelineZoom } from "@/lib/workspace/types";
 
-export const PX_PER_DAY_MONTH = 4;
+export const PX_PER_DAY_MONTH = 8;
 export const PX_PER_DAY_WEEK = 12;
 export const PX_PER_DAY_QUARTER = 1.2;
 
