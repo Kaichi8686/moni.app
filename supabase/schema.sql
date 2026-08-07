@@ -1,6 +1,6 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
-  role text not null check (role in ('child', 'parent', 'investor')),
+  role text not null check (role in ('child', 'parent', 'investor', 'admin')),
   display_name text,
   goal text,
   created_at timestamptz not null default now()
@@ -295,6 +295,8 @@ create table if not exists public.idea_questions (
   title text not null check (length(btrim(title)) > 0),
   body text not null default '',
   best_answer_id uuid,
+  category text not null default 'howto' check (category in ('howto', 'tech', 'idea', 'other')),
+  last_reply_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -304,6 +306,8 @@ create table if not exists public.idea_answers (
   author_id uuid not null references auth.users (id) on delete cascade,
   author_display_name text not null,
   body text not null check (length(btrim(body)) > 0),
+  parent_answer_id uuid references public.idea_answers (id) on delete cascade,
+  score integer not null default 0,
   created_at timestamptz not null default now()
 );
 

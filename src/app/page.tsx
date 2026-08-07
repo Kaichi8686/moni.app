@@ -7,12 +7,39 @@ import { useRouter } from "next/navigation";
 import { MoniLanding } from "@/components/MoniLanding";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
+import { ActivityComposer, type ActivityComposerSubmitPayload } from "@/components/feed/ActivityComposer";
+import { ActivityTimeline } from "@/components/feed/ActivityTimeline";
+import { QnABoard } from "@/components/qna/QnABoard";
+import { formatActivityCaption, parseActivityCaption, categoryToPostType } from "@/lib/feed/activityRecord";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
-import { ProjectTabGlide } from "@/components/projects/ProjectTabGlide";
+import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
+import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
+import {
+  emptyReactionCounts,
+  loadPostReactionMaps,
+  togglePostReaction,
+  type ReactionKind,
+} from "@/lib/feed/postReactions";
+import type { MentorClientContext } from "@/lib/ai/mentorContext";
+import { recordUserActivity } from "@/lib/gamification/recordUserActivity";
+import { readLastProject } from "@/lib/workspace/lastProject";
+import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { avatarInitial, avatarToneFromName } from "@/lib/ui/avatarTone";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
-type AppRole = "child" | "parent" | "investor";
+const COMMUNITY_TAB =
+  "relative -mb-px min-h-[36px] touch-manipulation px-0.5 text-[13px] font-semibold tracking-[-0.02em] transition";
+const COMMUNITY_TAB_ACTIVE = "text-zinc-900";
+const COMMUNITY_TAB_IDLE = "font-medium text-zinc-400 hover:text-zinc-600";
+const COMMUNITY_CTA =
+  "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-3.5 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+const COMMUNITY_CTA_PILL =
+  "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-4 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+
+type AppRole = "child" | "parent" | "investor" | "admin";
 type FeaturePage = "projects" | "posts" | "articles" | "mentor" | "discovery" | "chat" | "account";
 type Language = "ja" | "en";
 type ContactPermission = "all" | "followers" | "message_only" | "none";
@@ -29,25 +56,6 @@ type ProblemPost = {
 };
 type IdeaSquarePost = { id: string; author: string; text: string; likes: number; createdAt: string };
 
-type IdeaChieQuestion = {
-  id: string;
-  authorId: string;
-  authorName: string;
-  title: string;
-  body: string;
-  bestAnswerId: string | null;
-  createdAtIso: string;
-  answerCount: number;
-};
-
-type IdeaChieAnswer = {
-  id: string;
-  questionId: string;
-  authorId: string;
-  authorName: string;
-  body: string;
-  createdAtIso: string;
-};
 type ProblemCluster = { id: string; title: string; count: number; sample: string[] };
 
 type IdeaBlueprint = {
@@ -103,19 +111,31 @@ type Pitch = {
   likes: number;
 };
 
+type FeedPostType = "normal" | "achievement" | "question" | "idea";
+
 type FeedPost = {
   id: string;
   authorId: string;
   authorName: string;
+  authorAvatarUrl?: string | null;
   caption: string;
   imageUrl: string | null;
+  /** Resolved gallery URLs (primary + extras). */
+  imageUrls?: string[];
+  /** Display/record timestamp when author backdated (from caption meta). */
+  recordedAt?: string | null;
+  postType: FeedPostType;
   /** Storage object path（Supabase 時のみ。削除時に使用） */
   storagePath?: string;
+  /** Extra storage paths for multi-image delete */
+  extraStoragePaths?: string[];
   createdAt: string;
   likeCount: number;
   likedByMe: boolean;
   commentCount: number;
   comments: FeedComment[];
+  reactionCounts: { fire: number; idea: number; help: number };
+  myReaction: ReactionKind | null;
 };
 
 type FeedComment = {
@@ -243,6 +263,13 @@ const featureItems: Array<{ key: FeaturePage; icon: string }> = [
   { key: "account", icon: "◉" },
 ];
 
+const navLabelKeys: Partial<Record<FeaturePage, MessageKey>> = {
+  projects: "navProjects",
+  posts: "navHome",
+  chat: "navSearch",
+  account: "navProfile",
+};
+
 const featureLabels: Record<Language, Record<FeaturePage, string>> = {
   ja: {
     projects: "プロジェクト",
@@ -328,48 +355,9 @@ function scoreProblemDraft(raw: string): { score: number; hints: string[] } {
   return { score, hints };
 }
 
-const DEMO_MEMBERS: MatchMember[] = [
-  { id: "11111111-1111-4111-8111-111111111111", name: "ゆい", goal: "教育アプリを作りたい", strength: "UIデザイン", aiType: "engineer" },
-  { id: "22222222-2222-4222-8222-222222222222", name: "たくみ", goal: "学校の困りごとを解決したい", strength: "調査", aiType: "marketer" },
-  { id: "33333333-3333-4333-8333-333333333333", name: "みさき", goal: "環境系スタートアップに興味がある", strength: "発表", aiType: "marketer" },
-  { id: "44444444-4444-4444-8444-444444444444", name: "そら", goal: "ゲームで英語学習を楽しくしたい", strength: "プロトタイプ作成", aiType: "engineer" },
-  { id: "55555555-5555-4555-8555-555555555555", name: "りく", goal: "地域のフードロスを減らしたい", strength: "営業・ヒアリング", aiType: "marketer" },
-  { id: "66666666-6666-4666-8666-666666666666", name: "あかり", goal: "親子で使える家計教育サービス", strength: "コンテンツ企画", aiType: "idea" },
-  { id: "77777777-7777-4777-8777-777777777777", name: "けん", goal: "部活の連絡をラクにするアプリ", strength: "フロント実装", aiType: "engineer" },
-  { id: "88888888-8888-4888-8888-888888888888", name: "もも", goal: "小学生向け安全SNSを作りたい", strength: "ユーザー調査", aiType: "idea" },
-];
-
-const DEMO_FOLLOW_USERS: FollowUser[] = [
-  { id: "11111111-1111-4111-8111-111111111111", name: "ゆい", goal: "教育アプリを作りたい" },
-  { id: "22222222-2222-4222-8222-222222222222", name: "たくみ", goal: "学校の困りごとを解決したい" },
-  { id: "33333333-3333-4333-8333-333333333333", name: "みさき", goal: "環境系スタートアップに興味がある" },
-  { id: "44444444-4444-4444-8444-444444444444", name: "そら", goal: "ゲームで英語学習を楽しくしたい" },
-  { id: "55555555-5555-4555-8555-555555555555", name: "りく", goal: "地域のフードロスを減らしたい" },
-  { id: "66666666-6666-4666-8666-666666666666", name: "あかり", goal: "親子で使える家計教育サービス" },
-  { id: "77777777-7777-4777-8777-777777777777", name: "けん", goal: "部活の連絡をラクにするアプリ" },
-  { id: "88888888-8888-4888-8888-888888888888", name: "もも", goal: "小学生向け安全SNSを作りたい" },
-];
-
-const DEMO_PROBLEM_POSTS: ProblemPost[] = [
-  {
-    id: "problem-1",
-    author: "ゆい",
-    area: "学校",
-    body: "忘れ物チェックが朝バタバタして抜けやすい。前日に楽しく準備できる仕組みが欲しい。",
-    createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
-    supportCount: 4,
-    supportedByMe: false,
-  },
-  {
-    id: "problem-2",
-    author: "たくみ",
-    area: "家",
-    body: "兄弟でタブレットの順番でもめる。時間を公平に管理できる見える化が欲しい。",
-    createdAt: new Date(Date.now() - 1000 * 60 * 200).toISOString(),
-    supportCount: 6,
-    supportedByMe: false,
-  },
-];
+const DEMO_MEMBERS: MatchMember[] = [];
+const DEMO_FOLLOW_USERS: FollowUser[] = [];
+const DEMO_PROBLEM_POSTS: ProblemPost[] = [];
 
 const IDEA_TOOLS: IdeaTool[] = [
   {
@@ -603,10 +591,7 @@ const initialArticles: Article[] = [
       "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?auto=format&fit=crop&w=1200&q=80",
     likeCount: 2,
     likedByMe: false,
-    comments: [
-      { id: "c-1", authorName: "ゆい", body: "この視点すごく参考になります！", createdAt: new Date().toISOString() },
-      { id: "c-2", authorName: "たくみ", body: "次の記事も読みたいです。", createdAt: new Date().toISOString() },
-    ],
+    comments: [],
   },
 ];
 
@@ -615,7 +600,8 @@ const DEMO_FEED: FeedPost[] = [
     id: "demo-feed-welcome",
     authorId: "demo",
     authorName: "moni",
-    caption: "Twitterみたいに短文を気軽に投稿できるようにしました。画像は任意で添付できます！",
+    caption: "活動記録機能を整えました\n\n---\n\nタイトル・詳細・証跡画像で進捗を残せます。画像は任意です。",
+    postType: "normal",
     imageUrl:
       "data:image/svg+xml," +
       encodeURIComponent(
@@ -626,6 +612,8 @@ const DEMO_FEED: FeedPost[] = [
     likedByMe: false,
     commentCount: 0,
     comments: [],
+    reactionCounts: { fire: 0, idea: 0, help: 0 },
+    myReaction: null,
   },
 ];
 
@@ -676,13 +664,11 @@ export default function Home() {
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
   const bottomNavButtonClass = (page: FeaturePage) =>
-    `flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] leading-tight tracking-wide transition sm:gap-1 sm:py-2 sm:text-[11px] ${
-      activePage === page ? "font-semibold text-zinc-900" : "font-medium text-zinc-400 hover:text-zinc-700"
-    }`;
+    `app-bottom-nav-item keep-bottom-nav ${activePage === page ? "is-active" : ""}`;
   const [role, setRole] = useState<AppRole>("child");
   const [activePage, setActivePage] = useState<FeaturePage>("posts");
   const [communityView, setCommunityView] = useState<"progress" | "qna">("progress");
-  const [language, setLanguage] = useState<Language>("ja");
+  const { locale: language, setLocale: setLanguage, t } = useI18n();
   const [displayName, setDisplayName] = useState("");
   const [profileGoal, setProfileGoal] = useState("");
   const [profileType, setProfileType] = useState<AiMatchType>("idea");
@@ -691,6 +677,11 @@ export default function Home() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const isAppAdmin = useMemo(
+    () => isAppAdminUser({ email: sessionEmail, role }),
+    [sessionEmail, role],
+  );
+  const canModerate = canModerateContent(role);
   const [authMessage, setAuthMessage] = useState("");
 
   const [mentorMessages, setMentorMessages] = useState<MentorChatMessage[]>(() => [
@@ -705,7 +696,6 @@ export default function Home() {
   const [matchGoal, setMatchGoal] = useState("");
   const [matches, setMatches] = useState<MatchMember[]>(DEMO_MEMBERS);
   const [matchNotice, setMatchNotice] = useState("");
-  const [selectedAiType, setSelectedAiType] = useState<AiMatchType | null>(null);
   const [activeProfileMember, setActiveProfileMember] = useState<MatchMember | null>(null);
   const [peerProfileProjects, setPeerProfileProjects] = useState<PeerProjectSummary[]>([]);
   const [peerProfileProjectsLoading, setPeerProfileProjectsLoading] = useState(false);
@@ -780,13 +770,8 @@ export default function Home() {
   const [accountSubTab, setAccountSubTab] = useState<"profile" | "settings">("profile");
   const [mentorSubTab, setMentorSubTab] = useState<"menu" | "ai" | "validation">("menu");
 
-  const [ideaChieQuestions, setIdeaChieQuestions] = useState<IdeaChieQuestion[]>([]);
-  const [ideaChieDetailId, setIdeaChieDetailId] = useState<string | null>(null);
-  const [ideaChieAnswers, setIdeaChieAnswers] = useState<IdeaChieAnswer[]>([]);
-  const [ideaChieLoading, setIdeaChieLoading] = useState(false);
-  const [ideaChieNewTitle, setIdeaChieNewTitle] = useState("");
-  const [ideaChieNewBody, setIdeaChieNewBody] = useState("");
-  const [ideaChieAnswerDraft, setIdeaChieAnswerDraft] = useState("");
+  const [qnaPrefillTitle, setQnaPrefillTitle] = useState("");
+  const [qnaFocusToken, setQnaFocusToken] = useState(0);
 
   const accountText =
     language === "ja"
@@ -856,12 +841,13 @@ export default function Home() {
   const [pitches, setPitches] = useState<Pitch[]>([]);
 
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>(() => (supabaseEnabled ? [] : DEMO_FEED));
-  const [postCaption, setPostCaption] = useState("");
-  const [postFile, setPostFile] = useState<File | null>(null);
+  const [mentorContext, setMentorContext] = useState<MentorClientContext | null>(null);
   const [postComposerOpen, setPostComposerOpen] = useState(false);
-  const [postUploadPreview, setPostUploadPreview] = useState<string | null>(null);
+  const [postComposerSeed, setPostComposerSeed] = useState<{ title: string; detail: string }>({ title: "", detail: "" });
   const [postPosting, setPostPosting] = useState(false);
+  const [activityToast, setActivityToast] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [feedCommentsOpen, setFeedCommentsOpen] = useState<Record<string, boolean>>({});
   const [followingIds, setFollowingIds] = useState<string[]>([]);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -872,7 +858,7 @@ export default function Home() {
   const [followListModal, setFollowListModal] = useState<"followers" | "following" | "requests" | null>(null);
   const [accountPostCount, setAccountPostCount] = useState(0);
   const [followSuggestions, setFollowSuggestions] = useState<FollowUser[]>(DEMO_FOLLOW_USERS);
-  const visibleFollowSuggestions = followSuggestions.length > 0 ? followSuggestions : DEMO_FOLLOW_USERS;
+  const visibleFollowSuggestions = followSuggestions;
   const articleCategories = useMemo(() => {
     const cats = Array.from(new Set(articles.map((a) => a.category).filter(Boolean))) as string[];
     return ["all", ...cats];
@@ -898,10 +884,6 @@ export default function Home() {
   const ideaCompletedCount = useMemo(
     () => IDEA_TOOLS.filter((tool) => ideaDoneMap[tool.id]).length,
     [ideaDoneMap],
-  );
-  const ideaChieDetailQuestion = useMemo(
-    () => (ideaChieDetailId ? ideaChieQuestions.find((x) => x.id === ideaChieDetailId) ?? null : null),
-    [ideaChieDetailId, ideaChieQuestions],
   );
   const ideaSupportChecklist = useMemo(() => {
     const items = [
@@ -1037,7 +1019,6 @@ export default function Home() {
     () => (session ? feedPosts.filter((post) => post.authorId === session.user.id) : []),
     [feedPosts, session],
   );
-  const postFileInputRef = useRef<HTMLInputElement>(null);
 
   const [chatBody, setChatBody] = useState("");
   const [chatAttachmentName, setChatAttachmentName] = useState("");
@@ -1070,14 +1051,17 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [hasEnteredApp, setHasEnteredApp] = useState(false);
   /** ログイン済みでも「サービス説明」LPを重ねて表示 */
-  const [showLandingPage, setShowLandingPage] = useState(false);
+  const [showLandingPage, setShowLandingPage] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("landing") === "1" || params.get("about") === "1";
+  });
   const canUseSupabase = useMemo(() => Boolean(supabase && supabaseEnabled), []);
   const requiresLogin = canUseSupabase && !session;
 
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
 
-  const goProjectsTab = useCallback(() => setActivePage("projects"), []);
   const goDiscoverTab = useCallback(() => {
     setActivePage("chat");
     setChatSubView("list");
@@ -1093,14 +1077,15 @@ export default function Home() {
     const tab = params.get("tab");
     const community = params.get("community");
     const mentor = params.get("mentor");
-    if (
-      tab === "posts" ||
-      tab === "articles" ||
-      tab === "mentor" ||
-      tab === "chat" ||
-      tab === "account" ||
-      tab === "projects"
-    ) {
+    if (tab === "projects") {
+      router.replace(HOME_PROJECTS_HREF);
+      return;
+    }
+    if (tab === "account") {
+      router.replace("/profile");
+      return;
+    }
+    if (tab === "posts" || tab === "articles" || tab === "mentor" || tab === "chat") {
       setActivePage(tab);
     }
     if (community === "qna" || community === "progress") {
@@ -1112,13 +1097,19 @@ export default function Home() {
       setMentorSubTab("validation");
     }
     if (tab === "chat") setChatSubView("list");
-  }, []);
+  }, [router]);
+
+  useEffect(() => {
+    if (activePage === "account") {
+      router.replace("/profile");
+    }
+  }, [activePage, router]);
 
   const loadRole = useCallback(async (userId: string) => {
     if (!supabase) return;
     const { data, error } = await supabase
       .from("profiles")
-      .select("role,display_name,goal")
+      .select("role,display_name,goal,avatar_url")
       .eq("id", userId)
       .maybeSingle();
     if (error) return;
@@ -1128,9 +1119,10 @@ export default function Home() {
       if (!u || u.id !== userId) return;
       const meta = (u.user_metadata as { display_name?: string } | undefined)?.display_name?.trim();
       const fallbackName = meta || u.email?.split("@")[0] || "ユーザー";
+      const initialRole: AppRole = isAppAdminEmail(u.email) ? "admin" : "child";
       const { error: upErr } = await supabase.from("profiles").upsert({
         id: userId,
-        role: "child",
+        role: initialRole,
         display_name: fallbackName,
         goal: "",
       });
@@ -1138,16 +1130,26 @@ export default function Home() {
         setAuthMessage(`プロフィール初期化に失敗しました: ${upErr.message}`);
         return;
       }
-      setRole("child");
+      setRole(initialRole);
       setDisplayName(fallbackName);
       setProfileGoal("");
       return;
     }
-    if (data.role === "child" || data.role === "parent" || data.role === "investor") {
+    if (
+      data.role === "child" ||
+      data.role === "parent" ||
+      data.role === "investor" ||
+      data.role === "admin"
+    ) {
       setRole(data.role);
+    } else {
+      const { data: userData } = await supabase.auth.getUser();
+      if (isAppAdminEmail(userData.user?.email)) setRole("admin");
     }
     setDisplayName((data.display_name as string | null) ?? "");
     setProfileGoal((data.goal as string | null) ?? "");
+    const dbAvatar = (data.avatar_url as string | null)?.trim();
+    if (dbAvatar) setProfileAvatarUrl(dbAvatar);
   }, []);
 
   async function saveRole(nextRole: AppRole) {
@@ -1166,9 +1168,11 @@ export default function Home() {
 
   async function saveProfile() {
     if (!supabase || !session) return;
+    const roleToSave: AppRole =
+      isAppAdminUser({ email: session.user.email, role }) ? "admin" : role === "admin" ? "child" : role;
     const { error } = await supabase.from("profiles").upsert({
       id: session.user.id,
-      role,
+      role: roleToSave,
       display_name: displayName || session.user.email || "user",
       goal: profileGoal,
     });
@@ -1196,7 +1200,7 @@ export default function Home() {
 
     for (const sel of selectAttempts) {
       let q = supabase.from("articles").select(sel).order("created_at", { ascending: false });
-      if (role !== "investor") q = q.eq("status", "published");
+      if (!canModerateContent(role)) q = q.eq("status", "published");
       const res = await q;
       if (!res.error) {
         data = (res.data ?? null) as unknown as Array<Record<string, unknown>> | null;
@@ -1268,18 +1272,75 @@ export default function Home() {
     const uid = sessionRef.current?.user.id ?? null;
     const { data: rows, error } = await client
       .from("posts")
-      .select("id,author_id,caption,image_path,created_at")
+      .select("id,author_id,caption,image_path,created_at,post_type")
       .order("created_at", { ascending: false })
       .limit(40);
     if (error) {
       const hint = `${error.message}${error.code ? ` (${error.code})` : ""}`;
+      if (error.code === "42703" || hint.includes("post_type")) {
+        const fallback = await client
+          .from("posts")
+          .select("id,author_id,caption,image_path,created_at")
+          .order("created_at", { ascending: false })
+          .limit(40);
+        if (!fallback.error && fallback.data) {
+          const rows2 = fallback.data;
+          const authorIds2 = [...new Set(rows2.map((r) => r.author_id as string))];
+          const { data: profs2 } = await client.from("profiles").select("id,display_name,avatar_url").in("id", authorIds2);
+          const nameById2 = new Map(
+            (profs2 ?? []).map((p) => [p.id as string, ((p.display_name as string | null)?.trim() || "ユーザー") as string]),
+          );
+          const avatarById2 = new Map(
+            (profs2 ?? []).map((p) => [p.id as string, ((p.avatar_url as string | null)?.trim() || null) as string | null]),
+          );
+          setFeedPosts(
+            rows2.map((r) => {
+              const path = (r.image_path as string | null) ?? null;
+              const { data: pub } = path ? client.storage.from("post-images").getPublicUrl(path) : { data: { publicUrl: null } };
+              return {
+                id: r.id as string,
+                authorId: r.author_id as string,
+                authorName: nameById2.get(r.author_id as string) || "ユーザー",
+                authorAvatarUrl: avatarById2.get(r.author_id as string) ?? null,
+                caption: (r.caption as string) || "",
+                imageUrl: pub.publicUrl,
+                ...(() => {
+                  const parsed = parseActivityCaption((r.caption as string) || "");
+                  const urls = pub.publicUrl ? [pub.publicUrl] : [];
+                  const extras: string[] = [];
+                  for (const ep of parsed.extraImagePaths) {
+                    const { data } = client.storage.from("post-images").getPublicUrl(ep);
+                    if (data.publicUrl) urls.push(data.publicUrl);
+                    extras.push(ep);
+                  }
+                  return {
+                    imageUrls: urls,
+                    recordedAt: parsed.recordedAt,
+                    extraStoragePaths: extras,
+                  };
+                })(),
+                postType: "normal" as const,
+                storagePath: path ?? undefined,
+                createdAt: r.created_at as string,
+                likeCount: 0,
+                likedByMe: false,
+                commentCount: 0,
+                comments: [],
+                reactionCounts: { fire: 0, idea: 0, help: 0 },
+                myReaction: null,
+              };
+            }),
+          );
+          return;
+        }
+      }
       if (
         hint.includes("does not exist") ||
         hint.includes("schema cache") ||
         error.code === "42P01" ||
         error.code === "PGRST205"
       ) {
-        setFeedPosts(DEMO_FEED);
+        setFeedPosts([]);
         return;
       }
       setAuthMessage(`投稿の取得に失敗: ${error.message}`);
@@ -1290,12 +1351,15 @@ export default function Home() {
       return;
     }
     const authorIds = [...new Set(rows.map((r) => r.author_id as string))];
-    const { data: profs } = await client.from("profiles").select("id,display_name").in("id", authorIds);
+    const { data: profs } = await client.from("profiles").select("id,display_name,avatar_url").in("id", authorIds);
     const nameById = new Map(
       (profs ?? []).map((p) => [
         p.id as string,
         ((p.display_name as string | null)?.trim() || "ユーザー") as string,
       ]),
+    );
+    const avatarById = new Map(
+      (profs ?? []).map((p) => [p.id as string, ((p.avatar_url as string | null)?.trim() || null) as string | null]),
     );
     const postIds = rows.map((r) => r.id as string);
     const { data: likesRows } = await client.from("post_likes").select("post_id,user_id").in("post_id", postIds);
@@ -1343,26 +1407,53 @@ export default function Home() {
       const path = (r.image_path as string | null) ?? null;
       const { data: pub } = path ? client.storage.from("post-images").getPublicUrl(path) : { data: { publicUrl: null } };
       const postComments = commentsByPost.get(r.id as string) ?? [];
+      const pt = (r.post_type as FeedPostType | undefined) ?? "normal";
+      const caption = (r.caption as string) || "";
+      const parsed = parseActivityCaption(caption);
+      const urls = pub.publicUrl ? [pub.publicUrl] : [];
+      const extras: string[] = [];
+      for (const ep of parsed.extraImagePaths) {
+        const { data } = client.storage.from("post-images").getPublicUrl(ep);
+        if (data.publicUrl) urls.push(data.publicUrl);
+        extras.push(ep);
+      }
       return {
         id: r.id as string,
         authorId: r.author_id as string,
         authorName: nameById.get(r.author_id as string) || "ユーザー",
-        caption: (r.caption as string) || "",
-        imageUrl: pub.publicUrl,
+        authorAvatarUrl: avatarById.get(r.author_id as string) ?? null,
+        caption,
+        imageUrl: urls[0] ?? null,
+        imageUrls: urls,
+        recordedAt: parsed.recordedAt,
+        postType: pt === "achievement" || pt === "question" || pt === "idea" ? pt : "normal",
         storagePath: path ?? undefined,
+        extraStoragePaths: extras,
         createdAt: r.created_at as string,
         likeCount: countByPost.get(r.id as string) ?? 0,
         likedByMe: likedSet.has(r.id as string),
         commentCount: postComments.length,
         comments: postComments,
+        reactionCounts: emptyReactionCounts(),
+        myReaction: null,
       };
     });
-    setFeedPosts(mapped);
+    const { counts: reactionCounts, mine: myReactions } = await loadPostReactionMaps(client, postIds, uid);
+    const withReactions = mapped.map((p) => ({
+      ...p,
+      reactionCounts: reactionCounts.get(p.id) ?? emptyReactionCounts(),
+      myReaction: myReactions.get(p.id) ?? null,
+    }));
+    withReactions.sort(
+      (a, b) =>
+        new Date(b.recordedAt || b.createdAt).getTime() - new Date(a.recordedAt || a.createdAt).getTime(),
+    );
+    setFeedPosts(withReactions);
   }, []);
 
   const loadSocialGraph = useCallback(async (userId: string) => {
     if (!supabase) {
-      setFollowSuggestions(DEMO_FOLLOW_USERS);
+      setFollowSuggestions([]);
       return;
     }
     const client = supabase;
@@ -1399,7 +1490,7 @@ export default function Home() {
       setFollowingUsers([]);
       setIncomingFollowRequests([]);
       setOutgoingRequestIds([]);
-      setFollowSuggestions(DEMO_FOLLOW_USERS);
+      setFollowSuggestions([]);
       return;
     }
 
@@ -1467,7 +1558,7 @@ export default function Home() {
         name: (p.display_name || "ユーザー").trim() || "ユーザー",
         goal: (p.goal || "目標未設定").trim() || "目標未設定",
       }));
-    setFollowSuggestions(suggestions.length > 0 ? suggestions : DEMO_FOLLOW_USERS);
+    setFollowSuggestions(suggestions);
   }, []);
 
   const loadMessages = useCallback(async () => {
@@ -1495,68 +1586,6 @@ export default function Home() {
     }));
     setMessages(mapped);
   }, [activeRoomId, supabase]);
-
-  const loadIdeaChieBoard = useCallback(async () => {
-    if (!supabase) return;
-    setIdeaChieLoading(true);
-    const { data: qrows, error: qerr } = await supabase
-      .from("idea_questions")
-      .select("id,author_id,author_display_name,title,body,best_answer_id,created_at")
-      .order("created_at", { ascending: false })
-      .limit(80);
-    if (qerr) {
-      if (qerr.code !== "42P01" && qerr.code !== "PGRST205") {
-        setAuthMessage(`知恵袋の読み込みに失敗: ${qerr.message}`);
-      }
-      setIdeaChieQuestions([]);
-      setIdeaChieLoading(false);
-      return;
-    }
-    const { data: arows, error: aerr } = await supabase.from("idea_answers").select("question_id");
-    const countMap: Record<string, number> = {};
-    if (!aerr && arows) {
-      for (const row of arows as Array<{ question_id: string }>) {
-        const qid = row.question_id;
-        countMap[qid] = (countMap[qid] ?? 0) + 1;
-      }
-    }
-    const mapped: IdeaChieQuestion[] = (qrows ?? []).map((row) => ({
-      id: row.id as string,
-      authorId: row.author_id as string,
-      authorName: (row.author_display_name as string) || "ユーザー",
-      title: row.title as string,
-      body: (row.body as string) ?? "",
-      bestAnswerId: (row.best_answer_id as string | null) ?? null,
-      createdAtIso: row.created_at as string,
-      answerCount: countMap[row.id as string] ?? 0,
-    }));
-    setIdeaChieQuestions(mapped);
-    setIdeaChieLoading(false);
-  }, [supabase]);
-
-  const loadIdeaChieAnswers = useCallback(async (questionId: string) => {
-    if (!supabase) return;
-    const { data, error } = await supabase
-      .from("idea_answers")
-      .select("id,question_id,author_id,author_display_name,body,created_at")
-      .eq("question_id", questionId)
-      .order("created_at", { ascending: true });
-    if (error) {
-      setAuthMessage(`回答の取得に失敗: ${error.message}`);
-      setIdeaChieAnswers([]);
-      return;
-    }
-    setIdeaChieAnswers(
-      (data ?? []).map((row) => ({
-        id: row.id as string,
-        questionId: row.question_id as string,
-        authorId: row.author_id as string,
-        authorName: (row.author_display_name as string) || "ユーザー",
-        body: row.body as string,
-        createdAtIso: row.created_at as string,
-      })),
-    );
-  }, [supabase]);
 
   const loadReadState = useCallback(
     async (userId: string, roomId: string) => {
@@ -1678,6 +1707,18 @@ export default function Home() {
 
   refreshTalkListRef.current = refreshTalkList;
 
+  const openTalkWithPeer = useCallback(
+    async (peerUserId: string) => {
+      if (!session || !supabase) {
+        setAuthMessage("メッセージを送るにはログインしてください。");
+        return;
+      }
+      const { navigateToDirectMessage } = await import("@/lib/messages/openDirectMessage");
+      await navigateToDirectMessage(supabase, router, peerUserId);
+    },
+    [session, supabase, router],
+  );
+
   const eventSummary = useMemo(() => {
     const byName: Record<string, number> = {};
     for (const ev of opsEvents) byName[ev.name] = (byName[ev.name] ?? 0) + 1;
@@ -1760,8 +1801,8 @@ export default function Home() {
     let goal = language === "ja" ? "プロフィール情報" : "Profile";
     if (supabase) {
       const { data } = await supabase.from("profiles").select("goal").eq("id", userId).maybeSingle();
-      const profileGoal = (data as { goal?: string | null } | null)?.goal ?? "";
-      if (profileGoal.trim()) goal = profileGoal.trim();
+      const profileGoalText = (data as { goal?: string | null } | null)?.goal ?? "";
+      if (profileGoalText.trim()) goal = profileGoalText.trim();
     }
     setActiveProfileMember({
       id: userId,
@@ -1835,12 +1876,51 @@ export default function Home() {
   const loadPostsRef = useRef(loadPosts);
   const loadSocialGraphRef = useRef(loadSocialGraph);
   const loadMessagesRef = useRef(loadMessages);
+
+  const loadMentorContext = useCallback(async (userId: string) => {
+    if (!supabase) return;
+    const { data: prof } = await supabase.from("profiles").select("display_name,grade,school").eq("id", userId).maybeSingle();
+    const last = readLastProject();
+    let ctx: MentorClientContext = {
+      displayName: (prof?.display_name as string) ?? undefined,
+      grade: (prof as { grade?: string })?.grade,
+      school: (prof as { school?: string })?.school,
+    };
+    if (last?.id) {
+      const [{ data: proj }, { data: issues }, { data: phases }] = await Promise.all([
+        supabase.from("projects").select("name,description,business_type").eq("id", last.id).maybeSingle(),
+        supabase.from("project_issues").select("title,status").eq("project_id", last.id).limit(20),
+        supabase.from("project_roadmap_steps").select("title,description,status").eq("project_id", last.id).order("sort_order"),
+      ]);
+      const active = (phases ?? []).find((p) => p.status === "active") ?? (phases ?? [])[0];
+      ctx = {
+        ...ctx,
+        projectName: (proj?.name as string) ?? last.name,
+        businessType: (proj?.business_type as string) ?? undefined,
+        phaseTitle: (active?.title as string) ?? undefined,
+        phaseGoal: (active?.description as string) ?? undefined,
+        pendingTasks: (issues ?? []).filter((i) => i.status !== "done").map((i) => i.title as string),
+        completedTasks: (issues ?? []).filter((i) => i.status === "done").map((i) => i.title as string),
+      };
+    }
+    const { data: recentPosts } = await supabase
+      .from("posts")
+      .select("caption")
+      .eq("author_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    ctx.recentPosts = (recentPosts ?? []).map((p) => (p.caption as string) || "").filter(Boolean);
+    setMentorContext(ctx);
+  }, []);
+
+  const loadMentorContextRef = useRef(loadMentorContext);
   loadRoleRef.current = loadRole;
   loadArticlesRef.current = loadArticles;
   loadPitchesRef.current = loadPitches;
   loadPostsRef.current = loadPosts;
   loadSocialGraphRef.current = loadSocialGraph;
   loadMessagesRef.current = loadMessages;
+  loadMentorContextRef.current = loadMentorContext;
 
   async function markChatAsRead() {
     if (!supabase || !session) return;
@@ -1969,19 +2049,12 @@ export default function Home() {
     });
   }, [lastReadAt, messages, session]);
 
-  const totalTalkUnread = useMemo(
-    () => Object.values(talkMeta).reduce((s, m) => s + m.unread, 0),
-    [talkMeta],
-  );
   const reportNewCount = useMemo(() => reports.filter((r) => (r.status ?? "new") === "new").length, [reports]);
-  const incomingRequestCount = incomingFollowRequests.length;
   const notificationItems = useMemo(() => {
     const items: Array<{ id: string; level: "info" | "warn"; text: string }> = [];
-    if (totalTalkUnread > 0) items.push({ id: "chat-unread", level: "info", text: `未読メッセージが ${totalTalkUnread} 件あります` });
-    if (incomingRequestCount > 0) items.push({ id: "follow-request", level: "info", text: `フォローリクエストが ${incomingRequestCount} 件届いています` });
     if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります` });
     return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 6);
-  }, [dismissedNotificationIds, incomingRequestCount, reportNewCount, totalTalkUnread]);
+  }, [dismissedNotificationIds, reportNewCount]);
   const eventDailySummary = useMemo(() => {
     const bucket: Record<string, number> = {};
     for (const ev of opsEvents) {
@@ -2011,17 +2084,6 @@ export default function Home() {
   const showMentionHelper = useMemo(() => /(^|\s)@\S*$/.test(chatBody), [chatBody]);
 
   const autoReadTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem("moni-language");
-    if (saved === "ja" || saved === "en") setLanguage(saved);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("moni-language", language);
-  }, [language]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2087,24 +2149,11 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("about") === "1") {
+    if (params.get("about") === "1" || params.get("landing") === "1") {
       setShowLandingPage(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
-
-  useEffect(() => {
-    if (activePage !== "discovery" || !supabase) return;
-    void loadIdeaChieBoard();
-  }, [activePage, supabase, loadIdeaChieBoard]);
-
-  useEffect(() => {
-    if (!supabase || !ideaChieDetailId) {
-      setIdeaChieAnswers([]);
-      return;
-    }
-    void loadIdeaChieAnswers(ideaChieDetailId);
-  }, [supabase, ideaChieDetailId, loadIdeaChieAnswers]);
 
   useEffect(() => {
     if (!supabase || !session) return;
@@ -2131,21 +2180,22 @@ export default function Home() {
       setAuthMessage(`ログインエラー: ${decodeURIComponent(oauthErr.replace(/\+/g, " "))}`);
     }
 
-    void supabase.auth.getSession().then(async ({ data }) => {
+    void supabase.auth.getSession().then(({ data }) => {
       const next = data.session ?? null;
       sessionRef.current = next;
       setSession(next);
       setSessionEmail(next?.user.email ?? null);
       if (next) {
-        await loadRoleRef.current(next.user.id);
-        await loadArticlesRef.current();
-        await loadPitchesRef.current();
-        await refreshTalkListRef.current?.();
-        await loadSocialGraphRef.current(next.user.id);
+        void loadRoleRef.current(next.user.id);
+        void loadArticlesRef.current();
+        void loadPitchesRef.current();
+        void refreshTalkListRef.current?.();
+        void loadSocialGraphRef.current(next.user.id);
+        void loadMentorContextRef.current?.(next.user.id);
       } else {
-        setFollowSuggestions(DEMO_FOLLOW_USERS);
+        setFollowSuggestions([]);
       }
-      await loadPostsRef.current();
+      void loadPostsRef.current();
     });
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -2162,6 +2212,7 @@ export default function Home() {
           refreshTalkListRef.current?.() ?? Promise.resolve(),
           loadPostsRef.current(),
           loadSocialGraphRef.current(next.user.id),
+          loadMentorContextRef.current?.(next.user.id) ?? Promise.resolve(),
         ]);
       } else {
         setMessages([]);
@@ -2177,7 +2228,7 @@ export default function Home() {
         setFollowingUsers([]);
         setIncomingFollowRequests([]);
         setOutgoingRequestIds([]);
-        setFollowSuggestions(DEMO_FOLLOW_USERS);
+        setFollowSuggestions([]);
         void loadPostsRef.current();
       }
     });
@@ -2193,6 +2244,20 @@ export default function Home() {
     void loadMessages();
     void loadReadState(session.user.id, activeRoomId);
   }, [supabase, session, activeRoomId, loadMessages, loadReadState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !session || !supabase) return;
+    const params = new URLSearchParams(window.location.search);
+    const dmPeer = params.get("dm")?.trim();
+    if (!dmPeer) return;
+    const u = new URL(window.location.href);
+    u.searchParams.delete("dm");
+    window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
+    const client = supabase;
+    void import("@/lib/messages/openDirectMessage").then(({ navigateToDirectMessage }) =>
+      navigateToDirectMessage(client, router, dmPeer),
+    );
+  }, [session, router, supabase]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2521,12 +2586,6 @@ export default function Home() {
     };
   }, [canUseSupabase, session, supabase]);
 
-  useEffect(() => {
-    return () => {
-      if (postUploadPreview) URL.revokeObjectURL(postUploadPreview);
-    };
-  }, [postUploadPreview]);
-
   async function signOut() {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -2565,6 +2624,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
+          context: mentorContext ?? undefined,
         }),
       });
       const result = (await response.json()) as { reply?: string; error?: string };
@@ -2597,26 +2657,18 @@ export default function Home() {
   async function runMatching(event: FormEvent) {
     event.preventDefault();
     const terms = matchingKeywords(matchGoal).map(sanitizeLikeTerm).filter(Boolean);
-    if (terms.length === 0 && !selectedAiType) {
-      setMatchNotice("条件を入力するか、AIタイプを選んで検索してください。");
+    if (terms.length === 0) {
+      setMatchNotice("条件を入力して検索してください。");
       return;
     }
 
     if (supabase && session) {
-      const baseQuery = supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id,display_name,goal,role,avatar_url")
         .neq("id", session.user.id)
+        .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
         .limit(30);
-      const withTermsQuery =
-        terms.length > 0
-          ? baseQuery.or(
-              terms
-                .flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`])
-                .join(","),
-            )
-          : baseQuery;
-      const { data, error } = await withTermsQuery;
       if (error) {
         setMatchNotice("");
         setAuthMessage(`マッチング検索に失敗: ${error.message}`);
@@ -2643,41 +2695,20 @@ export default function Home() {
                   }),
         };
       });
-      const typed = selectedAiType ? mapped.filter((m) => m.aiType === selectedAiType) : mapped;
-      const merged = typed.length > 0 ? typed : DEMO_MEMBERS;
-      setMatches(merged);
+      setMatches(mapped);
       trackOpsEvent("matching_search");
       trackOpsEvent("search_started");
       setMatchNotice(
-        typed.length === 0
-          ? "一致ユーザーが少ないため、デモユーザーも表示しています。"
-          : `${typed.length}件見つかりました。`,
+        mapped.length === 0
+          ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
+          : `${mapped.length}件見つかりました。`,
       );
       return;
     }
 
-    const ranked = [...DEMO_MEMBERS]
-      .map((m) => {
-        const haystack = `${m.name}${m.goal}${m.strength}`;
-        const termScore = terms.reduce((acc, word) => (haystack.includes(word) ? acc + 1 : acc), 0);
-        const typeScore = !selectedAiType || (m.aiType ?? inferAiTypeFromMember(m)) === selectedAiType ? 1 : 0;
-        const score = termScore + typeScore;
-        return { m, score };
-      })
-      .filter(({ m, score }) => {
-        if (selectedAiType && (m.aiType ?? inferAiTypeFromMember(m)) !== selectedAiType) return false;
-        if (terms.length === 0) return true;
-        return score > 1;
-      })
-      .sort((a, b) => b.score - a.score)
-      .map(({ m }) => m);
-    setMatches(ranked);
+    setMatches([]);
     trackOpsEvent("matching_search_demo");
-    setMatchNotice(
-      ranked.length === 0
-        ? "デモ一覧に一致する仲間はいません。「教育」「環境」「学校」など短い言葉で試してください。"
-        : `${ranked.length}件ヒット（デモデータ内検索）`,
-    );
+    setMatchNotice("ログインすると、登録ユーザーの中から仲間を検索できます。");
   }
 
   async function publishArticle(id: string, status: "draft" | "published") {
@@ -2685,7 +2716,7 @@ export default function Home() {
     const target = articles.find((a) => a.id === id);
     if (!target) return;
     const isOwner = Boolean(target.authorId && target.authorId === session.user.id);
-    if (role !== "investor" && !isOwner) {
+    if (!canModerate && !isOwner) {
       setAuthMessage("この記事の公開状態を変更する権限がありません。");
       return;
     }
@@ -2827,7 +2858,7 @@ export default function Home() {
     if (supabase && session) {
       const target = articles.find((a) => a.id === articleId);
       const isOwner = Boolean(target?.authorId && target.authorId === session.user.id);
-      if (role !== "investor" && !isOwner) {
+      if (!canModerate && !isOwner) {
         setAuthMessage("この記事を編集する権限がありません。");
         return;
       }
@@ -2856,7 +2887,7 @@ export default function Home() {
     if (!target) return;
     if (supabase && session) {
       const isOwner = Boolean(target.authorId && target.authorId === session.user.id);
-      if (role !== "investor" && !isOwner) {
+      if (!canModerate && !isOwner) {
         setAuthMessage("この記事を削除する権限がありません。");
         return;
       }
@@ -3327,16 +3358,18 @@ export default function Home() {
     setTestSheetQuestion(q.slice(0, 140));
     setActivePage("posts");
     setCommunityView("qna");
-    setIdeaChieNewTitle(q.slice(0, 80));
+    setQnaPrefillTitle(q.slice(0, 80));
     setAuthMessage("コミュニティの質問フォームに内容をセットしました。");
   }
 
   function sendBlueprintToMentor() {
     const body = ideaBlueprint.mentorSeed.trim() || ideaBlueprint.elevatorPitch;
-    setPostCaption(body);
+    const title = ideaBlueprint.title.trim() || "アイデアの進捗";
+    setPostComposerSeed({ title, detail: body });
     setActivePage("posts");
     setCommunityView("progress");
-    setAuthMessage("コミュニティの進捗投稿フォームに下書きを入れました。");
+    setPostComposerOpen(true);
+    setAuthMessage("活動記録の下書きを開けました。内容を確認して記録してください。");
   }
 
   async function addPitch(event: FormEvent) {
@@ -3370,99 +3403,143 @@ export default function Home() {
     setPitchBody("");
   }
 
-  function onPostFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (postUploadPreview) URL.revokeObjectURL(postUploadPreview);
-    if (!f) {
-      setPostFile(null);
-      setPostUploadPreview(null);
-      return;
-    }
-    if (f.size > 5 * 1024 * 1024) {
-      setAuthMessage("画像は5MB以下にしてください。");
-      e.target.value = "";
-      return;
-    }
-    if (!/^image\/(jpeg|png|webp|gif)$/i.test(f.type)) {
-      setAuthMessage("JPEG / PNG / WebP / GIF の画像を選んでください。");
-      e.target.value = "";
-      return;
-    }
-    setPostFile(f);
-    setPostUploadPreview(URL.createObjectURL(f));
-  }
-
   function resetPostComposer() {
-    setPostCaption("");
-    setPostFile(null);
-    if (postUploadPreview) URL.revokeObjectURL(postUploadPreview);
-    setPostUploadPreview(null);
-    if (postFileInputRef.current) postFileInputRef.current.value = "";
+    setPostComposerSeed({ title: "", detail: "" });
     setPostComposerOpen(false);
   }
 
-  async function createFeedPost(event: FormEvent) {
-    event.preventDefault();
-    const caption = postCaption.trim();
-    if (!caption && !postFile) {
-      setAuthMessage("テキストか画像のどちらかを入力してください。");
+  function showActivityToast(message: string) {
+    setActivityToast(message);
+    window.setTimeout(() => setActivityToast(""), 2600);
+  }
+
+  async function submitActivityRecord(payload: ActivityComposerSubmitPayload) {
+    if (!payload.title.trim()) {
+      setAuthMessage("何をしたか（タイトル）を入力してください。");
       return;
     }
 
+    const postType = categoryToPostType(payload.category);
+
     if (!supabase || !session) {
+      const localUrls = payload.files.map((f) => URL.createObjectURL(f));
       setFeedPosts((prev) => [
         {
           id: `local-post-${Date.now()}`,
           authorId: "local",
           authorName: displayName.trim() || "あなた",
-          caption,
-          imageUrl: postFile ? URL.createObjectURL(postFile) : null,
-          createdAt: new Date().toISOString(),
+          caption: formatActivityCaption({
+            title: payload.title,
+            detail: payload.detail,
+            recordedAt: payload.recordedAt,
+            category: payload.category,
+          }),
+          postType,
+          imageUrl: localUrls[0] ?? null,
+          imageUrls: localUrls,
+          recordedAt: payload.recordedAt,
+          createdAt: payload.recordedAt || new Date().toISOString(),
           likeCount: 0,
           likedByMe: false,
           commentCount: 0,
           comments: [],
+          reactionCounts: { fire: 0, idea: 0, help: 0 },
+          myReaction: null,
         },
         ...prev,
       ]);
       resetPostComposer();
-      setAuthMessage("（デモ）端末内にだけ投稿を追加しました。Supabase 接続で共有できます。");
+      showActivityToast("活動を記録しました");
       return;
     }
 
     setPostPosting(true);
     try {
-      let path: string | null = null;
-      if (postFile) {
-        const extFromType = postFile.type === "image/png" ? "png" : postFile.type === "image/webp" ? "webp" : postFile.type === "image/gif" ? "gif" : "jpg";
-        path = `${session.user.id}/${Date.now()}.${extFromType}`;
-        const { error: upErr } = await supabase.storage.from("post-images").upload(path, postFile, {
+      const uploadedPaths: string[] = [];
+      for (let i = 0; i < payload.files.length; i += 1) {
+        const file = payload.files[i];
+        const extFromType =
+          file.type === "image/png"
+            ? "png"
+            : file.type === "image/webp"
+              ? "webp"
+              : file.type === "image/gif"
+                ? "gif"
+                : "jpg";
+        const path = `${session.user.id}/${Date.now()}-${i}.${extFromType}`;
+        const { error: upErr } = await supabase.storage.from("post-images").upload(path, file, {
           cacheControl: "3600",
           upsert: false,
-          contentType: postFile.type || "image/jpeg",
+          contentType: file.type || "image/jpeg",
         });
         if (upErr) {
           setAuthMessage(`画像のアップロードに失敗: ${upErr.message}`);
+          if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
           return;
         }
+        uploadedPaths.push(path);
       }
+
+      const primaryPath = uploadedPaths[0] ?? null;
+      const extraPaths = uploadedPaths.slice(1);
+      const finalCaption = formatActivityCaption({
+        title: payload.title,
+        detail: payload.detail,
+        recordedAt: payload.recordedAt,
+        category: payload.category,
+        extraImagePaths: extraPaths,
+      });
+
       const { error: insErr } = await supabase.from("posts").insert({
         author_id: session.user.id,
-        caption,
-        image_path: path,
+        caption: finalCaption || payload.title || "活動記録",
+        image_path: primaryPath,
+        post_type: postType,
       });
-      if (insErr) {
+      if (insErr?.message?.includes("post_type")) {
+        const retry = await supabase.from("posts").insert({
+          author_id: session.user.id,
+          caption: finalCaption || payload.title || "活動記録",
+          image_path: primaryPath,
+        });
+        if (retry.error) {
+          setAuthMessage(`投稿の保存に失敗: ${retry.error.message}`);
+          if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
+          return;
+        }
+      } else if (insErr) {
         setAuthMessage(`投稿の保存に失敗: ${insErr.message}`);
-        if (path) await supabase.storage.from("post-images").remove([path]);
+        if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
         return;
       }
       resetPostComposer();
       await loadPosts();
+      void recordUserActivity(supabase, session.user.id)
+        .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
+        .catch(() => undefined);
       trackOpsEvent("post_created");
       trackOpsEvent("first_post_completed");
+      showActivityToast("活動を記録しました");
     } finally {
       setPostPosting(false);
     }
+  }
+
+  async function toggleFeedPostReaction(post: FeedPost, kind: ReactionKind) {
+    if (!supabase || !session || post.authorId === "demo") return;
+    const next = await togglePostReaction(supabase, session.user.id, post.id, kind, post.myReaction);
+    setFeedPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== post.id) return p;
+        const reactionCounts = { ...p.reactionCounts };
+        if (p.myReaction) reactionCounts[p.myReaction] = Math.max(0, reactionCounts[p.myReaction] - 1);
+        if (next) reactionCounts[next] += 1;
+        return { ...p, myReaction: next, reactionCounts };
+      }),
+    );
+    void recordUserActivity(supabase, session.user.id, 1)
+      .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
+      .catch(() => undefined);
   }
 
   async function toggleFeedPostLike(post: FeedPost) {
@@ -3496,27 +3573,55 @@ export default function Home() {
     await loadPosts();
   }
 
+  function canDeleteFeedPost(post: FeedPost): boolean {
+    if (post.authorId === "demo") return false;
+    if (post.authorId === "local") return !session && !canUseSupabase;
+    const uid = session?.user?.id;
+    if (!uid) return false;
+    if (post.authorId === uid) return true;
+    return isAppAdmin;
+  }
+
   async function deleteFeedPost(post: FeedPost) {
     setFeedDeleting(true);
     try {
       if (post.authorId === "local") {
+        if (session || canUseSupabase) {
+          setAuthMessage("この投稿を削除する権限がありません。");
+          return;
+        }
         setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
         if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
         return;
       }
-      if (!session || session.user.id !== post.authorId) return;
+      const uid = session?.user?.id;
+      if (!uid) {
+        setAuthMessage("ログインしてから削除してください。");
+        return;
+      }
+      const isOwner = uid === post.authorId;
+      if (!isOwner && !isAppAdmin) {
+        setAuthMessage("この投稿を削除する権限がありません。");
+        return;
+      }
       if (!supabase || !canUseSupabase) {
-        setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
-        if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
+        setAuthMessage("接続できないため削除できません。");
         return;
       }
-      const { error } = await supabase.from("posts").delete().eq("id", post.id);
+      let deleteQuery = supabase.from("posts").delete().eq("id", post.id);
+      if (isOwner) deleteQuery = deleteQuery.eq("author_id", uid);
+      const { data: deletedRows, error } = await deleteQuery.select("id");
       if (error) {
         setAuthMessage(`投稿の削除に失敗: ${error.message}`);
         return;
       }
-      if (post.storagePath) {
-        await supabase.storage.from("post-images").remove([post.storagePath]);
+      if (!deletedRows?.length) {
+        setAuthMessage("この投稿を削除する権限がありません。");
+        return;
+      }
+      if (post.storagePath || (post.extraStoragePaths && post.extraStoragePaths.length > 0)) {
+        const paths = [post.storagePath, ...(post.extraStoragePaths ?? [])].filter(Boolean) as string[];
+        if (paths.length > 0) await supabase.storage.from("post-images").remove(paths);
       }
       await loadPosts();
     } finally {
@@ -3565,6 +3670,9 @@ export default function Home() {
     }
     appendLocalComment();
     await loadPosts();
+    void recordUserActivity(supabase, session.user.id)
+      .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
+      .catch(() => undefined);
   }
 
   async function toggleFollow(targetUserId: string) {
@@ -3688,91 +3796,6 @@ export default function Home() {
     return "ユーザー";
   }
 
-  async function submitIdeaChieQuestion(event?: FormEvent) {
-    event?.preventDefault();
-    if (!supabase || !session) {
-      setAuthMessage("質問を投稿するにはログインしてください。");
-      return;
-    }
-    const title = ideaChieNewTitle.trim();
-    const body = ideaChieNewBody.trim();
-    if (!title) {
-      setAuthMessage("タイトルを入力してください。");
-      return;
-    }
-    const { error } = await supabase.from("idea_questions").insert({
-      author_id: session.user.id,
-      author_display_name: effectiveChatSenderName(),
-      title,
-      body,
-    });
-    if (error) {
-      setAuthMessage(`質問の投稿に失敗: ${error.message}`);
-      return;
-    }
-    setIdeaChieNewTitle("");
-    setIdeaChieNewBody("");
-    setAuthMessage("質問を投稿しました。");
-    trackOpsEvent("idea_chie_question_posted");
-    trackOpsEvent("first_question_completed");
-    await loadIdeaChieBoard();
-  }
-
-  async function submitIdeaChieAnswer(event?: FormEvent) {
-    event?.preventDefault();
-    if (!supabase || !session || !ideaChieDetailId) return;
-    const q = ideaChieQuestions.find((x) => x.id === ideaChieDetailId);
-    if (!q) return;
-    if (q.authorId === session.user.id) {
-      setAuthMessage("自分の質問には回答できません。");
-      return;
-    }
-    const body = ideaChieAnswerDraft.trim();
-    if (!body) return;
-    const { error } = await supabase.from("idea_answers").insert({
-      question_id: ideaChieDetailId,
-      author_id: session.user.id,
-      author_display_name: effectiveChatSenderName(),
-      body,
-    });
-    if (error) {
-      setAuthMessage(`回答の投稿に失敗: ${error.message}`);
-      return;
-    }
-    setIdeaChieAnswerDraft("");
-    setAuthMessage("回答を投稿しました。");
-    trackOpsEvent("idea_chie_answer_posted");
-    await loadIdeaChieAnswers(ideaChieDetailId);
-    await loadIdeaChieBoard();
-  }
-
-  async function pickIdeaChieBestAnswer(answerId: string) {
-    if (!supabase || !session || !ideaChieDetailId) return;
-    const q = ideaChieQuestions.find((x) => x.id === ideaChieDetailId);
-    if (!q || q.authorId !== session.user.id) {
-      setAuthMessage("ベストアンサーは質問した本人だけが選べます。");
-      return;
-    }
-    const belongs = ideaChieAnswers.some((a) => a.id === answerId && a.questionId === ideaChieDetailId);
-    if (!belongs) {
-      setAuthMessage("この回答は選べません。");
-      return;
-    }
-    const { error } = await supabase
-      .from("idea_questions")
-      .update({ best_answer_id: answerId })
-      .eq("id", ideaChieDetailId)
-      .eq("author_id", session.user.id);
-    if (error) {
-      setAuthMessage(`ベストアンサーの設定に失敗: ${error.message}`);
-      return;
-    }
-    setAuthMessage("ベストアンサーにしました。");
-    trackOpsEvent("idea_chie_best_picked");
-    await loadIdeaChieBoard();
-    await loadIdeaChieAnswers(ideaChieDetailId);
-  }
-
   async function addMessage(event?: FormEvent) {
     event?.preventDefault();
     const bodyText = chatBody.trim();
@@ -3883,10 +3906,12 @@ export default function Home() {
         onStart={() => {
           trackOpsEvent(session ? "landing_resume_close" : "landing_cta_register");
           setShowLandingPage(false);
-          if (!session) {
-            setHasEnteredApp(true);
-            router.push("/login");
+          if (session) {
+            router.push(resolveAppEntryHref());
+            return;
           }
+          setHasEnteredApp(true);
+          router.push("/login");
         }}
         onPreview={() => {
           trackOpsEvent(session ? "landing_resume_preview" : "landing_cta_preview");
@@ -3957,8 +3982,10 @@ export default function Home() {
   return (
     <div
       id="moni-app"
-      className={`relative min-h-[100dvh] min-h-screen pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased ${
-        communityFullBleed ? "bg-white" : "bg-[#fafafa]"
+      className={`relative text-zinc-900 antialiased ${
+        communityFullBleed
+          ? "box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top,0px)]"
+          : "min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)]"
       }`}
     >
       <input
@@ -3971,7 +3998,7 @@ export default function Home() {
       <div
         className={
           communityFullBleed
-            ? "relative flex min-h-[100dvh] w-full flex-col"
+            ? "relative flex min-h-0 flex-1 w-full flex-col"
             : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3`
         }
       >
@@ -4003,7 +4030,13 @@ export default function Home() {
           <div className="p-4">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">アカウントの種類</p>
             <p className="mt-1 text-sm font-medium">
-              {role === "child" ? "子ども" : role === "parent" ? "保護者" : "投資家/起業家"}
+              {role === "admin"
+                ? "運営管理者"
+                : role === "child"
+                  ? "子ども"
+                  : role === "parent"
+                    ? "保護者"
+                    : "投資家/起業家"}
             </p>
           </div>
         </aside>
@@ -4012,12 +4045,12 @@ export default function Home() {
           {!communityFullBleed ? (
           <>
           <header className="flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3">
-            <h1 className="font-sans text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">moni</h1>
+            <h1 className="moni-wordmark text-xl sm:text-2xl">moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
               {!session && canUseSupabase ? (
                 <Link
                   href="/login"
-                  className="shrink-0 rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-800"
+                  className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
                 >
                   ログイン
                 </Link>
@@ -4037,17 +4070,10 @@ export default function Home() {
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     item.level === "warn" ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-sky-200 bg-sky-50 text-sky-700"
                   }`}
-                  onClick={() => {
-                    if (item.id === "follow-request") {
-                      setActivePage("account");
-                      setFollowListModal("requests");
-                      return;
-                    }
-                    dismissNotification(item.id);
-                  }}
-                  title={item.id === "follow-request" ? "フォローリクエストを確認" : "クリックで非表示"}
+                  onClick={() => dismissNotification(item.id)}
+                  title="クリックで非表示"
                 >
-                  {item.id === "follow-request" ? `🔔 ${item.text}` : item.text}
+                  {item.text}
                 </button>
               ))}
             </div>
@@ -4058,25 +4084,11 @@ export default function Home() {
           <main
             className={
               communityFullBleed
-                ? "flex min-h-0 flex-1 flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))]"
-                : "grid gap-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:grid-cols-1"
+                ? "flex min-h-0 flex-1 flex-col pb-bottom-nav"
+                : "grid gap-4 pb-bottom-nav md:grid-cols-1"
             }
           >
-        <section className={activePage === "projects" ? "" : "hidden"}>
-          {activePage === "projects" ? (
-            <ProjectTabGlide
-              displayName={displayName}
-              sessionEmail={sessionEmail}
-              hasSession={Boolean(session)}
-              onNavigate={(key) => {
-                if (key === "chat") setChatSubView("list");
-                if (key === "posts") setCommunityView("progress");
-                setActivePage(key);
-              }}
-            />
-          ) : null}
-        </section>
-        <section className={`${activePage === "account" ? "" : "hidden"} rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)]`}>
+        <section className="hidden rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)]" aria-hidden>
             {accountSubTab === "profile" ? (
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -4237,7 +4249,7 @@ export default function Home() {
                 <span className="text-[11px] text-[#8e8e8e]">{accountText.typeRecommend}</span>
               </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {DEMO_FOLLOW_USERS.slice(0, 5).map((u) => (
+                  {visibleFollowSuggestions.slice(0, 5).map((u) => (
                     <button
                       key={`chip-${u.id}`}
                       type="button"
@@ -4318,7 +4330,7 @@ export default function Home() {
                 <p className="mt-1 text-[11px] text-[#8e8e8e]">{accountText.usernameHint}</p>
               </div>
               <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">
-                <p className="text-xs font-semibold text-[#374151]">{accountText.language}</p>
+                <p className="text-xs font-semibold text-[#374151]">{t("language")}</p>
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
@@ -4329,7 +4341,7 @@ export default function Home() {
                     }`}
                     onClick={() => setLanguage("ja")}
                   >
-                    日本語
+                    {t("japanese")}
                   </button>
                   <button
                     type="button"
@@ -4340,7 +4352,7 @@ export default function Home() {
                     }`}
                     onClick={() => setLanguage("en")}
                   >
-                    English
+                    {t("english")}
                   </button>
                 </div>
               </div>
@@ -4389,9 +4401,10 @@ export default function Home() {
               <button className={`${primaryButtonClass}`} type="button" onClick={() => void saveProfile()} disabled={requiresLogin}>
                 {accountText.settingsSave}
               </button>
-              {role === "investor" ? (
+              {session && isAppAdmin ? <AppAdminDashboard session={session} language={language} /> : null}
+              {role === "investor" && !isAppAdmin ? (
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
-                  <p className="text-xs font-semibold text-zinc-700">運用ダッシュボード（管理者）</p>
+                  <p className="text-xs font-semibold text-zinc-700">運用ダッシュボード（投資家向け）</p>
                   <p className="mt-1 text-[11px] text-zinc-500">ユーザー行動ログと通報件数を確認できます。</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <div className="rounded-lg border border-zinc-200 bg-white p-2">
@@ -4477,162 +4490,86 @@ export default function Home() {
             activePage === "posts" && communityView === "progress" ? "" : "hidden"
           }`}
         >
-          <div className="shrink-0 border-b border-zinc-200 px-4 py-3 sm:px-5 sm:py-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-semibold">コミュニティ</h3>
+          <div className="mobile-sticky-header mobile-content-inset shrink-0 border-b border-zinc-200 bg-white pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="moni-wordmark text-xl leading-none">moni</h1>
+              {session ? (
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
+                  onClick={() => {
+                    setPostComposerSeed({ title: "", detail: "" });
+                    setPostComposerOpen(true);
+                  }}
+                >
+                  ＋ 記録
+                </button>
+              ) : null}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label="コミュニティの表示">
               <button
                 type="button"
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
-                  communityView === "progress" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
+                role="tab"
+                aria-selected={communityView === "progress"}
+                className={`${COMMUNITY_TAB} ${
+                  communityView === "progress" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
                 }`}
                 onClick={() => setCommunityView("progress")}
               >
                 進捗共有
+                {communityView === "progress" ? (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
               <button
                 type="button"
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
-                  communityView === "qna" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
+                role="tab"
+                aria-selected={communityView === "qna"}
+                className={`${COMMUNITY_TAB} ${
+                  communityView === "qna" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
                 }`}
                 onClick={() => {
                   setCommunityView("qna");
-                  if (!ideaChieNewTitle.trim()) setIdeaChieNewTitle("この案を最初に試すには何から始める？");
                 }}
               >
                 質問・相談
+                {communityView === "qna" ? (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <ul className="divide-y divide-zinc-200">
-            {feedPosts.map((post) => (
-              <li key={post.id} className="px-0 py-0 transition hover:bg-zinc-50/70">
-                <div className="flex items-center justify-between gap-2 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white"
-                      onClick={() => void openProfileByUserId(post.authorId, post.authorName)}
-                      aria-label={`${post.authorName}のプロフィールを見る`}
-                    >
-                      {(post.authorName.trim().charAt(0) || "?").toUpperCase()}
-                    </button>
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        className="truncate text-left text-sm font-semibold text-zinc-900 hover:underline"
-                        onClick={() => void openProfileByUserId(post.authorId, post.authorName)}
-                      >
-                        {post.authorName}
-                      </button>
-                      <p className="text-[11px] text-zinc-500">{formatFeedTime(post.createdAt)}</p>
-                    </div>
-                  </div>
-                  {session && session.user.id === post.authorId && post.authorId !== "demo" ? (
-                    <button
-                      type="button"
-                      className="shrink-0 text-xs font-semibold text-rose-500 hover:underline"
-                      onClick={() => setFeedDeleteTarget(post)}
-                    >
-                      削除
-                    </button>
-                  ) : null}
-                </div>
-                <div className="space-y-2 px-4 pb-3">
-                  {post.caption ? (
-                    <p className="text-sm leading-relaxed text-[#262626] whitespace-pre-wrap break-words">{post.caption}</p>
-                  ) : null}
-                  {post.imageUrl ? (
-                    <div className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-[#fafafa]">
-                      {/* eslint-disable-next-line @next/next/no-img-element -- 外部URL・data URL・blob */}
-                      <img src={post.imageUrl} alt="" className="max-h-[28rem] w-full object-cover" loading="lazy" />
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-4 text-sm">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-zinc-500 transition hover:text-sky-600 active:scale-95"
-                      onClick={() => void toggleFeedPostLike(post)}
-                      aria-label={post.likedByMe ? "いいねを取り消す" : "いいねする"}
-                    >
-                      <span className={post.likedByMe ? "text-rose-500" : "text-zinc-500"}>{post.likedByMe ? "♥" : "♡"}</span>
-                      <span className={post.likedByMe ? "font-semibold text-rose-500" : ""}>{post.likeCount.toLocaleString("ja-JP")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-zinc-500 transition hover:text-zinc-900"
-                      onClick={() => {
-                        const el = document.getElementById(`comment-input-${post.id}`);
-                        el?.focus();
-                      }}
-                    >
-                      <span>💬</span>
-                      <span>{post.commentCount.toLocaleString("ja-JP")}</span>
-                    </button>
-                  </div>
-                  <div className="mt-1 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
-                    {post.comments.length > 0 ? (
-                      <ul className="space-y-2">
-                        {post.comments.slice(-3).map((c) => (
-                          <li key={c.id} className="text-sm text-[#262626]">
-                            <span className="font-semibold">{c.authorName}</span>{" "}
-                            <span className="whitespace-pre-wrap break-words">{c.body}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-zinc-500">まだコメントはありません</p>
-                    )}
-                    <form
-                      className="flex items-center gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void addFeedComment(post);
-                      }}
-                    >
-                      <input
-                        id={`comment-input-${post.id}`}
-                        className="flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500"
-                        placeholder="コメントを書く"
-                        value={commentDrafts[post.id] ?? ""}
-                        onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
-                        maxLength={280}
-                      />
-                      <button
-                        type="submit"
-                        className={primaryButtonClass}
-                        disabled={!(commentDrafts[post.id] ?? "").trim()}
-                      >
-                        コメント
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {feedPosts.length === 0 && canUseSupabase ? (
-            <div className="px-5 py-10 text-center">
-              <p className="text-sm text-zinc-600">まだ投稿がありません。</p>
-              <p className="mt-1 text-xs text-zinc-500">右下の ＋ から進捗を投稿できます。</p>
-            </div>
-          ) : null}
+          <div className="community-feed-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-white">
+            <ActivityTimeline
+              posts={feedPosts}
+              currentUserId={session?.user?.id ?? null}
+              locale={language === "en" ? "en" : "ja"}
+              commentsOpen={feedCommentsOpen}
+              commentDrafts={commentDrafts}
+              onOpenAuthor={(authorId, authorName) => void openProfileByUserId(authorId, authorName)}
+              onToggleLike={(post) => void toggleFeedPostLike(post as FeedPost)}
+              onToggleComments={(postId) => {
+                setFeedCommentsOpen((prev) => {
+                  const nextOpen = !prev[postId];
+                  if (nextOpen) {
+                    window.setTimeout(() => {
+                      document
+                        .getElementById(`comment-input-${postId}`)
+                        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                    }, 80);
+                  }
+                  return { ...prev, [postId]: nextOpen };
+                });
+              }}
+              onCommentDraftChange={(postId, value) => setCommentDrafts((prev) => ({ ...prev, [postId]: value }))}
+              onSubmitComment={(post) => void addFeedComment(post as FeedPost)}
+              onDelete={(post) => setFeedDeleteTarget(post as FeedPost)}
+              canDelete={(post) => canDeleteFeedPost(post as FeedPost)}
+              emptyHint={session ? "右上の「＋ 記録」から活動を残せます。" : "ログインすると活動を記録できます。"}
+            />
           </div>
 
-          {!postComposerOpen ? (
-            <button
-              type="button"
-              className="absolute bottom-5 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-3xl font-light leading-none text-white shadow-[0_4px_20px_rgba(0,0,0,0.25)] transition hover:bg-zinc-800 active:scale-95"
-              onClick={() => setPostComposerOpen(true)}
-              aria-label="投稿を作成"
-            >
-              ＋
-            </button>
-          ) : null}
         </section>
 
         <section className={`${cardClass} ${activePage === "articles" ? "" : "hidden"}`}>
@@ -4640,7 +4577,7 @@ export default function Home() {
             <h3 className="text-base font-semibold">記事</h3>
             <button type="button" className={secondaryButtonClass} onClick={() => setActivePage("posts")}>投稿へ</button>
           </div>
-          {role === "investor" ? (
+          {canModerate ? (
             <form className="mt-3 grid gap-2" onSubmit={addArticle}>
               <div className="grid gap-2 md:grid-cols-2">
                 <input
@@ -4757,7 +4694,7 @@ export default function Home() {
                     ユーザー報告
                   </button>
                 ) : null}
-                {session && (role === "investor" || activeArticle.authorId === session.user.id) ? (
+                {session && (canModerate || activeArticle.authorId === session.user.id) ? (
                   <>
                     <button
                       type="button"
@@ -4901,7 +4838,7 @@ export default function Home() {
                       ユーザー報告
                     </button>
                   ) : null}
-                  {role === "investor" ? (
+                  {canModerate ? (
                     <button
                       className="ml-auto rounded-full border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700"
                       type="button"
@@ -4911,7 +4848,7 @@ export default function Home() {
                       {a.status === "published" ? "下書きに戻す" : "公開する"}
                     </button>
                   ) : null}
-                  {session && (role === "investor" || a.authorId === session.user.id) ? (
+                  {session && (canModerate || a.authorId === session.user.id) ? (
                     <>
                       <button
                         type="button"
@@ -5084,452 +5021,191 @@ export default function Home() {
             activePage === "posts" && communityView === "qna" ? "" : "hidden"
           }`}
         >
-          {/* Twitter/X 風ヘッダー */}
-          <div className="sticky top-0 z-10 border-b border-[#eff3f4] bg-white/90 px-4 py-3 backdrop-blur-md">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-xl font-bold tracking-tight text-[#0f1419]">質問・相談</h3>
-                <p className="mt-0.5 text-[13px] leading-snug text-[#536471]">
-                  つまずいたら投稿。みんなの返信を集めて、質問者だけがベストアンサーを選べます。
-                </p>
-              </div>
+          {/* コミュニティ共通ヘッダー（質問・相談） */}
+          <div className="mobile-sticky-header mobile-content-inset shrink-0 border-b border-zinc-200 bg-white pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="moni-wordmark text-xl leading-none">moni</h1>
+              {session ? (
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
+                  onClick={() => setQnaFocusToken((n) => n + 1)}
+                >
+                  ＋ 質問
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label="コミュニティの表示">
               <button
                 type="button"
-                className="shrink-0 rounded-full border border-[#cfd9de] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#0f1419] transition hover:bg-[#f7f9f9]"
+                role="tab"
+                aria-selected={communityView === "progress"}
+                className={`${COMMUNITY_TAB} ${
+                  communityView === "progress" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
+                }`}
                 onClick={() => setCommunityView("progress")}
               >
-                進捗へ
+                進捗共有
+                {communityView === "progress" ? (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
-            </div>
-          </div>
-
-          {ideaChieDetailId && !ideaChieDetailQuestion ? (
-            <div className="border-b border-[#eff3f4] px-4 py-6 text-[15px] text-[#536471]">
-              <p>この質問は一覧にありません。DBの反映待ちか、削除された可能性があります。</p>
               <button
                 type="button"
-                className="mt-4 rounded-full border border-[#cfd9de] bg-white px-4 py-2 text-[14px] font-semibold text-[#0f1419] transition hover:bg-[#f7f9f9]"
-                onClick={() => {
-                  setIdeaChieDetailId(null);
-                  void loadIdeaChieBoard();
-                }}
+                role="tab"
+                aria-selected={communityView === "qna"}
+                className={`${COMMUNITY_TAB} ${
+                  communityView === "qna" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
+                }`}
+                onClick={() => setCommunityView("qna")}
               >
-                一覧へ戻る
+                質問・相談
+                {communityView === "qna" ? (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
             </div>
-          ) : null}
-          {ideaChieDetailId && ideaChieDetailQuestion ? (
-            (() => {
-              const q = ideaChieDetailQuestion;
-              const sortedAnswers = [...ideaChieAnswers].sort((a, b) => {
-                if (a.id === q.bestAnswerId) return -1;
-                if (b.id === q.bestAnswerId) return 1;
-                return new Date(a.createdAtIso).getTime() - new Date(b.createdAtIso).getTime();
-              });
-              const isQuestionAuthor = Boolean(session?.user?.id && q.authorId === session.user.id);
-              const canAnswer = Boolean(session?.user?.id && q.authorId !== session.user.id);
-              const qInitial = (q.authorName.trim().charAt(0) || "?").toUpperCase();
-              const questionTweetText =
-                q.body.trim().length > 0 ? `${q.title.trim()}\n\n${q.body.trim()}` : q.title.trim();
-              return (
-                <div>
-                  <div className="flex items-center gap-1 border-b border-[#eff3f4] px-2 py-2">
-                    <button
-                      type="button"
-                      className="rounded-full p-2 text-[#0f1419] transition hover:bg-[#eff3f4]"
-                      aria-label="一覧に戻る"
-                      onClick={() => {
-                        setIdeaChieDetailId(null);
-                        setIdeaChieAnswerDraft("");
-                      }}
-                    >
-                      <span className="text-lg" aria-hidden>
-                        ←
-                      </span>
-                    </button>
-                    <span className="text-[17px] font-bold text-[#0f1419]">スレッド</span>
-                  </div>
+          </div>
 
-                  <article className="border-b border-[#eff3f4] px-4 py-3">
-                    <div className="flex gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white">
-                        {qInitial}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-x-1.5 text-[15px] leading-tight">
-                          <span className="font-bold text-[#0f1419]">{q.authorName}</span>
-                          <span className="text-[15px] font-normal text-[#536471]">·</span>
-                          <time className="text-[15px] font-normal text-[#536471]" dateTime={q.createdAtIso}>
-                            {formatFeedTime(q.createdAtIso)}
-                          </time>
-                          {q.bestAnswerId ? (
-                            <span className="ml-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                              解決
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1.5 whitespace-pre-wrap break-words text-[15px] font-normal leading-[1.45] text-[#0f1419]">
-                          {questionTweetText}
-                        </p>
-                        <div className="mt-3 flex max-w-[420px] items-center justify-between border-t border-[#eff3f4] pt-2.5 text-[13px] text-[#536471]">
-                          <span className="inline-flex items-center gap-2">
-                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#536471] transition hover:bg-[#e7f5fd] hover:text-sky-600" aria-hidden>
-                              💬
-                            </span>
-                            <span className="tabular-nums">{q.answerCount}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-
-                  <div className="border-b border-[#eff3f4]">
-                    <div className="border-t border-[#eff3f4] px-4 py-2">
-                      <p className="text-[13px] font-bold text-[#536471]">返信</p>
-                    </div>
-                    <ul>
-                      {sortedAnswers.length === 0 ? (
-                        <li className="px-4 py-8 text-center text-[15px] text-[#536471]">まだ返信がありません。最初のヒントを書いてみよう。</li>
-                      ) : (
-                        sortedAnswers.map((a) => {
-                          const isBest = q.bestAnswerId === a.id;
-                          const aInitial = (a.authorName.trim().charAt(0) || "?").toUpperCase();
-                          return (
-                            <li key={a.id} className={`border-t border-[#eff3f4] px-4 py-3 ${isBest ? "bg-emerald-50/40" : ""}`}>
-                              <div className="flex gap-3">
-                                <div
-                                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
-                                    isBest ? "bg-emerald-600" : "bg-sky-500"
-                                  }`}
-                                >
-                                  {aInitial}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-baseline gap-x-1.5">
-                                    <span className="text-[15px] font-bold text-[#0f1419]">{a.authorName}</span>
-                                    <span className="text-[15px] text-[#536471]">·</span>
-                                    <time className="text-[15px] font-normal text-[#536471]" dateTime={a.createdAtIso}>
-                                      {formatFeedTime(a.createdAtIso)}
-                                    </time>
-                                    {isBest ? (
-                                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                                        ベスト
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <p className="mt-1 whitespace-pre-wrap break-words text-[15px] font-normal leading-[1.45] text-[#0f1419]">{a.body}</p>
-                                  {isQuestionAuthor && !isBest ? (
-                                    <button
-                                      type="button"
-                                      className="mt-3 rounded-full border border-emerald-600 bg-white px-3 py-1.5 text-[13px] font-bold text-emerald-800 transition hover:bg-emerald-50"
-                                      onClick={() => void pickIdeaChieBestAnswer(a.id)}
-                                    >
-                                      ベストアンサーにする
-                                    </button>
-                                  ) : null}
-                                  {isQuestionAuthor && isBest ? (
-                                    <p className="mt-2 text-[13px] font-semibold text-emerald-800">選んだベストアンサーです</p>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </li>
-                          );
-                        })
-                      )}
-                    </ul>
-                  </div>
-
-                  {session ? (
-                    canAnswer ? (
-                      <form className="border-b border-[#eff3f4] px-4 py-3" onSubmit={(e) => void submitIdeaChieAnswer(e)}>
-                        <div className="flex gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-900 text-sm font-bold text-white">
-                            {profileAvatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element -- プロフィール画像プレビュー
-                              <img src={profileAvatarUrl} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              storyInitial
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <textarea
-                              className="min-h-[100px] w-full resize-none border-0 bg-transparent text-[15px] text-[#0f1419] placeholder:text-[#536471] outline-none focus:ring-0"
-                              placeholder="返信を投稿…"
-                              value={ideaChieAnswerDraft}
-                              onChange={(e) => setIdeaChieAnswerDraft(e.target.value)}
-                              rows={3}
-                            />
-                            <div className="mt-3 flex justify-end border-t border-[#eff3f4] pt-3">
-                              <button
-                                type="submit"
-                                className="rounded-full bg-sky-500 px-4 py-2 text-[15px] font-bold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                disabled={!ideaChieAnswerDraft.trim()}
-                              >
-                                返信
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </form>
-                    ) : (
-                      <p className="border-b border-[#eff3f4] px-4 py-4 text-[14px] text-[#536471]">
-                        自分の質問には返信できません。タイムラインで他の質問に返信してみよう。
-                      </p>
-                    )
-                  ) : (
-                    <p className="border-b border-[#eff3f4] px-4 py-4 text-[14px] text-[#536471]">返信するにはログインしてください。</p>
-                  )}
-                </div>
-              );
-            })()
-          ) : null}
-          {!ideaChieDetailId ? (
-            <div>
-              {session ? (
-                <form className="border-b border-[#eff3f4] px-4 py-3" onSubmit={(e) => void submitIdeaChieQuestion(e)}>
-                  <div className="flex gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-900 text-sm font-bold text-white">
-                      {profileAvatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- プロフィール画像プレビュー
-                        <img src={profileAvatarUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        storyInitial
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 pt-1">
-                      <label className="sr-only" htmlFor="idea-chie-compose-title">
-                        質問タイトル
-                      </label>
-                      <input
-                        id="idea-chie-compose-title"
-                        className="w-full border-0 bg-transparent text-xl font-bold text-[#0f1419] placeholder:text-[#536471] outline-none focus:ring-0"
-                        placeholder="いま何で困っている？（タイトル）"
-                        value={ideaChieNewTitle}
-                        onChange={(e) => setIdeaChieNewTitle(e.target.value)}
-                      />
-                      <label className="sr-only" htmlFor="idea-chie-compose-body">
-                        詳細
-                      </label>
-                      <textarea
-                        id="idea-chie-compose-body"
-                        className="mt-3 min-h-[120px] w-full resize-none border-0 bg-transparent text-[15px] text-[#0f1419] placeholder:text-[#536471] outline-none focus:ring-0"
-                        placeholder="状況やアイデアの内容を書く（任意）"
-                        value={ideaChieNewBody}
-                        onChange={(e) => setIdeaChieNewBody(e.target.value)}
-                        rows={4}
-                      />
-                      <div className="mt-3 flex justify-end border-t border-[#eff3f4] pt-3">
-                        <button
-                          type="submit"
-                          className="rounded-full bg-sky-500 px-5 py-2 text-[15px] font-bold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={!ideaChieNewTitle.trim()}
-                        >
-                          質問する
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </form>
-              ) : (
-                <div className="border-b border-[#eff3f4] px-4 py-6 text-center">
-                  <p className="text-[15px] text-[#536471]">質問や返信にはログインが必要です。</p>
-                </div>
-              )}
-
-              <div>
-                <div className="sticky top-[52px] z-[5] border-b border-[#eff3f4] bg-white/95 px-4 py-2 backdrop-blur-sm">
-                  <h4 className="text-[17px] font-bold text-[#0f1419]">タイムライン</h4>
-                </div>
-                {ideaChieLoading ? (
-                  <p className="px-4 py-8 text-center text-[15px] text-[#536471]">読み込み中…</p>
-                ) : ideaChieQuestions.length === 0 ? (
-                  <div className="px-4 py-12 text-center">
-                    <p className="text-[15px] text-[#536471]">まだ質問がありません。最初の投稿で次の一手が見えます。</p>
-                    <p className="mt-3 text-[13px] text-[#536471]">上のフォームから質問を投稿できます。</p>
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-[#eff3f4]">
-                    {ideaChieQuestions.map((q) => {
-                      const qi = (q.authorName.trim().charAt(0) || "?").toUpperCase();
-                      const previewTweet =
-                        q.body.trim().length > 0 ? `${q.title.trim()}\n\n${q.body.trim()}` : q.title.trim();
-                      const previewCollapsed = previewTweet.replace(/\s+/g, " ").trim();
-                      return (
-                        <li key={q.id}>
-                          <button
-                            type="button"
-                            className="group flex w-full gap-3 px-4 py-3 text-left transition hover:bg-[#f7f9f9]/90"
-                            onClick={() => {
-                              setIdeaChieDetailId(q.id);
-                              setIdeaChieAnswerDraft("");
-                            }}
-                          >
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-sm font-bold text-white">
-                              {qi}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-baseline gap-x-1.5 text-[15px] leading-tight">
-                                <span className="font-bold text-[#0f1419]">{q.authorName}</span>
-                                <span className="font-normal text-[#536471]">·</span>
-                                <span className="font-normal text-[#536471]">{formatFeedTime(q.createdAtIso)}</span>
-                                {q.bestAnswerId ? (
-                                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                                    解決
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 line-clamp-5 break-words text-[15px] font-normal leading-[1.45] text-[#0f1419]">
-                                {previewCollapsed}
-                              </p>
-                              <div className="mt-3 flex max-w-[420px] items-center text-[13px] text-[#536471]">
-                                <span className="inline-flex items-center gap-2">
-                                  <span
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#536471] transition group-hover:bg-[#e7f5fd] group-hover:text-sky-600"
-                                    aria-hidden
-                                  >
-                                    💬
-                                  </span>
-                                  <span className="tabular-nums">{q.answerCount}</span>
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-          ) : null}
+          <QnABoard
+            session={session}
+            displayName={displayName || effectiveChatSenderName()}
+            avatarUrl={profileAvatarUrl}
+            prefillTitle={qnaPrefillTitle}
+            onPrefillConsumed={() => setQnaPrefillTitle("")}
+            focusToken={qnaFocusToken}
+            onAuthMessage={setAuthMessage}
+            formatTime={formatFeedTime}
+            active={activePage === "posts" && communityView === "qna"}
+            onTrack={trackOpsEvent}
+          />
         </section>
 
-        <section className={`${cardClass} ${activePage === "chat" && chatSubView === "list" ? "" : "hidden"}`}>
-          <div>
-            <h3 className="text-base font-semibold">探す</h3>
-            <p className="mt-1 text-xs text-zinc-500">友達と公開プロジェクトを探せます。メッセージは下の一覧から。</p>
+        <section
+          className={`${cardClass} ${
+            activePage === "chat"
+              ? exploreSegment === "friends"
+                ? "flex min-h-[calc(100dvh-var(--bottom-nav-clearance)-5.25rem)] flex-col"
+                : ""
+              : "hidden"
+          }`}
+        >
+          <div className="shrink-0">
+            <h3 className="text-base font-semibold">{t("searchTitle")}</h3>
+            <p className="mt-1 text-xs text-zinc-500">{t("searchHint")}</p>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
-                exploreSegment === "friends"
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
-              }`}
-              onClick={() => setExploreSegment("friends")}
-            >
-              友達
-            </button>
-            <button
-              type="button"
-              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition ${
-                exploreSegment === "projects"
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-200 bg-zinc-50 text-zinc-900 hover:bg-zinc-100"
-              }`}
-              onClick={() => setExploreSegment("projects")}
-            >
-              プロジェクト
-            </button>
-          </div>
+          <div
+            className={`mt-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white ${
+              exploreSegment === "friends" ? "flex-1" : ""
+            }`}
+          >
+            <div className="grid shrink-0 grid-cols-2 border-b border-zinc-200" role="tablist" aria-label={t("searchTitle")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreSegment === "friends"}
+                className={`min-h-[44px] px-3 text-sm font-semibold transition ${
+                  exploreSegment === "friends"
+                    ? "bg-zinc-900 text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                }`}
+                onClick={() => setExploreSegment("friends")}
+              >
+                {t("searchFriends")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreSegment === "projects"}
+                className={`min-h-[44px] border-l border-zinc-200 px-3 text-sm font-semibold transition ${
+                  exploreSegment === "projects"
+                    ? "border-l-zinc-900 bg-zinc-900 text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                }`}
+                onClick={() => setExploreSegment("projects")}
+              >
+                {t("searchProjects")}
+              </button>
+            </div>
 
-          {exploreSegment === "friends" ? (
-            <div className="mt-3">
-              <form onSubmit={runMatching} className="rounded-xl border border-[#e5e7eb] bg-white p-3">
-                <p className="text-sm font-semibold text-[#262626]">友達を探す</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(Object.keys(AI_MATCH_TYPE_META) as AiMatchType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                      selectedAiType === type
-                        ? "border-[#0095f6] bg-[#e8f4ff] text-[#0f4c81]"
-                        : "border-[#d1d5db] bg-white text-[#4b5563] hover:bg-[#f9fafb]"
-                    }`}
-                    onClick={() => setSelectedAiType((prev) => (prev === type ? null : type))}
-                  >
-                    {AI_MATCH_TYPE_META[type].label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  className={`flex-1 ${inputClass}`}
-                  placeholder="例: 教育 アプリ 発表 が得意な人"
-                  value={matchGoal}
-                  onChange={(e) => setMatchGoal(e.target.value)}
-                />
-                <button className={primaryButtonClass} type="submit">
-                  絞り込む
-                </button>
-              </div>
-            </form>
-              {matchNotice ? <p className="mt-2 text-sm text-[#8e8e8e]">{matchNotice}</p> : null}
-              <ul className="mt-3 space-y-2 text-sm">
-                {matches.map((m) => {
-                  const isSelf = Boolean(m.id && session?.user?.id && m.id === session.user.id);
-                  const followDisabled = !m.id || isSelf;
-                  const isFollowing = Boolean(m.id && followingIds.includes(m.id));
-                  const isPending = Boolean(m.id && outgoingRequestIds.includes(m.id));
-                  const followLabel = !m.id
-                    ? "フォロー不可"
-                    : isSelf
-                      ? "自分"
-                      : isFollowing
-                        ? "フォロー中"
-                        : isPending
-                          ? "申請中"
-                          : "フォロー";
-                  return (
-                    <li
-                      key={m.id ?? `${m.name}-${m.goal}`}
-                      className="relative overflow-hidden rounded-xl border border-[#dbdbdb] bg-white"
-                    >
-                      <button
-                        type="button"
-                        className={`absolute right-2 top-2 z-10 min-h-[32px] rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
-                          isFollowing || isPending
-                            ? "border-zinc-300 bg-zinc-50 text-zinc-700"
-                            : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
-                        }`}
-                        disabled={followDisabled}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!m.id || isSelf) return;
-                          void toggleFollow(m.id);
-                        }}
+            {exploreSegment === "friends" ? (
+              <div className="flex min-h-0 flex-1 flex-col p-3" role="tabpanel">
+                <form onSubmit={runMatching} className="shrink-0">
+                  <p className="text-sm font-semibold text-[#262626]">
+                    {language === "ja" ? "友達を探す" : "Find friends"}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      className={`flex-1 ${inputClass}`}
+                      placeholder="例: 教育 アプリ 発表 が得意な人"
+                      value={matchGoal}
+                      onChange={(e) => setMatchGoal(e.target.value)}
+                    />
+                    <button className={primaryButtonClass} type="submit">
+                      絞り込む
+                    </button>
+                  </div>
+                </form>
+                {matchNotice ? <p className="mt-2 shrink-0 text-sm text-[#8e8e8e]">{matchNotice}</p> : null}
+                <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain text-sm">
+                  {matches.map((m) => {
+                    const isSelf = Boolean(m.id && session?.user?.id && m.id === session.user.id);
+                    const followDisabled = !m.id || isSelf;
+                    const isFollowing = Boolean(m.id && followingIds.includes(m.id));
+                    const isPending = Boolean(m.id && outgoingRequestIds.includes(m.id));
+                    const followLabel = !m.id
+                      ? "フォロー不可"
+                      : isSelf
+                        ? "自分"
+                        : isFollowing
+                          ? "フォロー中"
+                          : isPending
+                            ? "申請中"
+                            : "フォロー";
+                    return (
+                      <li
+                        key={m.id ?? `${m.name}-${m.goal}`}
+                        className="relative overflow-hidden rounded-xl border border-[#dbdbdb] bg-white"
                       >
-                        {followLabel}
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-start gap-3 p-3 pr-[5.5rem] text-left transition hover:bg-zinc-50/90"
-                        onClick={() => setActiveProfileMember(m)}
-                      >
-                        <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className={`absolute right-2 top-2 z-10 min-h-[32px] rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
+                            isFollowing || isPending
+                              ? "border-zinc-300 bg-zinc-50 text-zinc-700"
+                              : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
+                          }`}
+                          disabled={followDisabled}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!m.id || isSelf) return;
+                            void toggleFollow(m.id);
+                          }}
+                        >
+                          {followLabel}
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full items-start gap-3 p-3 pr-[5.5rem] text-left transition hover:bg-zinc-50/90"
+                          onClick={() => setActiveProfileMember(m)}
+                        >
+                          <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="sm" />
+                          <span className="min-w-0 flex-1">
                             <span className="font-semibold text-[#262626]">{m.name}</span>
-                            <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-semibold text-[#3730a3]">
-                              {AI_MATCH_TYPE_META[m.aiType ?? inferAiTypeFromMember(m)].label}
-                            </span>
+                            <p className="mt-1 line-clamp-2 text-sm text-zinc-700">{m.goal}</p>
                           </span>
-                          <p className="mt-1 line-clamp-2 text-sm text-zinc-700">{m.goal}</p>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-3">
-              <DiscoverPublicProjects showSectionHeader />
-            </div>
-          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <div className="p-3" role="tabpanel">
+                <DiscoverPublicProjects showSectionHeader />
+              </div>
+            )}
+          </div>
         </section>
 
         <section className={`${cardClass} ${activePage === "mentor" && mentorSubTab === "validation" ? "" : "hidden"}`}>
@@ -5694,7 +5370,8 @@ export default function Home() {
         </section>
 
         <section
-          className={`overflow-hidden rounded-none border border-[#dbdbdb] bg-white sm:rounded-lg ${activePage === "chat" ? "" : "hidden"} flex min-h-[min(72vh,580px)] flex-col p-0`}
+          className="hidden overflow-hidden rounded-none border border-[#dbdbdb] bg-white sm:rounded-lg"
+          aria-hidden="true"
         >
           {authMessage ? (
             <div
@@ -6142,9 +5819,6 @@ export default function Home() {
                       <h2 id="peer-profile-title" className="truncate text-[22px] font-bold leading-tight tracking-tight text-zinc-900">
                         {activeProfileMember.name}
                       </h2>
-                      <p className="mt-2 text-[15px] font-semibold text-indigo-950">
-                        {AI_MATCH_TYPE_META[activeProfileMember.aiType ?? inferAiTypeFromMember(activeProfileMember)].label}
-                      </p>
                     </div>
                     <button
                       type="button"
@@ -6282,32 +5956,87 @@ export default function Home() {
         </div>
       </div>
 
-      <nav
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 border-t border-[#dbdbdb] bg-white pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5"
-        aria-label="メイン機能の切り替え"
-      >
-        <div className="mx-auto flex w-full max-w-full flex-nowrap justify-between gap-0 overflow-x-auto px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-2 [&::-webkit-scrollbar]:hidden">
-          {featureItems.map((item) => (
-            <button
-              key={item.key}
-              className={`keep-bottom-nav relative min-w-[3.25rem] shrink-0 sm:min-w-0 sm:flex-1 ${bottomNavButtonClass(item.key)} ${
-                activePage === item.key
-                  ? "after:pointer-events-none after:absolute after:bottom-0 after:left-1/2 after:h-[2px] after:w-8 after:-translate-x-1/2 after:rounded-full after:bg-zinc-900"
-                  : ""
-              }`}
-              type="button"
-              onClick={() => {
-                if (item.key === "chat") setChatSubView("list");
-                if (item.key === "posts") setCommunityView("progress");
-                setActivePage(item.key);
-              }}
-              aria-label={featureLabels[language][item.key]}
-              title={featureLabels[language][item.key]}
-            >
-              <span className="text-[1.45rem] leading-none sm:text-[1.35rem]">{item.icon}</span>
-              <span className="hidden max-w-[4.75rem] truncate leading-tight sm:inline">{featureLabels[language][item.key]}</span>
-            </button>
-          ))}
+      <nav className="app-bottom-nav" aria-label="メイン機能の切り替え">
+        <div className="app-bottom-nav-inner">
+          {featureItems.map((item) => {
+            const label = navLabelKeys[item.key] ? t(navLabelKeys[item.key]!) : featureLabels[language][item.key];
+            const className = bottomNavButtonClass(item.key);
+            if (item.key === "account") {
+              return (
+                <Link
+                  key={item.key}
+                  href="/profile"
+                  className={className}
+                  aria-label={label}
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                </Link>
+              );
+            }
+            if (item.key === "projects") {
+              return (
+                <Link
+                  key={item.key}
+                  href={HOME_PROJECTS_HREF}
+                  className={className}
+                  aria-label={label}
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                </Link>
+              );
+            }
+            if (item.key === "posts") {
+              return (
+                <button
+                  key={item.key}
+                  className={className}
+                  type="button"
+                  onClick={() => {
+                    setCommunityView("progress");
+                    setActivePage(item.key);
+                  }}
+                  aria-label={label}
+                  aria-current={activePage === item.key ? "page" : undefined}
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                  {activePage === item.key ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
+                </button>
+              );
+            }
+            return (
+              <button
+                key={item.key}
+                className={className}
+                type="button"
+                onClick={() => {
+                  if (item.key === "chat") setChatSubView("list");
+                  if (item.key === "posts") setCommunityView("progress");
+                  setActivePage(item.key);
+                }}
+                aria-label={label}
+                aria-current={activePage === item.key ? "page" : undefined}
+                title={label}
+              >
+                <span className="app-bottom-nav-item-icon" aria-hidden>
+                  {item.icon}
+                </span>
+                <span className="max-w-[4.5rem] truncate">{label}</span>
+                {activePage === item.key ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
+              </button>
+            );
+          })}
         </div>
       </nav>
       <style jsx global>{`
@@ -6316,95 +6045,36 @@ export default function Home() {
         }
       `}</style>
 
-      {postComposerOpen ? (
+      <ActivityComposer
+        open={postComposerOpen}
+        posting={postPosting}
+        initialTitle={postComposerSeed.title}
+        initialDetail={postComposerSeed.detail}
+        onClose={resetPostComposer}
+        onSubmit={submitActivityRecord}
+      />
+
+      {activityToast ? (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="post-composer-title"
-          onClick={() => !postPosting && resetPostComposer()}
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-[120] flex justify-center px-4"
+          role="status"
         >
-          <div
-            className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 id="post-composer-title" className="text-base font-bold text-zinc-900">
-                進捗を投稿
-              </h3>
-              <button
-                type="button"
-                className="rounded-full p-2 text-lg text-zinc-500 hover:bg-zinc-100"
-                onClick={() => !postPosting && resetPostComposer()}
-                aria-label="閉じる"
-              >
-                ×
-              </button>
-            </div>
-            <form className="mt-4 space-y-3" onSubmit={(e) => void createFeedPost(e)}>
-              <label className="block text-xs font-semibold text-zinc-700" htmlFor="post-composer-body">
-                いまどうしてる？
-              </label>
-              <textarea
-                id="post-composer-body"
-                className={`min-h-[5.5rem] w-full ${inputClass}`}
-                placeholder="進捗や気づきを書いてみよう"
-                value={postCaption}
-                onChange={(e) => setPostCaption(e.target.value)}
-                maxLength={280}
-                autoFocus
-              />
-              {postUploadPreview ? (
-                <div className="overflow-hidden rounded-lg border border-[#dbdbdb] bg-[#fafafa]">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- ユーザー選択ファイルのプレビュー */}
-                  <img src={postUploadPreview} alt="" className="max-h-56 w-full object-cover" />
-                </div>
-              ) : null}
-              <input
-                ref={postFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                capture="environment"
-                className="hidden"
-                onChange={onPostFileChange}
-              />
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-xs text-zinc-500">{postCaption.length}/280</span>
-                <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
-                    onClick={() => postFileInputRef.current?.click()}
-                    disabled={postPosting}
-                    aria-label="写真を選ぶ"
-                  >
-                    <span aria-hidden>📷</span>
-                    写真
-                  </button>
-                  <button
-                    className={`${primaryButtonClass} min-h-[44px] shrink-0`}
-                    type="submit"
-                    disabled={postPosting || (!postFile && !postCaption.trim())}
-                  >
-                    {postPosting ? "投稿中…" : "投稿する"}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
+          <p className="rounded-sm border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+            {activityToast}
+          </p>
         </div>
       ) : null}
 
       {feedDeleteTarget ? (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="feed-delete-title"
           onClick={() => !feedDeleting && setFeedDeleteTarget(null)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
+            className="w-full max-w-sm rounded-t-2xl border border-zinc-200 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="feed-delete-title" className="text-base font-bold text-rose-900">
