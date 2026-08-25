@@ -1,10 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { buildRoadmapTemplateRows, PROJECT_LINE_META } from "@/lib/projects/roadmapTemplates";
+import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
 
@@ -12,29 +12,34 @@ export type AppFeatureKey = "projects" | "posts" | "articles" | "mentor" | "disc
 
 type SortKey = "newest" | "oldest" | "name";
 
+const ICON_BG = [
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-violet-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+];
+
 type Props = {
   displayName: string;
   sessionEmail: string | null;
   hasSession: boolean;
   onNavigate: (key: AppFeatureKey) => void;
-  /** /projects など全画面表示向け */
-  fillViewport?: boolean;
 };
 
-const ProjectCubeCarousel = dynamic(
-  () => import("@/components/projects/ProjectCubeCarousel").then((m) => m.ProjectCubeCarousel),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="relative h-full min-h-0 w-full flex-1" aria-busy>
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_40%,#f4f4f5_0%,#ffffff_70%)]">
-          <div className="h-[min(48vmin,420px)] w-[min(48vmin,420px)] animate-pulse rounded-3xl bg-zinc-200/70" />
-          <p className="mt-4 text-xs text-zinc-400">3Dを準備中…</p>
-        </div>
-      </div>
-    ),
-  },
-);
+const sidebarItems: { key: AppFeatureKey; label: string; icon: string }[] = [
+  { key: "posts", label: "ホーム", icon: "⌂" },
+  { key: "projects", label: "プロジェクト", icon: "▦" },
+  { key: "chat", label: "検索", icon: "⌕" },
+  { key: "account", label: "プロフィール", icon: "◉" },
+];
+
+function hashIndex(id: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % mod;
+}
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
 const PROJECT_LIST_SELECT =
@@ -46,9 +51,7 @@ function chunkIds<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export function ProjectTabGlide({ displayName: _displayName, sessionEmail: _sessionEmail, hasSession, onNavigate, fillViewport = false }: Props) {
-  void _displayName;
-  void _sessionEmail;
+export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavigate }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -284,49 +287,47 @@ export function ProjectTabGlide({ displayName: _displayName, sessionEmail: _sess
   }
 
   return (
-    <div
-      className={
-        fillViewport
-          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
-          : "flex min-h-[min(72vh,720px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 shadow-sm"
-      }
-    >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-        <header
-          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 bg-white/90 px-3 backdrop-blur-sm sm:px-5 ${
-            fillViewport ? "py-1.5" : "px-4 py-2.5 lg:px-6"
-          }`}
-        >
-          <div className={fillViewport ? "min-w-0" : undefined}>
-            <h2
-              className={`font-bold tracking-tight text-zinc-900 ${
-                fillViewport ? "text-base sm:text-lg" : "text-xl sm:text-2xl"
+    <div className="flex min-h-[min(72vh,720px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 shadow-sm sm:flex-row">
+      {/* サイドバー：Glide風（md+） */}
+      <aside className="hidden w-[220px] shrink-0 flex-col border-b border-zinc-200 bg-white sm:border-b-0 sm:border-r md:flex">
+        <div className="border-b border-zinc-100 p-3">
+          <p className="text-xs font-medium text-zinc-500">Free</p>
+          <p className="truncate text-sm font-semibold text-zinc-900">{displayName.trim() || "moni"}</p>
+          <p className="truncate text-[11px] text-zinc-400">{sessionEmail ?? ""}</p>
+        </div>
+        <nav className="flex-1 space-y-0.5 p-2">
+          {sidebarItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                onNavigate(item.key);
+              }}
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm ${
+                item.key === "projects" ? "bg-zinc-100 font-semibold text-zinc-900" : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              マイプロジェクト
-            </h2>
-            {fillViewport ? null : (
-              <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
-            )}
+              <span className="text-base opacity-80">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="min-w-0 flex-1 bg-white">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-3 sm:px-4">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">マイプロジェクト</h2>
+            <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
           </div>
-          <div className="flex flex-1 items-center justify-end gap-1.5 sm:flex-initial sm:min-w-0 sm:gap-2">
-            <label className={`relative min-w-0 flex-1 ${fillViewport ? "max-w-[9.5rem] sm:max-w-xs" : "sm:max-w-xs"}`}>
-              <span
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] leading-none sm:left-3 sm:text-[15px]"
-                aria-hidden
-              >
-                🔍
-              </span>
-              <input
-                className={`w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-8 pr-2 text-sm outline-none focus:border-zinc-400 sm:pl-9 sm:pr-3 sm:text-sm ${
-                  fillViewport ? "min-h-[36px] py-1.5 text-xs" : "min-h-[44px] py-2 text-base"
-                }`}
-                placeholder="検索"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="プロジェクトを検索"
-              />
-            </label>
+          <div className="flex flex-1 items-center justify-end gap-2 sm:flex-initial sm:min-w-0">
+            <input
+              className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-zinc-400 sm:max-w-xs"
+              placeholder="検索 ⌘K 風"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="プロジェクトを検索"
+            />
             <button
               type="button"
               disabled={!hasSession || inviteEligibleProjects.length === 0}
@@ -341,64 +342,78 @@ export function ProjectTabGlide({ displayName: _displayName, sessionEmail: _sess
                 if (!hasSession || inviteEligibleProjects.length === 0) return;
                 setInviteOpen(true);
               }}
-              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${
-                fillViewport ? "min-h-[36px] min-w-[36px] px-2 text-xs font-semibold" : "min-h-[44px] px-3 text-sm font-semibold"
-              } text-zinc-800`}
+              className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
-              招待
+              招待リンク
             </button>
-            <label className="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
-              <span className="sr-only sm:not-sr-only">並び</span>
-              <select
-                className={`rounded-lg border border-zinc-200 bg-white text-zinc-800 ${
-                  fillViewport ? "px-1.5 py-1 text-[11px]" : "px-2 py-1 text-xs"
-                }`}
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                aria-label="並び順"
-              >
-                <option value="newest">新しい順</option>
-                <option value="oldest">古い順</option>
-                <option value="name">名前</option>
-              </select>
-            </label>
           </div>
         </header>
 
-        {err ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
-            <p className="text-sm text-rose-600">{err}</p>
-            <button
-              type="button"
-              className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700"
-              onClick={() => void load()}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-zinc-100 px-3 py-2 sm:px-4">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <span>並び</span>
+            <select
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
             >
-              再読み込み
-            </button>
+              <option value="newest">新しい順</option>
+              <option value="oldest">古い順</option>
+              <option value="name">名前</option>
+            </select>
           </div>
-        ) : null}
+        </div>
+
+        {err ? <p className="px-4 py-2 text-sm text-rose-600">{err}</p> : null}
         {inviteToast ? <p className="px-4 py-1 text-center text-xs font-medium text-emerald-700">{inviteToast}</p> : null}
 
-        <div
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
-            fillViewport ? "relative min-h-0 p-0" : "px-1 pt-1 pb-2 sm:px-2"
-          }`}
-        >
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <ProjectCubeCarousel
-              projects={displayList}
-              currentUserId={currentUserId}
-              joinedIds={joinedIds}
-              loading={loading}
-              onCreate={() => setCreateOpen(true)}
-            />
+        <div className="p-3 pb-28 sm:p-4 sm:pb-24">
+          {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {/* 新規カード（Glide の +） */}
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="group flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">+</span>
+              <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
+              <span className="text-center text-[11px] text-zinc-500">作って仲間を集める</span>
+            </button>
+
+            {displayList.map((p) => {
+              const c = ICON_BG[hashIndex(p.id, ICON_BG.length)];
+              return (
+                <div key={p.id} className="group relative">
+                  <Link
+                    href={`/projects/${p.id}/overview`}
+                    prefetch
+                    className="relative z-10 flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:shadow-lg active:opacity-90"
+                  >
+                    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${c} text-2xl text-white shadow-sm`} aria-hidden>
+                      {(p.name.trim().charAt(0) || "P").toUpperCase()}
+                    </div>
+                    <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{p.name}</p>
+                    <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">{projectLineShortLabel(p.business_type)}</p>
+                    <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                      {p.visibility === "public" ? "公開" : "非公開"}
+                      {currentUserId && p.owner_id === currentUserId ? " ・ オーナー" : ""}
+                      {joinedIds.has(p.id) ? " ・ メンバー" : ""}
+                    </p>
+                    <div className="pointer-events-none absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                      <span className="rounded bg-white/90 px-1.5 text-[10px] text-zinc-500">⋯</span>
+                    </div>
+                  </Link>
+                </div>
+              );
+            })}
           </div>
 
           {!loading && displayList.length === 0 ? (
-            <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
-              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
+            <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center">
+              <p className="text-sm font-semibold text-zinc-800">参加しているプロジェクトはまだありません。</p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。キューブの「新規」面からも作成できます。
+                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button
@@ -410,7 +425,7 @@ export function ProjectTabGlide({ displayName: _displayName, sessionEmail: _sess
                 </button>
                 <button
                   type="button"
-                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
                   onClick={() => {
                     onNavigate("chat");
                   }}
@@ -420,6 +435,20 @@ export function ProjectTabGlide({ displayName: _displayName, sessionEmail: _sess
               </div>
             </div>
           ) : null}
+        </div>
+
+        {/* フローティング風 CTA（簡易版） */}
+        <div className="sticky bottom-0 border-t border-zinc-100 bg-white/90 px-3 py-2 backdrop-blur sm:px-4">
+          <div className="mx-auto flex max-w-lg flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:pr-1">
+            <p className="pl-1 text-xs text-zinc-500 sm:flex-1">次の一手は、コミュニティで進捗共有か質問相談。</p>
+            <button
+              type="button"
+              className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2 text-xs font-semibold text-white"
+              onClick={() => onNavigate("posts")}
+            >
+              コミュニティへ
+            </button>
+          </div>
         </div>
       </div>
 
