@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ProjectsLinearHome } from "@/components/projects/workspace/ProjectsLinearHome";
+import { ProjectsHomeView } from "@/components/projects/ProjectsHomeView";
 
 export const metadata: Metadata = {
   title: "プロジェクト | moni",
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ProjectsPage() {
-  return <ProjectsLinearHome />;
+  return <ProjectsHomeView />;
 }
