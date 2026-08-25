@@ -23,6 +23,7 @@ import {
   type OnboardingTeamSize,
 } from "@/lib/projects/coachingContext";
 import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboardingWizard";
+import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal";
 import { buildStudentRoadmapTemplateRowsWithProgress } from "@/lib/projects/studentRoadmapTemplates";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
@@ -137,6 +138,8 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [transferTargetId, setTransferTargetId] = useState("");
   const [editNameDraft, setEditNameDraft] = useState("");
   const [editThumbDraft, setEditThumbDraft] = useState("");
+  const [thumbCropSource, setThumbCropSource] = useState<string | null>(null);
+  const [thumbUploading, setThumbUploading] = useState(false);
   const [editDescriptionDraft, setEditDescriptionDraft] = useState("");
   const [editCategoryDraft, setEditCategoryDraft] = useState("");
   const [editBusinessTypeDraft, setEditBusinessTypeDraft] = useState<"maker" | "software" | "social">("software");
@@ -1509,7 +1512,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       {groupProfileOpen && selectedProject ? (
         <div
           className="fixed inset-0 z-[85] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          onClick={() => !projectSaving && setGroupProfileOpen(false)}
+          onClick={() => !projectSaving && !thumbUploading && setGroupProfileOpen(false)}
           role="presentation"
         >
           <div
@@ -1524,13 +1527,62 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               value={editNameDraft}
               onChange={(e) => setEditNameDraft(e.target.value)}
             />
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">写真（画像URL）</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              placeholder="https://..."
-              value={editThumbDraft}
-              onChange={(e) => setEditThumbDraft(e.target.value)}
-            />
+            <label className="mt-3 block text-xs font-semibold text-zinc-700">キューブ用の写真</label>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
+              長方形の写真でもOK。切り抜きで正方形にしてからキューブの面いっぱいに表示します。
+            </p>
+            <div className="mt-2 flex items-start gap-3">
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
+                {editThumbDraft.trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={editThumbDraft.trim()} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-[11px] text-zinc-400">未設定</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <label className="inline-flex min-h-[40px] cursor-pointer items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-800 hover:bg-zinc-50">
+                  {thumbUploading ? "アップロード中…" : "画像を選んで切り抜く"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={thumbUploading || projectSaving || !uid}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      const v = validateProjectImageFile(file);
+                      if (v) {
+                        setActionErr(v);
+                        return;
+                      }
+                      setActionErr("");
+                      setThumbCropSource(URL.createObjectURL(file));
+                    }}
+                  />
+                </label>
+                {editThumbDraft.trim() ? (
+                  <button
+                    type="button"
+                    className="block text-xs font-semibold text-rose-600 hover:underline"
+                    onClick={() => setEditThumbDraft("")}
+                    disabled={thumbUploading || projectSaving}
+                  >
+                    写真を外す
+                  </button>
+                ) : null}
+                <details className="text-[11px] text-zinc-500">
+                  <summary className="cursor-pointer font-semibold text-zinc-600">URLで指定（任意）</summary>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                    placeholder="https://..."
+                    value={editThumbDraft}
+                    onChange={(e) => setEditThumbDraft(e.target.value)}
+                  />
+                </details>
+              </div>
+            </div>
             <label className="mt-3 block text-xs font-semibold text-zinc-700">説明</label>
             <textarea
               className="mt-1 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
@@ -1570,13 +1622,13 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 type="button"
                 className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700"
                 onClick={() => setGroupProfileOpen(false)}
-                disabled={projectSaving}
+                disabled={projectSaving || thumbUploading}
               >
                 キャンセル
               </button>
               <button
                 type="button"
-                disabled={projectSaving}
+                disabled={projectSaving || thumbUploading}
                 className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => void saveProjectProfile()}
               >
@@ -1586,6 +1638,34 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           </div>
         </div>
       ) : null}
+
+      <SquareImageCropModal
+        open={Boolean(thumbCropSource)}
+        sourceUrl={thumbCropSource ?? ""}
+        onCancel={() => {
+          if (thumbCropSource?.startsWith("blob:")) URL.revokeObjectURL(thumbCropSource);
+          setThumbCropSource(null);
+        }}
+        onConfirm={async (blob) => {
+          if (!supabase || !uid || !selectedProject) {
+            setActionErr("ログインが必要です。");
+            return;
+          }
+          setThumbUploading(true);
+          setActionErr("");
+          try {
+            const file = new File([blob], `cube-thumb-${Date.now()}.jpg`, { type: "image/jpeg" });
+            const uploaded = await uploadProjectImage(supabase, uid, "project-thumb", selectedProject.id, file);
+            setEditThumbDraft(uploaded.publicUrl);
+            if (thumbCropSource?.startsWith("blob:")) URL.revokeObjectURL(thumbCropSource);
+            setThumbCropSource(null);
+          } catch (e) {
+            setActionErr(e instanceof Error ? e.message : "画像のアップロードに失敗しました");
+          } finally {
+            setThumbUploading(false);
+          }
+        }}
+      />
 
       {transferOwnerOpen && selectedProject ? (
         <div

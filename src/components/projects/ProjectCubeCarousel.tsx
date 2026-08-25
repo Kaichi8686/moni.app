@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, RoundedBox, Html } from "@react-three/drei";
+import { ContactShadows, Environment, Html } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -61,30 +61,32 @@ function makeFaceTexture(opts: {
     return tex;
   }
 
-  ctx.fillStyle = opts.bg;
-  ctx.fillRect(0, 0, 512, 512);
+  const paintFallback = () => {
+    ctx.fillStyle = opts.bg;
+    ctx.fillRect(0, 0, 512, 512);
+    const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
+    vignette.addColorStop(0, "rgba(255,255,255,0.18)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, 512, 512);
+    if (opts.create) {
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 36;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(256, 140);
+      ctx.lineTo(256, 372);
+      ctx.moveTo(140, 256);
+      ctx.lineTo(372, 256);
+      ctx.stroke();
+    } else {
+      const icon = opts.icon?.trim() || "";
+      if (icon) drawCenteredGlyph(ctx, icon, true);
+      else if (opts.letter) drawCenteredGlyph(ctx, opts.letter, false);
+    }
+  };
 
-  const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
-  vignette.addColorStop(0, "rgba(255,255,255,0.18)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.22)");
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, 512, 512);
-
-  if (opts.create) {
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 36;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(256, 140);
-    ctx.lineTo(256, 372);
-    ctx.moveTo(140, 256);
-    ctx.lineTo(372, 256);
-    ctx.stroke();
-  } else {
-    const icon = opts.icon?.trim() || "";
-    if (icon) drawCenteredGlyph(ctx, icon, true);
-    else if (opts.letter) drawCenteredGlyph(ctx, opts.letter, false);
-  }
+  paintFallback();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -97,15 +99,13 @@ function makeFaceTexture(opts: {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      // Cover the full square face (no letterboxing / edge bleed).
+      // Edge-to-edge cover: no letterbox, no vignette (avoids edge-bleed look on cube faces).
       ctx.fillStyle = opts.bg;
       ctx.fillRect(0, 0, 512, 512);
       const scale = Math.max(512 / img.width, 512 / img.height);
       const w = img.width * scale;
       const h = img.height * scale;
       ctx.drawImage(img, (512 - w) / 2, (512 - h) / 2, w, h);
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, 512, 512);
       texture.needsUpdate = true;
     };
     img.onerror = () => {};
@@ -210,10 +210,8 @@ function ProjectCube({
 
   return (
     <group ref={groupRef} position={[2.85 * side, 0, active ? 0.15 : -1.35]}>
-      <RoundedBox
-        args={[1.9, 1.9, 1.9]}
-        radius={0.14}
-        smoothness={4}
+      {/* BoxGeometry gives clean 0–1 UVs per face (RoundedBox extrude UVs caused edge bleed). */}
+      <mesh
         castShadow
         receiveShadow
         material={materials}
@@ -232,7 +230,9 @@ function ProjectCube({
           e.stopPropagation();
           if (active) onOpen();
         }}
-      />
+      >
+        <boxGeometry args={[1.9, 1.9, 1.9]} />
+      </mesh>
     </group>
   );
 }
