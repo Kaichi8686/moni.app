@@ -154,6 +154,59 @@ create policy "insert chat messages scoped" on public.chat_messages for insert w
   )
 );
 
+-- AIメンター（PC/スマホで会話同期用）
+create table if not exists public.mentor_conversations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  cleared_at timestamptz
+);
+
+alter table public.mentor_conversations enable row level security;
+
+create policy "read own mentor conversations" on public.mentor_conversations for select using (
+  user_id = auth.uid()
+);
+
+create policy "insert own mentor conversations" on public.mentor_conversations for insert with check (
+  user_id = auth.uid()
+);
+
+create policy "update own mentor conversations" on public.mentor_conversations for update using (
+  user_id = auth.uid()
+);
+
+create table if not exists public.mentor_chat_messages (
+  -- フロントが作るユニーク文字列ID（重複しない想定）
+  id text primary key,
+  conversation_id uuid not null references public.mentor_conversations (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.mentor_chat_messages enable row level security;
+
+create policy "read own mentor chat messages" on public.mentor_chat_messages for select using (
+  exists (
+    select 1
+    from public.mentor_conversations c
+    where c.id = mentor_chat_messages.conversation_id
+      and c.user_id = auth.uid()
+  )
+);
+
+create policy "insert own mentor chat messages" on public.mentor_chat_messages for insert with check (
+  user_id = auth.uid()
+  and exists (
+    select 1
+    from public.mentor_conversations c
+    where c.id = mentor_chat_messages.conversation_id
+      and c.user_id = auth.uid()
+  )
+);
+
 -- タイムライン投稿（インスタ風フィード）
 create table if not exists public.posts (
   id uuid primary key default gen_random_uuid(),

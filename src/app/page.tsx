@@ -168,7 +168,9 @@ const MENTOR_WELCOME_TEXT =
   "こんにちは。なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。";
 
 function createMentorWelcomeMessage(): MentorChatMessage {
-  return { id: "mentor-welcome", role: "assistant", content: MENTOR_WELCOME_TEXT };
+  const rid =
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return { id: `mentor-welcome-${rid}`, role: "assistant", content: MENTOR_WELCOME_TEXT };
 }
 
 type DmPeerRow = { room_id: string; peer_id: string; peer_name: string };
@@ -696,6 +698,7 @@ export default function Home() {
   const [mentorMessages, setMentorMessages] = useState<MentorChatMessage[]>(() => [
     createMentorWelcomeMessage(),
   ]);
+  const [mentorConversationId, setMentorConversationId] = useState<string | null>(null);
   const [mentorInput, setMentorInput] = useState("");
   const [mentorLoading, setMentorLoading] = useState(false);
   const [mentorError, setMentorError] = useState("");
@@ -2534,6 +2537,129 @@ export default function Home() {
     setSessionEmail(null);
   }
 
+  async function ensureMentorConversationId(): Promise<string | null> {
+    if (!supabase || !session) return null;
+    if (mentorConversationId) return mentorConversationId;
+
+    // まず「未クリア」会話があればそれを使う
+    const { data: existing, error: existingErr } = await supabase
+      .from("mentor_conversations")
+      .select("id")
+      .eq("user_id", session.user.id)
+      .is("cleared_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingErr || !existing?.id) {
+      const { data: created, error: createdErr } = await supabase
+        .from("mentor_conversations")
+        .insert({ user_id: session.user.id })
+        .select("id")
+        .maybeSingle();
+      if (createdErr || !created?.id) return null;
+
+      setMentorConversationId(created.id as string);
+
+      // 初回作成時のみ、現在のローカル状態をDBに書き込む（welcome等）
+      try {
+        const { data: hasAny } = await supabase
+          .from("mentor_chat_messages")
+          .select("id")
+          .eq("conversation_id", created.id)
+          .limit(1);
+        if ((hasAny ?? []).length === 0 && mentorMessages.length > 0) {
+          await supabase.from("mentor_chat_messages").insert(
+            mentorMessages.map((m) => ({
+              id: m.id,
+              conversation_id: created.id,
+              user_id: session.user.id,
+              role: m.role,
+              content: m.content,
+            })),
+          );
+        }
+      } catch {
+        // 書き込み失敗でも会話自体は続行する
+      }
+
+      return created.id as string;
+    }
+
+    setMentorConversationId(existing.id as string);
+    return existing.id as string;
+  }
+
+  useEffect(() => {
+    if (activePage !== "mentor") return;
+    if (!canUseSupabase || !supabase || !session) return;
+
+    let cancelled = false;
+    void (async () => {
+      // 未クリア会話（最新）をロード
+      const { data: existingConv, error: convErr } = await supabase
+        .from("mentor_conversations")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .is("cleared_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      let convId = existingConv?.id as string | undefined;
+      if (!convId || convErr) {
+        const { data: created, error: createdErr } = await supabase
+          .from("mentor_conversations")
+          .insert({ user_id: session.user.id })
+          .select("id")
+          .maybeSingle();
+        if (cancelled) return;
+        if (createdErr || !created?.id) return;
+        convId = created.id as string;
+      }
+
+      setMentorConversationId(convId);
+
+      const { data: rows, error: msgErr } = await supabase
+        .from("mentor_chat_messages")
+        .select("id,role,content")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: true })
+        .limit(200);
+
+      if (cancelled) return;
+      if (msgErr) return;
+
+      const loaded = (rows ?? []).map((r) => ({
+        id: r.id as string,
+        role: r.role as MentorChatMessage["role"],
+        content: r.content as string,
+      }));
+
+      if (loaded.length > 0) {
+        setMentorMessages(loaded);
+        return;
+      }
+
+      // メッセージが無ければ welcome を初期投入
+      const welcome = createMentorWelcomeMessage();
+      setMentorMessages([welcome]);
+      await supabase.from("mentor_chat_messages").insert({
+        id: welcome.id,
+        conversation_id: convId,
+        user_id: session.user.id,
+        role: welcome.role,
+        content: welcome.content,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePage, canUseSupabase, supabase, session]);
+
   useEffect(() => {
     mentorScrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [mentorMessages, mentorLoading]);
@@ -2553,6 +2679,7 @@ export default function Home() {
       role: "user",
       content: text,
     };
+    const convId = await ensureMentorConversationId();
     const history = [...mentorMessages, userMsg];
     setMentorInput("");
     setMentorMessages(history);
@@ -2560,6 +2687,16 @@ export default function Home() {
     setMentorError("");
 
     try {
+      if (convId && supabase && session) {
+        await supabase.from("mentor_chat_messages").insert({
+          id: userMsg.id,
+          conversation_id: convId,
+          user_id: session.user.id,
+          role: userMsg.role,
+          content: userMsg.content,
+        });
+      }
+
       const response = await fetch("/api/mentor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2573,14 +2710,22 @@ export default function Home() {
         setMentorError(result.error ?? "AIメンターの生成に失敗しました。");
         return;
       }
-      setMentorMessages((prev) => [
-        ...prev,
-        {
-          id: `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
-          role: "assistant",
-          content: assistantReply,
-        },
-      ]);
+      const assistantMsg: MentorChatMessage = {
+        id: `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+        role: "assistant",
+        content: assistantReply,
+      };
+
+      setMentorMessages((prev) => [...prev, assistantMsg]);
+      if (convId && supabase && session) {
+        await supabase.from("mentor_chat_messages").insert({
+          id: assistantMsg.id,
+          conversation_id: convId,
+          user_id: session.user.id,
+          role: assistantMsg.role,
+          content: assistantMsg.content,
+        });
+      }
       trackOpsEvent("first_ai_consult_completed");
     } catch {
       setMentorError("AIメンターに接続できませんでした。");
@@ -2589,9 +2734,39 @@ export default function Home() {
     }
   }
 
-  function clearMentorChat() {
-    setMentorMessages([createMentorWelcomeMessage()]);
+  async function clearMentorChat() {
+    const welcome = createMentorWelcomeMessage();
+    setMentorMessages([welcome]);
     setMentorError("");
+
+    if (!supabase || !session || !mentorConversationId) return;
+
+    try {
+      // 現在会話を「クリア済み」にする
+      await supabase.from("mentor_conversations").update({ cleared_at: new Date().toISOString() }).eq("id", mentorConversationId).eq("user_id", session.user.id);
+
+      // 新しい会話を作成
+      const { data: created, error: createdErr } = await supabase
+        .from("mentor_conversations")
+        .insert({ user_id: session.user.id })
+        .select("id")
+        .maybeSingle();
+      if (createdErr || !created?.id) return;
+
+      const newConvId = created.id as string;
+      setMentorConversationId(newConvId);
+
+      // 新会話に welcome を初期投入
+      await supabase.from("mentor_chat_messages").insert({
+        id: welcome.id,
+        conversation_id: newConvId,
+        user_id: session.user.id,
+        role: welcome.role,
+        content: welcome.content,
+      });
+    } catch {
+      // 失敗してもローカル状態は維持する
+    }
   }
 
   async function runMatching(event: FormEvent) {
@@ -5005,7 +5180,7 @@ export default function Home() {
               <button
                 type="button"
                 className="rounded-md border border-[#d1d5db] bg-white px-3 py-1.5 text-xs font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
-                onClick={clearMentorChat}
+                onClick={() => void clearMentorChat()}
               >
                 新しい相談
               </button>
