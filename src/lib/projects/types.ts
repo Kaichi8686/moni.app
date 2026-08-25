@@ -26,6 +26,8 @@ export type ProjectRow = {
   business_type?: "maker" | "software" | "social" | null;
   tags: string[];
   thumbnail_url: string | null;
+  /** キューブ面などに使う絵文字アイコン（カラム未適用時は欠落しうる） */
+  icon?: string | null;
   visibility: ProjectVisibility;
   recruitment_target: string;
   recruitment_message: string;
