@@ -1,10 +1,10 @@
 ---
-description: このリポジトリが現行 moni。親の旧静的MVPは触らない
+description: moni アプリ本体はこのフォルダだけ
 alwaysApply: true
 ---
 
-# moni (dream-spark-pro)
+# moni
 
-- このディレクトリが **現行 moni**（Next.js + Supabase + Vercel）。
-- 親の `moni/_archive/legacy-static-mvp/` は初期静的試作。**編集しない。**
-- `npm` / `vercel` / `git` はここ（dream-spark-pro）で実行する。
+- このフォルダが現行 moni（GitHub名: `moni.app`）。
+- `npm` / `vercel` / `git` はここで実行する。
+- 以前の `dream-spark-pro` ネストは廃止済み。
