@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import type { AiTaskSuggestion } from "@/lib/ai/studentCoachPrompt";
+import { parseCoachingContext, resolveUserSituation } from "@/lib/projects/coachingContext";
 import type { ProjectMemberRow, ProjectRow, ProjectTaskRow } from "@/lib/projects/types";
+import type { UserSituation } from "@/lib/projects/userSituation";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
+import { UserSituationPicker } from "@/components/projects/UserSituationPicker";
 
 type Props = { projectId?: string };
 
@@ -68,7 +72,8 @@ export function ProjectsWorkspace({ projectId }: Props) {
   const [noteDraft, setNoteDraft] = useState("");
   const [tasks, setTasks] = useState<ProjectTaskRow[]>([]);
   const [taskTitle, setTaskTitle] = useState("");
-  const [aiSuggestions, setAiSuggestions] = useState<Array<{ title: string; description: string; priority: "low" | "medium" | "high"; status: "todo" }>>([]);
+  const [aiSuggestions, setAiSuggestions] = useState<AiTaskSuggestion[]>([]);
+  const [aiUserSituation, setAiUserSituation] = useState<UserSituation | null>(null);
   const [requestMessage, setRequestMessage] = useState("");
   const [activeCallUrl, setActiveCallUrl] = useState("");
   const [activeCallSessionId, setActiveCallSessionId] = useState<string | null>(null);
@@ -362,18 +367,30 @@ export function ProjectsWorkspace({ projectId }: Props) {
     await loadProjectDetail(selected.id);
   }
 
-  async function addTask(aiGenerated = false, suggestion?: { title: string; description: string; priority: "low" | "medium" | "high"; status: "todo" }) {
+  async function addTask(aiGenerated = false, suggestion?: AiTaskSuggestion) {
     if (!supabase || !selected || !uid) return;
     const title = suggestion?.title ?? taskTitle.trim();
     if (!title) return;
+    const meta =
+      suggestion?.estimatedMinutes || suggestion?.difficulty || suggestion?.fallback
+        ? {
+            inputKind: "none" as const,
+            answerVisibility: "shared" as const,
+            estimatedMinutes: suggestion.estimatedMinutes,
+            difficulty: suggestion.difficulty,
+            fallback: suggestion.fallback,
+            priorityLabel: suggestion.priorityLabel,
+          }
+        : undefined;
     const payload = {
       project_id: selected.id,
       title,
-      description: suggestion?.description ?? "",
+      description: suggestion?.fallback ? `困ったとき: ${suggestion.fallback}` : suggestion?.description ?? "",
       priority: suggestion?.priority ?? "medium",
       status: "not_started",
       created_by: uid,
       ai_generated: aiGenerated,
+      meta,
     };
     const { error } = await supabase.from("project_tasks").insert(payload);
     if (error) setErr(error.message);
@@ -394,7 +411,10 @@ export function ProjectsWorkspace({ projectId }: Props) {
   }, [memberRole, isOwnerOfSelected]);
 
   async function generateAiTasks() {
-    if (!selected) return;
+    if (!selected || !aiUserSituation) {
+      setErr("AI提案の前に「今の状況」を選んでください。");
+      return;
+    }
     const res = await fetch("/api/projects/ai-task-suggestions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -402,11 +422,22 @@ export function ProjectsWorkspace({ projectId }: Props) {
         projectName: selected.name,
         projectDescription: selected.description,
         recentChat: chat.slice(-8).map((c) => c.body),
+        userSituation: aiUserSituation,
+        userInput: selected.description,
       }),
     });
-    const data = (await res.json().catch(() => ({}))) as { suggestions?: Array<{ title: string; description: string; priority: "low" | "medium" | "high"; status: "todo" }> };
+    const data = (await res.json().catch(() => ({}))) as { suggestions?: AiTaskSuggestion[]; error?: string };
+    if (data.error) setErr(data.error);
     setAiSuggestions((data.suggestions ?? []).slice(0, 6));
   }
+
+  useEffect(() => {
+    if (!selected) {
+      setAiUserSituation(null);
+      return;
+    }
+    setAiUserSituation(resolveUserSituation(parseCoachingContext(selected.coaching_context)) ?? null);
+  }, [selected]);
 
   if (!uid) {
     return <main className="mx-auto w-full max-w-3xl p-4 text-sm text-zinc-600">ログインするとプロジェクト機能を使えます。</main>;
@@ -684,10 +715,19 @@ export function ProjectsWorkspace({ projectId }: Props) {
 
               <section className={card}>
                 <h3 className="text-base font-semibold">タスク / AI提案</h3>
+                <div className="mt-3">
+                  <UserSituationPicker
+                    value={aiUserSituation}
+                    onChange={setAiUserSituation}
+                    compact
+                  />
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <input className={input} placeholder="手動タスク追加" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
                   <button className={button} onClick={() => void addTask(false)}>追加</button>
-                  <button className={subButton} onClick={() => void generateAiTasks()}>AI提案を生成</button>
+                  <button className={subButton} onClick={() => void generateAiTasks()} disabled={!aiUserSituation}>
+                    AI提案を生成
+                  </button>
                 </div>
                 {aiSuggestions.length > 0 ? (
                   <ul className="mt-2 space-y-2">
@@ -695,6 +735,12 @@ export function ProjectsWorkspace({ projectId }: Props) {
                       <li key={`${s.title}-${i}`} className="rounded-xl border border-sky-200 bg-sky-50 p-2 text-sm">
                         <p className="font-semibold">{s.title}</p>
                         <p className="text-zinc-600">{s.description}</p>
+                        <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-zinc-500">
+                          {s.estimatedMinutes ? <span>約{s.estimatedMinutes}分</span> : null}
+                          {s.difficulty ? <span>· {s.difficulty}</span> : null}
+                          {s.priorityLabel ? <span>· {s.priorityLabel}</span> : null}
+                        </div>
+                        {s.fallback ? <p className="mt-1 text-[11px] text-zinc-500">困ったとき: {s.fallback}</p> : null}
                         <button className={`${button} mt-1`} onClick={() => void addTask(true, s)}>採用してタスク化</button>
                       </li>
                     ))}

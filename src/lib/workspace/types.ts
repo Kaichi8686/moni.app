@@ -4,6 +4,9 @@ export type ProjectStatus = "backlog" | "planned" | "in_progress" | "paused" | "
 export type IssueStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
 export type Priority = "no_priority" | "urgent" | "high" | "medium" | "low";
 
+import type { IssueWorkflow } from "@/lib/workspace/issueWorkflow";
+export type { IssueWorkflow, IssueWorkflowStep } from "@/lib/workspace/issueWorkflow";
+
 export interface Member {
   id: string;
   name: string;
@@ -24,6 +27,9 @@ export interface Issue {
   updatedAt: string;
   description?: string;
   labels: string[];
+  workflow?: IssueWorkflow;
+  /** workflow.completionAnswer のショートカット */
+  completionAnswer?: string;
 }
 
 export interface Phase {

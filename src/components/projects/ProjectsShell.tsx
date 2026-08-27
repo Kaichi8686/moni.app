@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { AppBottomNav } from "@/components/AppBottomNav";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 
 export function ProjectsShell({ children }: { children: React.ReactNode }) {
@@ -11,6 +12,7 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
     <>
       {children}
       <CommandPalette projectId={projectId} />
+      <AppBottomNav />
     </>
   );
 }

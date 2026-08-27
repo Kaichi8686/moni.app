@@ -44,6 +44,19 @@ export function parseTaskMeta(raw: unknown): ProjectTaskMeta {
   const todaySlot = parseTodaySlot(o.todaySlot);
   const consultHint = typeof o.consultHint === "string" ? o.consultHint : undefined;
   const blockedReasonCode = parseBlockedReason(o.blockedReasonCode);
+  let difficulty: ProjectTaskMeta["difficulty"];
+  if (
+    o.difficulty === "すぐできる" ||
+    o.difficulty === "ちょっと勇気がいる" ||
+    o.difficulty === "誰かと一緒にやろう"
+  ) {
+    difficulty = o.difficulty;
+  }
+  const fallback = typeof o.fallback === "string" ? o.fallback : undefined;
+  let priorityLabel: ProjectTaskMeta["priorityLabel"];
+  if (o.priorityLabel === "今日やるべき" || o.priorityLabel === "今週中にやる" || o.priorityLabel === "余裕があれば") {
+    priorityLabel = o.priorityLabel;
+  }
   return {
     inputKind,
     choiceOptions,
@@ -59,6 +72,9 @@ export function parseTaskMeta(raw: unknown): ProjectTaskMeta {
     todaySlot,
     consultHint,
     blockedReasonCode,
+    difficulty,
+    fallback,
+    priorityLabel,
   };
 }
 

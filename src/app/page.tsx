@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MoniLanding } from "@/components/MoniLanding";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
 import { ActivityComposer, type ActivityComposerSubmitPayload } from "@/components/feed/ActivityComposer";
 import { ActivityTimeline } from "@/components/feed/ActivityTimeline";
@@ -14,6 +15,7 @@ import { formatActivityCaption, parseActivityCaption, categoryToPostType } from 
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
+import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import {
   emptyReactionCounts,
   loadPostReactionMaps,
@@ -26,6 +28,7 @@ import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { normalizeTagList } from "@/lib/profile/skillsTraits";
 import { avatarInitial, avatarToneFromName } from "@/lib/ui/avatarTone";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -223,16 +226,17 @@ function sanitizeLikeTerm(term: string): string {
   return term.replace(/%/g, "").replace(/_/g, "").trim();
 }
 
-function formatFeedTime(iso: string): string {
+function formatFeedTime(iso: string, locale: Language = "ja"): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const now = Date.now();
   const diff = (now - d.getTime()) / 1000;
-  if (diff < 45) return "たった今";
-  if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}日前`;
-  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+  const en = locale === "en";
+  if (diff < 45) return en ? "just now" : "たった今";
+  if (diff < 3600) return en ? `${Math.floor(diff / 60)}m` : `${Math.floor(diff / 60)}分前`;
+  if (diff < 86400) return en ? `${Math.floor(diff / 3600)}h` : `${Math.floor(diff / 3600)}時間前`;
+  if (diff < 604800) return en ? `${Math.floor(diff / 86400)}d` : `${Math.floor(diff / 86400)}日前`;
+  return d.toLocaleDateString(en ? "en-US" : "ja-JP", { month: "short", day: "numeric" });
 }
 
 const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
@@ -256,16 +260,20 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   },
 };
 
-const featureItems: Array<{ key: FeaturePage; icon: string }> = [
+type HomeBottomNavKey = FeaturePage | "idea";
+
+const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
   { key: "posts", icon: "⌂" },
   { key: "projects", icon: "▦" },
+  { key: "idea", icon: "✦" },
   { key: "chat", icon: "⌕" },
   { key: "account", icon: "◉" },
 ];
 
-const navLabelKeys: Partial<Record<FeaturePage, MessageKey>> = {
+const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
   projects: "navProjects",
   posts: "navHome",
+  idea: "navIdea",
   chat: "navSearch",
   account: "navProfile",
 };
@@ -356,6 +364,43 @@ function scoreProblemDraft(raw: string): { score: number; hints: string[] } {
 }
 
 const DEMO_MEMBERS: MatchMember[] = [];
+
+const FRIEND_SEARCH_EXAMPLES_JA = ["デザインが得意な人", "マーケティング経験者", "教育 アプリ"];
+const FRIEND_SEARCH_EXAMPLES_EN = ["good at design", "marketing experience", "education app"];
+
+function strengthFromRole(role: string | null | undefined): string {
+  if (role === "investor") return "投資/事業経験";
+  if (role === "parent") return "保護者視点";
+  return "子ども起業家";
+}
+
+function mapProfileToMatchMember(row: {
+  id: string;
+  display_name: string | null;
+  goal: string | null;
+  role: string | null;
+  avatar_url?: string | null;
+}): MatchMember {
+  const id = row.id;
+  const dbAvatar = row.avatar_url ?? null;
+  const strength = strengthFromRole(row.role);
+  return {
+    id,
+    name: row.display_name || "ユーザー",
+    goal: row.goal || "目標未設定",
+    strength,
+    avatarUrl: dbAvatar || readStoredAvatarUrl(id),
+    aiType:
+      row.role === "investor"
+        ? "marketer"
+        : row.role === "parent"
+          ? "idea"
+          : inferAiTypeFromMember({
+              goal: row.goal || "",
+              strength,
+            }),
+  };
+}
 const DEMO_FOLLOW_USERS: FollowUser[] = [];
 const DEMO_PROBLEM_POSTS: ProblemPost[] = [];
 
@@ -663,12 +708,12 @@ export default function Home() {
     "min-h-[44px] rounded-xl border border-zinc-900 bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 hover:border-zinc-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
-  const bottomNavButtonClass = (page: FeaturePage) =>
-    `app-bottom-nav-item keep-bottom-nav ${activePage === page ? "is-active" : ""}`;
+  const bottomNavButtonClass = (page: HomeBottomNavKey) =>
+    `app-bottom-nav-item keep-bottom-nav ${page !== "idea" && activePage === page ? "is-active" : ""}`;
   const [role, setRole] = useState<AppRole>("child");
   const [activePage, setActivePage] = useState<FeaturePage>("posts");
   const [communityView, setCommunityView] = useState<"progress" | "qna">("progress");
-  const { locale: language, setLocale: setLanguage, t } = useI18n();
+  const { locale: language, setLocale: setLanguage, t, tx } = useI18n();
   const [displayName, setDisplayName] = useState("");
   const [profileGoal, setProfileGoal] = useState("");
   const [profileType, setProfileType] = useState<AiMatchType>("idea");
@@ -695,6 +740,8 @@ export default function Home() {
 
   const [matchGoal, setMatchGoal] = useState("");
   const [matches, setMatches] = useState<MatchMember[]>(DEMO_MEMBERS);
+  const [matchSource, setMatchSource] = useState<"recommended" | "search">("recommended");
+  const [matchLoading, setMatchLoading] = useState(false);
   const [matchNotice, setMatchNotice] = useState("");
   const [activeProfileMember, setActiveProfileMember] = useState<MatchMember | null>(null);
   const [peerProfileProjects, setPeerProfileProjects] = useState<PeerProjectSummary[]>([]);
@@ -707,6 +754,10 @@ export default function Home() {
   const [discoveryProblemText, setDiscoveryProblemText] = useState("");
   const [discoveryTarget, setDiscoveryTarget] = useState(DISCOVERY_NAV_TARGETS[0]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [onboardingSkills, setOnboardingSkills] = useState<string[]>([]);
+  const [onboardingTraits, setOnboardingTraits] = useState<string[]>([]);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [ideaDoneMap, setIdeaDoneMap] = useState<Record<string, boolean>>({});
   const [ideaMemoMap, setIdeaMemoMap] = useState<Record<string, string>>({});
   const [favoriteCards, setFavoriteCards] = useState<string[]>([]);
@@ -1096,8 +1147,53 @@ export default function Home() {
       setActivePage("mentor");
       setMentorSubTab("validation");
     }
+    if (mentor === "ai") {
+      setActivePage("mentor");
+      setMentorSubTab("ai");
+    }
     if (tab === "chat") setChatSubView("list");
   }, [router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!(activePage === "mentor" && mentorSubTab === "ai")) return;
+    try {
+      const raw = sessionStorage.getItem("moni.ideaInterview.handoff.v1");
+      if (!raw) return;
+      sessionStorage.removeItem("moni.ideaInterview.handoff.v1");
+      const handoff = JSON.parse(raw) as {
+        seedTitle?: string;
+        seedSummary?: string;
+        theme?: string | null;
+        notes?: string;
+      };
+      if (!handoff.seedTitle) return;
+      const contextBlock = [
+        `アイデア発掘インタビューからの引き継ぎです。`,
+        `選んだ種: ${handoff.seedTitle}`,
+        `概要: ${handoff.seedSummary ?? ""}`,
+        handoff.theme ? `テーマ: ${handoff.theme}` : "",
+        handoff.notes ? `ユーザーのメモ:\n${handoff.notes}` : "",
+        ``,
+        `この種を、検証可能なビジネスアイデアに近づけるため深掘りしてください。まず次の一手を1つ提案してください。`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      setMentorMessages([
+        createMentorWelcomeMessage(),
+        {
+          id: `handoff-${Date.now()}`,
+          role: "user",
+          content: contextBlock,
+        },
+      ]);
+      setMentorInput(
+        `「${handoff.seedTitle}」を一緒に深掘りしたいです。最初に決めるべき検証ポイントは何ですか？`,
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [activePage, mentorSubTab]);
 
   useEffect(() => {
     if (activePage === "account") {
@@ -2452,6 +2548,9 @@ export default function Home() {
     const key = `moni-onboarding-complete-${session.user.id}`;
     const done = window.localStorage.getItem(key) === "1";
     setOnboardingCompleted(done);
+    setOnboardingStep(1);
+    setOnboardingSkills([]);
+    setOnboardingTraits([]);
     if (!done) trackOpsEvent("onboarding_started");
   }, [session]);
 
@@ -2505,7 +2604,15 @@ export default function Home() {
 
     void channel.track({ name: presenceName });
 
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadMessagesRef.current();
+        void refreshTalkListRef.current?.();
+      }
+    }, 3000);
+
     return () => {
+      window.clearInterval(poll);
       void client.removeChannel(channel);
     };
   }, [canUseSupabase, displayName, session, supabase]);
@@ -2654,50 +2761,81 @@ export default function Home() {
     setMentorError("");
   }
 
-  async function runMatching(event: FormEvent) {
-    event.preventDefault();
-    const terms = matchingKeywords(matchGoal).map(sanitizeLikeTerm).filter(Boolean);
+  async function loadRecommendedFriends() {
+    if (!supabase || !session) {
+      setMatches([]);
+      setMatchSource("recommended");
+      setMatchNotice("ログインすると、おすすめのユーザーが表示されます。");
+      return;
+    }
+    setMatchLoading(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,display_name,goal,role,avatar_url,created_at")
+      .neq("id", session.user.id)
+      .order("created_at", { ascending: false })
+      .limit(12);
+    setMatchLoading(false);
+    if (error) {
+      setMatches([]);
+      setMatchNotice(`おすすめの読み込みに失敗: ${error.message}`);
+      return;
+    }
+    const mapped = (data ?? []).map((row) =>
+      mapProfileToMatchMember({
+        id: row.id as string,
+        display_name: row.display_name as string | null,
+        goal: row.goal as string | null,
+        role: row.role as string | null,
+        avatar_url: (row.avatar_url as string | null) ?? null,
+      }),
+    );
+    setMatches(mapped);
+    setMatchSource("recommended");
+    setMatchNotice(
+      mapped.length === 0
+        ? "まだおすすめが少ないです。検索して探してみましょう。"
+        : "",
+    );
+  }
+
+  async function searchFriendsByGoal(rawGoal: string, opts?: { fromSubmit?: boolean }) {
+    const terms = matchingKeywords(rawGoal).map(sanitizeLikeTerm).filter(Boolean);
     if (terms.length === 0) {
-      setMatchNotice("条件を入力して検索してください。");
+      if (opts?.fromSubmit) setMatchNotice("条件を入力して検索してください。");
+      await loadRecommendedFriends();
       return;
     }
 
     if (supabase && session) {
+      setMatchLoading(true);
       const { data, error } = await supabase
         .from("profiles")
         .select("id,display_name,goal,role,avatar_url")
         .neq("id", session.user.id)
         .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
         .limit(30);
+      setMatchLoading(false);
       if (error) {
         setMatchNotice("");
         setAuthMessage(`マッチング検索に失敗: ${error.message}`);
         return;
       }
-      const mapped: MatchMember[] = (data ?? []).map((row) => {
-        const id = row.id as string;
-        const dbAvatar = (row.avatar_url as string | null) ?? null;
-        return {
-          id,
-          name: (row.display_name as string | null) || "ユーザー",
-          goal: (row.goal as string | null) || "目標未設定",
-          strength: row.role === "investor" ? "投資/事業経験" : row.role === "parent" ? "保護者視点" : "子ども起業家",
-          avatarUrl: dbAvatar || readStoredAvatarUrl(id),
-          aiType:
-            row.role === "investor"
-              ? "marketer"
-              : row.role === "parent"
-                ? "idea"
-                : inferAiTypeFromMember({
-                    goal: (row.goal as string | null) || "",
-                    strength:
-                      row.role === "investor" ? "投資/事業経験" : row.role === "parent" ? "保護者視点" : "子ども起業家",
-                  }),
-        };
-      });
+      const mapped: MatchMember[] = (data ?? []).map((row) =>
+        mapProfileToMatchMember({
+          id: row.id as string,
+          display_name: row.display_name as string | null,
+          goal: row.goal as string | null,
+          role: row.role as string | null,
+          avatar_url: (row.avatar_url as string | null) ?? null,
+        }),
+      );
       setMatches(mapped);
-      trackOpsEvent("matching_search");
-      trackOpsEvent("search_started");
+      setMatchSource("search");
+      if (opts?.fromSubmit) {
+        trackOpsEvent("matching_search");
+        trackOpsEvent("search_started");
+      }
       setMatchNotice(
         mapped.length === 0
           ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
@@ -2707,9 +2845,24 @@ export default function Home() {
     }
 
     setMatches([]);
-    trackOpsEvent("matching_search_demo");
+    setMatchSource("search");
+    if (opts?.fromSubmit) trackOpsEvent("matching_search_demo");
     setMatchNotice("ログインすると、登録ユーザーの中から仲間を検索できます。");
   }
+
+  async function runMatching(event: FormEvent) {
+    event.preventDefault();
+    await searchFriendsByGoal(matchGoal, { fromSubmit: true });
+  }
+
+  useEffect(() => {
+    if (activePage !== "chat" || exploreSegment !== "friends") return;
+    const handle = window.setTimeout(() => {
+      void searchFriendsByGoal(matchGoal);
+    }, 320);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce on query/segment only
+  }, [matchGoal, activePage, exploreSegment, session?.user?.id]);
 
   async function publishArticle(id: string, status: "draft" | "published") {
     if (!supabase || !session) return;
@@ -3161,13 +3314,40 @@ export default function Home() {
       if (discoveryInterests.length === 0 || prev.title.trim()) return prev;
       return { ...prev, title: `${discoveryInterests[0]}に関するプロジェクト` };
     });
-    if (session && typeof window !== "undefined") {
-      window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
+    setOnboardingStep(2);
+  }
+
+  async function saveOnboardingSkillsTraits(skills: string[], traits: string[]) {
+    if (!supabase || !session) return;
+    const payload = {
+      skills: normalizeTagList(skills),
+      traits: normalizeTagList(traits),
+    };
+    const { error } = await supabase.from("profiles").update(payload).eq("id", session.user.id);
+    if (error) {
+      await supabase.from("profiles").update({ skills: payload.skills }).eq("id", session.user.id);
     }
-    trackOpsEvent("onboarding_completed");
-    setOnboardingCompleted(true);
-    setActivePage("posts");
-    setAuthMessage("オンボーディング完了。ホームでつながりを楽しみましょう。");
+  }
+
+  async function completeOnboardingAfterSkills(opts?: { skipSave?: boolean }) {
+    if (onboardingSaving) return;
+    setOnboardingSaving(true);
+    try {
+      if (!opts?.skipSave) {
+        await saveOnboardingSkillsTraits(onboardingSkills, onboardingTraits);
+      }
+      if (session && typeof window !== "undefined") {
+        window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
+      }
+      trackOpsEvent("onboarding_completed");
+      setOnboardingCompleted(true);
+      setActivePage("posts");
+      setAuthMessage(
+        tx("オンボーディング完了。ホームでつながりを楽しみましょう。", "Setup done. Explore Home and connect."),
+      );
+    } finally {
+      setOnboardingSaving(false);
+    }
   }
 
   function generateIdeaBlueprint() {
@@ -3929,49 +4109,165 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-zinc-100 px-4 py-8">
         <div className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-5">
-          <h2 className="text-xl font-bold text-zinc-900">最初の準備</h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            興味や関心を選ぶと、あとからプロジェクトや仲間探しのヒントになります（任意）。
-          </p>
-          <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
-            後で設定したい場合は、まず使い始めることもできます。
-          </div>
-          {authMessage ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
-              {authMessage}
-            </div>
-          ) : null}
+          {onboardingStep === 1 ? (
+            <>
+              <h2 className="text-xl font-bold text-zinc-900">{tx("最初の準備", "Quick setup")}</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                {tx(
+                  "興味や関心を選ぶと、あとからプロジェクトや仲間探しのヒントになります（任意）。",
+                  "Pick interests to get better project and teammate suggestions later (optional).",
+                )}
+              </p>
+              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
+                {tx("後で設定したい場合は、まず使い始めることもできます。", "You can skip this and set it later.")}
+              </div>
+              {authMessage ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                  {authMessage}
+                </div>
+              ) : null}
 
-          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-            <p className="text-sm font-semibold text-zinc-900">興味・強み・関わりたい課題（任意）</p>
-            <p className="mt-1 text-xs text-zinc-600">気になるものだけタップしてください。未選択のままでも問題ありません。</p>
-            <div className="mt-2 space-y-2">
-              <div className="flex flex-wrap gap-1.5">{DISCOVERY_NAV_INTERESTS.map((item) => <button key={`ob-int-${item}`} type="button" className={discoveryInterests.includes(item) ? primaryButtonClass : secondaryButtonClass} onClick={() => toggleDiscoverySelection(item, discoveryInterests, setDiscoveryInterests)}>{item}</button>)}</div>
-              <div className="flex flex-wrap gap-1.5">{DISCOVERY_NAV_STRENGTHS.map((item) => <button key={`ob-str-${item}`} type="button" className={discoveryStrengths.includes(item) ? primaryButtonClass : secondaryButtonClass} onClick={() => toggleDiscoverySelection(item, discoveryStrengths, setDiscoveryStrengths)}>{item}</button>)}</div>
-              <div className="flex flex-wrap gap-1.5">{DISCOVERY_NAV_PROBLEMS.map((item) => <button key={`ob-prob-${item}`} type="button" className={discoveryProblems.includes(item) ? primaryButtonClass : secondaryButtonClass} onClick={() => toggleDiscoverySelection(item, discoveryProblems, setDiscoveryProblems, 4)}>{item}</button>)}</div>
-              <div className="flex flex-wrap gap-1.5">{DISCOVERY_NAV_TARGETS.map((item) => <button key={`ob-target-${item}`} type="button" className={discoveryTarget === item ? primaryButtonClass : secondaryButtonClass} onClick={() => setDiscoveryTarget(item)}>{item}</button>)}</div>
-              <input className={inputClass} placeholder="課題の補足（任意）" value={discoveryProblemText} onChange={(e) => setDiscoveryProblemText(e.target.value)} />
-            </div>
-          </div>
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-sm font-semibold text-zinc-900">
+                  {tx("興味・強み・関わりたい課題（任意）", "Interests, strengths, and problems (optional)")}
+                </p>
+                <p className="mt-1 text-xs text-zinc-600">
+                  {tx(
+                    "気になるものだけタップしてください。未選択のままでも問題ありません。",
+                    "Tap only what applies. You can leave everything unselected.",
+                  )}
+                </p>
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {DISCOVERY_NAV_INTERESTS.map((item) => (
+                      <button
+                        key={`ob-int-${item}`}
+                        type="button"
+                        className={discoveryInterests.includes(item) ? primaryButtonClass : secondaryButtonClass}
+                        onClick={() => toggleDiscoverySelection(item, discoveryInterests, setDiscoveryInterests)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DISCOVERY_NAV_STRENGTHS.map((item) => (
+                      <button
+                        key={`ob-str-${item}`}
+                        type="button"
+                        className={discoveryStrengths.includes(item) ? primaryButtonClass : secondaryButtonClass}
+                        onClick={() => toggleDiscoverySelection(item, discoveryStrengths, setDiscoveryStrengths)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DISCOVERY_NAV_PROBLEMS.map((item) => (
+                      <button
+                        key={`ob-prob-${item}`}
+                        type="button"
+                        className={discoveryProblems.includes(item) ? primaryButtonClass : secondaryButtonClass}
+                        onClick={() => toggleDiscoverySelection(item, discoveryProblems, setDiscoveryProblems, 4)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DISCOVERY_NAV_TARGETS.map((item) => (
+                      <button
+                        key={`ob-target-${item}`}
+                        type="button"
+                        className={discoveryTarget === item ? primaryButtonClass : secondaryButtonClass}
+                        onClick={() => setDiscoveryTarget(item)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className={inputClass}
+                    placeholder={tx("課題の補足（任意）", "More about the problem (optional)")}
+                    value={discoveryProblemText}
+                    onChange={(e) => setDiscoveryProblemText(e.target.value)}
+                  />
+                </div>
+              </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className={primaryButtonClass} onClick={finishOnboarding}>完了してアプリを開始</button>
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() => {
-                if (typeof window !== "undefined" && session) {
-                  window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
-                }
-                trackOpsEvent("onboarding_completed");
-                setOnboardingCompleted(true);
-                setActivePage("posts");
-                setAuthMessage("まずはホームで近況を見たり、投稿してみましょう。");
-              }}
-            >
-              いったんスキップして始める
-            </button>
-          </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" className={primaryButtonClass} onClick={finishOnboarding}>
+                  {tx("次へ", "Next")}
+                </button>
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  onClick={() => {
+                    if (typeof window !== "undefined" && session) {
+                      window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
+                    }
+                    trackOpsEvent("onboarding_completed");
+                    setOnboardingCompleted(true);
+                    setActivePage("posts");
+                    setAuthMessage(
+                      tx("まずはホームで近況を見たり、投稿してみましょう。", "Start on Home — browse updates or post."),
+                    );
+                  }}
+                >
+                  {tx("いったんスキップして始める", "Skip for now")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] font-semibold tracking-wide text-zinc-400">
+                {tx("ステップ 2 / 2", "Step 2 of 2")}
+              </p>
+              <div className="mt-3">
+                <SkillsTraitsEditor
+                  showIntro
+                  skills={onboardingSkills}
+                  traits={onboardingTraits}
+                  onSkillsChange={setOnboardingSkills}
+                  onTraitsChange={setOnboardingTraits}
+                />
+              </div>
+              <p className="mt-4 text-center text-[12px] text-zinc-400">
+                {tx(
+                  "必須ではありません。スキップしても、あとからプロフィール編集で入力できます。",
+                  "Optional — skip now and add this later in Edit profile.",
+                )}
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  disabled={onboardingSaving}
+                  onClick={() => void completeOnboardingAfterSkills()}
+                >
+                  {onboardingSaving
+                    ? tx("保存中…", "Saving…")
+                    : tx("完了してアプリを開始", "Finish and start")}
+                </button>
+                <button
+                  type="button"
+                  className="text-[13px] font-medium text-zinc-500 underline-offset-2 hover:underline"
+                  disabled={onboardingSaving}
+                  onClick={() => void completeOnboardingAfterSkills({ skipSave: true })}
+                >
+                  {tx("スキップ", "Skip")}
+                </button>
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  disabled={onboardingSaving}
+                  onClick={() => setOnboardingStep(1)}
+                >
+                  {tx("戻る", "Back")}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -3984,7 +4280,7 @@ export default function Home() {
       id="moni-app"
       className={`relative text-zinc-900 antialiased ${
         communityFullBleed
-          ? "box-border flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top,0px)]"
+          ? "box-border flex h-[100svh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top,0px)]"
           : "min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)]"
       }`}
     >
@@ -3999,7 +4295,7 @@ export default function Home() {
         className={
           communityFullBleed
             ? "relative flex min-h-0 flex-1 w-full flex-col"
-            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3`
+            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-4 py-3 sm:gap-4`
         }
       >
         <aside className="hidden" aria-hidden="true">
@@ -4052,7 +4348,7 @@ export default function Home() {
                   href="/login"
                   className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
                 >
-                  ログイン
+                  {tx("ログイン", "Log in")}
                 </Link>
               ) : null}
               <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
@@ -4203,13 +4499,13 @@ export default function Home() {
             ) : !session ? (
               <div className={`mt-3 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 ${accountSubTab === "profile" ? "" : "hidden"}`}>
                 <p className="text-sm leading-relaxed text-zinc-700">
-                  ログインまたは新規登録は専用ページで行えます。メール・パスワード、Google、ログイン用リンクに対応しています。
+                  {tx("ログインまたは新規登録は専用ページで行えます。メール・パスワード、Google、ログイン用リンクに対応しています。", "Log in or sign up on the dedicated page. Email/password, Google, and login links are supported.")}
                 </p>
                 <Link
                   href="/login"
                   className={`${primaryButtonClass} inline-flex w-full items-center justify-center text-center no-underline`}
                 >
-                  ログイン / 新規登録へ
+                  {tx("ログイン / 新規登録へ", "Log in / Sign up")}
                 </Link>
               </div>
             ) : null}
@@ -4229,7 +4525,7 @@ export default function Home() {
                   <ul className="mt-3 space-y-2">
                     {myFeedPosts.slice(0, 10).map((post) => (
                     <li key={`my-post-${post.id}`} className="rounded-xl border border-[#efefef] bg-[#fafafa] px-3 py-2">
-                        <p className="text-xs text-[#8e8e8e]">{formatFeedTime(post.createdAt)}</p>
+                        <p className="text-xs text-[#8e8e8e]">{formatFeedTime(post.createdAt, language)}</p>
                         <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm text-[#262626]">
                           {post.caption || accountText.imageOnlyPost}
                         </p>
@@ -4480,13 +4776,16 @@ export default function Home() {
             {authMessage ? <p className="mt-2 text-sm text-[#262626]">{authMessage}</p> : null}
             {requiresLogin ? (
               <p className="mt-2 text-sm text-[#ed4956]">
-                投稿系機能を使うにはログインが必要です。Googleログイン後、ヘッダー右にメールが表示されているか確認してください。
+                {tx(
+                  "投稿系機能を使うにはログインが必要です。Googleログイン後、ヘッダー右にメールが表示されているか確認してください。",
+                  "Log in to post. After Google sign-in, check that your email appears in the header.",
+                )}
               </p>
             ) : null}
         </section>
 
         <section
-          className={`relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white ${
+          className={`relative flex min-h-0 flex-1 flex-col bg-white ${
             activePage === "posts" && communityView === "progress" ? "" : "hidden"
           }`}
         >
@@ -4502,11 +4801,11 @@ export default function Home() {
                     setPostComposerOpen(true);
                   }}
                 >
-                  ＋ 記録
+                  {tx("＋ 記録", "+ Record")}
                 </button>
               ) : null}
             </div>
-            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label="コミュニティの表示">
+            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label={tx("コミュニティの表示", "Community")}>
               <button
                 type="button"
                 role="tab"
@@ -4516,7 +4815,7 @@ export default function Home() {
                 }`}
                 onClick={() => setCommunityView("progress")}
               >
-                進捗共有
+                {tx("進捗共有", "Updates")}
                 {communityView === "progress" ? (
                   <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
                 ) : null}
@@ -4532,7 +4831,7 @@ export default function Home() {
                   setCommunityView("qna");
                 }}
               >
-                質問・相談
+                {tx("質問・相談", "Q&A")}
                 {communityView === "qna" ? (
                   <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
                 ) : null}
@@ -4566,7 +4865,11 @@ export default function Home() {
               onSubmitComment={(post) => void addFeedComment(post as FeedPost)}
               onDelete={(post) => setFeedDeleteTarget(post as FeedPost)}
               canDelete={(post) => canDeleteFeedPost(post as FeedPost)}
-              emptyHint={session ? "右上の「＋ 記録」から活動を残せます。" : "ログインすると活動を記録できます。"}
+              emptyHint={
+                session
+                  ? tx("右上の「＋ 記録」から活動を残せます。", "Tap + Record in the top right to log activity.")
+                  : tx("ログインすると活動を記録できます。", "Log in to record activity.")
+              }
             />
           </div>
 
@@ -4574,8 +4877,8 @@ export default function Home() {
 
         <section className={`${cardClass} ${activePage === "articles" ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold">記事</h3>
-            <button type="button" className={secondaryButtonClass} onClick={() => setActivePage("posts")}>投稿へ</button>
+            <h3 className="text-base font-semibold">{tx("記事", "Articles")}</h3>
+            <button type="button" className={secondaryButtonClass} onClick={() => setActivePage("posts")}>{tx("投稿へ", "Back to feed")}</button>
           </div>
           {canModerate ? (
             <form className="mt-3 grid gap-2" onSubmit={addArticle}>
@@ -4662,7 +4965,7 @@ export default function Home() {
                 </span>
               </div>
               <p className="text-[11px] text-zinc-500">
-                投稿者: {activeArticle.authorName ?? "ユーザー"} {activeArticle.createdAt ? `・${formatFeedTime(activeArticle.createdAt)}` : ""}
+                {tx("投稿者", "Author")}: {activeArticle.authorName ?? tx("ユーザー", "User")} {activeArticle.createdAt ? `・${formatFeedTime(activeArticle.createdAt, language)}` : ""}
               </p>
               <h4 className="text-xl font-bold tracking-tight text-[#262626]">{activeArticle.title}</h4>
               <p className="mt-1 text-sm text-[#6b7280]">{activeArticle.summary}</p>
@@ -4789,7 +5092,7 @@ export default function Home() {
                     <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-zinc-700">{a.summary}</p>
                     <p className="mt-2 text-[11px] text-zinc-500">
                       ♡ {(a.likeCount ?? 0).toLocaleString("ja-JP")} ・ 💬 {(a.comments ?? []).length} ・{" "}
-                      {a.authorName ?? "ユーザー"} {a.createdAt ? `・${formatFeedTime(a.createdAt)}` : ""}
+                      {a.authorName ?? tx("ユーザー", "User")} {a.createdAt ? `・${formatFeedTime(a.createdAt, language)}` : ""}
                     </p>
                   </button>
                   <button type="button" className="shrink-0" onClick={() => setActiveArticleId(a.id)} aria-label={`${a.title}を開く`}>
@@ -4919,6 +5222,13 @@ export default function Home() {
               <p>
                 <span className="font-semibold text-zinc-900">使い分け:</span> 「相談AI」は考え整理、「検証」は反応チェック用です。
               </p>
+              <a
+                href="/idea"
+                className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] font-semibold text-sky-900 no-underline transition hover:bg-sky-100"
+              >
+                <span>アイデアが浮かばない人はこちら → AI発掘インタビュー</span>
+                <span aria-hidden>→</span>
+              </a>
             </div>
           </div>
         </section>
@@ -4926,26 +5236,34 @@ export default function Home() {
         <section
           className={`overflow-hidden rounded-none border border-[#dbdbdb] bg-[#f7f7f8] sm:rounded-lg ${activePage === "mentor" && mentorSubTab === "ai" ? "" : "hidden"} flex min-h-[min(72vh,620px)] flex-col p-0`}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e5e7eb] bg-white px-4 py-3">
-            <div>
+          <div className="flex shrink-0 flex-col gap-3 border-b border-[#e5e7eb] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-[17px] font-semibold tracking-tight text-[#202123]">相談AI</h3>
-              <p className="text-[11px] text-[#6b7280]">ChatGPT風チャット</p>
+              <p className="mt-0.5 text-sm text-[#6b7280]">ChatGPT風チャット</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-[#d1d5db] bg-white px-3 py-1.5 text-xs font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
-                onClick={() => setMentorSubTab("menu")}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <a
+                href="/idea"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 no-underline transition hover:bg-sky-100"
               >
-                ◀️
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-[#d1d5db] bg-white px-3 py-1.5 text-xs font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
-                onClick={clearMentorChat}
-              >
-                新しい相談
-              </button>
+                アイデア発掘
+              </a>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <button
+                  type="button"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
+                  onClick={() => setMentorSubTab("menu")}
+                >
+                  ← 戻る
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
+                  onClick={clearMentorChat}
+                >
+                  新しい相談
+                </button>
+              </div>
             </div>
           </div>
 
@@ -5017,7 +5335,7 @@ export default function Home() {
         </section>
 
         <section
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-white ${
+          className={`flex min-h-0 flex-1 flex-col bg-white ${
             activePage === "posts" && communityView === "qna" ? "" : "hidden"
           }`}
         >
@@ -5031,11 +5349,11 @@ export default function Home() {
                   className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
                   onClick={() => setQnaFocusToken((n) => n + 1)}
                 >
-                  ＋ 質問
+                  {tx("＋ 質問", "+ Ask")}
                 </button>
               ) : null}
             </div>
-            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label="コミュニティの表示">
+            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label={tx("コミュニティの表示", "Community")}>
               <button
                 type="button"
                 role="tab"
@@ -5045,7 +5363,7 @@ export default function Home() {
                 }`}
                 onClick={() => setCommunityView("progress")}
               >
-                進捗共有
+                {tx("進捗共有", "Updates")}
                 {communityView === "progress" ? (
                   <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
                 ) : null}
@@ -5059,7 +5377,7 @@ export default function Home() {
                 }`}
                 onClick={() => setCommunityView("qna")}
               >
-                質問・相談
+                {tx("質問・相談", "Q&A")}
                 {communityView === "qna" ? (
                   <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
                 ) : null}
@@ -5075,7 +5393,7 @@ export default function Home() {
             onPrefillConsumed={() => setQnaPrefillTitle("")}
             focusToken={qnaFocusToken}
             onAuthMessage={setAuthMessage}
-            formatTime={formatFeedTime}
+            formatTime={(iso) => formatFeedTime(iso, language)}
             active={activePage === "posts" && communityView === "qna"}
             onTrack={trackOpsEvent}
           />
@@ -5085,7 +5403,7 @@ export default function Home() {
           className={`${cardClass} ${
             activePage === "chat"
               ? exploreSegment === "friends"
-                ? "flex min-h-[calc(100dvh-var(--bottom-nav-clearance)-5.25rem)] flex-col"
+                ? "flex flex-col"
                 : ""
               : "hidden"
           }`}
@@ -5096,108 +5414,133 @@ export default function Home() {
           </div>
 
           <div
-            className={`mt-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white ${
-              exploreSegment === "friends" ? "flex-1" : ""
+            className={`mt-3 flex flex-col rounded-xl border border-zinc-200 bg-white ${
+              exploreSegment === "friends" ? "" : ""
             }`}
           >
-            <div className="grid shrink-0 grid-cols-2 border-b border-zinc-200" role="tablist" aria-label={t("searchTitle")}>
+            <div
+              className="flex shrink-0 gap-1 border-b border-zinc-100 px-2 pt-2"
+              role="tablist"
+              aria-label={t("searchTitle")}
+            >
               <button
                 type="button"
                 role="tab"
                 aria-selected={exploreSegment === "friends"}
-                className={`min-h-[44px] px-3 text-sm font-semibold transition ${
+                className={`relative min-h-[40px] flex-1 px-3 text-sm font-semibold transition ${
                   exploreSegment === "friends"
-                    ? "bg-zinc-900 text-white"
-                    : "bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                    ? "text-zinc-900"
+                    : "text-zinc-400 hover:text-zinc-700"
                 }`}
                 onClick={() => setExploreSegment("friends")}
               >
                 {t("searchFriends")}
+                {exploreSegment === "friends" ? (
+                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={exploreSegment === "projects"}
-                className={`min-h-[44px] border-l border-zinc-200 px-3 text-sm font-semibold transition ${
+                className={`relative min-h-[40px] flex-1 px-3 text-sm font-semibold transition ${
                   exploreSegment === "projects"
-                    ? "border-l-zinc-900 bg-zinc-900 text-white"
-                    : "bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                    ? "text-zinc-900"
+                    : "text-zinc-400 hover:text-zinc-700"
                 }`}
                 onClick={() => setExploreSegment("projects")}
               >
                 {t("searchProjects")}
+                {exploreSegment === "projects" ? (
+                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                ) : null}
               </button>
             </div>
 
             {exploreSegment === "friends" ? (
-              <div className="flex min-h-0 flex-1 flex-col p-3" role="tabpanel">
+              <div className="flex flex-col p-3" role="tabpanel">
                 <form onSubmit={runMatching} className="shrink-0">
-                  <p className="text-sm font-semibold text-[#262626]">
+                  <p className="text-sm font-semibold text-zinc-900">
                     {language === "ja" ? "友達を探す" : "Find friends"}
                   </p>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                     <input
-                      className={`flex-1 ${inputClass}`}
-                      placeholder="例: 教育 アプリ 発表 が得意な人"
+                      className={`min-w-0 w-full flex-1 ${inputClass}`}
+                      placeholder={tx("例: 教育 アプリ 発表 が得意な人", "e.g. education app, good at presenting")}
                       value={matchGoal}
                       onChange={(e) => setMatchGoal(e.target.value)}
                     />
-                    <button className={primaryButtonClass} type="submit">
-                      絞り込む
+                    <button className={`${primaryButtonClass} w-full shrink-0 sm:w-auto`} type="submit">
+                      {tx("絞り込む", "Search")}
                     </button>
                   </div>
+                  <details className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 open:bg-white">
+                    <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-zinc-700 [&::-webkit-details-marker]:hidden">
+                      {tx("検索例を見る", "See examples")}
+                    </summary>
+                    <div className="flex flex-col gap-2 border-t border-zinc-100 px-3 py-3">
+                      {(language === "en" ? FRIEND_SEARCH_EXAMPLES_EN : FRIEND_SEARCH_EXAMPLES_JA).map((example) => (
+                        <button
+                          key={example}
+                          type="button"
+                          onClick={() => setMatchGoal(example)}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-zinc-700 transition hover:border-zinc-300"
+                        >
+                          {example}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
                 </form>
-                {matchNotice ? <p className="mt-2 shrink-0 text-sm text-[#8e8e8e]">{matchNotice}</p> : null}
-                <ul className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain text-sm">
-                  {matches.map((m) => {
-                    const isSelf = Boolean(m.id && session?.user?.id && m.id === session.user.id);
-                    const followDisabled = !m.id || isSelf;
-                    const isFollowing = Boolean(m.id && followingIds.includes(m.id));
-                    const isPending = Boolean(m.id && outgoingRequestIds.includes(m.id));
-                    const followLabel = !m.id
-                      ? "フォロー不可"
-                      : isSelf
-                        ? "自分"
-                        : isFollowing
-                          ? "フォロー中"
-                          : isPending
-                            ? "申請中"
-                            : "フォロー";
-                    return (
-                      <li
-                        key={m.id ?? `${m.name}-${m.goal}`}
-                        className="relative overflow-hidden rounded-xl border border-[#dbdbdb] bg-white"
-                      >
-                        <button
-                          type="button"
-                          className={`absolute right-2 top-2 z-10 min-h-[32px] rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
-                            isFollowing || isPending
-                              ? "border-zinc-300 bg-zinc-50 text-zinc-700"
-                              : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
-                          }`}
-                          disabled={followDisabled}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!m.id || isSelf) return;
-                            void toggleFollow(m.id);
+                {matchNotice ? <p className="mt-2 shrink-0 text-sm text-zinc-500">{matchNotice}</p> : null}
+                {!matchLoading && matches.length > 0 ? (
+                  <p className="mt-3 shrink-0 text-[12px] font-semibold text-zinc-500">
+                    {matchSource === "recommended"
+                      ? language === "ja"
+                        ? "おすすめのユーザー（新着）"
+                        : "Suggested people"
+                      : language === "ja"
+                        ? "検索結果"
+                        : "Results"}
+                  </p>
+                ) : null}
+                {matchLoading ? (
+                  <p className="mt-6 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+                ) : null}
+                {!matchLoading && matches.length === 0 ? (
+                  <div className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
+                    <p className="text-sm font-medium text-zinc-700">
+                      {matchGoal.trim()
+                        ? tx("条件に合うユーザーが見つかりませんでした。", "No matching people found.")
+                        : tx("まだおすすめが少ないです。検索して探してみましょう。", "Few suggestions yet. Try a search.")}
+                    </p>
+                    <p className="mt-2 text-[12px] text-zinc-500">{tx("上の検索例をタップしてみてください", "Tap an example above to try it.")}</p>
+                  </div>
+                ) : null}
+                <ul className="mt-2 space-y-2.5 pb-2">
+                  {!matchLoading
+                    ? matches.map((m) => (
+                        <ExploreFriendCard
+                          key={m.id ?? `${m.name}-${m.goal}`}
+                          member={{
+                            id: m.id,
+                            name: m.name,
+                            goal: m.goal,
+                            strength: m.strength,
+                            avatarUrl: m.avatarUrl,
                           }}
-                        >
-                          {followLabel}
-                        </button>
-                        <button
-                          type="button"
-                          className="flex w-full items-start gap-3 p-3 pr-[5.5rem] text-left transition hover:bg-zinc-50/90"
-                          onClick={() => setActiveProfileMember(m)}
-                        >
-                          <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="sm" />
-                          <span className="min-w-0 flex-1">
-                            <span className="font-semibold text-[#262626]">{m.name}</span>
-                            <p className="mt-1 line-clamp-2 text-sm text-zinc-700">{m.goal}</p>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
+                          avatar={
+                            <MemberAvatarBubble
+                              userId={m.id}
+                              name={m.name}
+                              avatarUrl={m.avatarUrl}
+                              size="md"
+                            />
+                          }
+                          onOpenProfile={() => setActiveProfileMember(m)}
+                        />
+                      ))
+                    : null}
                 </ul>
               </div>
             ) : (
@@ -5909,7 +6252,7 @@ export default function Home() {
                     <li key={`follow-request-${req.requestId}`} className="rounded-lg border border-zinc-200 px-3 py-2">
                       <p className="text-sm font-semibold text-zinc-900">{req.followerName}</p>
                       <p className="text-xs text-zinc-500">{req.followerGoal}</p>
-                      <p className="mt-1 text-[11px] text-zinc-400">{formatFeedTime(req.createdAt)}</p>
+                      <p className="mt-1 text-[11px] text-zinc-400">{formatFeedTime(req.createdAt, language)}</p>
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
@@ -5959,7 +6302,9 @@ export default function Home() {
       <nav className="app-bottom-nav" aria-label="メイン機能の切り替え">
         <div className="app-bottom-nav-inner">
           {featureItems.map((item) => {
-            const label = navLabelKeys[item.key] ? t(navLabelKeys[item.key]!) : featureLabels[language][item.key];
+            const label = navLabelKeys[item.key]
+              ? t(navLabelKeys[item.key]!)
+              : featureLabels[language][item.key as FeaturePage];
             const className = bottomNavButtonClass(item.key);
             if (item.key === "account") {
               return (
@@ -5993,6 +6338,22 @@ export default function Home() {
                 </Link>
               );
             }
+            if (item.key === "idea") {
+              return (
+                <Link
+                  key={item.key}
+                  href="/idea"
+                  className={className}
+                  aria-label={label}
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                </Link>
+              );
+            }
             if (item.key === "posts") {
               return (
                 <button
@@ -6001,39 +6362,40 @@ export default function Home() {
                   type="button"
                   onClick={() => {
                     setCommunityView("progress");
-                    setActivePage(item.key);
+                    setActivePage("posts");
                   }}
                   aria-label={label}
-                  aria-current={activePage === item.key ? "page" : undefined}
+                  aria-current={activePage === "posts" ? "page" : undefined}
                   title={label}
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
                   <span className="max-w-[4.5rem] truncate">{label}</span>
-                  {activePage === item.key ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
+                  {activePage === "posts" ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
                 </button>
               );
             }
+            const pageKey = item.key as FeaturePage;
             return (
               <button
                 key={item.key}
                 className={className}
                 type="button"
                 onClick={() => {
-                  if (item.key === "chat") setChatSubView("list");
-                  if (item.key === "posts") setCommunityView("progress");
-                  setActivePage(item.key);
+                  if (pageKey === "chat") setChatSubView("list");
+                  if (pageKey === "posts") setCommunityView("progress");
+                  setActivePage(pageKey);
                 }}
                 aria-label={label}
-                aria-current={activePage === item.key ? "page" : undefined}
+                aria-current={activePage === pageKey ? "page" : undefined}
                 title={label}
               >
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
                 <span className="max-w-[4.5rem] truncate">{label}</span>
-                {activePage === item.key ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
+                {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );
           })}

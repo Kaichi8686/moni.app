@@ -2,9 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink } from "lucide-react";
+import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import { isIssueDueToday } from "@/lib/roadmap/mergeWithIssues";
 import type { Issue, IssueStatus } from "@/lib/workspace/types";
+import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
 type Props = {
   projectId: string;
@@ -14,6 +15,7 @@ type Props = {
   onToggleDone: (issueId: string, nextStatus: IssueStatus) => void;
   onSetDueToday: (issueId: string, today: boolean) => void;
   onCreate: (phaseId: string, title: string) => Promise<void>;
+  onOpenIssue?: (issue: Issue) => void;
 };
 
 export function RoadmapIssueList({
@@ -24,10 +26,12 @@ export function RoadmapIssueList({
   onToggleDone,
   onSetDueToday,
   onCreate,
+  onOpenIssue,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
-  const done = issues.filter((i) => i.status === "done").length;
+  const sorted = sortIssuesByDueDate(issues);
+  const done = sorted.filter((i) => i.status === "done").length;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -42,7 +46,7 @@ export function RoadmapIssueList({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-700">
-          課題 ({done}/{issues.length})
+          課題 ({done}/{sorted.length})
         </span>
         <div className="flex items-center gap-2">
           <Link
@@ -59,8 +63,6 @@ export function RoadmapIssueList({
           ) : null}
         </div>
       </div>
-      <p className="mb-3 text-[11px] text-gray-500">ここで追加した課題は課題タブと同じデータです。</p>
-
       {adding ? (
         <form onSubmit={(e) => void submit(e)} className="mb-3 flex gap-2">
           <input
@@ -76,7 +78,7 @@ export function RoadmapIssueList({
         </form>
       ) : null}
 
-      {issues.length === 0 && !adding ? (
+      {sorted.length === 0 && !adding ? (
         <p className="text-sm text-gray-500">
           {canEdit ? (
             <button type="button" onClick={() => setAdding(true)} className="text-violet-600 hover:underline">
@@ -89,7 +91,7 @@ export function RoadmapIssueList({
       ) : null}
 
       <ul>
-        {issues.map((issue) => {
+        {sorted.map((issue) => {
           const dueToday = isIssueDueToday(issue.dueDate);
           return (
             <li key={issue.id} className="group flex items-center gap-3 border-b border-gray-100 py-2">
@@ -103,13 +105,31 @@ export function RoadmapIssueList({
               >
                 {issue.status === "done" ? <Check className="h-3 w-3 text-white" /> : null}
               </button>
-              <span
-                className={`min-w-0 flex-1 text-sm ${
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenIssue?.(issue);
+                }}
+                className={`min-w-0 flex-1 text-left text-sm hover:text-violet-700 ${
                   issue.status === "done" ? "text-gray-400 line-through" : "text-gray-800"
-                }`}
+                } ${onOpenIssue ? "cursor-pointer" : "cursor-default"}`}
               >
                 {issue.title}
-              </span>
+              </button>
+              {onOpenIssue ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenIssue(issue);
+                  }}
+                  className="shrink-0 rounded p-1 text-gray-300 opacity-0 transition group-hover:opacity-100 hover:bg-violet-50 hover:text-violet-600"
+                  aria-label="詳細を見る"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : null}
               {canEdit ? (
                 <button
                   type="button"

@@ -1,4 +1,5 @@
 -- Project feature MVP schema for dream-spark-pro
+-- 再実行可: テーブルは IF NOT EXISTS、ポリシーは DROP IF EXISTS 後に CREATE
 
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
@@ -131,8 +132,9 @@ create or replace function public.project_is_member(p_project_id uuid, p_uid uui
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = public
+set row_security = off
 as $$
   select exists (
     select 1 from public.project_members m
@@ -144,8 +146,9 @@ create or replace function public.project_has_role(p_project_id uuid, p_uid uuid
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = public
+set row_security = off
 as $$
   select exists (
     select 1 from public.project_members m
@@ -154,6 +157,11 @@ as $$
       and m.role = any (p_roles)
   );
 $$;
+
+grant execute on function public.project_is_member(uuid, uuid) to authenticated;
+grant execute on function public.project_is_member(uuid, uuid) to anon;
+grant execute on function public.project_has_role(uuid, uuid, text[]) to authenticated;
+grant execute on function public.project_has_role(uuid, uuid, text[]) to anon;
 
 create or replace function public.project_on_insert_add_owner()
 returns trigger
@@ -236,93 +244,124 @@ alter table public.project_tasks enable row level security;
 alter table public.project_task_suggestions enable row level security;
 alter table public.project_notifications enable row level security;
 
+drop policy if exists "projects read public or member" on public.projects;
 create policy "projects read public or member" on public.projects for select using (
   visibility = 'public' or public.project_is_member(id, auth.uid()) or owner_id = auth.uid()
 );
+drop policy if exists "projects insert own owner" on public.projects;
 create policy "projects insert own owner" on public.projects for insert with check (auth.uid() = owner_id);
+drop policy if exists "projects update owner admin" on public.projects;
 create policy "projects update owner admin" on public.projects for update using (
   public.project_has_role(id, auth.uid(), array['owner','admin']) or owner_id = auth.uid()
 );
+drop policy if exists "projects delete owner only" on public.projects;
 create policy "projects delete owner only" on public.projects for delete using (
   public.project_has_role(id, auth.uid(), array['owner']) or owner_id = auth.uid()
 );
 
+drop policy if exists "members read project members only" on public.project_members;
 create policy "members read project members only" on public.project_members for select using (
-  public.project_is_member(project_id, auth.uid()) or
-  exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
+  user_id = auth.uid()
+  or public.project_is_member(project_id, auth.uid())
+  or exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
 );
+drop policy if exists "members insert owner admin" on public.project_members;
 create policy "members insert owner admin" on public.project_members for insert with check (
   public.project_has_role(project_id, auth.uid(), array['owner','admin'])
 );
+drop policy if exists "members insert self as project owner" on public.project_members;
 create policy "members insert self as project owner" on public.project_members for insert with check (
   user_id = auth.uid()
   and role = 'owner'
   and exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
 );
+drop policy if exists "members update owner only" on public.project_members;
 create policy "members update owner only" on public.project_members for update using (
   public.project_has_role(project_id, auth.uid(), array['owner'])
 );
+drop policy if exists "members delete owner admin or self" on public.project_members;
 create policy "members delete owner admin or self" on public.project_members for delete using (
   public.project_has_role(project_id, auth.uid(), array['owner','admin']) or user_id = auth.uid()
 );
 
+drop policy if exists "join request read owner admin or requester" on public.project_join_requests;
 create policy "join request read owner admin or requester" on public.project_join_requests for select using (
   requester_id = auth.uid() or public.project_has_role(project_id, auth.uid(), array['owner','admin'])
 );
+drop policy if exists "join request create own" on public.project_join_requests;
 create policy "join request create own" on public.project_join_requests for insert with check (
   requester_id = auth.uid()
   and exists (
     select 1 from public.projects p where p.id = project_id and p.visibility = 'public'
   )
 );
+drop policy if exists "join request cancel own pending" on public.project_join_requests;
 create policy "join request cancel own pending" on public.project_join_requests for update using (
   requester_id = auth.uid() and status = 'pending'
 );
 
+drop policy if exists "project chat read members" on public.project_chat_messages;
 create policy "project chat read members" on public.project_chat_messages for select using (
   public.project_is_member(project_id, auth.uid())
+  or exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
 );
+drop policy if exists "project chat insert members" on public.project_chat_messages;
 create policy "project chat insert members" on public.project_chat_messages for insert with check (
-  sender_id = auth.uid() and public.project_is_member(project_id, auth.uid())
+  sender_id = auth.uid()
+  and (
+    public.project_is_member(project_id, auth.uid())
+    or exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
+  )
 );
 
+drop policy if exists "call sessions read members" on public.project_call_sessions;
 create policy "call sessions read members" on public.project_call_sessions for select using (
   public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "call sessions insert members" on public.project_call_sessions;
 create policy "call sessions insert members" on public.project_call_sessions for insert with check (
   started_by = auth.uid() and public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "call sessions update starter admin owner" on public.project_call_sessions;
 create policy "call sessions update starter admin owner" on public.project_call_sessions for update using (
   started_by = auth.uid() or public.project_has_role(project_id, auth.uid(), array['owner','admin'])
 );
 
+drop policy if exists "call participants read members" on public.project_call_participants;
 create policy "call participants read members" on public.project_call_participants for select using (
   exists (
     select 1 from public.project_call_sessions s
     where s.id = call_session_id and public.project_is_member(s.project_id, auth.uid())
   )
 );
+drop policy if exists "call participants upsert own membership" on public.project_call_participants;
 create policy "call participants upsert own membership" on public.project_call_participants for insert with check (
   user_id = auth.uid()
 );
+drop policy if exists "call participants update self" on public.project_call_participants;
 create policy "call participants update self" on public.project_call_participants for update using (user_id = auth.uid());
 
+drop policy if exists "boards read members" on public.project_boards;
 create policy "boards read members" on public.project_boards for select using (
   public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "boards insert members" on public.project_boards;
 create policy "boards insert members" on public.project_boards for insert with check (
   created_by = auth.uid() and public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "boards update members" on public.project_boards;
 create policy "boards update members" on public.project_boards for update using (
   public.project_is_member(project_id, auth.uid())
 );
 
+drop policy if exists "board elements read members" on public.project_board_elements;
 create policy "board elements read members" on public.project_board_elements for select using (
   exists (
     select 1 from public.project_boards b
     where b.id = board_id and public.project_is_member(b.project_id, auth.uid())
   )
 );
+drop policy if exists "board elements write members" on public.project_board_elements;
 create policy "board elements write members" on public.project_board_elements for insert with check (
   created_by = auth.uid()
   and exists (
@@ -330,6 +369,7 @@ create policy "board elements write members" on public.project_board_elements fo
     where b.id = board_id and public.project_is_member(b.project_id, auth.uid())
   )
 );
+drop policy if exists "board elements update members" on public.project_board_elements;
 create policy "board elements update members" on public.project_board_elements for update using (
   exists (
     select 1 from public.project_boards b
@@ -337,25 +377,33 @@ create policy "board elements update members" on public.project_board_elements f
   )
 );
 
+drop policy if exists "tasks read members" on public.project_tasks;
 create policy "tasks read members" on public.project_tasks for select using (
   public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "tasks write members" on public.project_tasks;
 create policy "tasks write members" on public.project_tasks for insert with check (
   created_by = auth.uid() and public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "tasks update members" on public.project_tasks;
 create policy "tasks update members" on public.project_tasks for update using (
   public.project_is_member(project_id, auth.uid())
 );
 
+drop policy if exists "task suggestions read members" on public.project_task_suggestions;
 create policy "task suggestions read members" on public.project_task_suggestions for select using (
   public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "task suggestions write members" on public.project_task_suggestions;
 create policy "task suggestions write members" on public.project_task_suggestions for insert with check (
   created_by = auth.uid() and public.project_is_member(project_id, auth.uid())
 );
+drop policy if exists "task suggestions update members" on public.project_task_suggestions;
 create policy "task suggestions update members" on public.project_task_suggestions for update using (
   public.project_is_member(project_id, auth.uid())
 );
 
+drop policy if exists "notifications read own" on public.project_notifications;
 create policy "notifications read own" on public.project_notifications for select using (user_id = auth.uid());
+drop policy if exists "notifications update own" on public.project_notifications;
 create policy "notifications update own" on public.project_notifications for update using (user_id = auth.uid());

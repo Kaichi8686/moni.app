@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FollowModal } from "@/components/profile/FollowModal";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { FollowListUser } from "@/lib/profile/types";
 
 type Props = {
@@ -32,11 +33,12 @@ export function ProfileStats({
   streakDays,
 }: Props) {
   const [modal, setModal] = useState<"followers" | "following" | null>(null);
+  const { tx } = useI18n();
 
   const items = [
-    { value: postCount, label: "投稿", onClick: undefined as undefined | (() => void) },
-    { value: followerCount, label: "フォロワー", onClick: () => setModal("followers") },
-    { value: followingCount, label: "フォロー中", onClick: () => setModal("following") },
+    { value: postCount, label: tx("投稿", "Posts"), onClick: undefined as undefined | (() => void) },
+    { value: followerCount, label: tx("フォロワー", "Followers"), onClick: () => setModal("followers") },
+    { value: followingCount, label: tx("フォロー中", "Following"), onClick: () => setModal("following") },
   ];
 
   return (
@@ -71,7 +73,7 @@ export function ProfileStats({
           <div className="min-h-[36px] flex items-center">
             <span className="inline-flex items-baseline gap-1">
               <span className="text-[15px] font-semibold tabular-nums tracking-tight text-zinc-900">{streakDays}</span>
-              <span className="text-[12px] font-medium text-zinc-500">日連続</span>
+              <span className="text-[12px] font-medium text-zinc-500">{tx("日連続", "day streak")}</span>
             </span>
           </div>
         ) : null}

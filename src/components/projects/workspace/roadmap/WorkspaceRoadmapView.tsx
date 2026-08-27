@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Layers } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { ProjectCompletionDateCard } from "@/components/projects/workspace/ProjectCompletionDateCard";
 import { RoadmapTimeline } from "@/components/roadmap/RoadmapTimeline";
 import { RoadmapAddPhaseModal } from "@/components/projects/workspace/roadmap/RoadmapAddPhaseModal";
+import { IssueDetailSheet } from "@/components/issues/IssueDetailSheet";
+import { IssueModal } from "@/components/issues/IssueModal";
 import { RoadmapPhaseDetailPanel } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailPanel";
-import { RoadmapTodayTodo } from "@/components/projects/workspace/roadmap/RoadmapTodayTodo";
+import type { Issue } from "@/lib/workspace/types";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { buildIssueScheduleContext, syncRoadmapIssuesFromPhases } from "@/lib/templates/createRoadmapIssues";
 import {
   endOfTodayIso,
   mergeRoadmapPhasesWithIssues,
@@ -15,21 +22,35 @@ import {
 } from "@/lib/roadmap/mergeWithIssues";
 
 export default function WorkspaceRoadmapView() {
+  const { tx } = useI18n();
   const {
     projectId,
-    project: wsProject,
     issues,
+    phases,
+    schedules,
     loading: wsLoading,
     canEdit,
     reload: wsReload,
     createIssue,
     updateIssueStatus,
     updateIssue,
+    updateIssueWorkflow,
+    completeIssue,
+    project,
+    projectContext,
+    coachingContext,
+    setProjectCompletionDate,
   } = useProjectWorkspace();
+  const searchParams = useSearchParams();
   const roadmap = useRoadmapProject(projectId);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<RoadmapPhaseWithIssues | null>(null);
+  const [detailIssue, setDetailIssue] = useState<Issue | null>(null);
+  const [editIssue, setEditIssue] = useState<Issue | null>(null);
   const [actionError, setActionError] = useState("");
+  const [scheduleNotice, setScheduleNotice] = useState("");
+
+  const templatesHref = `/projects/${projectId}/roadmap/templates`;
 
   const mergedPhases = useMemo(
     () => mergeRoadmapPhasesWithIssues(roadmap.phases, issues),
@@ -37,6 +58,36 @@ export default function WorkspaceRoadmapView() {
   );
 
   const selectedLive = selected ? mergedPhases.find((p) => p.id === selected.id) ?? null : null;
+
+  const phaseIdFromUrl = searchParams.get("phase");
+  useEffect(() => {
+    if (!phaseIdFromUrl || mergedPhases.length === 0) return;
+    const phase = mergedPhases.find((p) => p.id === phaseIdFromUrl);
+    if (phase) setSelected(phase);
+  }, [phaseIdFromUrl, mergedPhases]);
+
+  const detailIssueLive = detailIssue ? issues.find((i) => i.id === detailIssue.id) ?? detailIssue : null;
+  const editIssueLive = editIssue ? issues.find((i) => i.id === editIssue.id) ?? editIssue : null;
+  const detailPhase = detailIssueLive?.phaseId
+    ? mergedPhases.find((p) => p.id === detailIssueLive.phaseId)
+    : selectedLive;
+  const detailPhaseTitle = detailPhase?.title;
+  const detailPhaseGoal = detailPhase?.goal;
+
+  const openIssueCount = useMemo(
+    () => issues.filter((i) => i.status !== "done" && i.status !== "cancelled").length,
+    [issues],
+  );
+
+  const taskCount = useMemo(
+    () => mergedPhases.reduce((n, p) => n + p.tasks.length, 0),
+    [mergedPhases],
+  );
+  const linkedIssueCount = useMemo(
+    () => mergedPhases.reduce((n, p) => n + p.linkedIssues.length, 0),
+    [mergedPhases],
+  );
+  const showSyncIssuesBanner = canEdit && taskCount > 0 && linkedIssueCount < taskCount;
 
   const syncReload = useCallback(async () => {
     await Promise.all([roadmap.reload(), wsReload()]);
@@ -49,71 +100,165 @@ export default function WorkspaceRoadmapView() {
         await fn();
         await syncReload();
       } catch (e) {
-        setActionError(e instanceof Error ? e.message : "操作に失敗しました");
+        setActionError(e instanceof Error ? e.message : tx("操作に失敗しました", "Action failed"));
       }
     },
-    [syncReload],
+    [syncReload, tx],
   );
 
   if (wsLoading || roadmap.loading) {
-    return <p className="p-6 text-sm text-gray-500">読み込み中...</p>;
+    return <p className="p-6 text-sm text-gray-500">{tx("読み込み中...", "Loading…")}</p>;
   }
 
   const err = roadmap.error || actionError;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[#1A1A1A]">ロードマップ</h1>
-          <p className="mt-1 text-sm text-[#6B7280]">
-            フェーズの期間とゴールをここで管理。具体的な作業は{" "}
-            <Link href={`/projects/${projectId}/issues`} className="font-medium text-violet-600 hover:underline">
-              課題タブ
-            </Link>
-            と連動します。
+          <h1 className="text-lg font-semibold text-[#1A1A1A]">{tx("ロードマップ", "Roadmap")}</h1>
+          <p className="mt-0.5 text-[13px] text-[#6B7280]">
+            {tx("段階ごとの計画と、課題のつながりです。", "Phase-by-phase plan and how issues connect.")}
           </p>
         </div>
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-violet-700"
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={templatesHref}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-semibold text-[#374151] hover:bg-[#F7F8F8]"
           >
-            + フェーズを追加
-          </button>
-        ) : null}
-      </div>
-
-      {err ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</p>
-      ) : null}
-
-      <p className="rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2 text-[12px] text-violet-900">
-        タイムラインの<strong className="font-semibold">色付きバー</strong>または<strong className="font-semibold">左のフェーズ名</strong>
-        をタップすると詳細が開きます。バー左端をドラッグすると期間を移動できます。
-      </p>
-
-      <RoadmapTodayTodo
-        phases={mergedPhases}
-        issues={issues}
-        projectId={projectId}
-        projectName={roadmap.project?.name ?? wsProject?.name}
-        canEdit={canEdit}
-      />
-
-      {mergedPhases.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-800">まだフェーズがありません</p>
-          <p className="mt-2 text-sm text-gray-500">自分でフェーズを入力するか、アシストから例を読み込めます。</p>
+            <Layers className="h-4 w-4" />
+            {tx("テンプレート", "Templates")}
+          </Link>
           {canEdit ? (
             <button
               type="button"
               onClick={() => setAddOpen(true)}
-              className="mt-4 rounded-lg border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50"
+              className="rounded-md bg-[#5E6AD2] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#4F5BBD]"
             >
-              フェーズを追加する
+              {tx("+ フェーズを追加", "+ Add phase")}
             </button>
+          ) : null}
+        </div>
+      </div>
+
+      {project ? (
+        <ProjectCompletionDateCard
+          canEdit={canEdit}
+          projectStart={project.startDate}
+          projectTarget={project.targetDate}
+          openIssueCount={openIssueCount}
+          onSave={setProjectCompletionDate}
+          onNotice={(message) => {
+            setScheduleNotice(message);
+            window.setTimeout(() => setScheduleNotice(""), 4000);
+          }}
+        />
+      ) : null}
+      {scheduleNotice ? (
+        <p
+          className="rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3 py-2 text-center text-[12px] font-medium text-[#374151]"
+          role="status"
+        >
+          {scheduleNotice}
+        </p>
+      ) : null}
+
+      {err ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</p>
+      ) : null}
+
+      {showSyncIssuesBanner ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#E5E7EB] bg-white px-3 py-2.5">
+          <div>
+            <p className="text-[13px] font-semibold text-[#1A1A1A]">{tx("段階のやることを課題にできます", "Turn phase tasks into issues")}</p>
+            <p className="text-[11px] text-[#6B7280]">
+              {tx(
+                `未連携のやること ${taskCount - linkedIssueCount}件を課題として追加します。`,
+                `Add ${taskCount - linkedIssueCount} unlinked tasks as issues.`,
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 rounded-md bg-[#5E6AD2] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#4F5BBD]"
+            onClick={() =>
+              void wrap(async () => {
+                const taskTitlesByPhase = new Map<string, string[]>();
+                for (const p of mergedPhases) {
+                  taskTitlesByPhase.set(
+                    p.id,
+                    p.tasks.map((t) => t.title).filter(Boolean),
+                  );
+                }
+                const schedule =
+                  project &&
+                  buildIssueScheduleContext({
+                    projectStart: project.startDate,
+                    projectTarget: project.targetDate,
+                    phases: mergedPhases.map((p) => ({
+                      id: p.id,
+                      order: p.order,
+                      startDate: p.startDate,
+                      endDate: p.endDate,
+                    })),
+                    schedules,
+                  });
+                if (!projectContext) {
+                  throw new Error(tx("プロジェクト情報を読み込んでから再度お試しください。", "Load the project, then try again."));
+                }
+                await syncRoadmapIssuesFromPhases({
+                  projectId,
+                  projectContext,
+                  phases: mergedPhases.map((p) => ({
+                    id: p.id,
+                    title: p.title,
+                    goal: p.goal,
+                    description: p.description,
+                    order: p.order,
+                    startDate: p.startDate,
+                    endDate: p.endDate,
+                  })),
+                  taskTitlesByPhase,
+                  existingIssues: issues,
+                  schedule: schedule ?? undefined,
+                });
+              })
+            }
+          >
+            {tx("課題を生成する", "Create issues")}
+          </button>
+        </div>
+      ) : null}
+
+      {mergedPhases.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
+          <p className="text-5xl">📋</p>
+          <h3 className="mt-3 text-lg font-semibold text-gray-900">{tx("またはテンプレートから始める", "Or start from a template")}</h3>
+          <p className="mx-auto mt-2 max-w-xs text-sm text-gray-500">
+            {tx("テンプレートを使えばすぐ始められます。自分で0から作ることもできます。", "Start from a template, or build from scratch.")}
+          </p>
+          {canEdit ? (
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <Link
+                href={`${templatesHref}?tab=ai`}
+                className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              >
+                {tx("AIでプランを作る", "Plan with AI")}
+              </Link>
+              <Link
+                href={templatesHref}
+                className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+              >
+                {tx("テンプレートを選ぶ", "Choose a template")}
+              </Link>
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="rounded-xl border border-gray-200 bg-gray-100 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+              >
+                {tx("＋ 自分で作る", "+ Build your own")}
+              </button>
+            </div>
           ) : null}
         </div>
       ) : (
@@ -130,16 +275,13 @@ export default function WorkspaceRoadmapView() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         projectStart={roadmap.project?.startDate}
-        existingCount={mergedPhases.length}
-        onBulkAddPhases={(items, t) => wrap(() => roadmap.bulkCreatePhases(items, t))}
+        onBulkAddPhases={(items) => wrap(() => roadmap.bulkCreatePhases(items))}
       />
 
       {selectedLive ? (
         <RoadmapPhaseDetailPanel
           projectId={projectId}
           phase={selectedLive}
-          projectName={roadmap.project?.name ?? wsProject?.name ?? ""}
-          projectDescription={roadmap.project?.description ?? wsProject?.description}
           canEdit={canEdit}
           onClose={() => setSelected(null)}
           onUpdate={(patch) => wrap(() => roadmap.updatePhase(selectedLive.id, patch))}
@@ -158,8 +300,61 @@ export default function WorkspaceRoadmapView() {
               }),
             )
           }
+          onOpenIssue={(issue) => setDetailIssue(issue)}
+          projectName={project?.name ?? ""}
+          projectDescription={project?.description ?? ""}
+          coachingContext={coachingContext}
         />
       ) : null}
+
+      <IssueDetailSheet
+        issue={detailIssueLive}
+        open={Boolean(detailIssueLive)}
+        phaseTitle={detailPhaseTitle}
+        phaseGoal={detailPhaseGoal}
+        members={project?.members ?? []}
+        canEdit={canEdit}
+        onClose={() => setDetailIssue(null)}
+        onEdit={
+          canEdit && detailIssueLive
+            ? () => {
+                setEditIssue(detailIssueLive);
+                setDetailIssue(null);
+              }
+            : undefined
+        }
+        onToggleDone={async (issue) => {
+          await updateIssueStatus(issue.id, issue.status === "done" ? "todo" : "done");
+        }}
+        onSaveWorkflow={async (id, workflow) => updateIssueWorkflow(id, workflow)}
+        onMarkIssueDone={async (id, answer) => completeIssue(id, answer)}
+        onSaveMemo={async (id, memo) => {
+          const issue = issues.find((i) => i.id === id);
+          if (!issue) return;
+          const phase = issue.phaseId ? phases.find((p) => p.id === issue.phaseId) : undefined;
+          const { defaultWorkflowIfMissing } = await import("@/lib/workspace/issueWorkflow");
+          const base = defaultWorkflowIfMissing(issue, phase?.title, phase?.description);
+          await updateIssueWorkflow(id, { ...base, completionAnswer: memo.trim() });
+        }}
+      />
+
+      <IssueModal
+        issue={editIssueLive}
+        open={Boolean(editIssueLive)}
+        onClose={() => setEditIssue(null)}
+        members={project?.members ?? []}
+        canEdit={canEdit}
+        onSave={async (id, patch) => {
+          await updateIssue(id, {
+            title: patch.title,
+            description: patch.description,
+            priority: patch.priority,
+            status: patch.status,
+            assigneeId: patch.assigneeId,
+            dueDate: patch.dueDate,
+          });
+        }}
+      />
     </div>
   );
 }

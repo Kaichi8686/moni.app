@@ -1,3 +1,5 @@
+import { getBuiltinDefinitionByTemplateId } from "@/lib/projects/builtinRoadmapTemplates";
+import type { ProjectTemplateDefinition } from "@/lib/projects/templateTypes";
 import type { PhaseColor, RoadmapBusinessType } from "@/lib/roadmap/types";
 
 export type PhaseTemplateItem = {
@@ -59,14 +61,14 @@ export const PHASE_TEMPLATES: Record<RoadmapBusinessType, PhaseTemplateItem[]> =
 };
 
 /** ロードマップ追加モーダルのアシスト用（自分入力が本体） */
-export const ASSIST_TEMPLATE_OPTIONS: { id: RoadmapBusinessType; label: string; hint: string }[] = [
-  { id: "food", label: "🍜 飲食・カフェ", hint: "6フェーズの例" },
-  { id: "retail", label: "👗 物販・EC", hint: "5フェーズの例" },
-  { id: "event", label: "🎪 イベント", hint: "5フェーズの例" },
-  { id: "education", label: "📖 教育・塾", hint: "5フェーズの例" },
-  { id: "app", label: "📱 アプリ・IT", hint: "5フェーズの例" },
-  { id: "research", label: "📚 探究・研究", hint: "5フェーズの例" },
-  { id: "other", label: "📋 汎用プラン", hint: "4フェーズの例" },
+export const ASSIST_TEMPLATE_OPTIONS: { id: RoadmapBusinessType; label: string }[] = [
+  { id: "food", label: "🍜 飲食・カフェ" },
+  { id: "retail", label: "👗 物販・EC" },
+  { id: "event", label: "🎪 イベント" },
+  { id: "education", label: "📖 教育・塾" },
+  { id: "app", label: "📱 アプリ・IT" },
+  { id: "research", label: "📚 探究・研究" },
+  { id: "other", label: "📋 汎用プラン" },
 ];
 
 /** @deprecated アシスト一覧は ASSIST_TEMPLATE_OPTIONS を使用 */
@@ -91,25 +93,47 @@ function toDateInput(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export function buildDraftPhasesFromTemplate(businessType: RoadmapBusinessType, projectStart: Date): PhaseDraftRow[] {
-  const items = PHASE_TEMPLATES[businessType] ?? PHASE_TEMPLATES.other;
+export function buildDraftPhasesFromDefinition(
+  definition: ProjectTemplateDefinition,
+  projectStart: Date,
+): PhaseDraftRow[] {
   let cursor = new Date(projectStart);
-  return items.map((item, idx) => {
+  return definition.phases.map((item, idx) => {
     const start = new Date(cursor);
     const end = new Date(cursor);
-    end.setDate(end.getDate() + item.durationDays);
+    end.setDate(end.getDate() + Math.max(1, item.durationDays));
     cursor = new Date(end);
     cursor.setDate(cursor.getDate() + 1);
     return {
       id: `draft-${idx}-${item.title}`,
       enabled: true,
       title: item.title,
-      goal: item.goal,
+      goal: item.goal ?? "",
       startDate: toDateInput(start),
       endDate: toDateInput(end),
       durationDays: item.durationDays,
     };
   });
+}
+
+/** @deprecated 標準カタログは buildDraftPhasesFromBuiltinId を使用 */
+export function buildDraftPhasesFromTemplate(businessType: RoadmapBusinessType, projectStart: Date): PhaseDraftRow[] {
+  const items = PHASE_TEMPLATES[businessType] ?? PHASE_TEMPLATES.other;
+  return buildDraftPhasesFromDefinition(
+    {
+      version: 1,
+      phases: items.map((item) => ({ title: item.title, goal: item.goal, durationDays: item.durationDays })),
+    },
+    projectStart,
+  );
+}
+
+export function buildDraftPhasesFromBuiltinId(builtinTemplateId: string, projectStart: Date): PhaseDraftRow[] {
+  const def =
+    getBuiltinDefinitionByTemplateId(`builtin:${builtinTemplateId}`) ??
+    getBuiltinDefinitionByTemplateId(builtinTemplateId);
+  if (!def) return [newEmptyDraftRow(projectStart)];
+  return buildDraftPhasesFromDefinition(def, projectStart);
 }
 
 /** 有効な行だけ、開始日をつなげて並べ直す */

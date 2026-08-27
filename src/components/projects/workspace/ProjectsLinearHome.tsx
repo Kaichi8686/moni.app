@@ -8,7 +8,10 @@ import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import type { Issue, Member, Phase, Project, ProjectStatus } from "@/lib/workspace/types";
 import { projectRowToWorkspace } from "@/lib/workspace/mapRows";
+import { readLastProject } from "@/lib/workspace/lastProject";
 import { useWorkspaceUiStore } from "@/lib/workspace/store";
+import { applyTemplateToProject, listProjectTemplates } from "@/lib/projects/projectTemplates";
+import type { TemplateListItem } from "@/lib/projects/projectTemplates";
 
 type ProjectDbRow = ProjectRow & {
   icon?: string | null;
@@ -20,7 +23,8 @@ type ProjectDbRow = ProjectRow & {
 
 type Filter = "all" | "active" | "completed";
 
-const PROJECT_LIST_SELECT = "*";
+const PROJECT_LIST_SELECT =
+  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at,icon,start_date,target_date,linear_status,lead_id";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -37,7 +41,13 @@ export function ProjectsLinearHome() {
   const [filter, setFilter] = useState<Filter>("all");
   const [modal, setModal] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", icon: "📁", start: "", end: "" });
+  const [form, setForm] = useState({ name: "", icon: "📁", start: "", end: "", templateId: "" });
+  const [createTemplates, setCreateTemplates] = useState<TemplateListItem[]>([]);
+  const [lastProject, setLastProject] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    setLastProject(readLastProject());
+  }, []);
 
   const load = useCallback(async () => {
     const client = supabase;
@@ -118,6 +128,20 @@ export function ProjectsLinearHome() {
   }, [load]);
 
   useEffect(() => {
+    if (!modal) return;
+    void (async () => {
+      const { data: session } = await supabase?.auth.getSession() ?? { data: null };
+      const uid = session?.session?.user.id ?? null;
+      try {
+        const res = await listProjectTemplates(uid);
+        setCreateTemplates([...res.builtin, ...res.user.filter((t) => t.isOwn)]);
+      } catch {
+        setCreateTemplates([]);
+      }
+    })();
+  }, [modal]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "?" && !e.metaKey) {
         e.preventDefault();
@@ -172,12 +196,26 @@ export function ProjectsLinearHome() {
         .select("id")
         .single();
       if (error) throw new Error(error.message);
+      const projectId = (data as { id: string }).id;
       await client.from("project_members").upsert(
-        { project_id: (data as { id: string }).id, user_id: uid, role: "owner" },
+        { project_id: projectId, user_id: uid, role: "owner" },
         { onConflict: "project_id,user_id" },
       );
+      if (form.templateId) {
+        try {
+          await applyTemplateToProject({
+            projectId,
+            templateId: form.templateId,
+            mode: "replace",
+            projectStart: form.start ? new Date(form.start) : new Date(),
+            existingPhases: [],
+          });
+        } catch (te) {
+          setErr(te instanceof Error ? te.message : "型の適用に失敗しました（プロジェクトは作成済みです）");
+        }
+      }
       setModal(false);
-      setForm({ name: "", icon: "📁", start: "", end: "" });
+      setForm({ name: "", icon: "📁", start: "", end: "", templateId: "" });
       await load();
     } catch (er) {
       setErr(er instanceof Error ? er.message : "作成に失敗");
@@ -222,6 +260,17 @@ export function ProjectsLinearHome() {
           </div>
         </header>
         {err ? <div className="mx-4 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{err}</div> : null}
+        {lastProject ? (
+          <div className="mx-4 mt-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+            <p className="text-[12px] font-medium text-violet-900">前回のプロジェクト</p>
+            <Link
+              href={`/projects/${lastProject.id}/roadmap`}
+              className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-violet-700 hover:underline"
+            >
+              {lastProject.name} のロードマップを続ける →
+            </Link>
+          </div>
+        ) : null}
         <div className="mx-auto max-w-3xl px-4 py-4">
           {loading ? <p className="text-sm text-[#6B7280]">読み込み中…</p> : null}
           {!loading && filtered.length === 0 ? <p className="text-sm text-[#6B7280]">プロジェクトがありません。</p> : null}
@@ -232,13 +281,6 @@ export function ProjectsLinearHome() {
               })
             : null}
         </div>
-        <p className="px-4 pb-6 text-[11px] text-[#6B7280]">
-          <Link href="/" className="underline">
-            ホームに戻る
-          </Link>
-          {" · "}
-          DB 初回は <code className="rounded bg-[#F7F8F8] px-1">apply_linear_workspace.sql</code> を実行
-        </p>
       </div>
 
       {modal ? (
@@ -262,6 +304,19 @@ export function ProjectsLinearHome() {
               value={form.icon}
               onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value.slice(0, 4) }))}
             />
+            <label className="mt-3 block text-[12px] font-medium text-[#6B7280]">ロードマップの型（任意）</label>
+            <select
+              className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-2 text-sm"
+              value={form.templateId}
+              onChange={(e) => setForm((f) => ({ ...f, templateId: e.target.value }))}
+            >
+              <option value="">あとで決める</option>
+              {createTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}（{t.phaseCount}フェーズ）
+                </option>
+              ))}
+            </select>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div>
                 <label className="text-[12px] font-medium text-[#6B7280]">開始日</label>
@@ -273,7 +328,7 @@ export function ProjectsLinearHome() {
                 />
               </div>
               <div>
-                <label className="text-[12px] font-medium text-[#6B7280]">終了日</label>
+                <label className="text-[12px] font-medium text-[#6B7280]">完成したい日</label>
                 <input
                   type="date"
                   className="mt-1 w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 text-sm"

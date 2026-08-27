@@ -7,7 +7,6 @@ import { uploadProjectImage, validateProjectImageFile } from "@/lib/projects/upl
 import { supabase } from "@/lib/supabase";
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
-import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
 import { ProjectHomePanel } from "@/components/projects/ProjectHomePanel";
 import { ProjectRoadmapPanel, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
 import { ProjectTasksPanel, type TaskPanelRow } from "@/components/projects/ProjectTasksPanel";
@@ -15,15 +14,17 @@ import { pickFocusStep } from "@/lib/projects/roadmapFocus";
 import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectScheduleCalendar } from "@/components/projects/ProjectScheduleCalendar";
 import {
+  encodeScheduleDescription,
+  type ScheduleKind,
+} from "@/lib/workspace/busyScheduleDays";
+import {
   parseCoachingContext,
   mergeCoachingContext,
   type CoachingContext,
-  type OnboardingBusinessCategoryKey,
   type OnboardingProgressStage,
   type OnboardingTeamSize,
 } from "@/lib/projects/coachingContext";
 import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboardingWizard";
-import { buildStudentRoadmapTemplateRowsWithProgress } from "@/lib/projects/studentRoadmapTemplates";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
@@ -35,7 +36,15 @@ type ChatMode = "group" | "dm";
 
 type ProjectDocumentRow = { id: string; title: string; content: string; updated_at: string; updated_by: string | null };
 type ProjectTaskLite = TaskPanelRow;
-type ScheduleRow = { id: string; title: string; description: string; starts_at: string; ends_at: string | null; attendees: string[] | null };
+type ScheduleRow = {
+  id: string;
+  title: string;
+  description: string;
+  starts_at: string;
+  ends_at: string | null;
+  attendees: string[] | null;
+  kind?: "event" | "busy";
+};
 type MessageRow = {
   id: string;
   sender_id: string;
@@ -285,7 +294,12 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     setProjectTasks(taskRows);
 
     if (isSchemaError(scheduleRes.error)) schemaMsgs.push("スケジュール");
-    setSchedules((scheduleRes.data ?? []) as ScheduleRow[]);
+    setSchedules(
+      ((scheduleRes.data ?? []) as ScheduleRow[]).map((s) => ({
+        ...s,
+        kind: (s.description ?? "").trimStart().startsWith("[[moni:busy]]") ? "busy" : (s.kind ?? "event"),
+      })),
+    );
 
     const proj = projectData as ProjectRow;
     const ids = [...new Set([...memberList.map((m) => m.user_id), proj.owner_id])];
@@ -371,7 +385,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
 
   const completeProjectOnboarding = useCallback(
     async (data: {
-      category: OnboardingBusinessCategoryKey;
+      userSituation: import("@/lib/projects/userSituation").UserSituation;
       dreamText: string;
       progressStage: OnboardingProgressStage;
       teamSize: OnboardingTeamSize;
@@ -382,10 +396,18 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       try {
         const prev = parseCoachingContext(selectedProject.coaching_context);
         const dreamTrim = data.dreamText.trim();
+        const legacyCategoryMap = {
+          festival: "event",
+          study: "education",
+          startup: "app",
+          community: "custom",
+          unclear: "custom",
+        } as const;
         const next = mergeCoachingContext(prev, {
           onboardingDoneAt: new Date().toISOString(),
           dreamStatement: dreamTrim || prev.dreamStatement,
-          onboardingBusinessCategory: data.category,
+          userSituation: data.userSituation,
+          onboardingBusinessCategory: legacyCategoryMap[data.userSituation],
           onboardingProgressStage: data.progressStage,
           onboardingTeamSize: data.teamSize,
         });
@@ -397,7 +419,12 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           setActionErr(uErr.message);
           return;
         }
-        const rows = buildStudentRoadmapTemplateRowsWithProgress(selectedProject.id, data.category, data.progressStage);
+        const { buildSituationRoadmapTemplateRowsWithProgress } = await import("@/lib/projects/situationRoadmapTemplates");
+        const rows = buildSituationRoadmapTemplateRowsWithProgress(
+          selectedProject.id,
+          data.userSituation,
+          data.progressStage,
+        );
         const { error: iErr } = await supabase.from("project_roadmap_steps").insert(rows);
         if (iErr) {
           setActionErr(iErr.message);
@@ -412,7 +439,16 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   );
 
   const addSuggestedDailyTasks = useCallback(
-    async (items: Array<{ title: string; minutes: number }>) => {
+    async (
+      items: Array<{
+        title: string;
+        minutes: number;
+        estimatedMinutes?: number;
+        difficulty?: "すぐできる" | "ちょっと勇気がいる" | "誰かと一緒にやろう";
+        fallback?: string;
+        priorityLabel?: "今日やるべき" | "今週中にやる" | "余裕があれば";
+      }>,
+    ) => {
       if (!supabase || !selectedProject || !uid) return;
       setActionErr("");
       const stepId = pickFocusStep(roadmapSteps)?.id ?? null;
@@ -425,14 +461,23 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       for (const item of items.slice(0, 3)) {
         const title = item.title.trim().slice(0, 200);
         if (!title) continue;
-        const est = normalizeEstimate(item.minutes);
-        const meta = { inputKind: "none", answerVisibility: "shared", estimatedMinutes: est };
+        const est = normalizeEstimate(item.estimatedMinutes ?? item.minutes);
+        const meta = {
+          inputKind: "none" as const,
+          answerVisibility: "shared" as const,
+          estimatedMinutes: est,
+          difficulty: item.difficulty,
+          fallback: item.fallback?.trim() || undefined,
+          priorityLabel: item.priorityLabel,
+        };
+        const priority =
+          item.priorityLabel === "今日やるべき" ? "high" : item.priorityLabel === "今週中にやる" ? "medium" : "low";
         const { error } = await supabase.from("project_tasks").insert({
           project_id: selectedProject.id,
           title,
-          description: "",
+          description: item.fallback?.trim() ? `困ったとき: ${item.fallback.trim()}` : "",
           status: "not_started",
-          priority: "medium",
+          priority,
           created_by: uid,
           assignee_id: null,
           due_date: null,
@@ -635,20 +680,44 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     startsAt: string;
     endsAt: string;
     attendees: string;
+    kind?: "event" | "busy";
   }) {
     if (!supabase || !selectedProject || !uid || !payload.title.trim() || !payload.startsAt) return;
     setScheduleSaving(true);
     try {
-      const attendees = payload.attendees.split(/[,、]/).map((x) => x.trim()).filter(Boolean);
-      const { error } = await supabase.from("project_schedules").insert({
+      const kind: ScheduleKind = payload.kind === "busy" ? "busy" : "event";
+      const attendees =
+        kind === "busy" ? [] : payload.attendees.split(/[,、]/).map((x) => x.trim()).filter(Boolean);
+      const description = encodeScheduleDescription(kind, payload.description);
+      const baseRow = {
         project_id: selectedProject.id,
         title: payload.title.trim(),
-        description: payload.description.trim(),
+        description,
         starts_at: new Date(payload.startsAt).toISOString(),
         ends_at: payload.endsAt ? new Date(payload.endsAt).toISOString() : null,
         attendees,
         created_by: uid,
-      });
+      };
+      let { error } = await supabase.from("project_schedules").insert({ ...baseRow, kind });
+      if (error && /kind|column/i.test(error.message)) {
+        ({ error } = await supabase.from("project_schedules").insert(baseRow));
+      }
+      if (error) setActionErr(error.message);
+      await load();
+    } finally {
+      setScheduleSaving(false);
+    }
+  }
+
+  async function deleteSchedule(scheduleId: string) {
+    if (!supabase || !selectedProject || !scheduleId) return;
+    setScheduleSaving(true);
+    try {
+      const { error } = await supabase
+        .from("project_schedules")
+        .delete()
+        .eq("id", scheduleId)
+        .eq("project_id", selectedProject.id);
       if (error) setActionErr(error.message);
       await load();
     } finally {
@@ -965,14 +1034,11 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                           className="flex w-full px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
                           onClick={() => {
                             setHeaderMenuOpen(false);
-                            void (async () => {
-                              const ok = await copyProjectInviteUrl(selectedProject.id);
-                              setInviteNotice(ok ? "招待リンク（URL）をコピーしました。" : "コピーに失敗しました。");
-                              window.setTimeout(() => setInviteNotice(""), 3200);
-                            })();
+                            setInviteNotice("マイプロジェクトの🔔から、表示名で検索して招待できます（URLは使いません）。");
+                            window.setTimeout(() => setInviteNotice(""), 4200);
                           }}
                         >
-                          招待URLをコピー
+                          メンバーを招待（通知）
                         </button>
                         <button
                           type="button"
@@ -980,16 +1046,10 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                           className="flex w-full px-4 py-3 text-left text-sm font-medium text-zinc-800 hover:bg-zinc-50"
                           onClick={() => {
                             setHeaderMenuOpen(false);
-                            void (async () => {
-                              const r = await shareOrCopyProject(selectedProject.name, selectedProject.id);
-                              if (r === "failed") setInviteNotice("共有・コピーに失敗しました。");
-                              else if (r === "copied") setInviteNotice("文章ごとコピーしました。");
-                              else setInviteNotice("共有を開きました。");
-                              window.setTimeout(() => setInviteNotice(""), 3200);
-                            })();
+                            router.push("/projects");
                           }}
                         >
-                          共有…
+                          🔔 通知・招待を開く
                         </button>
                         <button
                           type="button"
@@ -1347,11 +1407,9 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             setActiveTab("schedule");
           }}
           onShareTeam={async () => {
-            const r = await shareOrCopyProject(selectedProject.name, selectedProject.id);
-            if (r === "failed") setInviteNotice("共有・コピーに失敗しました。");
-            else if (r === "copied") setInviteNotice("文章ごとコピーしました。");
-            else setInviteNotice("共有を開きました。");
+            setInviteNotice("マイプロジェクトの🔔から表示名で検索して招待できます。");
             window.setTimeout(() => setInviteNotice(""), 3200);
+            router.push("/projects");
           }}
           onCompleteTask={(id) => void completeProjectTask(id)}
           onAddAiTodoSuggestions={(items) => void addSuggestedDailyTasks(items)}
@@ -1400,6 +1458,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           schedules={schedules}
           scheduleSaving={scheduleSaving}
           onSaveSchedule={(p) => submitSchedule(p)}
+          onDeleteSchedule={(id) => deleteSchedule(id)}
         />
       ) : null}
 
@@ -1499,7 +1558,11 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 onSave={async (p) => {
                   await submitSchedule(p);
                 }}
+                onDelete={async (id) => {
+                  await deleteSchedule(id);
+                }}
                 saving={scheduleSaving}
+                canEdit={Boolean(isMember || isOwner)}
               />
             </div>
           </div>

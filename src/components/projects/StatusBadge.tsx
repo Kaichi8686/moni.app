@@ -1,24 +1,7 @@
 "use client";
 
 import type { IssueStatus, ProjectStatus } from "@/lib/workspace/types";
-
-const projectLabels: Record<ProjectStatus, string> = {
-  backlog: "未着手",
-  planned: "計画中",
-  in_progress: "進行中",
-  paused: "保留",
-  completed: "完了",
-  cancelled: "中止",
-};
-
-const issueLabels: Record<IssueStatus, string> = {
-  backlog: "バックログ",
-  todo: "やること",
-  in_progress: "進行中",
-  in_review: "レビュー",
-  done: "完了",
-  cancelled: "中止",
-};
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const projectTone: Record<ProjectStatus, string> = {
   backlog: "bg-zinc-100 text-zinc-600",
@@ -39,17 +22,35 @@ const issueTone: Record<IssueStatus, string> = {
 };
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  const { tx } = useI18n();
+  const labels: Record<ProjectStatus, string> = {
+    backlog: tx("未着手", "Backlog"),
+    planned: tx("計画中", "Planned"),
+    in_progress: tx("進行中", "In progress"),
+    paused: tx("保留", "Paused"),
+    completed: tx("完了", "Completed"),
+    cancelled: tx("中止", "Cancelled"),
+  };
   return (
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${projectTone[status]}`}>
-      {projectLabels[status]}
+      {labels[status]}
     </span>
   );
 }
 
 export function IssueStatusBadge({ status }: { status: IssueStatus }) {
+  const { tx } = useI18n();
+  const labels: Record<IssueStatus, string> = {
+    backlog: tx("あとで", "Later"),
+    todo: tx("やること", "To do"),
+    in_progress: tx("進行中", "In progress"),
+    in_review: tx("確認中", "In review"),
+    done: tx("完了", "Done"),
+    cancelled: tx("中止", "Cancelled"),
+  };
   return (
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${issueTone[status]}`}>
-      {issueLabels[status]}
+      {labels[status]}
     </span>
   );
 }

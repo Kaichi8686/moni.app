@@ -5,8 +5,10 @@ import { useRef, useState } from "react";
 import { ArrowUpRight, Camera, GraduationCap, MapPin } from "lucide-react";
 import { ProfileActionButtons } from "@/components/profile/ProfileActionButtons";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { ProfileStats } from "@/components/profile/ProfileStats";
 import { MONI_TIER_META, type MoniTier } from "@/lib/gamification/moniTier";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 import type { FollowListUser, ProfileView } from "@/lib/profile/types";
 
@@ -41,6 +43,7 @@ export function ProfileHeader({
   profileUserId,
   streakDays,
 }: Props) {
+  const { tx } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState("");
@@ -57,7 +60,7 @@ export function ProfileHeader({
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
-      if (!token) throw new Error("ログインが必要です");
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
       const body = new FormData();
       body.append("file", file);
       const res = await fetch("/api/upload-avatar", {
@@ -66,11 +69,11 @@ export function ProfileHeader({
         body,
       });
       const json = (await res.json()) as { avatarUrl?: string; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "アップロードに失敗しました");
+      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
       setAvatarPreview(json.avatarUrl ?? null);
       onAvatarUpdated?.();
     } catch (e) {
-      setAvatarError(e instanceof Error ? e.message : "写真の変更に失敗しました");
+      setAvatarError(e instanceof Error ? e.message : tx("写真の変更に失敗しました", "Couldn’t change photo"));
     } finally {
       setAvatarUploading(false);
       if (avatarInputRef.current) avatarInputRef.current.value = "";
@@ -100,8 +103,8 @@ export function ProfileHeader({
                 disabled={avatarUploading}
                 onClick={() => avatarInputRef.current?.click()}
                 className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
-                aria-label="プロフィール写真を変更"
-                title="プロフィール写真を変更"
+                aria-label={tx("プロフィール写真を変更", "Change profile photo")}
+                title={tx("プロフィール写真を変更", "Change profile photo")}
               >
                 <Camera className="h-3.5 w-3.5" />
               </button>
@@ -147,7 +150,7 @@ export function ProfileHeader({
             href={`/profile/${profileUserId}/portfolio`}
             className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[12px] font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white"
           >
-            ポートフォリオ
+            {tx("ポートフォリオ", "Portfolio")}
             <ArrowUpRight className="h-3.5 w-3.5 text-zinc-500" aria-hidden />
           </Link>
         ) : null}
@@ -180,8 +183,10 @@ export function ProfileHeader({
           </div>
         ) : null}
 
+        <ProfileSkillsTraits skills={profile.skills ?? []} traits={profile.traits ?? []} />
+
         {avatarError ? <p className="text-xs text-rose-600">{avatarError}</p> : null}
-        {avatarUploading ? <p className="text-xs text-zinc-500">写真をアップロード中…</p> : null}
+        {avatarUploading ? <p className="text-xs text-zinc-500">{tx("写真をアップロード中…", "Uploading photo…")}</p> : null}
 
         <div className="pt-1">
           <ProfileActionButtons

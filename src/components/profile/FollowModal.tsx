@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { FollowListUser } from "@/lib/profile/types";
 
 type Props = {
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function FollowModal({ type, profileId, viewerId, onClose, loadUsers, onToggleFollow }: Props) {
+  const { tx } = useI18n();
   const [users, setUsers] = useState<FollowListUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,28 +35,30 @@ export function FollowModal({ type, profileId, viewerId, onClose, loadUsers, onT
 
   return (
     <div className="fixed inset-0 z-[80]">
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="閉じる" onClick={onClose} />
+      <button type="button" className="absolute inset-0 bg-black/40" aria-label={tx("閉じる", "Close")} onClick={onClose} />
       <div className="absolute bottom-0 left-0 right-0 flex max-h-[80vh] flex-col rounded-t-2xl bg-white pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-gray-300" />
         </div>
         <div className="mobile-content-inset flex items-center justify-between border-b pb-3">
-          <h2 className="text-sm font-semibold">{type === "followers" ? "フォロワー" : "フォロー中"}</h2>
+          <h2 className="text-sm font-semibold">{type === "followers" ? tx("フォロワー", "Followers") : tx("フォロー中", "Following")}</h2>
           <button
             type="button"
             onClick={onClose}
             className="touch-target inline-flex items-center justify-center text-lg text-gray-500"
-            aria-label="閉じる"
+            aria-label={tx("閉じる", "Close")}
           >
             ×
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <p className="px-4 py-8 text-center text-sm text-gray-500">読み込み中…</p>
+            <p className="px-4 py-8 text-center text-sm text-gray-500">{tx("読み込み中…", "Loading…")}</p>
           ) : users.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-gray-500">
-              {type === "followers" ? "まだフォロワーはいません" : "まだフォロー中のユーザーはいません"}
+              {type === "followers"
+                ? tx("まだフォロワーはいません", "No followers yet")
+                : tx("まだフォロー中のユーザーはいません", "Not following anyone yet")}
             </p>
           ) : (
             users.map((user) => (
@@ -78,7 +82,11 @@ export function FollowModal({ type, profileId, viewerId, onClose, loadUsers, onT
                     }`}
                     onClick={() => void onToggleFollow(user.id).then(() => void loadUsers().then(setUsers))}
                   >
-                    {user.isFollowing ? "フォロー中" : user.isPending ? "申請中" : "フォロー"}
+                    {user.isFollowing
+                      ? tx("フォロー中", "Following")
+                      : user.isPending
+                        ? tx("申請中", "Requested")
+                        : tx("フォロー", "Follow")}
                   </button>
                 ) : null}
               </div>

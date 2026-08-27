@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectRow } from "@/lib/projects/types";
-import type { CoachingContext } from "@/lib/projects/coachingContext";
+import { parseCoachingContext, resolveUserSituation, type CoachingContext } from "@/lib/projects/coachingContext";
 import { roadmapDonePercent, pickFocusStep } from "@/lib/projects/roadmapFocus";
 import { focusPhaseIndex1Based, pickPrimaryTodayTask } from "@/lib/projects/todayFocus";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
@@ -22,7 +22,16 @@ type Props = {
   onOpenTasks: () => void;
   onShareTeam: () => void | Promise<void>;
   onCompleteTask: (taskId: string) => void | Promise<void>;
-  onAddAiTodoSuggestions?: (items: Array<{ title: string; minutes: number }>) => void | Promise<void>;
+  onAddAiTodoSuggestions?: (
+    items: Array<{
+      title: string;
+      minutes: number;
+      estimatedMinutes?: number;
+      difficulty?: "すぐできる" | "ちょっと勇気がいる" | "誰かと一緒にやろう";
+      fallback?: string;
+      priorityLabel?: "今日やるべき" | "今週中にやる" | "余裕があれば";
+    }>,
+  ) => void | Promise<void>;
   onOpenWeeklyMemo?: () => void;
   /** 週目標など coaching_context の部分更新 */
   onSaveCoaching?: (patch: Partial<CoachingContext>) => Promise<void>;
@@ -92,7 +101,16 @@ export function ProjectHomePanel({
   const pct = useMemo(() => roadmapDonePercent(steps), [steps]);
   const { current, total } = useMemo(() => focusPhaseIndex1Based(steps), [steps]);
   const focus = useMemo(() => pickFocusStep(steps), [steps]);
-  const [aiItems, setAiItems] = useState<Array<{ title: string; minutes: number }> | null>(null);
+  const [aiItems, setAiItems] = useState<
+    Array<{
+      title: string;
+      minutes: number;
+      estimatedMinutes?: number;
+      difficulty?: "すぐできる" | "ちょっと勇気がいる" | "誰かと一緒にやろう";
+      fallback?: string;
+      priorityLabel?: "今日やるべき" | "今週中にやる" | "余裕があれば";
+    }> | null
+  >(null);
   const [weeklyGoalSaving, setWeeklyGoalSaving] = useState(false);
   const [weeklyGoalDraft, setWeeklyGoalDraft] = useState("");
   const weeklyGoal = coaching.weeklyCompletionGoal;
@@ -200,10 +218,18 @@ export function ProjectHomePanel({
           focusPhaseStatus: focus?.status ?? null,
           completedTaskTitles: doneTitles,
           openTaskTitles: openTitles,
+          userSituation: resolveUserSituation(coaching),
         }),
       });
       const data = (await res.json()) as {
-        items?: Array<{ title?: string; minutes?: number }>;
+        items?: Array<{
+          title?: string;
+          minutes?: number;
+          estimatedMinutes?: number;
+          difficulty?: "すぐできる" | "ちょっと勇気がいる" | "誰かと一緒にやろう";
+          fallback?: string;
+          priorityLabel?: "今日やるべき" | "今週中にやる" | "余裕があれば";
+        }>;
         offline?: boolean;
         fallback?: boolean;
         error?: string;
@@ -214,6 +240,10 @@ export function ProjectHomePanel({
         .map((x) => ({
           title: typeof x.title === "string" ? x.title.trim() : "",
           minutes: typeof x.minutes === "number" ? x.minutes : 30,
+          estimatedMinutes: typeof x.estimatedMinutes === "number" ? x.estimatedMinutes : undefined,
+          difficulty: x.difficulty,
+          fallback: typeof x.fallback === "string" ? x.fallback.trim() : undefined,
+          priorityLabel: x.priorityLabel,
         }))
         .filter((x) => x.title.length > 0)
         .slice(0, 3);
@@ -348,7 +378,13 @@ export function ProjectHomePanel({
             {aiItems.map((item, i) => (
               <li key={`${item.title}-${i}`} className="leading-snug">
                 <span className="font-medium">{item.title}</span>
-                <span className="startup-font-mono ml-1 text-xs text-zinc-500">（{item.minutes}分）</span>
+                <span className="startup-font-mono ml-1 text-xs text-zinc-500">
+                  （{item.estimatedMinutes ?? item.minutes}分
+                  {item.difficulty ? ` · ${item.difficulty}` : ""}）
+                </span>
+                {item.fallback ? (
+                  <p className="mt-0.5 text-[11px] text-zinc-500">困ったとき: {item.fallback}</p>
+                ) : null}
               </li>
             ))}
           </ol>

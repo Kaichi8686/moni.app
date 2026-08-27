@@ -16,63 +16,9 @@ import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { SettingsRow, type SettingsItem } from "@/components/settings/SettingsRow";
 import { isAppAdminUser } from "@/lib/auth/appAdmin";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
-
-const SETTINGS_GROUPS: { id: string; title: string; items: SettingsItem[] }[] = [
-  {
-    id: "profile",
-    title: "プロフィール",
-    items: [
-      {
-        icon: UserCircle,
-        label: "プロフィールを編集",
-        description: "名前・bio・写真・リンク",
-        href: "/profile/edit",
-        color: "#18181B",
-      },
-      {
-        icon: Paintbrush,
-        label: "プロフィールを見る",
-        description: "公開プロフィールのプレビュー",
-        href: "/profile",
-        color: "#3F3F46",
-      },
-    ],
-  },
-  {
-    id: "privacy",
-    title: "プライバシーと安全",
-    items: [
-      {
-        icon: Lock,
-        label: "ログイン",
-        description: "アカウントの切り替え",
-        href: "/login",
-        color: "#059669",
-      },
-    ],
-  },
-  {
-    id: "support",
-    title: "サポート",
-    items: [
-      {
-        icon: HelpCircle,
-        label: "ランディングを見る",
-        description: "サービスの説明ページ",
-        href: "/?landing=1",
-        color: "#52525B",
-      },
-      {
-        icon: Flag,
-        label: "不具合を報告",
-        href: "mailto:support@moni.app?subject=不具合報告",
-        color: "#52525B",
-      },
-    ],
-  },
-];
 
 const OPEN_KEY = "moni-settings-open-sections";
 
@@ -89,6 +35,7 @@ function loadOpenMap(): Record<string, boolean> {
 
 export function SettingsList() {
   const router = useRouter();
+  const { tx, locale } = useI18n();
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({
@@ -119,6 +66,61 @@ export function SettingsList() {
 
   const isAdmin = isAppAdminUser({ email: session?.user.email, role });
 
+  const settingsGroups: { id: string; title: string; items: SettingsItem[] }[] = [
+    {
+      id: "profile",
+      title: tx("プロフィール", "Profile"),
+      items: [
+        {
+          icon: UserCircle,
+          label: tx("プロフィールを編集", "Edit profile"),
+          description: tx("名前・bio・写真・リンク", "Name, bio, photo, links"),
+          href: "/profile/edit",
+          color: "#18181B",
+        },
+        {
+          icon: Paintbrush,
+          label: tx("プロフィールを見る", "View profile"),
+          description: tx("公開プロフィールのプレビュー", "Preview your public profile"),
+          href: "/profile",
+          color: "#3F3F46",
+        },
+      ],
+    },
+    {
+      id: "privacy",
+      title: tx("プライバシーと安全", "Privacy & safety"),
+      items: [
+        {
+          icon: Lock,
+          label: tx("ログイン", "Log in"),
+          description: tx("アカウントの切り替え", "Switch account"),
+          href: "/login",
+          color: "#059669",
+        },
+      ],
+    },
+    {
+      id: "support",
+      title: tx("サポート", "Support"),
+      items: [
+        {
+          icon: HelpCircle,
+          label: tx("ランディングを見る", "About moni"),
+          description: tx("サービスの説明ページ", "Product overview"),
+          href: "/?landing=1",
+          color: "#52525B",
+        },
+        {
+          icon: Flag,
+          label: tx("不具合を報告", "Report a problem"),
+          href: "mailto:support@moni.app?subject=不具合報告",
+          color: "#52525B",
+        },
+      ],
+    },
+  ];
+
   function toggleSection(id: string) {
     setOpenMap((prev) => {
       const next = { ...prev, [id]: !prev[id] };
@@ -143,7 +145,7 @@ export function SettingsList() {
           type="button"
           onClick={() => router.back()}
           className="inline-flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-zinc-100"
-          aria-label="戻る"
+          aria-label={tx("戻る", "Back")}
         >
           <ChevronLeft className="h-5 w-5 text-zinc-900" />
         </button>
@@ -152,16 +154,16 @@ export function SettingsList() {
 
       {session && isAdmin ? (
         <div className="shrink-0 border-b border-[#E5E7EB] bg-white p-4 sm:px-6">
-          <AppAdminDashboard session={session} language="ja" />
+          <AppAdminDashboard session={session} language={locale} />
         </div>
       ) : null}
 
       <nav
         className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-0 py-2"
-        aria-label="設定メニュー"
+        aria-label={tx("設定メニュー", "Settings menu")}
       >
         <ul className="flex w-full flex-1 flex-col">
-          {SETTINGS_GROUPS.map((group) => {
+          {settingsGroups.map((group) => {
             const open = Boolean(openMap[group.id]);
             return (
               <li key={group.id} className="border-b border-[#E5E7EB]">
@@ -210,7 +212,7 @@ export function SettingsList() {
                   aria-hidden
                 />
                 <Bell className="h-4 w-4 text-[#6B7280]" aria-hidden />
-                <span className="text-[14px] font-bold text-[#1A1A1A]">通知・言語</span>
+                <span className="text-[14px] font-bold text-[#1A1A1A]">{tx("通知・言語", "Notifications & language")}</span>
               </button>
               {openMap.notifications ? (
                 <div className="bg-white">
@@ -232,7 +234,7 @@ export function SettingsList() {
               onClick={() => void signOut()}
               className="w-full rounded-lg border border-rose-200 bg-rose-50 py-3 text-sm font-bold text-rose-700 transition hover:bg-rose-100 active:scale-[0.99]"
             >
-              ログアウト
+              {tx("ログアウト", "Log out")}
             </button>
           ) : null}
           <p className="text-center text-xs font-medium text-zinc-500">moni v2.0.0</p>

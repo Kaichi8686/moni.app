@@ -10,11 +10,11 @@ import type { PhaseStatus as RoadmapPhaseStatus } from "@/lib/roadmap/types";
 
 const statusBar: Record<string, string> = {
   backlog: "bg-zinc-400",
-  planned: "bg-sky-500",
-  in_progress: "bg-violet-500",
-  paused: "bg-amber-400",
-  completed: "bg-emerald-500",
-  cancelled: "bg-red-400",
+  planned: "bg-[#8B93E0]",
+  in_progress: "bg-[#5E6AD2]",
+  paused: "bg-amber-500",
+  completed: "bg-emerald-600",
+  cancelled: "bg-zinc-400",
 };
 
 export type TimelinePhaseLike = {
@@ -94,7 +94,7 @@ export function TimelineBar({
     [canEdit],
   );
 
-  const barColor = riskLate ? "bg-red-500 ring-2 ring-red-300" : statusBar[phase.status] ?? "bg-violet-500";
+  const barColor = riskLate ? "bg-[#DC2626] ring-2 ring-red-200" : statusBar[phase.status] ?? "bg-[#5E6AD2]";
 
   return (
     <div className="relative h-11 border-b border-[#F7F8F8]">

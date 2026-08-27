@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProfilePost } from "@/lib/profile/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   post: ProfilePost;
@@ -9,6 +10,7 @@ type Props = {
 };
 
 export function ProfilePostModal({ post, authorName, onClose }: Props) {
+  const { tx, locale } = useI18n();
   const caption = post.caption.trim();
 
   return (
@@ -18,7 +20,7 @@ export function ProfilePostModal({ post, authorName, onClose }: Props) {
       aria-modal="true"
       onClick={onClose}
     >
-      <button type="button" className="absolute inset-0 bg-black/55" aria-label="閉じる" />
+      <button type="button" className="absolute inset-0 bg-black/55" aria-label={tx("閉じる", "Close")} />
       <div
         className="relative z-10 flex max-h-[88dvh] w-full max-w-[468px] flex-col overflow-hidden rounded-t-2xl bg-white sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -29,7 +31,7 @@ export function ProfilePostModal({ post, authorName, onClose }: Props) {
             type="button"
             onClick={onClose}
             className="rounded-full px-2 py-1 text-lg leading-none text-gray-500 hover:bg-gray-100"
-            aria-label="閉じる"
+            aria-label={tx("閉じる", "Close")}
           >
             ×
           </button>
@@ -50,10 +52,10 @@ export function ProfilePostModal({ post, authorName, onClose }: Props) {
           {caption ? (
             <p className="whitespace-pre-wrap text-[13px] leading-snug text-gray-900">{caption}</p>
           ) : (
-            <p className="text-[13px] text-gray-500">（テキストのみの投稿）</p>
+            <p className="text-[13px] text-gray-500">{tx("（テキストのみの投稿）", "(text-only post)")}</p>
           )}
           <p className="mt-2 text-[10px] uppercase tracking-wide text-gray-400">
-            {new Date(post.createdAt).toLocaleDateString("ja-JP", {
+            {new Date(post.createdAt).toLocaleDateString(locale === "en" ? "en-US" : "ja-JP", {
               month: "short",
               day: "numeric",
             })}

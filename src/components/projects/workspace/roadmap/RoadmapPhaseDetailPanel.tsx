@@ -6,20 +6,25 @@ import { RoadmapStatusBadge } from "@/components/projects/workspace/roadmap/Road
 import { RoadmapIssueList } from "@/components/projects/workspace/roadmap/RoadmapIssueList";
 import type { RoadmapPhaseWithIssues } from "@/lib/roadmap/mergeWithIssues";
 import type { PhaseStatus } from "@/lib/roadmap/types";
-import type { IssueStatus } from "@/lib/workspace/types";
+import type { Issue, IssueStatus } from "@/lib/workspace/types";
+import { resolveUserSituation, type CoachingContext } from "@/lib/projects/coachingContext";
 
 type Props = {
   projectId: string;
   phase: RoadmapPhaseWithIssues;
-  projectName: string;
-  projectDescription?: string;
   canEdit: boolean;
   onClose: () => void;
-  onUpdate: (patch: Partial<{ title: string; goal: string; status: PhaseStatus; startDate: string; endDate: string }>) => Promise<void>;
+  onUpdate: (
+    patch: Partial<{ title: string; goal: string; description: string; status: PhaseStatus; startDate: string; endDate: string }>,
+  ) => Promise<void>;
   onDelete: () => Promise<void>;
   onToggleIssueDone: (issueId: string, status: IssueStatus) => Promise<void>;
   onSetIssueDueToday: (issueId: string, today: boolean) => Promise<void>;
   onCreateIssue: (phaseId: string, title: string) => Promise<void>;
+  onOpenIssue?: (issue: Issue) => void;
+  projectName?: string;
+  projectDescription?: string;
+  coachingContext?: CoachingContext;
 };
 
 const STATUS_OPTIONS: PhaseStatus[] = ["planned", "in_progress", "paused", "completed"];
@@ -27,8 +32,6 @@ const STATUS_OPTIONS: PhaseStatus[] = ["planned", "in_progress", "paused", "comp
 export function RoadmapPhaseDetailPanel({
   projectId,
   phase,
-  projectName,
-  projectDescription,
   canEdit,
   onClose,
   onUpdate,
@@ -36,55 +39,48 @@ export function RoadmapPhaseDetailPanel({
   onToggleIssueDone,
   onSetIssueDueToday,
   onCreateIssue,
+  onOpenIssue,
+  projectName = "",
+  projectDescription = "",
+  coachingContext = {},
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [goalLoading, setGoalLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [goalAiBusy, setGoalAiBusy] = useState(false);
   const [titleDraft, setTitleDraft] = useState(phase.title);
   const [goalDraft, setGoalDraft] = useState(phase.goal ?? "");
 
   useEffect(() => {
     setTitleDraft(phase.title);
     setGoalDraft(phase.goal ?? "");
+    setDeleteConfirm(false);
+    setMenuOpen(false);
   }, [phase.id, phase.title, phase.goal]);
 
-  async function generateGoal() {
-    setGoalLoading(true);
-    try {
-      const res = await fetch("/api/projects/coach/phase-goal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phaseTitle: phase.title,
-          projectName,
-          projectDescription: projectDescription ?? "",
-        }),
-      });
-      const data = (await res.json()) as { goal?: string };
-      if (data.goal) {
-        setGoalDraft(data.goal);
-        await onUpdate({ goal: data.goal });
-      }
-    } finally {
-      setGoalLoading(false);
-    }
-  }
-
   async function handleDelete() {
-    if (!window.confirm(`「${phase.title}」を削除しますか？`)) return;
     setBusy(true);
     try {
       await onDelete();
       onClose();
     } finally {
       setBusy(false);
+      setDeleteConfirm(false);
     }
   }
 
   return (
     <>
-      <button type="button" className="fixed inset-0 z-40 bg-black/20 lg:bg-black/10" aria-label="閉じる" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl">
+      <button
+        type="button"
+        className="fixed inset-x-0 bottom-0 top-28 z-40 bg-black/20 lg:top-24 lg:bg-black/10"
+        aria-label="閉じる"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      />
+      <aside className="fixed bottom-0 right-0 top-28 z-[90] flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl lg:top-24">
         <div className="flex items-center justify-between border-b p-4">
           <RoadmapStatusBadge status={phase.status} />
           <div className="flex items-center gap-1">
@@ -99,15 +95,39 @@ export function RoadmapPhaseDetailPanel({
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
                 {menuOpen ? (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-sm">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                      onClick={() => void handleDelete()}
-                    >
-                      フェーズを削除
-                    </button>
+                  <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-sm">
+                    {deleteConfirm ? (
+                      <div className="px-3 py-2">
+                        <p className="text-[12px] font-medium text-red-800">「{phase.title}」を削除しますか？</p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setDeleteConfirm(false)}
+                            className="min-h-[36px] flex-1 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            キャンセル
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleDelete()}
+                            className="min-h-[36px] flex-1 rounded-md bg-red-600 text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {busy ? "削除中…" : "削除"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                        onClick={() => setDeleteConfirm(true)}
+                      >
+                        フェーズを削除
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -143,30 +163,75 @@ export function RoadmapPhaseDetailPanel({
         />
 
         <div className="px-4 pb-3">
-          <label className="mb-1 block text-xs text-gray-500">このフェーズのゴール</label>
-          <div className="flex gap-2">
-            <input
-              readOnly={!canEdit}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
-              placeholder="例：ターゲットと直接10人話す"
-              value={goalDraft}
-              onChange={(e) => setGoalDraft(e.target.value)}
-              onBlur={() => {
-                if (canEdit && goalDraft !== (phase.goal ?? "")) void onUpdate({ goal: goalDraft });
-              }}
-            />
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-xs text-gray-500">このフェーズのゴール</label>
             {canEdit ? (
               <button
                 type="button"
-                disabled={goalLoading}
-                onClick={() => void generateGoal()}
-                className="whitespace-nowrap rounded-lg border border-violet-300 px-3 text-xs text-violet-600 hover:bg-violet-50"
+                disabled={goalAiBusy}
+                onClick={() => {
+                  setGoalAiBusy(true);
+                  void fetch("/api/projects/coach/phase-goal", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      phaseTitle: phase.title,
+                      projectName,
+                      projectDescription,
+                      dreamStatement: coachingContext.dreamStatement ?? "",
+                      userSituation: resolveUserSituation(coachingContext),
+                    }),
+                  })
+                    .then(async (r) => {
+                      const j = (await r.json()) as {
+                        goal?: string;
+                        action?: string;
+                        why?: string;
+                        how?: string;
+                        fallback?: string;
+                        notes?: string;
+                      };
+                      if (!r.ok) throw new Error("提案に失敗しました");
+                      const goal = j.goal?.trim() ?? "";
+                      if (!goal) throw new Error("提案が空でした");
+                      setGoalDraft(goal);
+                      const descParts = [
+                        j.action ? `やること: ${j.action}` : "",
+                        j.why ? `なぜ: ${j.why}` : "",
+                        j.notes ?? "",
+                      ].filter(Boolean);
+                      await onUpdate({
+                        goal,
+                        description: descParts.join("\n") || phase.description,
+                      });
+                    })
+                    .catch(() => window.alert("AI提案に失敗しました。もう一度お試しください。"))
+                    .finally(() => setGoalAiBusy(false));
+                }}
+                className="text-[10px] font-semibold text-orange-700 disabled:opacity-50"
               >
-                {goalLoading ? "生成中" : "AI生成"}
+                {goalAiBusy ? "提案中…" : "✨ AI提案"}
               </button>
             ) : null}
           </div>
+          <input
+            readOnly={!canEdit}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+            placeholder="例：ターゲットと直接10人話す"
+            value={goalDraft}
+            onChange={(e) => setGoalDraft(e.target.value)}
+            onBlur={() => {
+              if (canEdit && goalDraft !== (phase.goal ?? "")) void onUpdate({ goal: goalDraft });
+            }}
+          />
         </div>
+
+        {phase.description?.trim() ? (
+          <div className="mx-4 mb-3 rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2.5">
+            <p className="text-[11px] font-semibold text-violet-900">このフェーズでやること</p>
+            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{phase.description}</p>
+          </div>
+        ) : null}
 
         <div className="flex gap-3 px-4 pb-4">
           <div>
@@ -199,6 +264,7 @@ export function RoadmapPhaseDetailPanel({
           onToggleDone={(id, status) => void onToggleIssueDone(id, status)}
           onSetDueToday={(id, today) => void onSetIssueDueToday(id, today)}
           onCreate={onCreateIssue}
+          onOpenIssue={onOpenIssue}
         />
       </aside>
     </>

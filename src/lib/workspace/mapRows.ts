@@ -1,4 +1,5 @@
 import type { Issue, IssueStatus, Member, Phase, Priority, Project, ProjectStatus } from "@/lib/workspace/types";
+import { parseWorkflowFromDescription, workflowFromJson } from "@/lib/workspace/issueWorkflow";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 
 export type PhaseRowDb = {
@@ -26,6 +27,7 @@ export type IssueRowDb = {
   assignee_id: string | null;
   due_date: string | null;
   labels: string[] | null;
+  workflow_json?: unknown | null;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +57,8 @@ export function buildMembers(
 }
 
 export function mapIssueRow(row: IssueRowDb): Issue {
+  const workflow =
+    workflowFromJson(row.workflow_json) ?? parseWorkflowFromDescription(row.description ?? undefined) ?? undefined;
   return {
     id: row.id,
     title: row.title,
@@ -68,6 +72,8 @@ export function mapIssueRow(row: IssueRowDb): Issue {
     updatedAt: row.updated_at,
     description: row.description ?? undefined,
     labels: row.labels ?? [],
+    workflow,
+    completionAnswer: workflow?.completionAnswer?.trim() || undefined,
   };
 }
 

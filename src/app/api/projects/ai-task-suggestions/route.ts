@@ -1,46 +1,88 @@
 import { NextResponse } from "next/server";
+import {
+  buildCoachSystemPrompt,
+  normalizeDifficulty,
+  normalizeEstimatedMinutes,
+  normalizePriorityLabel,
+  priorityFromLabel,
+  sanitizeCoachText,
+  TASK_SUGGESTIONS_JSON_RULES,
+  type AiTaskSuggestion,
+} from "@/lib/ai/studentCoachPrompt";
+import { parseUserSituation } from "@/lib/projects/userSituation";
 
 type InputBody = {
   projectName: string;
   projectDescription: string;
   recentChat?: string[];
+  userSituation?: string;
+  userInput?: string;
 };
+
+const OFFLINE_SUGGESTIONS: AiTaskSuggestion[] = [
+  {
+    title: "友達3人にアンケートを送る",
+    description: "「こういうのあったら使う？」とLINEで聞く。返事が来なくても1人分はOK。",
+    priority: "high",
+    status: "todo",
+    estimatedMinutes: 30,
+    difficulty: "すぐできる",
+    fallback: "口頭で聞いてメモしてもOK",
+    priorityLabel: "今日やるべき",
+  },
+  {
+    title: "今週やることを3つに絞る",
+    description: "全部やろうとせず、今週中に終わるサイズだけ残す。",
+    priority: "medium",
+    status: "todo",
+    estimatedMinutes: 15,
+    difficulty: "すぐできる",
+    fallback: "1つだけ決めてもOK",
+    priorityLabel: "今週中にやる",
+  },
+];
+
+function normalizeSuggestion(raw: unknown): AiTaskSuggestion | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const title = sanitizeCoachText(typeof o.title === "string" ? o.title : "");
+  const description = sanitizeCoachText(typeof o.description === "string" ? o.description : "");
+  if (!title || title.length > 200) return null;
+
+  const priorityLabel = normalizePriorityLabel(o.priorityLabel);
+  const priorityRaw = typeof o.priority === "string" ? o.priority : "";
+  let priority: "low" | "medium" | "high" = "medium";
+  if (priorityRaw === "low" || priorityRaw === "medium" || priorityRaw === "high") priority = priorityRaw;
+  else if (priorityLabel) priority = priorityFromLabel(priorityLabel);
+
+  return {
+    title,
+    description: description.slice(0, 400),
+    priority,
+    status: "todo",
+    estimatedMinutes: normalizeEstimatedMinutes(o.estimatedMinutes ?? o.minutes),
+    difficulty: normalizeDifficulty(o.difficulty),
+    fallback: sanitizeCoachText(typeof o.fallback === "string" ? o.fallback : "").slice(0, 200) || undefined,
+    priorityLabel,
+  };
+}
 
 export async function POST(req: Request) {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) {
-    return NextResponse.json(
-      {
-        suggestions: [
-          {
-            title: "1時間でやる課題仮説インタビュー準備",
-            description: "想定ユーザー3人に聞く質問を5つ作る。",
-            priority: "high",
-            status: "todo",
-          },
-          {
-            title: "今週の検証タスクを3つに絞る",
-            description: "効果が測れるものだけ残し、担当者を仮決めする。",
-            priority: "medium",
-            status: "todo",
-          },
-        ],
-        offline: true,
-      },
-      { status: 200 },
-    );
+    return NextResponse.json({ suggestions: OFFLINE_SUGGESTIONS, offline: true }, { status: 200 });
   }
 
   try {
     const body = (await req.json()) as InputBody;
+    const userSituation = parseUserSituation(body.userSituation);
     const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-    const prompt = `あなたは学生プロジェクトの実行コーチです。抽象論は禁止。必ず具体タスクだけを提案してください。
-JSON配列のみ返すこと。各要素は {title, description, priority, status}。
-priority は low|medium|high、status は todo 固定。
-5件提案する。
+    const system = buildCoachSystemPrompt({ userSituation });
+    const user = `${TASK_SUGGESTIONS_JSON_RULES}
 
 プロジェクト名: ${body.projectName}
 説明: ${body.projectDescription}
+${body.userInput?.trim() ? `ユーザーの入力: ${body.userInput.trim().slice(0, 800)}` : ""}
 最近の会話:
 ${(body.recentChat ?? []).slice(0, 8).join("\n")}`;
 
@@ -52,11 +94,11 @@ ${(body.recentChat ?? []).slice(0, 8).join("\n")}`;
       },
       body: JSON.stringify({
         model,
-        temperature: 0.2,
+        temperature: 0.35,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You output strict JSON only." },
-          { role: "user", content: prompt },
+          { role: "system", content: system },
+          { role: "user", content: user },
         ],
       }),
     });
@@ -66,11 +108,20 @@ ${(body.recentChat ?? []).slice(0, 8).join("\n")}`;
     };
     const raw = data.choices?.[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as { suggestions?: unknown[] } | unknown[];
-    const suggestions = Array.isArray(parsed)
+    const rawList = Array.isArray(parsed)
       ? parsed
       : Array.isArray((parsed as { suggestions?: unknown[] }).suggestions)
         ? (parsed as { suggestions: unknown[] }).suggestions
         : [];
+
+    const suggestions = rawList
+      .map(normalizeSuggestion)
+      .filter(Boolean)
+      .slice(0, 5) as AiTaskSuggestion[];
+
+    if (suggestions.length === 0) {
+      return NextResponse.json({ suggestions: OFFLINE_SUGGESTIONS, fallback: true }, { status: 200 });
+    }
 
     return NextResponse.json({ suggestions });
   } catch (error) {

@@ -1,5 +1,9 @@
+import { inferUserSituationFromLegacyCategory, parseUserSituation, type UserSituation } from "@/lib/projects/userSituation";
+
 /** Step 1: 業種テンプレ（studentRoadmapTemplates と同じキー） */
 export type OnboardingBusinessCategoryKey = "food" | "retail" | "app" | "event" | "education" | "custom";
+
+export type { UserSituation };
 
 /** Step 2: いまの進み具合（ロードマップ初期状態に反映） */
 export type OnboardingProgressStage = "idea" | "research" | "prototype" | "live";
@@ -12,6 +16,8 @@ const CATEGORY_KEYS = new Set<string>(["food", "retail", "app", "event", "educat
 export type CoachingContext = {
   /** 達成したいこと（短文・任意） */
   dreamStatement?: string;
+  /** ユーザーの今の状況（AI提案の文脈） */
+  userSituation?: UserSituation;
   /** 困っていること（任意） */
   stuckNow?: string;
   /** 期限の目安（例: 夏まで・3か月以内） */
@@ -62,6 +68,8 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
   const roughDeadline = typeof o.roughDeadline === "string" ? o.roughDeadline : undefined;
   const onboardingDoneAt = typeof o.onboardingDoneAt === "string" ? o.onboardingDoneAt : undefined;
   const onboardingBusinessCategory = parseBusinessCategory(o.onboardingBusinessCategory);
+  const userSituation =
+    parseUserSituation(o.userSituation) ?? inferUserSituationFromLegacyCategory(onboardingBusinessCategory);
   const onboardingProgressStage = parseProgressStage(o.onboardingProgressStage);
   const onboardingTeamSize = parseTeamSize(o.onboardingTeamSize);
   const teamActivityStreak =
@@ -93,6 +101,7 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
 
   return {
     dreamStatement,
+    userSituation,
     stuckNow,
     roughDeadline,
     onboardingDoneAt,
@@ -121,4 +130,9 @@ export function mergeCoachingContext(prev: CoachingContext, patch: Partial<Coach
     }
   }
   return next;
+}
+
+/** AI API に渡す状況（未設定時は legacy category から推定） */
+export function resolveUserSituation(ctx: CoachingContext): UserSituation | undefined {
+  return ctx.userSituation ?? inferUserSituationFromLegacyCategory(ctx.onboardingBusinessCategory);
 }

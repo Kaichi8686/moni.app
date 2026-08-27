@@ -2,29 +2,14 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { ja } from "date-fns/locale";
+import { enUS, ja } from "date-fns/locale";
 import type { Issue, IssueStatus, Member, Priority } from "@/lib/workspace/types";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
-
-const PRIORITIES: Priority[] = ["no_priority", "urgent", "high", "medium", "low"];
-const priorityLabel: Record<Priority, string> = {
-  no_priority: "なし",
-  urgent: "急",
-  high: "高",
-  medium: "中",
-  low: "低",
-};
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const ISSUE_STATUSES: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"];
-const statusLabel: Record<IssueStatus, string> = {
-  backlog: "バックログ",
-  todo: "やること",
-  in_progress: "進行中",
-  in_review: "レビュー",
-  done: "完了",
-  cancelled: "中止",
-};
+const PRIORITIES: Priority[] = ["no_priority", "urgent", "high", "medium", "low"];
 
 function dueDateToInputValue(iso?: string): string {
   if (!iso) return "";
@@ -67,6 +52,22 @@ export function IssueModal({
   const [dueInput, setDueInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const { tx, locale } = useI18n();
+  const priorityLabel: Record<Priority, string> = {
+    no_priority: tx("なし", "None"),
+    urgent: tx("急", "Urgent"),
+    high: tx("高", "High"),
+    medium: tx("中", "Medium"),
+    low: tx("低", "Low"),
+  };
+  const statusLabel: Record<IssueStatus, string> = {
+    backlog: tx("あとで", "Later"),
+    todo: tx("これから", "To do"),
+    in_progress: tx("いまやってる", "In progress"),
+    in_review: tx("確認中", "In review"),
+    done: tx("完了", "Done"),
+    cancelled: tx("やめた", "Cancelled"),
+  };
 
   useEffect(() => {
     if (!issue || !open) return;
@@ -102,7 +103,7 @@ export function IssueModal({
       });
       onClose();
     } catch (er) {
-      setErr(er instanceof Error ? er.message : "保存に失敗しました");
+      setErr(er instanceof Error ? er.message : tx("保存に失敗しました", "Couldn’t save"));
     } finally {
       setSaving(false);
     }
@@ -117,8 +118,8 @@ export function IssueModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#E5E7EB] px-4 py-3">
-          <h2 className="text-base font-semibold">課題</h2>
-          <button type="button" className="rounded-md p-2 text-[#6B7280] hover:bg-[#F7F8F8]" onClick={onClose} aria-label="閉じる">
+          <h2 className="text-base font-semibold">{tx("課題", "Issue")}</h2>
+          <button type="button" className="rounded-md p-2 text-[#6B7280] hover:bg-[#F7F8F8]" onClick={onClose} aria-label={tx("閉じる", "Close")}>
             ×
           </button>
         </div>
@@ -129,7 +130,7 @@ export function IssueModal({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-status">
-                    ステータス
+                    {tx("ステータス", "Status")}
                   </label>
                   <select
                     id="issue-edit-status"
@@ -145,7 +146,7 @@ export function IssueModal({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[12px] font-medium text-[#6B7280]">優先度</label>
+                  <label className="text-[12px] font-medium text-[#6B7280]">{tx("優先度", "Priority")}</label>
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as Priority)}
@@ -160,7 +161,7 @@ export function IssueModal({
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-assignee">
-                    担当
+                    {tx("担当", "Assignee")}
                   </label>
                   <select
                     id="issue-edit-assignee"
@@ -168,7 +169,7 @@ export function IssueModal({
                     onChange={(e) => setAssigneeId(e.target.value)}
                     className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
                   >
-                    <option value="">未割り当て</option>
+                    <option value="">{tx("未割り当て", "Unassigned")}</option>
                     {members.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
@@ -178,7 +179,7 @@ export function IssueModal({
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-due">
-                    期限
+                    {tx("期限", "Due date")}
                   </label>
                   <input
                     id="issue-edit-due"
@@ -191,7 +192,7 @@ export function IssueModal({
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-title">
-                  タイトル
+                  {tx("タイトル", "Title")}
                 </label>
                 <input
                   id="issue-edit-title"
@@ -204,14 +205,14 @@ export function IssueModal({
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-body">
-                  説明
+                  {tx("説明", "Description")}
                 </label>
                 <textarea
                   id="issue-edit-body"
                   className="mt-1 min-h-[10rem] w-full resize-y rounded-md border border-[#E5E7EB] px-3 py-2 text-sm leading-relaxed text-[#1A1A1A] outline-none ring-[#5E6AD2] focus:ring-2"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="内容や受け入れ条件などを書けます"
+                  placeholder={tx("内容や受け入れ条件などを書けます", "Details or acceptance criteria")}
                   rows={8}
                 />
               </div>
@@ -219,10 +220,10 @@ export function IssueModal({
             </div>
             <div className="flex shrink-0 justify-end gap-2 border-t border-[#E5E7EB] bg-white px-4 py-3">
               <button type="button" className="rounded-md border border-[#E5E7EB] px-3 py-2 text-sm" onClick={onClose} disabled={saving}>
-                閉じる
+                {tx("閉じる", "Close")}
               </button>
               <button type="submit" className="rounded-md bg-[#5E6AD2] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={saving}>
-                {saving ? "保存中…" : "保存"}
+                {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
               </button>
             </div>
           </form>
@@ -236,14 +237,16 @@ export function IssueModal({
             {activeIssue.description ? <p className="whitespace-pre-wrap text-sm text-[#6B7280]">{activeIssue.description}</p> : null}
             <dl className="grid gap-1 text-[12px] text-[#6B7280]">
               <div className="flex gap-2">
-                <dt className="shrink-0 font-medium text-[#9CA3AF]">担当</dt>
+                <dt className="shrink-0 font-medium text-[#9CA3AF]">{tx("担当", "Assignee")}</dt>
                 <dd>{assigneeName ?? "—"}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="shrink-0 font-medium text-[#9CA3AF]">期限</dt>
+                <dt className="shrink-0 font-medium text-[#9CA3AF]">{tx("期限", "Due")}</dt>
                 <dd>
                   {activeIssue.dueDate
-                    ? format(parseISO(activeIssue.dueDate), "yyyy/M/d", { locale: ja })
+                    ? format(parseISO(activeIssue.dueDate), locale === "en" ? "MMM d, yyyy" : "yyyy/M/d", {
+                        locale: locale === "en" ? enUS : ja,
+                      })
                     : "—"}
                 </dd>
               </div>

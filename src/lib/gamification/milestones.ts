@@ -13,16 +13,16 @@ export type MilestoneType =
   | "incorporation"
   | "custom";
 
-export const MILESTONE_TYPE_OPTIONS: { type: MilestoneType; label: string; icon: string }[] = [
-  { type: "first_sale", label: "初めての売上", icon: "💰" },
-  { type: "team_formed", label: "チーム結成", icon: "🤝" },
-  { type: "media", label: "メディア掲載", icon: "📣" },
-  { type: "contest", label: "コンテスト受賞", icon: "🏆" },
-  { type: "funding", label: "資金調達", icon: "💎" },
-  { type: "release", label: "リリース", icon: "🚀" },
-  { type: "users", label: "ユーザー獲得", icon: "👥" },
-  { type: "incorporation", label: "法人設立", icon: "📝" },
-  { type: "custom", label: "カスタム", icon: "✏️" },
+export const MILESTONE_TYPE_OPTIONS: { type: MilestoneType; label: string; labelEn: string; icon: string }[] = [
+  { type: "first_sale", label: "初めての売上", labelEn: "First sale", icon: "💰" },
+  { type: "team_formed", label: "チーム結成", labelEn: "Team formed", icon: "🤝" },
+  { type: "media", label: "メディア掲載", labelEn: "Media feature", icon: "📣" },
+  { type: "contest", label: "コンテスト受賞", labelEn: "Contest award", icon: "🏆" },
+  { type: "funding", label: "資金調達", labelEn: "Fundraising", icon: "💎" },
+  { type: "release", label: "リリース", labelEn: "Launch", icon: "🚀" },
+  { type: "users", label: "ユーザー獲得", labelEn: "Users gained", icon: "👥" },
+  { type: "incorporation", label: "法人設立", labelEn: "Incorporation", icon: "📝" },
+  { type: "custom", label: "カスタム", labelEn: "Custom", icon: "✏️" },
 ];
 
 export type UserMilestone = {
@@ -127,8 +127,10 @@ export async function deleteUserMilestone(
   if (error) throw new Error(error.message);
 }
 
-export function milestoneTypeLabel(type: MilestoneType): string {
-  return MILESTONE_TYPE_OPTIONS.find((o) => o.type === type)?.label ?? type;
+export function milestoneTypeLabel(type: MilestoneType, locale: "ja" | "en" = "ja"): string {
+  const opt = MILESTONE_TYPE_OPTIONS.find((o) => o.type === type);
+  if (!opt) return type;
+  return locale === "en" ? opt.labelEn : opt.label;
 }
 
 export function milestoneTypeIcon(type: MilestoneType): string {

@@ -4,12 +4,16 @@ import { Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
+import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { profileUsername } from "@/lib/profile/username";
 import { supabase } from "@/lib/supabase";
 
 export function EditProfileForm() {
   const router = useRouter();
+  const { tx } = useI18n();
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({
     displayName: "",
@@ -19,6 +23,8 @@ export function EditProfileForm() {
     school: "",
     location: "",
     avatarUrl: null as string | null,
+    skills: [] as string[],
+    traits: [] as string[],
   });
   const [initialForm, setInitialForm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -37,6 +43,8 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
+        "display_name,goal,avatar_url,bio,website,school,location,skills",
         "display_name,goal,avatar_url,bio,website,school,location",
         "display_name,goal,avatar_url,bio,website",
         "display_name,goal,avatar_url",
@@ -56,6 +64,8 @@ export function EditProfileForm() {
         school: (data?.school as string | null) ?? "",
         location: (data?.location as string | null) ?? "",
         avatarUrl: (data?.avatar_url as string | null) ?? null,
+        skills: parseStringTagArray(data?.skills),
+        traits: parseStringTagArray(data?.traits),
       };
       setForm(next);
       setInitialForm(JSON.stringify(next));
@@ -71,7 +81,7 @@ export function EditProfileForm() {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session.session?.access_token;
-      if (!token) throw new Error("ログインが必要です");
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
       const body = new FormData();
       body.append("file", file);
       const res = await fetch("/api/upload-avatar", {
@@ -80,11 +90,11 @@ export function EditProfileForm() {
         body,
       });
       const json = (await res.json()) as { avatarUrl?: string; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "アップロード失敗");
+      if (!res.ok) throw new Error(json.error ?? tx("アップロード失敗", "Upload failed"));
       setForm((f) => ({ ...f, avatarUrl: json.avatarUrl ?? f.avatarUrl }));
-      setMessage("プロフィール写真を更新しました");
+      setMessage(tx("プロフィール写真を更新しました", "Profile photo updated"));
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "アップロードに失敗しました");
+      setMessage(e instanceof Error ? e.message : tx("アップロードに失敗しました", "Upload failed"));
     } finally {
       setUploading(false);
     }
@@ -94,10 +104,14 @@ export function EditProfileForm() {
     if (!supabase || !userId) return;
     setSaving(true);
     setMessage("");
-    const payload: Record<string, string> = {
+    const skills = normalizeTagList(form.skills);
+    const traits = normalizeTagList(form.traits);
+    const payload: Record<string, string | string[]> = {
       display_name: form.displayName.trim() || "ユーザー",
       goal: form.bio.trim(),
       bio: form.bio.trim(),
+      skills,
+      traits,
     };
     if (form.website.trim()) payload.website = form.website.trim();
     if (form.school.trim()) payload.school = form.school.trim();
@@ -106,12 +120,29 @@ export function EditProfileForm() {
     const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
     setSaving(false);
     if (error) {
-      const fallback = await supabase
-        .from("profiles")
-        .update({ display_name: payload.display_name, goal: payload.goal })
-        .eq("id", userId);
+      const withoutTraits = { ...payload };
+      delete withoutTraits.traits;
+      let fallback = await supabase.from("profiles").update(withoutTraits).eq("id", userId);
       if (fallback.error) {
-        setMessage(fallback.error.message);
+        const withoutSkills = { ...withoutTraits };
+        delete withoutSkills.skills;
+        fallback = await supabase.from("profiles").update(withoutSkills).eq("id", userId);
+      }
+      if (fallback.error) {
+        const minimal = await supabase
+          .from("profiles")
+          .update({ display_name: payload.display_name, goal: payload.goal })
+          .eq("id", userId);
+        if (minimal.error) {
+          setMessage(minimal.error.message);
+          return;
+        }
+        setMessage(
+          tx(
+            "特技・性格の保存には Supabase で apply_profile_skills_traits.sql を実行してください（他の項目は保存済み）。",
+            "Run apply_profile_skills_traits.sql in Supabase to save skills/traits (other fields were saved).",
+          ),
+        );
         return;
       }
     }
@@ -120,31 +151,29 @@ export function EditProfileForm() {
 
   const fields: Array<{
     label: string;
-    field: keyof typeof form;
+    field: "displayName" | "username" | "bio" | "school" | "location" | "website";
     placeholder: string;
     multiline: boolean;
     readOnly?: boolean;
   }> = [
-    { label: "表示名", field: "displayName", placeholder: "例：カイチ", multiline: false },
-    { label: "ユーザーID", field: "username", placeholder: "表示のみ", multiline: false, readOnly: true },
-    { label: "自己紹介", field: "bio", placeholder: "いま挑戦していることを一言で", multiline: true },
-    { label: "学校", field: "school", placeholder: "例：○○大学 2年", multiline: false },
-    { label: "場所", field: "location", placeholder: "例：東京", multiline: false },
-    { label: "リンク", field: "website", placeholder: "https://", multiline: false },
+    { label: tx("表示名", "Display name"), field: "displayName", placeholder: tx("例：カイチ", "e.g. Kaichi"), multiline: false },
+    { label: tx("ユーザーID", "Username"), field: "username", placeholder: tx("表示のみ", "Display only"), multiline: false, readOnly: true },
+    { label: tx("自己紹介", "Bio"), field: "bio", placeholder: tx("いま挑戦していることを一言で", "What you’re working on, in a sentence"), multiline: true },
+    { label: tx("学校", "School"), field: "school", placeholder: tx("例：○○大学 2年", "e.g. University, 2nd year"), multiline: false },
+    { label: tx("場所", "Location"), field: "location", placeholder: tx("例：東京", "e.g. Tokyo"), multiline: false },
+    { label: tx("リンク", "Link"), field: "website", placeholder: "https://", multiline: false },
   ];
 
   return (
     <div className="account-shell w-full">
-      <header
-        className="account-header profile-inset justify-between"
-      >
+      <header className="account-header profile-inset justify-between">
         <button
           type="button"
           onClick={() => router.back()}
           className="inline-flex min-h-[44px] touch-manipulation items-center text-[14px] transition-opacity hover:opacity-70 active:opacity-50"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          キャンセル
+          {tx("キャンセル", "Cancel")}
         </button>
         <h1 className="text-[15px] font-semibold" style={{ color: "var(--color-text-primary)" }}>
           moni
@@ -156,7 +185,7 @@ export function EditProfileForm() {
           className="inline-flex min-h-[44px] touch-manipulation items-center text-[14px] font-semibold transition-opacity disabled:opacity-40 active:opacity-70"
           style={{ color: "var(--color-accent)" }}
         >
-          {saving ? "保存中..." : "完了"}
+          {saving ? tx("保存中...", "Saving...") : tx("完了", "Done")}
         </button>
       </header>
 
@@ -183,7 +212,7 @@ export function EditProfileForm() {
             </label>
           </div>
           <label className="cursor-pointer text-[13px] font-semibold" style={{ color: "var(--color-accent)" }}>
-            {uploading ? "アップロード中…" : "写真を変更"}
+            {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を変更", "Change photo")}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
@@ -229,6 +258,16 @@ export function EditProfileForm() {
             </div>
           </div>
         ))}
+
+        <div className="account-card px-4 py-4">
+          <SkillsTraitsEditor
+            compact
+            skills={form.skills}
+            traits={form.traits}
+            onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
+            onTraitsChange={(traits) => setForm((f) => ({ ...f, traits }))}
+          />
+        </div>
       </div>
 
       {message ? (

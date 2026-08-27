@@ -20,17 +20,19 @@ export function ProjectCard({
   const target = project.targetDate
     ? format(new Date(project.targetDate), "M/d", { locale: ja })
     : "未定";
+  const href = `/projects/${project.id}/roadmap`;
 
   return (
-    <div className="group relative flex items-center gap-4 border-b border-[#E5E7EB] bg-white px-4 py-3 transition-all duration-150 ease-out hover:bg-[#F7F8F8]">
+    <Link
+      href={href}
+      className="group relative flex items-center gap-4 border-b border-[#E5E7EB] bg-white px-4 py-3 transition-all duration-150 ease-out hover:bg-[#F7F8F8]"
+    >
       <span className="text-xl" aria-hidden>
         {project.icon || "📁"}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/projects/${project.id}/overview`} className="truncate font-medium text-[#1A1A1A] hover:underline">
-            {project.name}
-          </Link>
+          <span className="truncate font-medium text-[#1A1A1A] group-hover:underline">{project.name}</span>
           <ProjectStatusBadge status={project.status} />
         </div>
         <div className="mt-2 flex max-w-md items-center gap-3">
@@ -40,12 +42,9 @@ export function ProjectCard({
           </span>
         </div>
       </div>
-      <Link
-        href={`/projects/${project.id}/overview`}
-        className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] opacity-0 transition-all duration-150 ease-out hover:bg-white group-hover:opacity-100"
-      >
+      <span className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] opacity-0 transition-all duration-150 ease-out group-hover:opacity-100">
         開く
-      </Link>
-    </div>
+      </span>
+    </Link>
   );
 }

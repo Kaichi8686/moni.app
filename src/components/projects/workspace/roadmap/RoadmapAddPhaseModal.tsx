@@ -3,24 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import { ChevronDown, ChevronUp, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { ARCHETYPE_LABELS, BUILTIN_ROADMAP_TEMPLATES } from "@/lib/projects/builtinRoadmapTemplates";
+import type { TemplateArchetype } from "@/lib/projects/templateTypes";
 import {
-  ASSIST_TEMPLATE_OPTIONS,
-  buildDraftPhasesFromTemplate,
+  buildDraftPhasesFromBuiltinId,
   chainDraftPhaseDates,
   newEmptyDraftRow,
   type PhaseDraftRow,
 } from "@/lib/roadmap/phaseTemplates";
-import type { RoadmapBusinessType } from "@/lib/roadmap/types";
+
+const ASSIST_ARCHETYPES: TemplateArchetype[] = ["application", "service", "hardware"];
 
 type Props = {
   open: boolean;
   onClose: () => void;
   projectStart?: string;
-  existingCount: number;
   onBulkAddPhases: (
     items: Array<{ title: string; goal?: string; startDate: string; endDate: string }>,
-    businessType?: RoadmapBusinessType,
   ) => Promise<void>;
 };
 
@@ -28,11 +28,11 @@ function draftsHaveContent(rows: PhaseDraftRow[]): boolean {
   return rows.some((d) => d.title.trim() || d.goal.trim());
 }
 
-export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCount, onBulkAddPhases }: Props) {
+export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPhases }: Props) {
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<PhaseDraftRow[]>([]);
   const [assistOpen, setAssistOpen] = useState(false);
-  const [loadedAssist, setLoadedAssist] = useState<RoadmapBusinessType | null>(null);
+  const [loadedAssistId, setLoadedAssistId] = useState<string | null>(null);
 
   const start = useMemo(() => (projectStart ? new Date(projectStart) : new Date()), [projectStart]);
 
@@ -40,12 +40,12 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCoun
     if (!open) {
       setDrafts([]);
       setAssistOpen(false);
-      setLoadedAssist(null);
+      setLoadedAssistId(null);
       return;
     }
     setDrafts([newEmptyDraftRow(start)]);
     setAssistOpen(false);
-    setLoadedAssist(null);
+    setLoadedAssistId(null);
   }, [open, start]);
 
   if (!open) return null;
@@ -68,21 +68,21 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCoun
         return next;
       }),
     );
-    setLoadedAssist(null);
+    setLoadedAssistId(null);
   }
 
   function removeDraft(id: string) {
     setDrafts((rows) => (rows.length <= 1 ? rows : rows.filter((r) => r.id !== id)));
-    setLoadedAssist(null);
+    setLoadedAssistId(null);
   }
 
-  function applyAssist(type: RoadmapBusinessType) {
+  function applyAssist(templateId: string) {
     if (draftsHaveContent(drafts)) {
-      const ok = window.confirm("今の入力を、アシストの例で置き換えますか？\n（キャンセルならそのまま編集を続けられます）");
+      const ok = window.confirm("今の入力を例で置き換えますか？");
       if (!ok) return;
     }
-    setDrafts(buildDraftPhasesFromTemplate(type, start));
-    setLoadedAssist(type);
+    setDrafts(buildDraftPhasesFromBuiltinId(templateId, start));
+    setLoadedAssistId(templateId);
     setAssistOpen(false);
   }
 
@@ -98,7 +98,7 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCoun
     if (enabled.length === 0) return;
     setBusy(true);
     try {
-      await onBulkAddPhases(enabled, loadedAssist ?? undefined);
+      await onBulkAddPhases(enabled);
       onClose();
     } finally {
       setBusy(false);
@@ -111,10 +111,7 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCoun
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/30 p-4 sm:items-center">
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900">フェーズを追加</h2>
-            <p className="mt-0.5 text-[11px] text-gray-500">まず自由に入力。例が欲しいときだけアシストを使えます</p>
-          </div>
+          <h2 className="text-sm font-bold text-gray-900">フェーズを追加</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-gray-100" aria-label="閉じる">
             <X className="h-4 w-4" />
           </button>
@@ -214,46 +211,42 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, existingCoun
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
               onClick={() => setAssistOpen((v) => !v)}
             >
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-800">
-                <Sparkles className="h-3.5 w-3.5" />
-                アシスト（業種別の例を読み込む）
-              </span>
+              <span className="text-xs font-semibold text-violet-800">アシスト</span>
               {assistOpen ? <ChevronUp className="h-4 w-4 text-violet-600" /> : <ChevronDown className="h-4 w-4 text-violet-600" />}
             </button>
             {assistOpen ? (
-              <div className="border-t border-violet-100 px-3 pb-3 pt-2">
-                <p className="mb-2 text-[11px] leading-relaxed text-violet-900/80">
-                  迷ったとき用です。選ぶと下の入力欄に例が入ります。あとから自由に直せます。
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {ASSIST_TEMPLATE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => applyAssist(opt.id)}
-                      className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                        loadedAssist === opt.id
-                          ? "border-violet-400 bg-violet-100 font-medium text-violet-900"
-                          : "border-violet-200 bg-white text-gray-800 hover:border-violet-300 hover:bg-violet-50"
-                      }`}
-                    >
-                      <span className="block">{opt.label}</span>
-                      <span className="text-[10px] text-gray-500">{opt.hint}</span>
-                    </button>
-                  ))}
-                </div>
+              <div className="max-h-[280px] overflow-y-auto border-t border-violet-100 px-3 pb-3 pt-2">
+                {ASSIST_ARCHETYPES.map((arch) => {
+                  const meta = ARCHETYPE_LABELS[arch];
+                  const items = BUILTIN_ROADMAP_TEMPLATES.filter((t) => t.archetype === arch);
+                  return (
+                    <div key={arch} className="mb-3 last:mb-0">
+                      <p className="text-[10px] font-semibold text-violet-900">
+                        {meta.emoji} {meta.label}
+                      </p>
+                      <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                        {items.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => applyAssist(t.id)}
+                            className={`rounded-lg border px-2.5 py-2 text-left text-[11px] leading-snug transition-colors ${
+                              loadedAssistId === t.id
+                                ? "border-violet-400 bg-violet-100 font-medium text-violet-900"
+                                : "border-violet-200 bg-white text-gray-800 hover:border-violet-300 hover:bg-violet-50"
+                            }`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </div>
 
-          {existingCount > 0 ? (
-            <p className="mt-3 text-xs text-amber-700">既存フェーズの末尾に追加されます。</p>
-          ) : null}
-          {loadedAssist ? (
-            <p className="mt-2 text-[11px] text-violet-600">
-              アシスト「{ASSIST_TEMPLATE_OPTIONS.find((o) => o.id === loadedAssist)?.label}」を読み込み済み（編集してから追加できます）
-            </p>
-          ) : null}
         </div>
 
         <div className="flex shrink-0 gap-2 border-t bg-white p-4">

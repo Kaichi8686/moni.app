@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Command } from "cmdk";
+import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { useWorkspaceUiStore } from "@/lib/workspace/store";
 
 export function CommandPalette({ projectId }: { projectId?: string }) {
@@ -45,7 +46,7 @@ export function CommandPalette({ projectId }: { projectId?: string }) {
             <Command.Item
               className="cursor-pointer rounded-md px-2 py-2 text-[13px] text-[#1A1A1A] aria-selected:bg-[#F7F8F8]"
               onSelect={() => {
-                router.push("/projects");
+                router.push(HOME_PROJECTS_HREF);
                 setOpen(false);
               }}
             >

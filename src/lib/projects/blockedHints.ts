@@ -23,9 +23,9 @@ export function blockedRestartHint(code: BlockedReasonCode): {
       };
     case "need_help":
       return {
-        message: "チャットなどで、やってほしいことを一文で伝えると動きやすくなります。",
+        message: "プロジェクト内チャットで、やってほしいことを一文で伝えると動きやすくなります。",
         links: [
-          { label: "ユーザー検索・チャット", href: "/?tab=chat" },
+          { label: "仲間・プロジェクトを探す", href: "/?tab=chat" },
           { label: "進捗を投稿", href: "/?tab=posts&community=progress" },
         ],
       };

@@ -1,49 +1,94 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
+import { buildRoadmapTemplateRows, PROJECT_LINE_META } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
-import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
+import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
+import { ProjectCubeCarousel } from "@/components/projects/ProjectCubeCarousel";
+import { Bell } from "lucide-react";
+import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
+import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
+import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
 export type AppFeatureKey = "projects" | "posts" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
 type SortKey = "newest" | "oldest" | "name";
 
-const ICON_BG = [
-  "bg-sky-500",
-  "bg-emerald-500",
-  "bg-amber-500",
-  "bg-violet-500",
-  "bg-rose-500",
-  "bg-cyan-500",
-];
-
 type Props = {
-  displayName: string;
-  sessionEmail: string | null;
   hasSession: boolean;
+  userId: string | null;
   onNavigate: (key: AppFeatureKey) => void;
+  /** /projects ホーム用：画面いっぱいに広げる */
+  fillViewport?: boolean;
 };
-
-const sidebarItems: { key: AppFeatureKey; label: string; icon: string }[] = [
-  { key: "posts", label: "ホーム", icon: "⌂" },
-  { key: "projects", label: "プロジェクト", icon: "▦" },
-  { key: "chat", label: "検索", icon: "⌕" },
-  { key: "account", label: "プロフィール", icon: "◉" },
-];
-
-function hashIndex(id: string, mod: number): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % mod;
-}
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
 const PROJECT_LIST_SELECT =
-  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at";
+  "id,owner_id,name,description,category,tags,thumbnail_url,icon,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at";
+
+const PROJECT_LIST_SELECT_FALLBACKS = [
+  PROJECT_LIST_SELECT,
+  "id,owner_id,name,description,category,tags,thumbnail_url,icon,visibility,business_type,created_at,updated_at",
+  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at",
+  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,created_at,updated_at",
+  "id,owner_id,name,description,visibility,created_at,updated_at",
+] as const;
+
+function isSchemaMismatchError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = error.message ?? "";
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
+  );
+}
+
+async function fetchProjectsByIds(
+  client: NonNullable<typeof supabase>,
+  ids: string[],
+): Promise<{ rows: ProjectRow[]; error: string | null }> {
+  if (ids.length === 0) return { rows: [], error: null };
+  const batches = chunkIds(ids, 90);
+  for (const select of PROJECT_LIST_SELECT_FALLBACKS) {
+    let merged: ProjectRow[] = [];
+    let failed: { code?: string; message?: string } | null = null;
+    for (const batch of batches) {
+      const res = await client.from("projects").select(select).in("id", batch);
+      if (res.error) {
+        failed = res.error;
+        break;
+      }
+      merged = merged.concat((res.data ?? []) as unknown as ProjectRow[]);
+    }
+    if (!failed) return { rows: merged, error: null };
+    if (!isSchemaMismatchError(failed)) return { rows: [], error: failed.message ?? "取得に失敗しました" };
+  }
+  return { rows: [], error: "プロジェクト一覧の取得に失敗しました。" };
+}
+
+async function fetchOwnedProjects(
+  client: NonNullable<typeof supabase>,
+  uid: string,
+): Promise<{ rows: ProjectRow[]; error: string | null }> {
+  for (const select of PROJECT_LIST_SELECT_FALLBACKS) {
+    const res = await client
+      .from("projects")
+      .select(select)
+      .eq("owner_id", uid)
+      .order("updated_at", { ascending: false })
+      .limit(120);
+    if (!res.error) return { rows: (res.data ?? []) as unknown as ProjectRow[], error: null };
+    if (!isSchemaMismatchError(res.error)) return { rows: [], error: res.error.message };
+    const withoutOrder = await client.from("projects").select(select).eq("owner_id", uid).limit(120);
+    if (!withoutOrder.error) return { rows: (withoutOrder.data ?? []) as unknown as ProjectRow[], error: null };
+    if (!isSchemaMismatchError(withoutOrder.error)) return { rows: [], error: withoutOrder.error.message };
+  }
+  return { rows: [], error: "プロジェクト一覧の取得に失敗しました。" };
+}
 
 function chunkIds<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -51,7 +96,26 @@ function chunkIds<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavigate }: Props) {
+const QUERY_TIMEOUT_MS = 12_000;
+
+async function withQueryTimeout<T>(promise: PromiseLike<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error(`${label}がタイムアウトしました。再読み込みしてください。`)),
+        QUERY_TIMEOUT_MS,
+      );
+    }),
+  ]);
+}
+
+export function ProjectTabGlide({
+  hasSession,
+  userId,
+  onNavigate,
+  fillViewport = false,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -76,10 +140,20 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteToast, setInviteToast] = useState("");
+  const [bellBadge, setBellBadge] = useState(0);
 
   const flashInviteToast = useCallback((message: string) => {
     setInviteToast(message);
     window.setTimeout(() => setInviteToast(""), 2600);
+  }, []);
+
+  const refreshBellBadge = useCallback(async (uid: string) => {
+    const [invites, notes] = await Promise.all([
+      fetchIncomingProjectInvites(uid),
+      fetchMyProjectNotifications(uid, 40),
+    ]);
+    const unreadNotes = notes.filter((n) => !n.read_at && n.type !== "project_invite").length;
+    setBellBadge(invites.length + unreadNotes);
   }, []);
 
   const load = useCallback(async () => {
@@ -91,8 +165,7 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
     setLoading(true);
     setErr("");
     try {
-      const { data: session } = await client.auth.getSession();
-      const uid = session?.session?.user.id;
+      const uid = userId;
       if (!uid) {
         setCurrentUserId(null);
         setProjects([]);
@@ -101,55 +174,59 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
       }
       setCurrentUserId(uid);
 
-      const { data: mems, error: memErr } = await client.from("project_members").select("project_id").eq("user_id", uid);
-      if (memErr) {
-        setErr(memErr.message);
-        return;
+      const ownedResult = await withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧");
+      if (ownedResult.error) {
+        setErr(ownedResult.error);
       }
-      const memberIds = [...new Set((mems ?? []).map((m: { project_id: string }) => m.project_id))];
 
-      let memberRows: ProjectRow[] = [];
-      if (memberIds.length > 0) {
-        const batches = chunkIds(memberIds, 90);
-        const batchResults = await Promise.all(
-          batches.map((batch) => client.from("projects").select(PROJECT_LIST_SELECT).in("id", batch)),
+      let memberIds: string[] = [];
+      try {
+        const memRes = await withQueryTimeout(
+          client.from("project_members").select("project_id").eq("user_id", uid),
+          "参加プロジェクト",
         );
-        for (const br of batchResults) {
-          if (br.error) {
-            setErr(br.error.message);
-            return;
-          }
-          memberRows = memberRows.concat((br.data ?? []) as ProjectRow[]);
+        if (memRes.error) {
+          setErr((prev) => prev || memRes.error.message);
+        } else {
+          memberIds = [...new Set((memRes.data ?? []).map((m: { project_id: string }) => m.project_id))];
         }
+      } catch (e) {
+        setErr((prev) => prev || (e instanceof Error ? e.message : "参加プロジェクトの取得に失敗しました。"));
       }
 
-      const { data: ownedFallback, error: ownErr } = await client
-        .from("projects")
-        .select(PROJECT_LIST_SELECT)
-        .eq("owner_id", uid)
-        .order("updated_at", { ascending: false })
-        .limit(120);
-      if (ownErr) {
-        setErr(ownErr.message);
-        return;
+      const memberResult =
+        memberIds.length > 0
+          ? await withQueryTimeout(fetchProjectsByIds(client, memberIds), "参加プロジェクト詳細")
+          : { rows: [] as ProjectRow[], error: null };
+      if (memberResult.error) {
+        setErr((prev) => prev || memberResult.error || "");
       }
 
       const byId = new Map<string, ProjectRow>();
-      for (const row of [...memberRows, ...((ownedFallback ?? []) as ProjectRow[])]) {
+      for (const row of [...(memberResult.rows ?? []), ...(ownedResult.rows ?? [])]) {
         byId.set(row.id, row);
       }
-      const merged = [...byId.values()].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      const merged = [...byId.values()].sort(
+        (a, b) => new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime(),
+      );
+      // オーナーなのに members にいないケースを自己修復
+      await Promise.all(
+        merged
+          .filter((p) => p.owner_id === uid)
+          .map((p) => ensureOwnerMembership(p.id, p.owner_id).catch(() => undefined)),
+      );
       setProjects(merged.slice(0, 200));
       setJoinedIds(new Set(merged.map((p) => p.id)));
+      void refreshBellBadge(uid);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました。");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId, refreshBellBadge]);
 
   useEffect(() => {
-    void load();
+    void load().catch(() => setLoading(false));
   }, [load]);
 
   const displayList = useMemo(() => {
@@ -287,133 +364,118 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
   }
 
   return (
-    <div className="flex min-h-[min(72vh,720px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 shadow-sm sm:flex-row">
-      {/* サイドバー：Glide風（md+） */}
-      <aside className="hidden w-[220px] shrink-0 flex-col border-b border-zinc-200 bg-white sm:border-b-0 sm:border-r md:flex">
-        <div className="border-b border-zinc-100 p-3">
-          <p className="text-xs font-medium text-zinc-500">Free</p>
-          <p className="truncate text-sm font-semibold text-zinc-900">{displayName.trim() || "moni"}</p>
-          <p className="truncate text-[11px] text-zinc-400">{sessionEmail ?? ""}</p>
-        </div>
-        <nav className="flex-1 space-y-0.5 p-2">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => {
-                onNavigate(item.key);
-              }}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm ${
-                item.key === "projects" ? "bg-zinc-100 font-semibold text-zinc-900" : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              <span className="text-base opacity-80">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      <div className="min-w-0 flex-1 bg-white">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 px-3 py-3 sm:px-4">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">マイプロジェクト</h2>
-            <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
+    <div
+      className={
+        fillViewport
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
+          : "flex min-h-[min(72vh,720px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 shadow-sm"
+      }
+    >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+        <header
+          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 bg-white/90 px-3 backdrop-blur-sm sm:px-5 ${
+            fillViewport ? "py-1.5" : "px-4 py-2.5 lg:px-6"
+          }`}
+        >
+          <div className={fillViewport ? "min-w-0" : undefined}>
+            <h2 className={`font-bold tracking-tight text-zinc-900 ${fillViewport ? "text-base sm:text-lg" : "text-xl sm:text-2xl"}`}>
+              マイプロジェクト
+            </h2>
+            {!fillViewport ? (
+              <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
+            ) : null}
           </div>
-          <div className="flex flex-1 items-center justify-end gap-2 sm:flex-initial sm:min-w-0">
-            <input
-              className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-zinc-400 sm:max-w-xs"
-              placeholder="検索 ⌘K 風"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="プロジェクトを検索"
-            />
+          <div className="flex flex-1 items-center justify-end gap-1.5 sm:flex-initial sm:min-w-0 sm:gap-2">
+            <label className={`relative min-w-0 flex-1 ${fillViewport ? "max-w-[9.5rem] sm:max-w-xs" : "sm:max-w-xs"}`}>
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] leading-none sm:left-3 sm:text-[15px]" aria-hidden>
+                🔍
+              </span>
+              <input
+                className={`w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-8 pr-2 text-sm outline-none focus:border-zinc-400 sm:pl-9 sm:pr-3 sm:text-sm ${
+                  fillViewport ? "min-h-[36px] py-1.5 text-xs" : "min-h-[44px] py-2 text-base"
+                }`}
+                placeholder="検索"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="プロジェクトを検索"
+              />
+            </label>
             <button
               type="button"
-              disabled={!hasSession || inviteEligibleProjects.length === 0}
-              title={
-                !hasSession
-                  ? "ログインが必要です"
-                  : inviteEligibleProjects.length === 0
-                    ? "参加中または自分がオーナーのプロジェクトだけ招待リンクを出せます"
-                    : "参加中・オーナーのプロジェクトのURLをコピー・共有"
-              }
+              disabled={!hasSession}
+              title={!hasSession ? "ログインが必要です" : "通知"}
               onClick={() => {
-                if (!hasSession || inviteEligibleProjects.length === 0) return;
+                if (!hasSession) return;
                 setInviteOpen(true);
               }}
-              className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
+                fillViewport ? "min-h-[36px] min-w-[36px]" : "min-h-[44px] min-w-[44px]"
+              }`}
+              aria-label="通知"
             >
-              招待リンク
+              <Bell className={fillViewport ? "h-4 w-4" : "h-5 w-5"} strokeWidth={1.75} aria-hidden />
+              {bellBadge > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                  {bellBadge > 9 ? "9+" : bellBadge}
+                </span>
+              ) : null}
             </button>
+            <label className="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
+              <span className="sr-only sm:not-sr-only">並び</span>
+              <select
+                className={`rounded-lg border border-zinc-200 bg-white text-zinc-800 ${fillViewport ? "px-1.5 py-1 text-[11px]" : "px-2 py-1 text-xs"}`}
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                aria-label="並び順"
+              >
+                <option value="newest">新しい順</option>
+                <option value="oldest">古い順</option>
+                <option value="name">名前</option>
+              </select>
+            </label>
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-zinc-100 px-3 py-2 sm:px-4">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <span>並び</span>
-            <select
-              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-            >
-              <option value="newest">新しい順</option>
-              <option value="oldest">古い順</option>
-              <option value="name">名前</option>
-            </select>
-          </div>
-        </div>
-
-        {err ? <p className="px-4 py-2 text-sm text-rose-600">{err}</p> : null}
-        {inviteToast ? <p className="px-4 py-1 text-center text-xs font-medium text-emerald-700">{inviteToast}</p> : null}
-
-        <div className="p-3 pb-28 sm:p-4 sm:pb-24">
-          {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {/* 新規カード（Glide の +） */}
+        {err ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <p className="text-sm text-rose-600">{err}</p>
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
-              className="group flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+              className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700"
+              onClick={() => void load()}
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">+</span>
-              <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
-              <span className="text-center text-[11px] text-zinc-500">作って仲間を集める</span>
+              再読み込み
             </button>
+          </div>
+        ) : null}
+        {inviteToast ? <p className="px-4 py-1 text-center text-xs font-medium text-emerald-700">{inviteToast}</p> : null}
 
-            {displayList.map((p) => {
-              const c = ICON_BG[hashIndex(p.id, ICON_BG.length)];
-              return (
-                <div key={p.id} className="group relative">
-                  <Link
-                    href={`/projects/${p.id}/overview`}
-                    prefetch
-                    className="relative z-10 flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:shadow-lg active:opacity-90"
-                  >
-                    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${c} text-2xl text-white shadow-sm`} aria-hidden>
-                      {(p.name.trim().charAt(0) || "P").toUpperCase()}
-                    </div>
-                    <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{p.name}</p>
-                    <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">{projectLineShortLabel(p.business_type)}</p>
-                    <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
-                      {p.visibility === "public" ? "公開" : "非公開"}
-                      {currentUserId && p.owner_id === currentUserId ? " ・ オーナー" : ""}
-                      {joinedIds.has(p.id) ? " ・ メンバー" : ""}
-                    </p>
-                    <div className="pointer-events-none absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                      <span className="rounded bg-white/90 px-1.5 text-[10px] text-zinc-500">⋯</span>
-                    </div>
-                  </Link>
-                </div>
-              );
-            })}
+        <div
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+            fillViewport ? "relative min-h-0 p-0" : "mobile-content-inset px-1 pt-1 pb-2 sm:px-2"
+          }`}
+        >
+          {!fillViewport && currentUserId ? (
+            <div className="mb-2 shrink-0">
+              <ActiveProjectCard userId={currentUserId} />
+            </div>
+          ) : null}
+
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <ProjectCubeCarousel
+              projects={displayList}
+              currentUserId={currentUserId}
+              joinedIds={joinedIds}
+              loading={loading}
+              onCreate={() => setCreateOpen(true)}
+            />
           </div>
 
           {!loading && displayList.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center">
-              <p className="text-sm font-semibold text-zinc-800">参加しているプロジェクトはまだありません。</p>
+            <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。
+                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。キューブの「新規」面からも作成できます。
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button
@@ -425,7 +487,7 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
                 </button>
                 <button
                   type="button"
-                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
+                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
                   onClick={() => {
                     onNavigate("chat");
                   }}
@@ -435,20 +497,6 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
               </div>
             </div>
           ) : null}
-        </div>
-
-        {/* フローティング風 CTA（簡易版） */}
-        <div className="sticky bottom-0 border-t border-zinc-100 bg-white/90 px-3 py-2 backdrop-blur sm:px-4">
-          <div className="mx-auto flex max-w-lg flex-col gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:pr-1">
-            <p className="pl-1 text-xs text-zinc-500 sm:flex-1">次の一手は、コミュニティで進捗共有か質問相談。</p>
-            <button
-              type="button"
-              className="shrink-0 rounded-xl bg-zinc-900 px-4 py-2 text-xs font-semibold text-white"
-              onClick={() => onNavigate("posts")}
-            >
-              コミュニティへ
-            </button>
-          </div>
         </div>
       </div>
 
@@ -568,59 +616,18 @@ export function ProjectTabGlide({ displayName, sessionEmail, hasSession, onNavig
         </div>
       ) : null}
 
-      {inviteOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={() => setInviteOpen(false)}>
-          <div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-bold text-zinc-900">招待リンク</h3>
-              <button type="button" className="text-sm text-zinc-500" onClick={() => setInviteOpen(false)}>
-                閉じる
-              </button>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-              表示されているのは、あなたが<strong>参加中</strong>か<strong>オーナー</strong>のプロジェクトだけです。URL を LINE やメールで送れます（相手が開ける条件は公開設定やメンバー状態によります）。
-            </p>
-            <ul className="mt-4 space-y-2">
-              {inviteEligibleProjects.map((p) => (
-                <li key={p.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
-                  <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
-                  <p className="text-[11px] text-zinc-500">{p.visibility === "public" ? "公開" : "非公開"}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
-                      onClick={() =>
-                        void (async () => {
-                          const ok = await copyProjectInviteUrl(p.id);
-                          flashInviteToast(ok ? `「${p.name}」のURLをコピーしました` : "コピーに失敗しました");
-                        })()
-                      }
-                    >
-                      URLをコピー
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
-                      onClick={() =>
-                        void (async () => {
-                          const r = await shareOrCopyProject(p.name, p.id);
-                          if (r === "failed") flashInviteToast("共有できませんでした");
-                          else if (r === "copied") flashInviteToast("テキストをコピーしました（共有メニューなし）");
-                          else flashInviteToast("共有パネルを開きました");
-                        })()
-                      }
-                    >
-                      共有…
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+      {inviteOpen && currentUserId ? (
+        <ProjectInviteBellPanel
+          open={inviteOpen}
+          onClose={() => {
+            setInviteOpen(false);
+            void refreshBellBadge(currentUserId);
+          }}
+          userId={currentUserId}
+          eligibleProjects={inviteEligibleProjects}
+          onAccepted={() => void load()}
+          toast={flashInviteToast}
+        />
       ) : null}
     </div>
   );

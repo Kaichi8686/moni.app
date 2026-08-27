@@ -2,10 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isAppAdminEmail } from "@/lib/auth/appAdmin";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
+import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import type { FollowListUser, ProfilePost, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills",
   "id,display_name,goal,avatar_url,bio,website,school,location",
   "id,display_name,goal,avatar_url,bio,website",
   "id,display_name,goal,avatar_url",
@@ -64,6 +67,8 @@ export async function loadProfileView(
 
   const school = (row.school as string | null | undefined)?.trim() || null;
   const location = (row.location as string | null | undefined)?.trim() || null;
+  const skills = parseStringTagArray(row.skills);
+  const traits = parseStringTagArray(row.traits);
 
   return {
     id: userId,
@@ -74,6 +79,8 @@ export async function loadProfileView(
     website: (row.website as string | null)?.trim() || null,
     ...(school ? { school } : {}),
     ...(location ? { location } : {}),
+    ...(skills.length ? { skills } : {}),
+    ...(traits.length ? { traits } : {}),
     postCount: postCount ?? 0,
     followerCount: followerCount ?? 0,
     followingCount: followingCount ?? 0,

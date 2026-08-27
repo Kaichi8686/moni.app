@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { anthropicTextMessage } from "@/lib/ai/claudeMessages";
+import { buildCoachSystemPrompt, sanitizeCoachText } from "@/lib/ai/studentCoachPrompt";
+import { parseUserSituation } from "@/lib/projects/userSituation";
 
 const blockedWords = ["自傷", "暴力", "死にたい", "いじめ", "自殺"];
 
@@ -14,6 +16,7 @@ type Body = {
   presetLabel?: string | null;
   projectName?: string;
   focusPhaseTitle?: string | null;
+  userSituation?: string;
 };
 
 export async function POST(req: Request) {
@@ -45,11 +48,15 @@ export async function POST(req: Request) {
     const name = (body.projectName ?? "").trim().slice(0, 120);
     const phase = (body.focusPhaseTitle ?? "").trim().slice(0, 120);
     const preset = (body.presetLabel ?? "").trim().slice(0, 80);
+    const userSituation = parseUserSituation(body.userSituation);
 
-    const system = `あなたは大学生チームの実行コーチです。日本語・ですます調。ロボットっぽい言い回し禁止。
-- まず共感を一文、次に「今日できる一小さな一手」を2つまで提案。長文禁止（全体600文字以内）。
-- 断定せず検証可能な言い方。説教しない。
-- 絵文字は使わない。
+    const system = `${buildCoachSystemPrompt({ userSituation })}
+
+【この相談での追加ルール】
+- 日本語・ですます調。ロボットっぽい言い回し禁止
+- まず共感を一文、次に「今日できる一小さな一手」を2つまで提案。長文禁止（全体600文字以内）
+- 各提案に「うまくいかなかったら」の逃げ道を含める
+- 断定せず検証可能な言い方。説教しない。絵文字は使わない
 プロジェクト文脈: ${name ? `「${name}」` : "（不明）"} / いまのフェーズ: ${phase || "（不明）"}
 ${preset ? `ユーザーが選んだ悩みカテゴリ: ${preset}` : ""}`;
 
@@ -65,14 +72,14 @@ ${preset ? `ユーザーが選んだ悩みカテゴリ: ${preset}` : ""}`;
       if (ai.code === "no_key") {
         return NextResponse.json({
           reply:
-            "AI相談はいまオフです（ANTHROPIC_API_KEY を設定すると使えます）。とりあえず「今日やることを1つだけ15分で終わるサイズに切る」を試してみてください。",
+            "AI相談はいまオフです（ANTHROPIC_API_KEY を設定すると使えます）。とりあえず「今日やることを1つだけ15分で終わるサイズに切る」を試してみるのはどうかな？ うまくいかなくても、紙に書くだけでもOK。",
           offline: true,
         });
       }
       return NextResponse.json({ error: ai.message }, { status: 502 });
     }
 
-    return NextResponse.json({ reply: ai.text, source: "anthropic" });
+    return NextResponse.json({ reply: sanitizeCoachText(ai.text), source: "anthropic" });
   } catch {
     return NextResponse.json({ error: "stuck API error" }, { status: 500 });
   }

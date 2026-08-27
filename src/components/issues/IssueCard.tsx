@@ -3,12 +3,13 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { format, parseISO } from "date-fns";
-import { ja } from "date-fns/locale";
+import { enUS, ja } from "date-fns/locale";
 import { GripVertical } from "lucide-react";
 import type { Issue } from "@/lib/workspace/types";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export function IssueCard({
   issue,
@@ -19,6 +20,7 @@ export function IssueCard({
   assigneeName?: string;
   onOpen?: (issue: Issue) => void;
 }) {
+  const { tx, locale } = useI18n();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: issue.id });
   const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.6 : 1 };
   return (
@@ -33,8 +35,8 @@ export function IssueCard({
           type="button"
           className="mt-0.5 shrink-0 cursor-grab touch-manipulation rounded p-0.5 text-[#9CA3AF] hover:bg-zinc-100 hover:text-[#1A1A1A] active:cursor-grabbing"
           {...listeners}
-          aria-label="ドラッグして列を移動"
-          title="ここを掴んで列を移動"
+          aria-label={tx("ドラッグして列を移動", "Drag to another column")}
+          title={tx("ここを掴んで列を移動", "Grab here to move columns")}
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -49,7 +51,7 @@ export function IssueCard({
           </div>
           {issue.dueDate ? (
             <p className="mt-1 text-[11px] text-[#6B7280]">
-              期限 {format(parseISO(issue.dueDate), "M/d", { locale: ja })}
+              {tx("期限", "Due")} {format(parseISO(issue.dueDate), "M/d", { locale: locale === "en" ? enUS : ja })}
             </p>
           ) : null}
           <div className="mt-2 flex items-center justify-between gap-2">

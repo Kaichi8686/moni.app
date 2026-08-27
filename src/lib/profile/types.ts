@@ -7,6 +7,10 @@ export type ProfileView = {
   website: string | null;
   school?: string | null;
   location?: string | null;
+  /** 特技タグ（canonical JA または自由入力） */
+  skills?: string[];
+  /** 性格タグ */
+  traits?: string[];
   postCount: number;
   followerCount: number;
   followingCount: number;

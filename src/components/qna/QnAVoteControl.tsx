@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   score: number;
@@ -10,12 +11,13 @@ type Props = {
 };
 
 export function QnAVoteControl({ score, myVote, disabled, onVote }: Props) {
+  const { tx } = useI18n();
   return (
     <div className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
       <button
         type="button"
         disabled={disabled}
-        aria-label="役に立った"
+        aria-label={tx("役に立った", "Helpful")}
         aria-pressed={myVote === 1}
         onClick={() => onVote(1)}
         className={`flex h-7 w-7 items-center justify-center rounded-md transition disabled:opacity-40 ${
@@ -34,7 +36,7 @@ export function QnAVoteControl({ score, myVote, disabled, onVote }: Props) {
       <button
         type="button"
         disabled={disabled}
-        aria-label="役に立たなかった"
+        aria-label={tx("役に立たなかった", "Not helpful")}
         aria-pressed={myVote === -1}
         onClick={() => onVote(-1)}
         className={`flex h-7 w-7 items-center justify-center rounded-md transition disabled:opacity-40 ${

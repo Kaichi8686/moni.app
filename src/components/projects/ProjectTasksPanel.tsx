@@ -142,7 +142,9 @@ type Props = {
     startsAt: string;
     endsAt: string;
     attendees: string;
+    kind?: "event" | "busy";
   }) => Promise<void>;
+  onDeleteSchedule?: (scheduleId: string) => Promise<void>;
 };
 
 export function ProjectTasksPanel({
@@ -168,6 +170,7 @@ export function ProjectTasksPanel({
   schedules,
   scheduleSaving,
   onSaveSchedule,
+  onDeleteSchedule,
 }: Props) {
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [draftTitle, setDraftTitle] = useState("");
@@ -617,6 +620,12 @@ export function ProjectTasksPanel({
               {meta.estimatedMinutes ? (
                 <span className="rounded-md bg-zinc-100 px-1.5 py-0.5">目安 {meta.estimatedMinutes}分</span>
               ) : null}
+              {meta.difficulty ? (
+                <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900">{meta.difficulty}</span>
+              ) : null}
+              {meta.priorityLabel ? (
+                <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-sky-900">{meta.priorityLabel}</span>
+              ) : null}
               {assigneeLabel ? <span className="rounded-md bg-zinc-100 px-1.5 py-0.5">担当 {assigneeLabel}</span> : null}
               {task.due_date ? (
                 <span className="rounded-md bg-zinc-100 px-1.5 py-0.5">期限 {task.due_date.slice(0, 10).replace(/-/g, "/")}</span>
@@ -730,6 +739,9 @@ export function ProjectTasksPanel({
           ) : null}
           {task.description.trim() ? (
             <p className="break-words text-[13px] leading-relaxed text-zinc-600">{task.description}</p>
+          ) : null}
+          {meta.fallback?.trim() && !task.description.includes("困ったとき") ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">困ったとき: {meta.fallback}</p>
           ) : null}
           {visibilityLabel && mode !== "simple" ? <p className="text-[10px] font-medium text-violet-800">{visibilityLabel}</p> : null}
           {pastDue ? (
@@ -922,24 +934,24 @@ export function ProjectTasksPanel({
         <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">プロジェクト概要</p>
         <h2 className="mt-1 text-lg font-bold leading-tight text-zinc-900">{dreamHeadline}</h2>
         {dreamWhy ? <p className="mt-2 text-[13px] leading-relaxed text-zinc-700">{dreamWhy}</p> : null}
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
-          <span className="rounded-full bg-white px-2.5 py-1 text-indigo-950 ring-1 ring-indigo-100">
+        <div className="mt-3 flex flex-col gap-2 text-sm font-semibold sm:flex-row sm:flex-wrap">
+          <span className="rounded-lg bg-white px-3 py-2 text-indigo-950 ring-1 ring-indigo-100">
             ロードマップの進捗{" "}
             {milestoneTotal > 0 ? `完了 ${milestoneDoneCount} / 全 ${milestoneTotal} 段階` : "（ロードマップがまだありません）"}
           </span>
           {nextMilestoneTitle ? (
-            <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-white">次に進める段階: {nextMilestoneTitle}</span>
+            <span className="rounded-lg bg-indigo-600 px-3 py-2 text-white">次に進める段階: {nextMilestoneTitle}</span>
           ) : null}
           {taskStats.blocked > 0 ? (
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900 ring-1 ring-amber-100">
+            <span className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900 ring-1 ring-amber-100">
               中断中のタスク {taskStats.blocked}
             </span>
           ) : null}
           {taskStats.waiting > 0 ? (
-            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-900 ring-1 ring-sky-100">保留 {taskStats.waiting}</span>
+            <span className="rounded-lg bg-sky-50 px-3 py-2 text-sky-900 ring-1 ring-sky-100">保留 {taskStats.waiting}</span>
           ) : null}
         </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+        <p className="mt-3 text-sm leading-relaxed text-zinc-600">
           <span className="font-semibold text-zinc-800">今週（月曜・東京）</span>
           のタスク完了{" "}
           <span className="startup-font-mono font-semibold text-indigo-950">{weekDoneCount}</span>
@@ -956,15 +968,15 @@ export function ProjectTasksPanel({
           連続活動 <span className="startup-font-mono font-semibold text-indigo-950">{streakDays}</span> 日
         </p>
         {canEdit ? (
-          <div className="mt-2 rounded-xl border border-indigo-100/80 bg-white/70 px-2.5 py-2">
-            <p className="text-[10px] font-semibold text-zinc-500">週の完了目標（ホームと共通）</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <div className="mt-2 rounded-xl border border-indigo-100/80 bg-white/70 px-3 py-2.5">
+            <p className="text-xs font-semibold text-zinc-500">週の完了目標（ホームと共通）</p>
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
               {[3, 5, 8, 10, 15].map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => void onSaveCoaching({ weeklyCompletionGoal: n })}
-                  className={`min-h-[30px] rounded-lg px-2.5 text-[10px] font-semibold transition ${
+                  className={`min-h-[40px] rounded-lg px-2.5 text-sm font-semibold transition ${
                     weeklyGoal === n ? "bg-indigo-600 text-white" : "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
                   }`}
                 >
@@ -974,7 +986,7 @@ export function ProjectTasksPanel({
               <button
                 type="button"
                 onClick={() => void onSaveCoaching({ weeklyCompletionGoal: 0 })}
-                className="min-h-[30px] rounded-lg border border-zinc-200 bg-white px-2.5 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-50"
+                className="min-h-[40px] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 sm:col-span-1"
               >
                 クリア
               </button>
@@ -1227,7 +1239,13 @@ export function ProjectTasksPanel({
           </span>
         </summary>
         <div className="border-t border-zinc-100 px-2 pb-3 pt-1">
-          <ProjectScheduleCalendar schedules={schedules} onSave={onSaveSchedule} saving={scheduleSaving} />
+          <ProjectScheduleCalendar
+            schedules={schedules}
+            onSave={onSaveSchedule}
+            onDelete={onDeleteSchedule}
+            saving={scheduleSaving}
+            canEdit={canEdit}
+          />
         </div>
       </details>
 

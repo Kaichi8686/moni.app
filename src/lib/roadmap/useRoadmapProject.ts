@@ -129,11 +129,15 @@ export function useRoadmapProject(projectId: string) {
   );
 
   const updatePhase = useCallback(
-    async (phaseId: string, patch: Partial<{ title: string; goal: string; status: PhaseStatus; startDate: string; endDate: string }>) => {
+    async (
+      phaseId: string,
+      patch: Partial<{ title: string; goal: string; description: string; status: PhaseStatus; startDate: string; endDate: string }>,
+    ) => {
       if (!supabase || !canEdit) return;
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (patch.title !== undefined) row.title = patch.title.trim();
       if (patch.goal !== undefined) row.goal = patch.goal.trim();
+      if (patch.description !== undefined) row.description = patch.description.trim();
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.startDate !== undefined) row.start_date = new Date(patch.startDate).toISOString();
       if (patch.endDate !== undefined) row.end_date = new Date(patch.endDate).toISOString();

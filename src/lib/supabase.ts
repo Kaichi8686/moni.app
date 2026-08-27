@@ -7,19 +7,25 @@ export const supabaseEnabled = Boolean(url && anonKey);
 
 type GlobalWithSupabase = typeof globalThis & { __moniSupabaseClient?: SupabaseClient };
 
-/** ブラウザでは Web Locks を使わず即実行。React Strict Mode の二重マウントと競合しないようにする */
 function createMoniClient(): SupabaseClient {
-  const browserAuthLock =
-    typeof window !== "undefined"
-      ? async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn()
-      : undefined;
-  return createClient(url as string, anonKey as string, {
+  const client = createClient(url as string, anonKey as string, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      ...(browserAuthLock ? { lock: browserAuthLock } : {}),
+      detectSessionInUrl: true,
+    },
+    realtime: {
+      params: { eventsPerSecond: 20 },
     },
   });
+  if (typeof window !== "undefined") {
+    client.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) {
+        client.realtime.setAuth(session.access_token);
+      }
+    });
+  }
+  return client;
 }
 
 function getClient(): SupabaseClient | null {

@@ -26,6 +26,8 @@ export type ProjectRow = {
   business_type?: "maker" | "software" | "social" | null;
   tags: string[];
   thumbnail_url: string | null;
+  /** プロジェクト絵文字アイコン（カラム未適用時は欠落しうる） */
+  icon?: string | null;
   visibility: ProjectVisibility;
   recruitment_target: string;
   recruitment_message: string;
@@ -55,6 +57,12 @@ export type ProjectTaskMeta = {
   answeredAt?: string;
   /** 見積もり時間（分）。UIは 5/15/30/60 の選択 */
   estimatedMinutes?: 5 | 15 | 30 | 60;
+  /** 難しさの目安 */
+  difficulty?: "すぐできる" | "ちょっと勇気がいる" | "誰かと一緒にやろう";
+  /** うまくいかなかったときの逃げ道 */
+  fallback?: string;
+  /** AI提案の優先度ラベル */
+  priorityLabel?: "今日やるべき" | "今週中にやる" | "余裕があれば";
   /** 完了の判断基準（短文） */
   completionCriteria?: string;
   /** このタスクの目的や理由（短文・任意） */

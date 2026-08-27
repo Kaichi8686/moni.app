@@ -13,8 +13,9 @@ import {
   buildStudentRoadmapTemplateRows,
   type StudentRoadmapCategoryKey,
 } from "@/lib/projects/studentRoadmapTemplates";
-import { parseCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
+import { parseCoachingContext, resolveUserSituation, type CoachingContext } from "@/lib/projects/coachingContext";
 import { parseTaskMeta } from "@/lib/projects/taskMeta";
+import { RoadmapStepActionCard } from "@/components/projects/RoadmapStepActionCard";
 import type { BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { todayKeyJapan, diffCalendarDaysFromTodayJapan } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
@@ -61,13 +62,6 @@ function statusBadge(step: RoadmapStepFull): { label: string; className: string 
   return { label: "未着手", className: "bg-zinc-100 text-zinc-700 ring-zinc-200" };
 }
 
-function phaseGoalLine(step: RoadmapStepFull): string {
-  const d = step.description?.trim();
-  if (d) return d;
-  const c = step.completion_criteria?.trim();
-  if (c) return c;
-  return `「${step.title}」で達成したいことを一文で書くと進みやすいです`;
-}
 
 function taskInteractionSimple(meta: unknown): boolean {
   const m = parseTaskMeta(meta);
@@ -128,7 +122,15 @@ export function ProjectRoadmapPanel({
   const [saving, setSaving] = useState(false);
   const [openStepMenuId, setOpenStepMenuId] = useState<string | null>(null);
   const [phaseGoalBusyId, setPhaseGoalBusyId] = useState<string | null>(null);
-  const [phaseGoalPreview, setPhaseGoalPreview] = useState<{ stepId: string; text: string } | null>(null);
+  const [phaseGoalPreview, setPhaseGoalPreview] = useState<{
+    stepId: string;
+    text: string;
+    action?: string;
+    why?: string;
+    how?: string;
+    fallback?: string;
+    notes?: string;
+  } | null>(null);
   const [stuckStepId, setStuckStepId] = useState<string | null>(null);
   const [stuckPreset, setStuckPreset] = useState<string | null>(null);
   const [stuckMessages, setStuckMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
@@ -141,6 +143,7 @@ export function ProjectRoadmapPanel({
     () => parseCoachingContext(project.coaching_context).dreamStatement ?? "",
     [project.coaching_context],
   );
+  const coachingSnap = useMemo(() => parseCoachingContext(project.coaching_context), [project.coaching_context]);
   const focusIdx = useMemo(
     () => (focusStep ? orderedSteps.findIndex((s) => s.id === focusStep.id) : -1),
     [orderedSteps, focusStep],
@@ -360,13 +363,30 @@ export function ProjectRoadmapPanel({
           projectName: project.name,
           projectDescription: project.description ?? "",
           dreamStatement: coachingDream,
+          userSituation: resolveUserSituation(coachingSnap),
         }),
       });
-      const j = (await r.json()) as { goal?: string; error?: string };
+      const j = (await r.json()) as {
+        goal?: string;
+        action?: string;
+        why?: string;
+        how?: string;
+        fallback?: string;
+        notes?: string;
+        error?: string;
+      };
       if (!r.ok) throw new Error(j.error ?? "提案に失敗しました");
       const goal = typeof j.goal === "string" ? j.goal.trim() : "";
       if (!goal) throw new Error("提案が空でした");
-      setPhaseGoalPreview({ stepId: step.id, text: goal });
+      setPhaseGoalPreview({
+        stepId: step.id,
+        text: goal,
+        action: j.action?.trim() || goal,
+        why: j.why?.trim() || "",
+        how: j.how?.trim() || "",
+        fallback: j.fallback?.trim() || "",
+        notes: j.notes?.trim() || "",
+      });
     } catch (e) {
       onError(e instanceof Error ? e.message : "AI提案に失敗しました");
     } finally {
@@ -402,6 +422,7 @@ export function ProjectRoadmapPanel({
           presetLabel: stuckPreset,
           projectName: project.name,
           focusPhaseTitle: stepTitle,
+          userSituation: resolveUserSituation(coachingSnap),
         }),
       });
       const j = (await r.json()) as { reply?: string; error?: string };
@@ -416,8 +437,12 @@ export function ProjectRoadmapPanel({
     }
   };
 
-  const applyPhaseGoalToStep = (stepId: string, text: string) => {
-    void patchStep(stepId, { description: text });
+  const applyPhaseGoalToStep = (stepId: string, preview: NonNullable<typeof phaseGoalPreview>) => {
+    void patchStep(stepId, {
+      description: preview.action?.trim() || preview.text,
+      completion_criteria: preview.why?.trim() || preview.text,
+      notes: preview.notes?.trim() || undefined,
+    });
     setPhaseGoalPreview(null);
   };
 
@@ -508,7 +533,6 @@ export function ProjectRoadmapPanel({
     return "待機";
   };
 
-  const coachingSnap = useMemo(() => parseCoachingContext(project.coaching_context), [project.coaching_context]);
   const weekTaskDoneCount = useMemo(() => {
     void tokyoDayRoll;
     return countWeekCompletedTasksJapan(tasks);
@@ -712,7 +736,6 @@ export function ProjectRoadmapPanel({
               const nextHint = nextHintForStep(step.id);
               const badge = statusBadge(step);
               const isFutureRow = focusIdx >= 0 && idx > focusIdx && step.status !== "done";
-              const goal = phaseGoalLine(step);
               const stepTasks = tasksForStep(step.id);
 
               let cardBg =
@@ -743,19 +766,28 @@ export function ProjectRoadmapPanel({
                           <h3 className="text-base font-bold text-[#1A1A1A]">{step.title}</h3>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${badge.className}`}>{badge.label}</span>
                         </div>
-                        <p className="text-sm leading-relaxed text-zinc-700">&ldquo;{goal}&rdquo;</p>
+                        <RoadmapStepActionCard step={step} stepNumber={n} className="mt-1" />
                         {phaseGoalPreview?.stepId === step.id ? (
                           <div className="mt-2 rounded-2xl border border-orange-200 bg-[#FFF3D6]/95 px-3 py-2.5">
-                            <p className="text-[11px] font-semibold text-orange-950">AIの一文ゴール案</p>
-                            <p className="mt-1 text-sm leading-relaxed text-[#1A1A1A]">{phaseGoalPreview.text}</p>
+                            <p className="text-[11px] font-semibold text-orange-950">AIの提案</p>
+                            <RoadmapStepActionCard
+                              step={{
+                                ...step,
+                                description: phaseGoalPreview.action || phaseGoalPreview.text,
+                                completion_criteria: phaseGoalPreview.why || phaseGoalPreview.text,
+                                notes: phaseGoalPreview.notes || null,
+                              }}
+                              stepNumber={n}
+                              className="mt-2 border-0 bg-transparent p-0"
+                            />
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button
                                 type="button"
                                 disabled={saving}
-                                onClick={() => applyPhaseGoalToStep(step.id, phaseGoalPreview.text)}
+                                onClick={() => applyPhaseGoalToStep(step.id, phaseGoalPreview)}
                                 className="min-h-[40px] rounded-2xl bg-[#FF5C35] px-3 text-xs font-bold text-white transition duration-200 ease-out hover:brightness-105 disabled:opacity-50"
                               >
-                                説明に反映する
+                                ステップに反映する
                               </button>
                               <button
                                 type="button"

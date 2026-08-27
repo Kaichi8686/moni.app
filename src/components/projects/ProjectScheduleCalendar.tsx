@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useMemo, useState } from "react";
+import { displayScheduleDescription, isBusySchedule } from "@/lib/workspace/busyScheduleDays";
 
 export type CalendarSchedule = {
   id: string;
@@ -9,6 +10,8 @@ export type CalendarSchedule = {
   starts_at: string;
   ends_at: string | null;
   attendees: string[] | null;
+  /** event=通常 / busy=忙しい日（課題期限を置かない） */
+  kind?: "event" | "busy";
 };
 
 /** 課題の期限をカレンダーに載せる用（dueDate は ISO） */
@@ -24,6 +27,7 @@ type DayItem =
   | { kind: "issue"; issue: CalendarIssueEntry };
 
 const ISSUE_BAR_CLASS = "bg-[#5E6AD2]/90";
+const BUSY_BAR_CLASS = "bg-zinc-500/90";
 
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
 const EVENT_BAR_CLASS = [
@@ -94,32 +98,50 @@ function issueDueDateKey(dueDateIso: string): string | null {
 }
 
 const issueStatusLabel: Record<string, string> = {
-  backlog: "バックログ",
-  todo: "やること",
-  in_progress: "進行中",
-  in_review: "レビュー",
+  backlog: "あとで",
+  todo: "これから",
+  in_progress: "いまやってる",
+  in_review: "確認中",
   done: "完了",
-  cancelled: "中止",
+  cancelled: "やめた",
 };
 
 type Props = {
   schedules: CalendarSchedule[];
   issues?: CalendarIssueEntry[];
   onIssueClick?: (issueId: string) => void;
-  onSave: (payload: { title: string; description: string; startsAt: string; endsAt: string; attendees: string }) => Promise<void>;
+  onSave: (payload: {
+    title: string;
+    description: string;
+    startsAt: string;
+    endsAt: string;
+    attendees: string;
+    kind: "event" | "busy";
+  }) => Promise<void>;
+  onDelete?: (scheduleId: string) => Promise<void>;
   saving?: boolean;
   canEdit?: boolean;
 };
 
-export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, onSave, saving, canEdit = true }: Props) {
+export function ProjectScheduleCalendar({
+  schedules,
+  issues = [],
+  onIssueClick,
+  onSave,
+  onDelete,
+  saving,
+  canEdit = true,
+}: Props) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string | null>(() => dateKeyLocal(new Date()));
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
     startsAt: "",
     endsAt: "",
     attendees: "",
+    kind: "event" as "event" | "busy",
   });
 
   const eventsByDay = useMemo(() => {
@@ -214,8 +236,16 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
       startsAt: form.startsAt,
       endsAt: form.endsAt,
       attendees: form.attendees,
+      kind: form.kind,
     });
-    setForm((f) => ({ title: "", description: "", startsAt: f.startsAt, endsAt: f.endsAt, attendees: "" }));
+    setForm((f) => ({
+      title: "",
+      description: "",
+      startsAt: f.startsAt,
+      endsAt: f.endsAt,
+      attendees: "",
+      kind: "event",
+    }));
   }
 
   const todayKey = dateKeyLocal(new Date());
@@ -255,6 +285,10 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
             予定
           </span>
           <span className="flex items-center gap-1.5">
+            <span className={`h-2 w-4 rounded ${BUSY_BAR_CLASS}`} aria-hidden />
+            忙しい日（課題なし）
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className={`h-2 w-4 rounded ${ISSUE_BAR_CLASS}`} aria-hidden />
             課題（期限）
           </span>
@@ -283,14 +317,15 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
           const list = eventsByDay.get(key) ?? [];
           const isToday = key === todayKey;
           const isSelected = key === selectedKey;
+          const isBusyDay = list.some((item) => item.kind === "schedule" && isBusySchedule(item.schedule));
           return (
             <button
               key={key}
               type="button"
               onClick={() => onPickDay(key)}
-              className={`flex min-h-[72px] flex-col items-stretch border border-transparent bg-white p-1 text-left transition hover:bg-emerald-50/80 sm:min-h-[88px] ${
-                isSelected ? "ring-2 ring-emerald-400 ring-offset-1" : ""
-              } ${isToday ? "bg-emerald-50/40" : ""}`}
+              className={`flex min-h-[72px] flex-col items-stretch border border-transparent p-1 text-left transition hover:bg-emerald-50/80 sm:min-h-[88px] ${
+                isBusyDay ? "bg-zinc-100/90" : "bg-white"
+              } ${isSelected ? "ring-2 ring-emerald-400 ring-offset-1" : ""} ${isToday && !isBusyDay ? "bg-emerald-50/40" : ""}`}
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold sm:h-7 sm:w-7 sm:text-xs ${
@@ -304,7 +339,9 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
                   item.kind === "schedule" ? (
                     <span
                       key={`s-${item.schedule.id}`}
-                      className={`truncate rounded px-1 py-0.5 text-[9px] font-medium text-white shadow-sm sm:text-[10px] ${hashColor(item.schedule.id)}`}
+                      className={`truncate rounded px-1 py-0.5 text-[9px] font-medium text-white shadow-sm sm:text-[10px] ${
+                        isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
+                      }`}
                     >
                       {item.schedule.title}
                     </span>
@@ -347,9 +384,16 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
                 item.kind === "schedule" ? (
                   <li key={`s-${item.schedule.id}`} className="rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 shadow-sm">
                     <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${hashColor(item.schedule.id)}`} aria-hidden />
+                      <span
+                        className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${
+                          isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
+                        }`}
+                        aria-hidden
+                      />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">予定</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                          {isBusySchedule(item.schedule) ? "忙しい日（課題なし）" : "予定"}
+                        </p>
                         <p className="font-semibold text-zinc-900">{item.schedule.title}</p>
                         <p className="text-[11px] text-zinc-500">
                           {new Date(item.schedule.starts_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
@@ -357,11 +401,27 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
                             ? ` – ${new Date(item.schedule.ends_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`
                             : ""}
                         </p>
-                        {item.schedule.description ? <p className="mt-1 text-sm text-zinc-700">{item.schedule.description}</p> : null}
+                        {displayScheduleDescription(item.schedule.description) ? (
+                          <p className="mt-1 text-sm text-zinc-700">{displayScheduleDescription(item.schedule.description)}</p>
+                        ) : null}
                         {item.schedule.attendees && item.schedule.attendees.length > 0 ? (
                           <p className="mt-1 text-[11px] text-zinc-400">{item.schedule.attendees.join(" · ")}</p>
                         ) : null}
                       </div>
+                      {canEdit && onDelete ? (
+                        <button
+                          type="button"
+                          disabled={saving || deletingId === item.schedule.id}
+                          onClick={() => {
+                            if (!window.confirm(`「${item.schedule.title}」を削除しますか？`)) return;
+                            setDeletingId(item.schedule.id);
+                            void onDelete(item.schedule.id).finally(() => setDeletingId(null));
+                          }}
+                          className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          {deletingId === item.schedule.id ? "削除中…" : "削除"}
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 ) : (
@@ -393,11 +453,40 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
       {canEdit ? (
       <form className="border-t border-zinc-200 bg-white px-3 py-4 sm:px-4" onSubmit={(e) => void handleSubmit(e)}>
         <p className="mb-3 text-sm font-bold text-zinc-900">予定を追加</p>
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setForm((p) => ({ ...p, kind: "event" }))}
+            className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+              form.kind === "event"
+                ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            通常の予定
+          </button>
+          <button
+            type="button"
+            onClick={() => setForm((p) => ({ ...p, kind: "busy" }))}
+            className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+              form.kind === "busy"
+                ? "border-zinc-500 bg-zinc-100 text-zinc-800"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            忙しい日（課題なし）
+          </button>
+        </div>
+        {form.kind === "busy" ? (
+          <p className="mb-3 text-[11px] leading-relaxed text-zinc-500">
+            この日には課題の最終日を置きません。既存の課題期限もずらします。
+          </p>
+        ) : null}
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             required
             className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none ring-emerald-500/20 transition focus:border-emerald-400 focus:ring-2 sm:col-span-2"
-            placeholder="タイトル（例：キックオフ）"
+            placeholder={form.kind === "busy" ? "タイトル（例：試験・出張）" : "タイトル（例：キックオフ）"}
             value={form.title}
             onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
           />
@@ -420,12 +509,14 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
               onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
             />
           </div>
-          <input
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 sm:col-span-2"
-            placeholder="参加者（カンマ区切り・任意）"
-            value={form.attendees}
-            onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
-          />
+          {form.kind === "event" ? (
+            <input
+              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 sm:col-span-2"
+              placeholder="参加者（カンマ区切り・任意）"
+              value={form.attendees}
+              onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
+            />
+          ) : null}
           <textarea
             className="min-h-[72px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 sm:col-span-2"
             placeholder="メモ・場所など（任意）"
@@ -439,7 +530,7 @@ export function ProjectScheduleCalendar({ schedules, issues = [], onIssueClick, 
           disabled={saving || !form.title.trim() || !form.startsAt}
           className="mt-4 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-sm font-bold text-white shadow-md shadow-emerald-500/25 transition hover:brightness-105 disabled:opacity-50"
         >
-          {saving ? "追加中…" : "予定を追加"}
+          {saving ? "追加中…" : form.kind === "busy" ? "忙しい日を追加" : "予定を追加"}
         </button>
       </form>
       ) : null}

@@ -23,6 +23,7 @@ import {
   loadProfileView,
 } from "@/lib/profile/profileData";
 import type { ProfilePost, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
 type Props = {
@@ -38,6 +39,7 @@ const TAB_IDLE = "font-medium text-zinc-400 hover:text-zinc-600";
 
 export function ProfileScreen({ userId: propUserId }: Props) {
   const router = useRouter();
+  const { tx } = useI18n();
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [posts, setPosts] = useState<ProfilePost[]>([]);
@@ -56,7 +58,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   const loadProfileData = useCallback(
     async (targetId: string, uid: string | null) => {
       if (!supabase) {
-        setError("Supabase が未設定です");
+        setError(tx("Supabase が未設定です", "Supabase is not configured"));
         return;
       }
       setError("");
@@ -64,14 +66,14 @@ export function ProfileScreen({ userId: propUserId }: Props) {
         if (uid === targetId) {
           const ok = await ensureProfileRow(supabase, targetId);
           if (!ok) {
-            setError("プロフィールの初期化に失敗しました。再読み込みしてください。");
+            setError(tx("プロフィールの初期化に失敗しました。再読み込みしてください。", "Could not initialize the profile. Please reload."));
             return;
           }
         }
 
         const view = await loadProfileView(supabase, targetId);
         if (!view) {
-          setError("プロフィールが見つかりません");
+          setError(tx("プロフィールが見つかりません", "Profile not found"));
           return;
         }
         const [postList, projectList, gam] = await Promise.all([
@@ -105,15 +107,15 @@ export function ProfileScreen({ userId: propUserId }: Props) {
           setIsPending(false);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "読み込みに失敗しました");
+        setError(e instanceof Error ? e.message : tx("読み込みに失敗しました", "Failed to load"));
       }
     },
-    [],
+    [tx],
   );
 
   useEffect(() => {
     if (!supabase) {
-      setError("Supabase が未設定です");
+      setError(tx("Supabase が未設定です", "Supabase is not configured"));
       setLoading(false);
       return;
     }
@@ -150,7 +152,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
       if (cancelled || authReadyRef.current) return;
       authReadyRef.current = true;
       setLoading(false);
-      setError("読み込みがタイムアウトしました。ページを再読み込みしてください。");
+      setError(tx("読み込みがタイムアウトしました。ページを再読み込みしてください。", "Loading timed out. Please reload the page."));
     }, 15000);
 
     return () => {
@@ -158,7 +160,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
       window.clearTimeout(timeout);
       sub.subscription.unsubscribe();
     };
-  }, [propUserId, loadProfileData]);
+  }, [propUserId, loadProfileData, tx]);
 
   const reload = useCallback(async () => {
     if (!supabase) return;
@@ -199,7 +201,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   if (!supabaseEnabled) {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-zinc-600">
-        Supabase 未接続です
+        {tx("Supabase 未接続です", "Supabase is not connected")}
       </div>
     );
   }
@@ -213,7 +215,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
               type="button"
               onClick={() => router.back()}
               className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-lg transition hover:bg-zinc-100"
-              aria-label="戻る"
+              aria-label={tx("戻る", "Back")}
             >
               ←
             </button>
@@ -223,24 +225,24 @@ export function ProfileScreen({ userId: propUserId }: Props) {
         <Link
           href="/settings"
           className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
-          aria-label="設定"
+          aria-label={tx("設定", "Settings")}
         >
           <Settings className="h-5 w-5" />
         </Link>
       </header>
 
       {loading ? (
-        <p className="px-4 py-12 text-center text-sm text-zinc-500">読み込み中…</p>
+        <p className="px-4 py-12 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
       ) : error ? (
         <p className="px-4 py-12 text-center text-sm text-rose-600">{error}</p>
       ) : !viewerId && !propUserId ? (
         <div className="px-4 py-12 text-center">
-          <p className="text-sm text-zinc-600">プロフィールを見るにはログインが必要です。</p>
+          <p className="text-sm text-zinc-600">{tx("プロフィールを見るにはログインが必要です。", "Log in to view profiles.")}</p>
           <Link
             href="/login"
             className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-zinc-900 px-5 text-sm font-bold text-white transition hover:bg-zinc-800"
           >
-            ログイン
+            {tx("ログイン", "Log in")}
           </Link>
         </div>
       ) : profile ? (
@@ -273,16 +275,16 @@ export function ProfileScreen({ userId: propUserId }: Props) {
           {gamification?.gamificationReady ? <BadgeRow badges={gamification.badges} /> : null}
           {!gamification?.gamificationReady && isOwnProfile ? (
             <div className="mx-4 mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-600 sm:mx-5">
-              バッジ・ストリークを使うには Supabase で{" "}
+              {tx("バッジ・ストリークを使うには Supabase で", "To use badges and streaks, run")}{" "}
               <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">apply_user_gamification.sql</code>{" "}
-              を実行してください。
+              {tx("を実行してください。", "in Supabase.")}
             </div>
           ) : null}
 
           <div
             className="flex gap-7 border-b border-zinc-200 bg-white px-4 sm:px-5"
             role="tablist"
-            aria-label="プロフィールの内容"
+            aria-label={tx("プロフィールの内容", "Profile content")}
           >
             <button
               type="button"
@@ -291,7 +293,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
               className={`${TAB} ${contentTab === "posts" ? TAB_ACTIVE : TAB_IDLE}`}
               onClick={() => setContentTab("posts")}
             >
-              投稿
+              {tx("投稿", "Posts")}
               {contentTab === "posts" ? (
                 <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-zinc-900" aria-hidden />
               ) : null}
@@ -303,7 +305,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
               className={`${TAB} ${contentTab === "projects" ? TAB_ACTIVE : TAB_IDLE}`}
               onClick={() => setContentTab("projects")}
             >
-              プロジェクト
+              {tx("プロジェクト", "Projects")}
               {contentTab === "projects" ? (
                 <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-zinc-900" aria-hidden />
               ) : null}

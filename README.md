@@ -1,5 +1,8 @@
 # moni
 
+> **ここが現行アプリのコード本体です。**  
+> 親フォルダ `moni/` 直下の古い `index.html` 試作は `_archive/legacy-static-mvp/` に移してあります（編集しない）。
+
 子ども・保護者・投資家/起業家を対象にした、本番向け起業支援アプリの土台です。
 
 ## 実装済み
@@ -51,7 +54,7 @@ npm run start:local
 
 1. `.env.example` を `.env.local` にコピー
 2. `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定
-3. Supabase SQL Editor で `supabase/schema.sql` を実行
+3. Supabase SQL Editor で `supabase/schema.sql` を実行（運営管理者は `supabase/apply_app_admin.sql` も実行）
 4. Supabase Auth > Providers で Google を有効化
 5. Google Cloud Console で OAuthクライアントを作成し、SupabaseにClient ID/Secretを設定
 6. Redirect URL をSupabase指定URLと `http://localhost:3000` に合わせる
@@ -71,6 +74,8 @@ npm run start:local
   - `ANTHROPIC_MODEL`（任意。未設定時はサーバー既定モデル）
   - `DAILY_API_KEY`（Daily REST API key）
   - `DAILY_DOMAIN`（例: `your-team.daily.co`）
+  - `SUPABASE_SERVICE_ROLE_KEY`（運営ダッシュボードのユーザー集計。Settings → API）
+  - `APP_ADMIN_EMAILS`（任意。運営管理者メール。未設定時は `kigyouman8686@gmail.com`）
 - Supabase Auth > URL Configuration の Site URL をVercelのURLに設定
 - Google Provider の Redirect URL も同様に本番URLに合わせる
 
@@ -92,5 +97,5 @@ npm run start:local
 
 - Presence付きRealtimeチャット（入室中ユーザー表示）
 - 通話SDK（Daily or Agora）実装
-- 管理者ロールと審査ワークフロー
+- 運営ダッシュボードの拡張（イベントトラッキングのサーバー集計など）
 - 子ども向けAI安全フィルタ（モデレーション + NGワード制御）

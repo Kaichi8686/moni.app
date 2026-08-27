@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
 type Props = {
@@ -30,6 +31,7 @@ export function ProfileActionButtons({
   onFollowChange,
 }: Props) {
   const router = useRouter();
+  const { tx } = useI18n();
   const [following, setFollowing] = useState(isFollowing);
   const [pending, setPending] = useState(isPending);
   const [loading, setLoading] = useState(false);
@@ -94,16 +96,20 @@ export function ProfileActionButtons({
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/profile/edit" className={btnPrimary}>
           <Pencil className="h-3.5 w-3.5" aria-hidden />
-          編集
+          {tx("編集", "Edit")}
         </Link>
-        <Link href="/mybook" className={btnSecondary} title="マイブック">
+        <Link href="/mybook" className={btnSecondary} title={tx("マイブック", "My Book")}>
           <BookOpen className="h-3.5 w-3.5" aria-hidden />
-          マイブック
+          {tx("マイブック", "My Book")}
         </Link>
       </div>
     );
   }
-  const followLabel = following ? "フォロー中" : pending ? "申請中" : "フォローする";
+  const followLabel = following
+    ? tx("フォロー中", "Following")
+    : pending
+      ? tx("申請中", "Requested")
+      : tx("フォローする", "Follow");
 
   return (
     <div className="flex gap-2">
@@ -117,10 +123,10 @@ export function ProfileActionButtons({
       >
         {followLabel}
       </button>
-      <button type="button" onClick={() => void openMessage()} className={iconBtn} aria-label="メッセージ">
+      <button type="button" onClick={() => void openMessage()} className={iconBtn} aria-label={tx("メッセージ", "Message")}>
         <MessageCircle className="h-[18px] w-[18px]" />
       </button>
-      <button type="button" className={iconBtn} aria-label="その他">
+      <button type="button" className={iconBtn} aria-label={tx("その他", "More")}>
         <MoreHorizontal className="h-[18px] w-[18px]" />
       </button>
     </div>

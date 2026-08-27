@@ -13,7 +13,13 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { BADGE_DEFINITIONS, type EarnedBadge } from "@/lib/gamification/badges";
+import {
+  BADGE_DEFINITIONS,
+  badgeDescription,
+  badgeLabel,
+  type EarnedBadge,
+} from "@/lib/gamification/badges";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   badges: EarnedBadge[];
@@ -30,24 +36,31 @@ const BADGE_ICONS: Record<string, LucideIcon> = {
   fundraised: Gem,
 };
 
-function formatEarnedAt(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
-}
-
 export function BadgeRow({ badges }: Props) {
+  const { locale, tx } = useI18n();
   const earnedMap = new Map(badges.map((b) => [b.id, b.earned_at]));
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeDef = activeId ? BADGE_DEFINITIONS.find((b) => b.id === activeId) : null;
   const activeEarnedAt = activeId ? earnedMap.get(activeId) : undefined;
   const ActiveIcon = activeId ? BADGE_ICONS[activeId] ?? BadgeCheck : BadgeCheck;
 
+  function formatEarnedAt(iso: string) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(locale === "en" ? "en-US" : "ja-JP", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+
   return (
     <>
       <div className="border-b border-zinc-200 bg-white px-4 py-3.5 sm:px-5">
-        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">実績</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <p className="mb-2.5 text-[12px] font-semibold tracking-wide text-zinc-400">
+          {tx("実績", "Achievements")}
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {BADGE_DEFINITIONS.map((def) => {
             const earned = earnedMap.has(def.id);
             const Icon = BADGE_ICONS[def.id] ?? BadgeCheck;
@@ -56,7 +69,7 @@ export function BadgeRow({ badges }: Props) {
                 key={def.id}
                 type="button"
                 onClick={() => setActiveId(def.id)}
-                className={`flex min-h-[44px] items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                className={`flex min-h-[48px] items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition ${
                   earned
                     ? "border-zinc-300 bg-white hover:border-zinc-400"
                     : "border-zinc-100 bg-zinc-50/80 opacity-55 hover:opacity-80"
@@ -70,10 +83,12 @@ export function BadgeRow({ badges }: Props) {
                   <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 </span>
                 <span className="min-w-0">
-                  <span className={`block truncate text-[12px] font-semibold ${earned ? "text-zinc-900" : "text-zinc-500"}`}>
-                    {def.label}
+                  <span className={`block text-sm font-semibold leading-snug ${earned ? "text-zinc-900" : "text-zinc-500"}`}>
+                    {badgeLabel(def, locale)}
                   </span>
-                  <span className="block text-[10px] text-zinc-400">{earned ? "獲得済み" : "未獲得"}</span>
+                  <span className="block text-xs text-zinc-400">
+                    {earned ? tx("獲得済み", "Earned") : tx("未獲得", "Locked")}
+                  </span>
                 </span>
               </button>
             );
@@ -103,11 +118,15 @@ export function BadgeRow({ badges }: Props) {
               </span>
               <div className="min-w-0 flex-1">
                 <h3 id="badge-detail-title" className="text-[16px] font-semibold tracking-tight text-zinc-900">
-                  {activeDef.label}
+                  {badgeLabel(activeDef, locale)}
                 </h3>
-                <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">{activeDef.description}</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
+                  {badgeDescription(activeDef, locale)}
+                </p>
                 <p className="mt-2 text-[12px] text-zinc-400">
-                  {activeEarnedAt ? `獲得日: ${formatEarnedAt(activeEarnedAt)}` : "まだ獲得していません"}
+                  {activeEarnedAt
+                    ? tx(`獲得日: ${formatEarnedAt(activeEarnedAt)}`, `Earned: ${formatEarnedAt(activeEarnedAt)}`)
+                    : tx("まだ獲得していません", "Not earned yet")}
                 </p>
               </div>
             </div>
@@ -116,7 +135,7 @@ export function BadgeRow({ badges }: Props) {
               className="mt-5 w-full rounded-lg bg-zinc-900 py-2.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800"
               onClick={() => setActiveId(null)}
             >
-              閉じる
+              {tx("閉じる", "Close")}
             </button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildMentorSystemExtension, type MentorClientContext } from "@/lib/ai/mentorContext";
 
 const blockedWords = ["自傷", "暴力", "死にたい", "いじめ"];
 const ideaKeywords = ["アイデア", "仮説", "検証", "課題", "ソリューション", "ピッチ", "MVP", "実験", "ニーズ"];
@@ -22,9 +23,63 @@ function latestUserText(messages: MentorApiMessage[]) {
 
 export type MentorApiMessage = { role: "user" | "assistant"; content: string };
 
+const SYSTEM_BASE = `あなたは子ども・若者のプロジェクト伴走メンターです。LINEやDMで話しているような、人間らしい日本語で返す。
+
+【話し方】
+- です・ます調で、堅すぎず軽すぎない。ロボットっぽい言い回し（「〜について回答します」「以下の点に留意」など）は使わない。
+- 相手の言葉や気持ちにまず短く触れてから、本題へ。毎回同じ挨拶で始めない。
+- 高校生・大学生にもわかる言葉。専門語は言い換える。
+- 絵文字は使わなくてよい。使うならたまに1つまで。
+- JSONや表は出さない。
+
+【内容の原則】
+- 雑談・愚痴・たわいもない話は、そのトーンのまま自然に応じる（無理に起業へ結びつけない）。
+- プロジェクト・勉強・目標・進め方の相談のときは、一般論で終わらせず、渡されたコンテキスト（プロジェクト名・進捗・課題など）に即した具体例を必ず含める。
+- 抽象的な「大事です」だけで終わらない。「誰が・何を・いつまでに」が分かる粒度にする。
+
+【相談がプロジェクト／進め方／迷いのときの構成】
+1. 受け止め（1〜2文）
+2. 現状分析（コンテキストがある場合はそれを踏まえる。無い項目は捏造しない）
+3. 具体提案（2〜3個）
+4. 次アクション（今日または今週にできる一歩を1つ、動詞で）
+5. 想定障害と備え（逃げ道を1つ）
+6. （任意）深掘り質問は最大1つ
+
+【長さ】
+- 通常はおおよそ400〜900字。短文の雑談ならコンパクトでよいが、薄い一般論で終わらない。
+- 説教や長講義はしない。
+
+【安全】
+- 危険・違法・深刻な心身の問題は丁寧に断り、大人や専門家に相談するよう促す。
+
+【良い回答例】
+ユーザー: 何から手をつければいいかわからない
+アシスタント:
+ゼロから全部やろうとすると止まりやすいから、「小さくて効果が見える一歩」からで大丈夫。
+プロジェクトがあるなら、まず想定ユーザーの困りごとを1つ聞くのが最短ルートになりやすい。
+提案:
+1) 候補を3人リストアップする（友だち・先輩でも可）
+2) 「いま一番面倒なのは？」を1問だけ聞く
+3) 答えを1行メモする
+次アクション: 今日、候補3人の名前だけ書き出す。
+うまくいかないとき: 人が思いつかなければ、自分の「先週いちばん面倒だったこと」を仮の困りごとにする。`;
+
+const IDEA_MODE_INSTRUCTION = `
+
+【アイデア作成モード】
+次の思考順で整理する（見出しは短くてよい）:
+1) 課題定義（誰の、どんな困りごとか）
+2) 仮説（なぜその解決が効くか）
+3) 検証（最小で何を確かめるか）
+4) 次アクション（24時間以内にやる1歩）
+5) 代替案（任意・1つ）
+- 断定しすぎず、検証可能な表現を使う。
+- 相談者がすでに案を持っている場合は、否定よりも改善案を示す。
+- 渡されたプロジェクト情報があれば、それに即した例を入れる。`;
+
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { messages?: MentorApiMessage[] };
+    const body = (await req.json()) as { messages?: MentorApiMessage[]; context?: MentorClientContext };
     const raw = Array.isArray(body.messages) ? body.messages : [];
     const messages = raw
       .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
@@ -62,42 +117,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemBase = `あなたは子ども・若者とLINEやDMで話しているような、人間らしい日本語で返す相手です。
-
-【話し方】
-- です・ます調で、堅すぎず軽すぎない。ロボットっぽい言い回し（「〜について回答します」「以下の点に留意」など）は使わない。
-- 相手の言葉や気持ちにまず短く触れてから、本題へ。毎回同じ挨拶で始めない。
-- 長さは相手に合わせる。短文なら返しもコンパクトでよい。長く打ってきたらちゃんと拾う。
-- 箇条書きは、手順やコツを頼まれたときだけ。普段は普通の文章で。
-- 絵文字は使わなくてよい。使うならたまに1つまで。
-
-【内容】
-- 雑談・愚痴・質問・たわいもない話は、そのトーンのまま自然に応じる。必ずアイデアや起業に結びつけない。
-- 起業・勉強・アプリ・目標の相談のときだけ、軽くヒントや次の一歩を足してよい。説教や長講義はしない。
-
-【安全】
-- 危険・違法・深刻な心身の問題は丁寧に断り、大人や専門家に相談するよう促す。`;
     const useIdeaMode = shouldUseIdeaMode(history);
-    const ideaModeInstruction = `
-
-【アイデア作成モード】
-- アイデア相談のときは、次の思考順で整理する:
-  1) 課題定義（誰の、どんな困りごとか）
-  2) 仮説（なぜその解決が効くか）
-  3) 検証（最小で何を確かめるか）
-  4) 次アクション（24時間以内にやる1歩）
-- 断定しすぎず、検証可能な表現を使う。
-- 回答は長すぎない。必要なら短い見出しや箇条書きを使って読みやすくする。
-- 相談者がすでに案を持っている場合は、否定よりも改善案を示す。`;
-    const ideaResponseTemplate = `
-
-【回答フォーマット（アイデア相談時）】
-- 課題定義:
-- 仮説:
-- 検証:
-- 次アクション(24h):
-- 代替案(任意):`;
-    const system = `${systemBase}${useIdeaMode ? `${ideaModeInstruction}\n${ideaResponseTemplate}` : ""}`;
+    const contextBlock = buildMentorSystemExtension(body.context);
+    const system = `${SYSTEM_BASE}${contextBlock}${useIdeaMode ? IDEA_MODE_INSTRUCTION : ""}`;
     const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
     const userFocus = latestUserText(history);
 
@@ -107,14 +129,14 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model,
         messages: [{ role: "system", content: system }, ...history],
-        max_tokens: 900,
-        temperature: useIdeaMode ? 0.62 : 0.88,
-        frequency_penalty: 0.25,
-        presence_penalty: 0.08,
+        max_tokens: 2500,
+        temperature: useIdeaMode ? 0.62 : 0.6,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
         ...(useIdeaMode
           ? {
               metadata: {

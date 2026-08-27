@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 
 /**
  * OAuth / メールマジックリンクの戻り先。Supabase の Redirect URLs に
@@ -79,7 +80,7 @@ export default function AuthCallbackPage() {
         );
         return;
       }
-      router.replace("/");
+      router.replace(resolveAppEntryHref());
     })();
   }, [router]);
 
@@ -89,7 +90,7 @@ export default function AuthCallbackPage() {
       <button
         type="button"
         className="rounded-lg border border-[#dbdbdb] bg-white px-4 py-2 text-sm font-semibold text-[#262626] hover:bg-[#fafafa]"
-        onClick={() => router.replace("/")}
+        onClick={() => router.replace(resolveAppEntryHref())}
       >
         トップへ戻る
       </button>

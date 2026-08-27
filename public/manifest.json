@@ -1,0 +1,11 @@
+{
+  "name": "moni",
+  "short_name": "moni",
+  "description": "学生のビジネス実行プラットフォーム",
+  "start_url": "/?tab=posts",
+  "display": "standalone",
+  "background_color": "#fafaf8",
+  "theme_color": "#7C3AED",
+  "lang": "ja",
+  "icons": []
+}

@@ -1,6 +1,5 @@
--- project_members の SELECT ポリシーが project_is_member() を呼ぶ → 関数内が再度 project_members を読み
--- RLS が再帰 → 「stack depth limit exceeded」になる。
--- メンバー判定は SECURITY DEFINER + row_security off で RLS を迂回し、再帰のみ止める。
+-- project_members の SELECT が project_is_member() 経由で再帰し、一覧取得が失敗・タイムアウトするのを防ぐ。
+-- Supabase SQL Editor でこのファイルを実行してください（何度実行しても安全）。
 
 create or replace function public.project_is_member(p_project_id uuid, p_uid uuid)
 returns boolean
@@ -36,3 +35,10 @@ grant execute on function public.project_is_member(uuid, uuid) to authenticated;
 grant execute on function public.project_is_member(uuid, uuid) to anon;
 grant execute on function public.project_has_role(uuid, uuid, text[]) to authenticated;
 grant execute on function public.project_has_role(uuid, uuid, text[]) to anon;
+
+drop policy if exists "members read project members only" on public.project_members;
+create policy "members read project members only" on public.project_members for select using (
+  user_id = auth.uid()
+  or public.project_is_member(project_id, auth.uid())
+  or exists (select 1 from public.projects p where p.id = project_id and p.owner_id = auth.uid())
+);

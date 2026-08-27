@@ -51,3 +51,105 @@ export const ACTIVITY_LEVEL_CLASS: Record<0 | 1 | 2 | 3 | 4, string> = {
   3: "bg-green-500",
   4: "bg-green-700",
 };
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function mondayOfWeek(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return addDaysYmd(ymd, -((wd + 6) % 7));
+}
+
+export type ActivityDay = { date: string; count: number };
+
+export type MonthCell = {
+  date: string | null;
+  day: number | null;
+  count: number;
+  isToday: boolean;
+};
+
+export type ActivitySummary = {
+  total: number;
+  thisWeek: number;
+  thisMonth: number;
+  year: number;
+  month: number;
+  today: string;
+  recent: ActivityDay[];
+  monthCells: MonthCell[];
+};
+
+export function summarizeActivity(activityLog: Record<string, number>, now = new Date()): ActivitySummary {
+  const today = todayKeyJapan(now);
+  const [year, month] = today.split("-").map(Number);
+  const monthPrefix = `${year}-${pad2(month)}`;
+  const weekStart = mondayOfWeek(today);
+
+  let total = 0;
+  let thisWeek = 0;
+  let thisMonth = 0;
+  const recent: ActivityDay[] = [];
+
+  for (const [date, raw] of Object.entries(activityLog)) {
+    const count = Number(raw) || 0;
+    if (count <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    total += count;
+    if (date.startsWith(monthPrefix)) thisMonth += count;
+    if (date >= weekStart && date <= today) thisWeek += count;
+    recent.push({ date, count });
+  }
+  recent.sort((a, b) => b.date.localeCompare(a.date));
+
+  return {
+    total,
+    thisWeek,
+    thisMonth,
+    year,
+    month,
+    today,
+    recent: recent.slice(0, 8),
+    monthCells: buildMonthCells(year, month, today, activityLog),
+  };
+}
+
+function buildMonthCells(
+  year: number,
+  month: number,
+  today: string,
+  activityLog: Record<string, number>,
+): MonthCell[] {
+  const firstDow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const lead = (firstDow + 6) % 7;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const cells: MonthCell[] = [];
+  for (let i = 0; i < lead; i++) cells.push({ date: null, day: null, count: 0, isToday: false });
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = `${year}-${pad2(month)}-${pad2(day)}`;
+    cells.push({
+      date,
+      day,
+      count: activityLog[date] ?? 0,
+      isToday: date === today,
+    });
+  }
+  return cells;
+}
+
+const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
+const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+export function formatActivityDateJa(ymd: string): string {
+  return formatActivityDate(ymd, "ja");
+}
+
+export function formatActivityDate(ymd: string, locale: "ja" | "en" = "ja"): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (locale === "en") {
+    return `${WEEKDAY_EN[wd]}, ${m}/${d}`;
+  }
+  return `${m}月${d}日（${WEEKDAY_JA[wd]}）`;
+}
