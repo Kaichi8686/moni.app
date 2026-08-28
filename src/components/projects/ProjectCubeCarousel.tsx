@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Html } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -44,73 +44,148 @@ function drawCenteredGlyph(ctx: CanvasRenderingContext2D, text: string, emoji: b
   }
 }
 
-function makeFaceTexture(opts: {
-  bg: string;
-  create?: boolean;
-  icon?: string;
-  letter?: string;
-  imageUrl?: string | null;
-}) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+const FACE_TEX_SIZE = 512;
+
+function paintFaceFallback(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    bg: string;
+    create?: boolean;
+    icon?: string;
+    letter?: string;
+    photoPending?: boolean;
+  },
+) {
+  ctx.fillStyle = opts.photoPending ? "#18181b" : opts.bg;
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  if (opts.photoPending) return;
+
+  const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
+  vignette.addColorStop(0, "rgba(255,255,255,0.18)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.22)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  if (opts.create) {
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = 36;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(256, 140);
+    ctx.lineTo(256, 372);
+    ctx.moveTo(140, 256);
+    ctx.lineTo(372, 256);
+    ctx.stroke();
+  } else {
+    const icon = opts.icon?.trim() || "";
+    if (icon) drawCenteredGlyph(ctx, icon, true);
+    else if (opts.letter) drawCenteredGlyph(ctx, opts.letter, false);
   }
+}
 
-  const paintFallback = () => {
-    ctx.fillStyle = opts.bg;
-    ctx.fillRect(0, 0, 512, 512);
-    const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
-    vignette.addColorStop(0, "rgba(255,255,255,0.18)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.22)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, 512, 512);
-    if (opts.create) {
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.lineWidth = 36;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(256, 140);
-      ctx.lineTo(256, 372);
-      ctx.moveTo(140, 256);
-      ctx.lineTo(372, 256);
-      ctx.stroke();
-    } else {
-      const icon = opts.icon?.trim() || "";
-      if (icon) drawCenteredGlyph(ctx, icon, true);
-      else if (opts.letter) drawCenteredGlyph(ctx, opts.letter, false);
-    }
-  };
+function paintFacePhoto(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (w <= 0 || h <= 0) return false;
 
-  paintFallback();
+  ctx.fillStyle = "#18181b";
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  const scale = Math.max(FACE_TEX_SIZE / w, FACE_TEX_SIZE / h);
+  const drawW = w * scale;
+  const drawH = h * scale;
+  ctx.drawImage(img, (FACE_TEX_SIZE - drawW) / 2, (FACE_TEX_SIZE - drawH) / 2, drawW, drawH);
+  return true;
+}
 
+function createFaceTextureCanvas(
+  opts: {
+    bg: string;
+    create?: boolean;
+    icon?: string;
+    letter?: string;
+    imageUrl?: string | null;
+  },
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = FACE_TEX_SIZE;
+  canvas.height = FACE_TEX_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const photoPending = Boolean(opts.imageUrl?.trim());
+    paintFaceFallback(ctx, { ...opts, photoPending });
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.needsUpdate = true;
+  return texture;
+}
 
-  if (opts.imageUrl) {
+function useFaceTexture(opts: {
+  bg: string;
+  create?: boolean;
+  icon?: string;
+  letter?: string;
+  imageUrl?: string | null;
+}) {
+  const invalidate = useThree((state) => state.invalidate);
+  const imageUrl = opts.imageUrl?.trim() || null;
+  const texture = useMemo(
+    () => createFaceTextureCanvas({ ...opts, imageUrl }),
+    // One texture per cube mount; carousel items are keyed by project id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable per instance
+    [],
+  );
+
+  useEffect(() => {
+    const canvas = texture.image;
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const markDirty = () => {
+      texture.needsUpdate = true;
+      invalidate();
+    };
+
+    if (!imageUrl) {
+      paintFaceFallback(ctx, opts);
+      markDirty();
+      return;
+    }
+
+    let cancelled = false;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      // Edge-to-edge cover: no letterbox, no vignette (avoids edge-bleed look on cube faces).
-      ctx.fillStyle = opts.bg;
-      ctx.fillRect(0, 0, 512, 512);
-      const scale = Math.max(512 / img.width, 512 / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      ctx.drawImage(img, (512 - w) / 2, (512 - h) / 2, w, h);
-      texture.needsUpdate = true;
+      if (cancelled) return;
+      if (!paintFacePhoto(ctx, img)) {
+        paintFaceFallback(ctx, opts);
+      }
+      markDirty();
     };
-    img.onerror = () => {};
-    img.src = opts.imageUrl;
-  }
+    img.onerror = () => {
+      if (cancelled) return;
+      paintFaceFallback(ctx, opts);
+      markDirty();
+    };
+    img.src = imageUrl;
+
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+      img.src = "";
+    };
+  }, [texture, imageUrl, invalidate, opts]);
+
+  useEffect(
+    () => () => {
+      texture.dispose();
+    },
+    [texture],
+  );
 
   return texture;
 }
@@ -132,33 +207,46 @@ function ProjectCube({
   const pressRef = useRef(false);
   const scaleRef = useRef(1);
 
-  const map = useMemo(() => {
-    if (item.kind === "create") return makeFaceTexture({ bg: "#27272a", create: true });
-    const p = item.project;
-    const imageUrl = p.thumbnail_url?.trim() || null;
-    const icon = p.icon?.trim() || undefined;
-    const letter = (p.name.trim().charAt(0) || "P").toUpperCase();
-    const bg = CUBE_COLORS[projectHashIndex(p.id, CUBE_COLORS.length)] ?? "#52525b";
-    return makeFaceTexture({ bg, icon, letter, imageUrl });
-  }, [item]);
+  const faceOpts = useMemo(
+    () =>
+      item.kind === "create"
+        ? { bg: "#27272a", create: true as const }
+        : {
+            bg: CUBE_COLORS[projectHashIndex(item.project.id, CUBE_COLORS.length)] ?? "#52525b",
+            icon: item.project.icon?.trim() || undefined,
+            letter: (item.project.name.trim().charAt(0) || "P").toUpperCase(),
+            imageUrl: item.project.thumbnail_url?.trim() || null,
+          },
+    [item],
+  );
+
+  const map = useFaceTexture(faceOpts);
+
+  const hasPhoto = item.kind === "project" && Boolean(item.project.thumbnail_url?.trim());
 
   const materials = useMemo(
     () =>
-      Array.from(
-        { length: 6 },
-        () =>
-          new THREE.MeshPhysicalMaterial({
+      Array.from({ length: 6 }, () => {
+        if (hasPhoto) {
+          return new THREE.MeshStandardMaterial({
             map,
-            roughness: 0.38,
-            metalness: 0.12,
-            clearcoat: 0.35,
-            clearcoatRoughness: 0.4,
-            transparent: true,
-            opacity: active ? 1 : 0.48,
-            color: active ? "#ffffff" : "#c4c4c4",
-          }),
-      ),
-    [map, active],
+            roughness: 0.52,
+            metalness: 0,
+            color: "#ffffff",
+          });
+        }
+        return new THREE.MeshPhysicalMaterial({
+          map,
+          roughness: 0.38,
+          metalness: 0.12,
+          clearcoat: 0.35,
+          clearcoatRoughness: 0.4,
+          transparent: true,
+          opacity: active ? 1 : 0.48,
+          color: active ? "#ffffff" : "#c4c4c4",
+        });
+      }),
+    [map, active, hasPhoto],
   );
 
   useEffect(
@@ -166,13 +254,6 @@ function ProjectCube({
       materials.forEach((m) => m.dispose());
     },
     [materials],
-  );
-
-  useEffect(
-    () => () => {
-      map.dispose();
-    },
-    [map],
   );
 
   useFrame((state) => {
