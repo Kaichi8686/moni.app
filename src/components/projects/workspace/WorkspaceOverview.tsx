@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   ArrowRight,
   Check,
@@ -18,6 +18,9 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+
+/** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
+const ROADMAP_VISIBLE_LIMIT = 6;
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
@@ -67,8 +70,21 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
   const { project, projectMeta, projectId, issues, phases, loading } = useProjectWorkspace();
+  const [roadmapExpanded, setRoadmapExpanded] = useState(false);
 
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
+  /** 未完了を先頭にし、完了済みはその後ろ */
+  const displayPhases = useMemo(() => {
+    const active = sortedPhases.filter((phase) => phase.status !== "completed");
+    const done = sortedPhases.filter((phase) => phase.status === "completed");
+    return [...active, ...done];
+  }, [sortedPhases]);
+  const visiblePhases = useMemo(
+    () => (roadmapExpanded ? displayPhases : displayPhases.slice(0, ROADMAP_VISIBLE_LIMIT)),
+    [displayPhases, roadmapExpanded],
+  );
+  const hiddenPhaseCount = Math.max(0, displayPhases.length - visiblePhases.length);
+
   const upcomingIssues = useMemo(
     () =>
       sortIssuesByDueDate(
@@ -76,6 +92,10 @@ export default function WorkspaceOverview() {
       ).slice(0, 3),
     [issues],
   );
+
+  useEffect(() => {
+    setRoadmapExpanded(false);
+  }, [projectId]);
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
@@ -149,40 +169,60 @@ export default function WorkspaceOverview() {
           </Link>
         </div>
         {sortedPhases.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {sortedPhases.map((phase, index) => {
-              const complete = phase.status === "completed";
-              const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-              const locked = !complete && !current && index > currentIndex;
-              const card = (
-                <div
-                  className={`relative min-h-[108px] overflow-hidden rounded-2xl border p-3 pt-5 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
-                    locked
-                      ? "border-zinc-200 bg-zinc-50 text-zinc-400"
-                      : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
-                  }`}
-                >
-                  <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
-                  {current ? <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-orange-100" /> : null}
-                  {locked ? <LockKeyhole className="absolute right-3 top-3 h-4 w-4" aria-hidden /> : null}
-                  <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {index + 1}</p>
-                  <p className={`mt-2 line-clamp-2 text-[13px] font-semibold leading-snug sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
-                    {phase.title}
-                  </p>
-                  {complete ? (
-                    <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
-                      <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
-                    </span>
-                  ) : null}
-                </div>
-              );
-              return locked ? (
-                <div key={phase.id} aria-disabled="true">{card}</div>
-              ) : (
-                <Link key={phase.id} href={`/projects/${projectId}/roadmap`}>{card}</Link>
-              );
-            })}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {visiblePhases.map((phase) => {
+                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                const complete = phase.status === "completed";
+                const current = phase.status === "in_progress" || (!complete && index === currentIndex);
+                const locked = !complete && !current && index > currentIndex;
+                const card = (
+                  <div
+                    className={`relative min-h-[108px] overflow-hidden rounded-2xl border p-3 pt-5 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
+                      locked
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-400"
+                        : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
+                    }`}
+                  >
+                    <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
+                    {current ? <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-orange-100" /> : null}
+                    {locked ? <LockKeyhole className="absolute right-3 top-3 h-4 w-4" aria-hidden /> : null}
+                    <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {index + 1}</p>
+                    <p className={`mt-2 line-clamp-2 text-[13px] font-semibold leading-snug sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
+                      {phase.title}
+                    </p>
+                    {complete ? (
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
+                        <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+                return locked ? (
+                  <div key={phase.id} aria-disabled="true">{card}</div>
+                ) : (
+                  <Link key={phase.id} href={`/projects/${projectId}/roadmap`}>{card}</Link>
+                );
+              })}
+            </div>
+            {hiddenPhaseCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setRoadmapExpanded(true)}
+                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13px] font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+              >
+                {tx(`もっと見る（あと${hiddenPhaseCount}件）`, `Show more (${hiddenPhaseCount} more)`)}
+              </button>
+            ) : roadmapExpanded && displayPhases.length > ROADMAP_VISIBLE_LIMIT ? (
+              <button
+                type="button"
+                onClick={() => setRoadmapExpanded(false)}
+                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-100"
+              >
+                {tx(`閉じる（${ROADMAP_VISIBLE_LIMIT}件まで表示）`, `Show fewer (up to ${ROADMAP_VISIBLE_LIMIT})`)}
+              </button>
+            ) : null}
+          </>
         ) : (
           <Link href={`/projects/${projectId}/roadmap`} className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600">
             {tx("ロードマップを作成する", "Create roadmap")}
