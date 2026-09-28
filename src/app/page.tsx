@@ -999,20 +999,11 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [hasEnteredApp, setHasEnteredApp] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.sessionStorage.getItem("moni-has-entered-app") === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [hasEnteredApp, setHasEnteredApp] = useState(false);
   /** ログイン済みでも「サービス説明」LPを重ねて表示 */
-  const [showLandingPage, setShowLandingPage] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.get("landing") === "1" || params.get("about") === "1";
-  });
+  const [showLandingPage, setShowLandingPage] = useState(false);
+  /** sessionStorage / URL をクライアントで読むまで LP 判定しない（SSR ハイドレーションでの LP フラッシュ防止） */
+  const [clientReady, setClientReady] = useState(false);
   const canUseSupabase = useMemo(() => Boolean(supabase && supabaseEnabled), []);
   /** getSession 完了前は未ログイン扱いしない（タブ遷移時の LP フラッシュ防止） */
   const [authReady, setAuthReady] = useState(!canUseSupabase);
@@ -1036,6 +1027,11 @@ export default function Home() {
     const tab = params.get("tab");
     const community = params.get("community");
     const mentor = params.get("mentor");
+    const wantsLanding = params.get("landing") === "1" || params.get("about") === "1";
+    if (wantsLanding) {
+      setShowLandingPage(true);
+      return;
+    }
     if (tab === "projects") {
       router.replace(HOME_PROJECTS_HREF);
       return;
@@ -1943,11 +1939,23 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    try {
+      if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
+        setHasEnteredApp(true);
+      }
+    } catch {
+      /* ignore */
+    }
     const params = new URLSearchParams(window.location.search);
     if (params.get("about") === "1" || params.get("landing") === "1") {
       setShowLandingPage(true);
-      window.history.replaceState({}, "", window.location.pathname);
+      const next = new URL(window.location.href);
+      next.searchParams.delete("about");
+      next.searchParams.delete("landing");
+      const qs = next.searchParams.toString();
+      window.history.replaceState({}, "", `${next.pathname}${qs ? `?${qs}` : ""}${next.hash}`);
     }
+    setClientReady(true);
   }, []);
 
   useEffect(() => {
@@ -2243,10 +2251,9 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hasEnteredApp) return;
     try {
-      if (hasEnteredApp) window.sessionStorage.setItem("moni-has-entered-app", "1");
-      else window.sessionStorage.removeItem("moni-has-entered-app");
+      window.sessionStorage.setItem("moni-has-entered-app", "1");
     } catch {
       /* ignore quota / private mode */
     }
@@ -2379,6 +2386,11 @@ export default function Home() {
     setSession(null);
     setSessionEmail(null);
     setHasEnteredApp(false);
+    try {
+      window.sessionStorage.removeItem("moni-has-entered-app");
+    } catch {
+      /* ignore */
+    }
   }
 
   useEffect(() => {
@@ -3652,12 +3664,12 @@ export default function Home() {
     event.target.value = "";
   }
 
-  // セッション復元中に MoniLanding を出すと、タブ切替のたびに LP が一瞬チラつく
-  if (!authReady && !showLandingPage) {
+  // セッション / sessionStorage 復元前に MoniLanding を出すと、タブ切替のたびに LP が一瞬チラつく
+  if ((!clientReady || !authReady) && !showLandingPage) {
     return <main className="min-h-screen bg-zinc-50" aria-busy="true" />;
   }
 
-  if (showLandingPage || (authReady && !session && !hasEnteredApp)) {
+  if (showLandingPage || (clientReady && authReady && !session && !hasEnteredApp)) {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
