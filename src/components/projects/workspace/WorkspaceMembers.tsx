@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
@@ -37,13 +37,39 @@ export default function WorkspaceMembers() {
   const [inviteSearchBusy, setInviteSearchBusy] = useState(false);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
+  const [moderatorRolesLoaded, setModeratorRolesLoaded] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
 
-  /** オーナーだけ申請承認・招待できる（RPC も owner/admin 限定） */
-  const canInviteOrReview = useMemo(() => {
-    if (!uid || !project) return false;
-    const me = project.members.find((m) => m.id === uid);
-    return me?.role === "owner";
-  }, [uid, project]);
+  useEffect(() => {
+    let cancelled = false;
+    async function checkRole() {
+      if (!supabase || !uid || !projectId) {
+        if (!cancelled) {
+          setIsModerator(false);
+          setModeratorRolesLoaded(true);
+        }
+        return;
+      }
+      const { data } = await supabase
+        .from("project_members")
+        .select("role")
+        .eq("project_id", projectId)
+        .eq("user_id", uid)
+        .maybeSingle();
+      const role = (data as { role?: string } | null)?.role;
+      if (!cancelled) {
+        setIsModerator(role === "owner" || role === "admin");
+        setModeratorRolesLoaded(true);
+      }
+    }
+    void checkRole();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, projectId, project?.members]);
+
+  /** オーナー／管理者だけ申請承認・招待できる（RPC と一致） */
+  const canInviteOrReview = isModerator;
 
   const loadJoinRequests = useCallback(async () => {
     if (!supabase || !canInviteOrReview) {
@@ -82,8 +108,9 @@ export default function WorkspaceMembers() {
   }, [canInviteOrReview, projectId]);
 
   useEffect(() => {
+    if (!moderatorRolesLoaded) return;
     void loadJoinRequests();
-  }, [loadJoinRequests]);
+  }, [loadJoinRequests, moderatorRolesLoaded]);
 
   async function searchInviteCandidates() {
     if (!supabase || !uid) return;
