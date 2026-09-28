@@ -1007,6 +1007,8 @@ export default function Home() {
     return params.get("landing") === "1" || params.get("about") === "1";
   });
   const canUseSupabase = useMemo(() => Boolean(supabase && supabaseEnabled), []);
+  /** getSession 完了前は未ログイン扱いしない（タブ遷移時の LP フラッシュ防止） */
+  const [authReady, setAuthReady] = useState(!canUseSupabase);
   const requiresLogin = canUseSupabase && !session;
 
   const sessionRef = useRef<Session | null>(null);
@@ -1966,22 +1968,27 @@ export default function Home() {
       setAuthMessage(`ログインエラー: ${decodeURIComponent(oauthErr.replace(/\+/g, " "))}`);
     }
 
-    void supabase.auth.getSession().then(({ data }) => {
-      const next = data.session ?? null;
-      sessionRef.current = next;
-      setSession(next);
-      setSessionEmail(next?.user.email ?? null);
-      if (next) {
-        void loadRoleRef.current(next.user.id);
-        void loadArticlesRef.current();
-        void loadPitchesRef.current();
-        void refreshTalkListRef.current?.();
-        void loadSocialGraphRef.current(next.user.id);
-        void loadMentorContextRef.current?.(next.user.id);
-      } else {
-        setFollowSuggestions([]);
-      }
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        const next = data.session ?? null;
+        sessionRef.current = next;
+        setSession(next);
+        setSessionEmail(next?.user.email ?? null);
+        if (next) {
+          void loadRoleRef.current(next.user.id);
+          void loadArticlesRef.current();
+          void loadPitchesRef.current();
+          void refreshTalkListRef.current?.();
+          void loadSocialGraphRef.current(next.user.id);
+          void loadMentorContextRef.current?.(next.user.id);
+        } else {
+          setFollowSuggestions([]);
+        }
+      })
+      .finally(() => {
+        setAuthReady(true);
+      });
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       const next = nextSession ?? null;
@@ -3625,7 +3632,12 @@ export default function Home() {
     event.target.value = "";
   }
 
-  if (showLandingPage || (!session && !hasEnteredApp)) {
+  // セッション復元中に MoniLanding を出すと、タブ切替のたびに LP が一瞬チラつく
+  if (!authReady && !showLandingPage) {
+    return <main className="min-h-screen bg-zinc-50" aria-busy="true" />;
+  }
+
+  if (showLandingPage || (authReady && !session && !hasEnteredApp)) {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
