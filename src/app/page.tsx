@@ -4064,8 +4064,13 @@ export default function Home() {
                     return;
                   }
                   if (item.id === "follow-request") {
-                    setActivePage("account");
+                    // stay on current page — setActivePage("account") redirects to /profile
+                    // and drops this modal before approve/reject can be used
                     setFollowListModal("requests");
+                    return;
+                  }
+                  if (item.id === "chat-unread") {
+                    router.push("/messages");
                     return;
                   }
                   dismissNotification(item.id);
