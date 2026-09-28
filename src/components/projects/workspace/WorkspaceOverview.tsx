@@ -15,10 +15,12 @@ import {
   Vote,
 } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+import type { Phase } from "@/lib/workspace/types";
 
 /** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -75,7 +77,12 @@ export default function WorkspaceOverview() {
     projectId,
     open: false,
   });
+  const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
+  const selectedPhaseLive =
+    selectedPhase && selectedPhase.projectId === projectId
+      ? phases.find((phase) => phase.id === selectedPhase.id) ?? selectedPhase
+      : null;
 
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
   /** 未完了を先頭にし、完了済みはその後ろ */
@@ -207,7 +214,14 @@ export default function WorkspaceOverview() {
                 return locked ? (
                   <div key={phase.id} aria-disabled="true">{card}</div>
                 ) : (
-                  <Link key={phase.id} href={`/projects/${projectId}/roadmap`}>{card}</Link>
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className="text-left"
+                    onClick={() => setSelectedPhase(phase)}
+                  >
+                    {card}
+                  </button>
                 );
               })}
             </div>
@@ -235,6 +249,23 @@ export default function WorkspaceOverview() {
           </Link>
         )}
       </section>
+
+      <RoadmapPhaseInfoSheet
+        open={Boolean(selectedPhaseLive)}
+        phase={
+          selectedPhaseLive
+            ? {
+                id: selectedPhaseLive.id,
+                title: selectedPhaseLive.title,
+                goal: selectedPhaseLive.goal,
+                description: selectedPhaseLive.description,
+                stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+              }
+            : null
+        }
+        onClose={() => setSelectedPhase(null)}
+        editHref={selectedPhaseLive ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}` : undefined}
+      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
