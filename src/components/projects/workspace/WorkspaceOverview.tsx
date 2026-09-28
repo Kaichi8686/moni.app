@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import {
   ArrowRight,
   Check,
@@ -70,7 +70,11 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
   const { project, projectMeta, projectId, issues, phases, loading } = useProjectWorkspace();
-  const [roadmapExpanded, setRoadmapExpanded] = useState(false);
+  const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
+    projectId,
+    open: false,
+  });
+  const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
   /** 未完了を先頭にし、完了済みはその後ろ */
@@ -92,10 +96,6 @@ export default function WorkspaceOverview() {
       ).slice(0, 3),
     [issues],
   );
-
-  useEffect(() => {
-    setRoadmapExpanded(false);
-  }, [projectId]);
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
@@ -208,7 +208,7 @@ export default function WorkspaceOverview() {
             {hiddenPhaseCount > 0 ? (
               <button
                 type="button"
-                onClick={() => setRoadmapExpanded(true)}
+                onClick={() => setExpandState({ projectId, open: true })}
                 className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13px] font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
               >
                 {tx(`もっと見る（あと${hiddenPhaseCount}件）`, `Show more (${hiddenPhaseCount} more)`)}
@@ -216,7 +216,7 @@ export default function WorkspaceOverview() {
             ) : roadmapExpanded && displayPhases.length > ROADMAP_VISIBLE_LIMIT ? (
               <button
                 type="button"
-                onClick={() => setRoadmapExpanded(false)}
+                onClick={() => setExpandState({ projectId, open: false })}
                 className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-100"
               >
                 {tx(`閉じる（${ROADMAP_VISIBLE_LIMIT}件まで表示）`, `Show fewer (up to ${ROADMAP_VISIBLE_LIMIT})`)}
