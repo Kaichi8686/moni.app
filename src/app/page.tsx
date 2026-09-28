@@ -1027,9 +1027,9 @@ export default function Home() {
     const tab = params.get("tab");
     const community = params.get("community");
     const mentor = params.get("mentor");
-    const wantsLanding = params.get("landing") === "1" || params.get("about") === "1";
-    if (wantsLanding) {
-      setShowLandingPage(true);
+    // showLandingPage state でも判定（URL から landing を消した後の再実行で /projects へ飛ばないように）
+    if (showLandingPage || params.get("landing") === "1" || params.get("about") === "1") {
+      if (!showLandingPage) setShowLandingPage(true);
       return;
     }
     if (tab === "projects") {
@@ -1064,7 +1064,23 @@ export default function Home() {
       setMentorSubTab("ai");
     }
     if (tab === "chat") setChatSubView("list");
-  }, [router]);
+  }, [router, showLandingPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
+        setHasEnteredApp(true);
+      }
+    } catch {
+      /* ignore */
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("about") === "1" || params.get("landing") === "1") {
+      setShowLandingPage(true);
+    }
+    setClientReady(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1936,27 +1952,6 @@ export default function Home() {
     trackOpsEvent(`open_${activePage}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePage]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
-        setHasEnteredApp(true);
-      }
-    } catch {
-      /* ignore */
-    }
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("about") === "1" || params.get("landing") === "1") {
-      setShowLandingPage(true);
-      const next = new URL(window.location.href);
-      next.searchParams.delete("about");
-      next.searchParams.delete("landing");
-      const qs = next.searchParams.toString();
-      window.history.replaceState({}, "", `${next.pathname}${qs ? `?${qs}` : ""}${next.hash}`);
-    }
-    setClientReady(true);
-  }, []);
 
   useEffect(() => {
     if (!supabase || !session) return;
