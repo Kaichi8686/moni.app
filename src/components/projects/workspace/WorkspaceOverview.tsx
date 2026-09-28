@@ -239,7 +239,7 @@ export default function WorkspaceOverview() {
         </div>
         <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
           {upcomingIssues.length > 0 ? (
-            <ul className="divide-y divide-zinc-100">
+            <ul className="list-none divide-y divide-zinc-100">
               {upcomingIssues.map((issue) => {
                 const assignee = project.members.find((member) => member.id === issue.assigneeId);
                 return (
