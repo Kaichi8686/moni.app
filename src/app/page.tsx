@@ -1008,12 +1008,12 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [hasEnteredApp, setHasEnteredApp] = useState(false);
   /** ログイン済みでも「サービス説明」LPを重ねて表示 */
-  const [showLandingPage, setShowLandingPage] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.get("landing") === "1" || params.get("about") === "1";
-  });
+  const [showLandingPage, setShowLandingPage] = useState(false);
+  /** sessionStorage / URL をクライアントで読むまで LP 判定しない（SSR ハイドレーションでの LP フラッシュ防止） */
+  const [clientReady, setClientReady] = useState(false);
   const canUseSupabase = useMemo(() => Boolean(supabase && supabaseEnabled), []);
+  /** getSession 完了前は未ログイン扱いしない（タブ遷移時の LP フラッシュ防止） */
+  const [authReady, setAuthReady] = useState(!canUseSupabase);
   const requiresLogin = canUseSupabase && !session;
 
   const sessionRef = useRef<Session | null>(null);
@@ -1034,6 +1034,11 @@ export default function Home() {
     const tab = params.get("tab");
     const community = params.get("community");
     const mentor = params.get("mentor");
+    // showLandingPage state でも判定（URL から landing を消した後の再実行で /projects へ飛ばないように）
+    if (showLandingPage || params.get("landing") === "1" || params.get("about") === "1") {
+      if (!showLandingPage) setShowLandingPage(true);
+      return;
+    }
     if (tab === "projects") {
       router.replace(HOME_PROJECTS_HREF);
       return;
@@ -1066,7 +1071,23 @@ export default function Home() {
       setMentorSubTab("ai");
     }
     if (tab === "chat") setChatSubView("list");
-  }, [router]);
+  }, [router, showLandingPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
+        setHasEnteredApp(true);
+      }
+    } catch {
+      /* ignore */
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("about") === "1" || params.get("landing") === "1") {
+      setShowLandingPage(true);
+    }
+    setClientReady(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2001,15 +2022,6 @@ export default function Home() {
   }, [activePage]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("about") === "1" || params.get("landing") === "1") {
-      setShowLandingPage(true);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
-
-  useEffect(() => {
     if (!supabase || !session) return;
     if (activePage !== "chat" || chatSubView !== "room") return;
     if (unreadCount <= 0) return;
@@ -2034,24 +2046,31 @@ export default function Home() {
       setAuthMessage(`ログインエラー: ${decodeURIComponent(oauthErr.replace(/\+/g, " "))}`);
     }
 
-    void supabase.auth.getSession().then(({ data }) => {
-      const next = data.session ?? null;
-      sessionRef.current = next;
-      setSession(next);
-      setSessionEmail(next?.user.email ?? null);
-      if (next) {
-        void loadRoleRef.current(next.user.id);
-        void loadArticlesRef.current();
-        void loadPitchesRef.current();
-        void refreshTalkListRef.current?.();
-        void loadSocialGraphRef.current(next.user.id);
-        void loadMentorContextRef.current?.(next.user.id);
-        void loadProjectNotificationsRef.current(next.user.id);
-      } else {
-        setFollowSuggestions([]);
-        setProjectNotifications([]);
-      }
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        const next = data.session ?? null;
+        sessionRef.current = next;
+        setSession(next);
+        setSessionEmail(next?.user.email ?? null);
+        if (next) {
+          void loadRoleRef.current(next.user.id);
+          void loadArticlesRef.current();
+          void loadPitchesRef.current();
+          void refreshTalkListRef.current?.();
+          void loadSocialGraphRef.current(next.user.id);
+          void loadMentorContextRef.current?.(next.user.id);
+          void loadProjectNotificationsRef.current(next.user.id);
+        } else {
+          setFollowSuggestions([]);
+          setProjectNotifications([]);
+        }
+        // setSession と同じ tick で立て、authReady だけ先に true になる瞬間を作らない
+        setAuthReady(true);
+      })
+      .catch(() => {
+        setAuthReady(true);
+      });
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       const next = nextSession ?? null;
@@ -2299,6 +2318,15 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !hasEnteredApp) return;
+    try {
+      window.sessionStorage.setItem("moni-has-entered-app", "1");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [hasEnteredApp]);
+
+  useEffect(() => {
     if (!session || typeof window === "undefined") {
       setOnboardingCompleted(true);
       return;
@@ -2461,6 +2489,12 @@ export default function Home() {
     await supabase.auth.signOut();
     setSession(null);
     setSessionEmail(null);
+    setHasEnteredApp(false);
+    try {
+      window.sessionStorage.removeItem("moni-has-entered-app");
+    } catch {
+      /* ignore */
+    }
   }
 
   useEffect(() => {
@@ -3734,7 +3768,12 @@ export default function Home() {
     event.target.value = "";
   }
 
-  if (showLandingPage || (!session && !hasEnteredApp)) {
+  // セッション / sessionStorage 復元前に MoniLanding を出すと、タブ切替のたびに LP が一瞬チラつく
+  if ((!clientReady || !authReady) && !showLandingPage) {
+    return <main className="min-h-screen bg-zinc-50" aria-busy="true" />;
+  }
+
+  if (showLandingPage || (clientReady && authReady && !session && !hasEnteredApp)) {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
