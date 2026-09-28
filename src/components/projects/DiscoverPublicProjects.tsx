@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
@@ -373,12 +372,12 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
               </dl>
 
               <div className="mt-5 flex flex-col gap-2">
-                <Link
-                  href={`/projects/${detail.id}/overview`}
-                  className="flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
-                >
-                  {tx("プロジェクト画面を開く", "Open project")}
-                </Link>
+                <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
+                  {tx(
+                    "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
+                    "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
+                  )}
+                </p>
                 {uid ? (
                   detailPending ? (
                     <p className="text-center text-sm font-medium text-amber-800">

@@ -5804,11 +5804,7 @@ export default function Home() {
                   <ul className="space-y-3">
                     {peerProfileProjects.map((p) => (
                       <li key={`peer-proj-${p.id}`}>
-                        <Link
-                          href={`/projects/${p.id}/overview`}
-                          className="block rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md"
-                          onClick={() => setActiveProfileMember(null)}
-                        >
+                        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
                           <div className="flex items-start justify-between gap-2">
                             <p className="min-w-0 flex-1 font-semibold text-zinc-900">{p.name}</p>
                             <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
@@ -5818,7 +5814,12 @@ export default function Home() {
                           <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-600">
                             {(p.description ?? "").trim() || "説明はまだありません。"}
                           </p>
-                        </Link>
+                          <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                            {language === "ja"
+                              ? "探す画面からは説明のみ表示されます。中身を見るにはプロジェクトへの参加が必要です。"
+                              : "Discover shows description only. Join the project to open its contents."}
+                          </p>
+                        </div>
                       </li>
                     ))}
                   </ul>
