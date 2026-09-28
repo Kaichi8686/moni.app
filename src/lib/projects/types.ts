@@ -4,6 +4,22 @@ export type ProjectVisibility = "public" | "private";
 export type ProjectRole = "owner" | "admin" | "member";
 export type JoinRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
 
+export type ProjectNotificationType =
+  | "join_request_received"
+  | "join_request_accepted"
+  | "join_request_rejected"
+  | "project_invited";
+
+export type ProjectNotificationRow = {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  type: ProjectNotificationType | string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+};
+
 /** project_tasks.status（マイグレーション後）。レガシー todo/doing は normalize で吸収 */
 export type TaskStatus = TaskWorkStatus;
 export type TaskPriority = "low" | "medium" | "high";

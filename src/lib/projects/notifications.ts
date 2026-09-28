@@ -1,0 +1,60 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type ProjectNotificationType =
+  | "join_request_received"
+  | "join_request_accepted"
+  | "join_request_rejected"
+  | "project_invited";
+
+export type ProjectNotificationRow = {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  type: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+};
+
+export function projectNotificationHref(row: Pick<ProjectNotificationRow, "type" | "project_id">): string | null {
+  if (!row.project_id) return null;
+  if (row.type === "join_request_received") {
+    return `/projects/${row.project_id}/members`;
+  }
+  return `/projects/${row.project_id}/overview`;
+}
+
+export async function fetchUnreadProjectNotifications(
+  client: SupabaseClient,
+  userId: string,
+  limit = 20,
+): Promise<ProjectNotificationRow[]> {
+  const { data, error } = await client
+    .from("project_notifications")
+    .select("id,user_id,project_id,type,body,read_at,created_at")
+    .eq("user_id", userId)
+    .is("read_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    // テーブル未適用時は空で継続
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw error;
+  }
+  return (data ?? []) as ProjectNotificationRow[];
+}
+
+export async function markProjectNotificationRead(
+  client: SupabaseClient,
+  notificationId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("project_notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("id", notificationId)
+    .is("read_at", null);
+  if (error && error.code !== "42P01" && error.code !== "PGRST205") {
+    throw error;
+  }
+}

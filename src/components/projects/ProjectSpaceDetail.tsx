@@ -135,6 +135,10 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [joinMessageDraft, setJoinMessageDraft] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
   const [inviteNotice, setInviteNotice] = useState("");
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [inviteCandidates, setInviteCandidates] = useState<Array<{ id: string; name: string }>>([]);
+  const [inviteSearchBusy, setInviteSearchBusy] = useState(false);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [groupProfileOpen, setGroupProfileOpen] = useState(false);
@@ -750,6 +754,68 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       await load();
     } finally {
       setJoinBusy(false);
+    }
+  }
+
+  async function searchInviteCandidates() {
+    if (!supabase || !uid) return;
+    const q = inviteQuery.trim();
+    if (q.length < 1) {
+      setInviteCandidates([]);
+      return;
+    }
+    setInviteSearchBusy(true);
+    setActionErr("");
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,display_name")
+        .ilike("display_name", `%${q}%`)
+        .neq("id", uid)
+        .limit(8);
+      if (error) {
+        setActionErr(error.message);
+        setInviteCandidates([]);
+        return;
+      }
+      const memberSet = new Set(members.map((m) => m.user_id));
+      setInviteCandidates(
+        (data ?? [])
+          .map((row) => ({
+            id: row.id as string,
+            name: ((row.display_name as string | null)?.trim() || "ユーザー") as string,
+          }))
+          .filter((row) => !memberSet.has(row.id)),
+      );
+    } finally {
+      setInviteSearchBusy(false);
+    }
+  }
+
+  async function inviteMemberById(inviteeId: string, inviteeName: string) {
+    if (!supabase || !selectedProject) return;
+    setInviteBusyId(inviteeId);
+    setActionErr("");
+    try {
+      const { error } = await supabase.rpc("project_invite_member", {
+        p_project_id: selectedProject.id,
+        p_invitee_id: inviteeId,
+      });
+      if (error) {
+        const msg = error.message ?? "";
+        if (msg.includes("already a member")) setActionErr("すでにメンバーです。");
+        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
+          setActionErr("招待機能のDBが未適用です。Supabaseで apply_project_invite_notifications.sql を実行してください。");
+        } else setActionErr(msg);
+        return;
+      }
+      setInviteNotice(`${inviteeName} さんを招待しました。お知らせが届きます。`);
+      window.setTimeout(() => setInviteNotice(""), 3200);
+      setInviteQuery("");
+      setInviteCandidates([]);
+      await load();
+    } finally {
+      setInviteBusyId(null);
     }
   }
 
@@ -1511,6 +1577,52 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               ))}
             </ul>
           </div>
+          {canModerateJoinRequests ? (
+            <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <h3 className="text-sm font-semibold text-zinc-900">メンバーを招待</h3>
+              <p className="mt-1 text-xs text-zinc-500">表示名で検索して招待すると、相手のお知らせに届きます。</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <input
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  placeholder="表示名で検索"
+                  value={inviteQuery}
+                  onChange={(e) => setInviteQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void searchInviteCandidates();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={inviteSearchBusy || !inviteQuery.trim()}
+                  onClick={() => void searchInviteCandidates()}
+                  className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 disabled:opacity-60"
+                >
+                  {inviteSearchBusy ? "検索中…" : "検索"}
+                </button>
+              </div>
+              <ul className="mt-2 space-y-2">
+                {inviteCandidates.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2">
+                    <p className="truncate text-sm font-medium text-zinc-900">{c.name}</p>
+                    <button
+                      type="button"
+                      disabled={inviteBusyId === c.id}
+                      onClick={() => void inviteMemberById(c.id, c.name)}
+                      className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      {inviteBusyId === c.id ? "招待中…" : "招待する"}
+                    </button>
+                  </li>
+                ))}
+                {inviteQuery.trim() && !inviteSearchBusy && inviteCandidates.length === 0 ? (
+                  <li className="text-sm text-zinc-500">該当するユーザーが見つかりません。</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
           {canModerateJoinRequests ? (
             <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
               <h3 className="text-sm font-semibold text-zinc-900">参加申請（承認・拒否）</h3>
