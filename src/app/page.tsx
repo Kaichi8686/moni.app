@@ -999,7 +999,14 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [hasEnteredApp, setHasEnteredApp] = useState(false);
+  const [hasEnteredApp, setHasEnteredApp] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.sessionStorage.getItem("moni-has-entered-app") === "1";
+    } catch {
+      return false;
+    }
+  });
   /** ログイン済みでも「サービス説明」LPを重ねて表示 */
   const [showLandingPage, setShowLandingPage] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -1985,8 +1992,10 @@ export default function Home() {
         } else {
           setFollowSuggestions([]);
         }
+        // setSession と同じ tick で立て、authReady だけ先に true になる瞬間を作らない
+        setAuthReady(true);
       })
-      .finally(() => {
+      .catch(() => {
         setAuthReady(true);
       });
 
@@ -2234,6 +2243,16 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (hasEnteredApp) window.sessionStorage.setItem("moni-has-entered-app", "1");
+      else window.sessionStorage.removeItem("moni-has-entered-app");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [hasEnteredApp]);
+
+  useEffect(() => {
     if (!session || typeof window === "undefined") {
       setOnboardingCompleted(true);
       return;
@@ -2359,6 +2378,7 @@ export default function Home() {
     await supabase.auth.signOut();
     setSession(null);
     setSessionEmail(null);
+    setHasEnteredApp(false);
   }
 
   useEffect(() => {
