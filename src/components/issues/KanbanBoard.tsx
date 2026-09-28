@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DndContext, PointerSensor, closestCorners, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import type { Issue, IssueStatus } from "@/lib/workspace/types";
 import { IssueCard } from "@/components/issues/IssueCard";
+import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const cols: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done"];
@@ -102,7 +103,7 @@ export function KanbanBoard({
               <IssueCard
                 key={i.id}
                 issue={i}
-                assigneeName={i.assigneeId ? nameByUserId[i.assigneeId] : undefined}
+                assigneeName={assigneeNames(i, nameByUserId).join("、") || undefined}
                 onOpen={onIssueOpen}
               />
             ))
@@ -122,7 +123,7 @@ export function KanbanBoard({
                     <IssueCard
                       key={i.id}
                       issue={i}
-                      assigneeName={i.assigneeId ? nameByUserId[i.assigneeId] : undefined}
+                      assigneeName={assigneeNames(i, nameByUserId).join("、") || undefined}
                       onOpen={onIssueOpen}
                     />
                   ))}

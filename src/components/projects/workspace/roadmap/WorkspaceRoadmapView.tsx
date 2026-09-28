@@ -350,7 +350,7 @@ export default function WorkspaceRoadmapView() {
             description: patch.description,
             priority: patch.priority,
             status: patch.status,
-            assigneeId: patch.assigneeId,
+            assigneeIds: patch.assigneeIds,
             dueDate: patch.dueDate,
           });
         }}
