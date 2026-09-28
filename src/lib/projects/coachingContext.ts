@@ -1,4 +1,6 @@
 import { inferUserSituationFromLegacyCategory, parseUserSituation, type UserSituation } from "@/lib/projects/userSituation";
+import { parseCustomTaskGenres } from "@/lib/workspace/taskGenres";
+import type { CustomTaskGenreDef } from "@/lib/workspace/types";
 
 /** Step 1: 業種テンプレ（studentRoadmapTemplates と同じキー） */
 export type OnboardingBusinessCategoryKey = "food" | "retail" | "app" | "event" | "education" | "custom";
@@ -36,6 +38,8 @@ export type CoachingContext = {
   teamActivityLastDate?: string;
   /** 今週のタスク完了目標（1〜99）。未設定はフィールドなし */
   weeklyCompletionGoal?: number;
+  /** プロジェクト課題タブのカスタムジャンル */
+  customTaskGenres?: CustomTaskGenreDef[];
   /** 週のメモ（任意） */
   weeklyReview?: {
     done?: string;
@@ -99,6 +103,9 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
     };
   }
 
+  const customTaskGenres = parseCustomTaskGenres(o.customTaskGenres);
+  const customTaskGenresOut = customTaskGenres.length > 0 ? customTaskGenres : undefined;
+
   return {
     dreamStatement,
     userSituation,
@@ -111,6 +118,7 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
     teamActivityStreak,
     teamActivityLastDate,
     weeklyCompletionGoal,
+    customTaskGenres: customTaskGenresOut,
     weeklyReview,
   };
 }
@@ -120,6 +128,11 @@ export function mergeCoachingContext(prev: CoachingContext, patch: Partial<Coach
   const next: CoachingContext = { ...prev, ...patch };
   if (patch.weeklyReview !== undefined) {
     next.weeklyReview = { ...prev.weeklyReview, ...patch.weeklyReview };
+  }
+  if (patch.customTaskGenres !== undefined) {
+    const parsed = parseCustomTaskGenres(patch.customTaskGenres);
+    if (parsed.length > 0) next.customTaskGenres = parsed;
+    else delete next.customTaskGenres;
   }
   if (patch.weeklyCompletionGoal !== undefined) {
     const g = patch.weeklyCompletionGoal;
