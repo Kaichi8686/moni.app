@@ -248,7 +248,6 @@ export default function WorkspaceOverview() {
                       href={`/projects/${projectId}/issues?task=${issue.id}`}
                       className="flex min-h-[58px] items-center gap-3 px-3.5 py-2.5 hover:bg-zinc-50 sm:px-4"
                     >
-                      <span className="h-6 w-6 shrink-0 rounded-full border-2 border-zinc-300" aria-hidden />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium text-zinc-800 sm:text-sm">{issue.title}</span>
                         <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
