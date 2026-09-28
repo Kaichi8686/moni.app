@@ -213,3 +213,12 @@ $$;
 create index if not exists idx_project_notifications_user_unread
   on public.project_notifications (user_id, created_at desc)
   where read_at is null;
+
+-- Realtime（ホームのお知らせ即時更新用）。既に追加済みなら無視
+do $$
+begin
+  alter publication supabase_realtime add table public.project_notifications;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;
