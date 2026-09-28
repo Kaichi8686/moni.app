@@ -873,7 +873,7 @@ export function ProjectTabGlide({
                   type="button"
                   disabled={inviteSearchBusy || !inviteUserQuery.trim()}
                   onClick={() => void searchInviteUsers()}
-                  className="inline-flex shrink-0 touch-manipulation items-center justify-center rounded-lg border border-zinc-300 bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                  className="inline-flex shrink-0 touch-manipulation items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {inviteSearchBusy ? "検索中…" : "検索"}
                 </button>
