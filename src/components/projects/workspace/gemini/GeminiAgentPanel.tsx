@@ -12,6 +12,7 @@ import type {
 import { GEMINI_AGENT_META, parseRoadmapPayload } from "@/lib/ai/geminiAgents/types";
 import { appendIdeasToVoting } from "@/lib/projects/ideaVoting/appendIdeas";
 import { applyAgentRoadmapToProject, type ApplyRoadmapMode } from "@/lib/projects/applyAgentRoadmap";
+import { AiChatRichText } from "@/components/ai/AiChatRichText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -240,7 +241,11 @@ export function GeminiAgentPanel({
                 "「〇〇の計画を作って」と送ると、ロードマップ案が出ます。反映ボタンで保存できます。",
                 "Send “make a plan for …” and you’ll get a roadmap draft. Use Apply to save it.",
               )}
-            {mode === "general" && tx("困っていることや質問を、そのまま送ってください。", "Send whatever you’re stuck on or curious about.")}
+            {mode === "general" &&
+              tx(
+                "困っていることや質問を、そのまま送ってください。大事なところは太字と絵文字で見やすく答えます。",
+                "Send whatever you’re stuck on or curious about. I’ll highlight key points with bold and emojis.",
+              )}
             {mode === "ideas" && tx("「アイデアを10個出して」と送ると、案のリストが出ます。", "Send “give me 10 ideas” and you’ll get a list.")}
           </p>
         ) : null}
@@ -248,11 +253,15 @@ export function GeminiAgentPanel({
         {messages.map((m, i) => (
           <div
             key={`${m.role}-${i}`}
-            className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed whitespace-pre-wrap ${
+            className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
               m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
             }`}
           >
-            {m.content}
+            {m.role === "assistant" ? (
+              <AiChatRichText text={m.content} className="break-words" />
+            ) : (
+              <p className="whitespace-pre-wrap break-words">{m.content}</p>
+            )}
           </div>
         ))}
 

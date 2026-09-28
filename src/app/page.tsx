@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MoniLanding } from "@/components/MoniLanding";
+import { AiChatRichText } from "@/components/ai/AiChatRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
@@ -149,7 +150,7 @@ type MentorSavedConversation = {
 };
 
 const MENTOR_WELCOME_TEXT =
-  "こんにちは。なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。";
+  "こんにちは 😊 なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。**大事なところは太字**で見やすく答えますね。";
 
 function createMentorWelcomeMessage(): MentorChatMessage {
   return { id: "mentor-welcome", role: "assistant", content: MENTOR_WELCOME_TEXT };
@@ -4947,7 +4948,10 @@ export default function Home() {
                       </div>
                       <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#202123]">{m.content}</p>
+                    <AiChatRichText
+                      text={m.content}
+                      className="break-words text-sm leading-relaxed text-[#202123]"
+                    />
                   </div>
                 ))}
 

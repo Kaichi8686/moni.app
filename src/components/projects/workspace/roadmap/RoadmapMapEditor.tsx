@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GripVertical, Map, Plus, Sparkles, Trash2 } from "lucide-react";
 import { addDays } from "date-fns";
+import { AiChatRichText } from "@/components/ai/AiChatRichText";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
@@ -237,16 +238,22 @@ export function RoadmapMapEditor() {
                 {tx("やりたいことを話すと、ステップの叩き台を提案します。", "Describe the challenge and I’ll draft the steps.")}
               </p>
             ) : (
-              aiMessages.map((message) => (
-                <p
-                  key={message.id}
-                  className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                    message.role === "user" ? "bg-white text-zinc-800" : "bg-orange-100/80 text-zinc-800"
-                  }`}
-                >
-                  {message.content}
-                </p>
-              ))
+              aiMessages.map((message) =>
+                message.role === "assistant" ? (
+                  <AiChatRichText
+                    key={message.id}
+                    text={message.content}
+                    className="rounded-xl bg-orange-100/80 px-3 py-2 text-sm leading-relaxed text-zinc-800"
+                  />
+                ) : (
+                  <p
+                    key={message.id}
+                    className="whitespace-pre-wrap rounded-xl bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800"
+                  >
+                    {message.content}
+                  </p>
+                ),
+              )
             )}
             {aiLoading ? <p className="text-sm text-zinc-500">{tx("考え中…", "Thinking…")}</p> : null}
           </div>
