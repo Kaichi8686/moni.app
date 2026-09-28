@@ -8,6 +8,7 @@ import { MoniLanding } from "@/components/MoniLanding";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
+import { InboxNoticeBell } from "@/components/ui/InboxNoticeBell";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
@@ -1909,16 +1910,30 @@ export default function Home() {
       kind?: "aggregate" | "project";
       projectNotification?: ProjectNotificationRow;
     }> = [];
-    if (totalTalkUnread > 0) items.push({ id: "chat-unread", level: "info", text: `未読メッセージが ${totalTalkUnread} 件あります`, kind: "aggregate" });
+    if (totalTalkUnread > 0) {
+      items.push({
+        id: "chat-unread",
+        level: "info",
+        text: `未読メッセージ ${totalTalkUnread}件`,
+        kind: "aggregate",
+      });
+    }
     if (incomingRequestCount > 0) {
       items.push({
         id: "follow-request",
         level: "info",
-        text: `フォローリクエストが ${incomingRequestCount} 件届いています`,
+        text: `フォローリクエスト ${incomingRequestCount}件`,
         kind: "aggregate",
       });
     }
-    if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります`, kind: "aggregate" });
+    if (reportNewCount > 0) {
+      items.push({
+        id: "report-new",
+        level: "warn",
+        text: `未対応の通報 ${reportNewCount}件`,
+        kind: "aggregate",
+      });
+    }
     for (const row of projectNotifications) {
       items.push({
         id: `project-notice-${row.id}`,
@@ -4039,7 +4054,23 @@ export default function Home() {
             }
           >
             <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
-            <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+            <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+              <InboxNoticeBell
+                items={notificationItems}
+                onDismiss={dismissNotification}
+                onOpen={(item) => {
+                  if (item.kind === "project" && item.projectNotification) {
+                    void openProjectNotification(item.projectNotification);
+                    return;
+                  }
+                  if (item.id === "follow-request") {
+                    setActivePage("account");
+                    setFollowListModal("requests");
+                    return;
+                  }
+                  dismissNotification(item.id);
+                }}
+              />
               {!session && canUseSupabase ? (
                 <Link
                   href="/login"
@@ -4053,47 +4084,6 @@ export default function Home() {
               </div>
             </div>
           </header>
-
-          {notificationItems.length > 0 ? (
-            <div
-              className={
-                searchFullBleed
-                  ? "flex flex-wrap justify-center gap-1.5 border-b border-zinc-100 bg-amber-50/80 px-3 py-2"
-                  : "flex flex-wrap justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2"
-              }
-            >
-              {notificationItems.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    item.level === "warn" ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-sky-200 bg-sky-50 text-sky-700"
-                  }`}
-                  onClick={() => {
-                    if (item.kind === "project" && item.projectNotification) {
-                      void openProjectNotification(item.projectNotification);
-                      return;
-                    }
-                    if (item.id === "follow-request") {
-                      setActivePage("account");
-                      setFollowListModal("requests");
-                      return;
-                    }
-                    dismissNotification(item.id);
-                  }}
-                  title={
-                    item.kind === "project"
-                      ? "タップして確認"
-                      : item.id === "follow-request"
-                        ? "フォローリクエストを確認"
-                        : "クリックで非表示"
-                  }
-                >
-                  {item.kind === "project" || item.id === "follow-request" ? `🔔 ${item.text}` : item.text}
-                </button>
-              ))}
-            </div>
-          ) : null}
 
           <main
             className={
