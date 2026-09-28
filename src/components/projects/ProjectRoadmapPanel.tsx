@@ -87,6 +87,9 @@ const STUCK_PRESETS = [
   "自由に話す",
 ] as const;
 
+/** ロードマップ一覧は未完了から最大この件数まで常時表示し、残りは「もっと見る」 */
+const ROADMAP_VISIBLE_LIMIT = 6;
+
 export function ProjectRoadmapPanel({
   projectId,
   project,
@@ -102,6 +105,8 @@ export function ProjectRoadmapPanel({
   onError,
 }: Props) {
   const [doneCollapsed, setDoneCollapsed] = useState(true);
+  const [activeExpanded, setActiveExpanded] = useState(false);
+  const [pendingScrollStepId, setPendingScrollStepId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -153,6 +158,24 @@ export function ProjectRoadmapPanel({
 
   const activeSteps = useMemo(() => orderedSteps.filter((s) => s.status !== "done"), [orderedSteps]);
   const doneSteps = useMemo(() => orderedSteps.filter((s) => s.status === "done"), [orderedSteps]);
+  const visibleActiveSteps = useMemo(
+    () => (activeExpanded ? activeSteps : activeSteps.slice(0, ROADMAP_VISIBLE_LIMIT)),
+    [activeSteps, activeExpanded],
+  );
+  const hiddenActiveCount = Math.max(0, activeSteps.length - visibleActiveSteps.length);
+
+  useEffect(() => {
+    setActiveExpanded(false);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!pendingScrollStepId || !activeExpanded) return;
+    const id = pendingScrollStepId;
+    setPendingScrollStepId(null);
+    requestAnimationFrame(() => {
+      document.getElementById(`roadmap-step-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [pendingScrollStepId, activeExpanded, visibleActiveSteps]);
 
   const stepStats = useMemo(() => {
     void tokyoDayRoll;
@@ -519,9 +542,26 @@ export function ProjectRoadmapPanel({
     });
   }
 
-  const scrollToStep = useCallback((stepId: string) => {
-    document.getElementById(`roadmap-step-${stepId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+  const scrollToStep = useCallback(
+    (stepId: string) => {
+      const activeIdx = activeSteps.findIndex((s) => s.id === stepId);
+      if (activeIdx >= ROADMAP_VISIBLE_LIMIT && !activeExpanded) {
+        setPendingScrollStepId(stepId);
+        setActiveExpanded(true);
+        return;
+      }
+      if (activeIdx < 0) {
+        const done = doneSteps.find((s) => s.id === stepId);
+        if (done) {
+          setDoneCollapsed(false);
+          setDetailId(stepId);
+          return;
+        }
+      }
+      document.getElementById(`roadmap-step-${stepId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [activeExpanded, activeSteps, doneSteps],
+  );
 
   const templateTitles = ROADMAP_TEMPLATES[roadmapTemplateKey(project.business_type)];
 
@@ -727,7 +767,7 @@ export function ProjectRoadmapPanel({
           </div>
 
           <ul className="space-y-4">
-            {activeSteps.map((step) => {
+            {visibleActiveSteps.map((step) => {
               const n = orderedSteps.findIndex((s) => s.id === step.id) + 1;
               const idx = orderedSteps.findIndex((s) => s.id === step.id);
               const isFocus = focusStep?.id === step.id;
@@ -981,6 +1021,24 @@ export function ProjectRoadmapPanel({
               );
             })}
           </ul>
+
+          {hiddenActiveCount > 0 ? (
+            <button
+              type="button"
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-xs font-semibold text-zinc-800 shadow-sm transition duration-200 ease-out hover:bg-zinc-50"
+              onClick={() => setActiveExpanded(true)}
+            >
+              もっと見る（あと{hiddenActiveCount}件）
+            </button>
+          ) : activeExpanded && activeSteps.length > ROADMAP_VISIBLE_LIMIT ? (
+            <button
+              type="button"
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs font-semibold text-zinc-700 transition duration-200 ease-out hover:bg-zinc-100"
+              onClick={() => setActiveExpanded(false)}
+            >
+              閉じる（{ROADMAP_VISIBLE_LIMIT}件まで表示）
+            </button>
+          ) : null}
 
           {doneSteps.length > 0 ? (
             <div className="mt-1">
