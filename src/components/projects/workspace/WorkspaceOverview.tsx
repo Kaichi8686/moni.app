@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
@@ -69,7 +70,7 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases, loading } = useProjectWorkspace();
+  const { project, projectMeta, projectId, issues, phases, loading, uid } = useProjectWorkspace();
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
@@ -92,9 +93,14 @@ export default function WorkspaceOverview() {
   const upcomingIssues = useMemo(
     () =>
       sortIssuesByDueDate(
-        issues.filter((issue) => issue.status !== "cancelled" && !isIssueSubmitted(issue)),
+        issues.filter(
+          (issue) =>
+            issue.status !== "cancelled" &&
+            !isIssueSubmitted(issue) &&
+            isIssueAssignedTo(issue, uid),
+        ),
       ).slice(0, 3),
-    [issues],
+    [issues, uid],
   );
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
@@ -241,7 +247,7 @@ export default function WorkspaceOverview() {
           {upcomingIssues.length > 0 ? (
             <ul className="divide-y divide-zinc-100">
               {upcomingIssues.map((issue) => {
-                const assignee = project.members.find((member) => member.id === issue.assigneeId);
+                const assignees = assigneeLabel(issue, project.members, tx("未担当", "Unassigned"));
                 return (
                   <li key={issue.id}>
                     <Link
@@ -259,7 +265,7 @@ export default function WorkspaceOverview() {
                         </span>
                       </span>
                       <span className="max-w-[30%] shrink-0 truncate text-[11px] text-zinc-500 sm:text-xs">
-                        {assignee?.name ?? tx("未担当", "Unassigned")}
+                        {assignees}
                       </span>
                     </Link>
                   </li>
@@ -267,7 +273,9 @@ export default function WorkspaceOverview() {
               })}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-[13px] text-zinc-500">{tx("未完了の課題はありません", "No open issues")}</p>
+            <p className="px-4 py-6 text-center text-[13px] text-zinc-500">
+              {tx("あなたの担当課題はありません", "No issues assigned to you")}
+            </p>
           )}
         </div>
       </section>

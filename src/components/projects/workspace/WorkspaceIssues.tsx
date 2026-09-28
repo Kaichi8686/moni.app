@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Plus } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
+import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import {
   createCustomTaskGenreId,
@@ -42,7 +44,7 @@ export default function WorkspaceIssues() {
   const [draftGenreLabel, setDraftGenreLabel] = useState("");
   const [draftGenreHint, setDraftGenreHint] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
-  const [draftAssignee, setDraftAssignee] = useState("");
+  const [draftAssignees, setDraftAssignees] = useState<string[]>([]);
   const [draftBegin, setDraftBegin] = useState("");
   const [draftDue, setDraftDue] = useState("");
   const [beginDraft, setBeginDraft] = useState("");
@@ -164,13 +166,13 @@ export default function WorkspaceIssues() {
         title: draftTitle,
         status: "todo",
         priority: "medium",
-        assigneeId: draftAssignee || null,
+        assigneeIds: draftAssignees,
         genre: screen.genre,
         beginAt,
         dueDate,
       });
       setDraftTitle("");
-      setDraftAssignee("");
+      setDraftAssignees([]);
       setDraftBegin("");
       setDraftDue("");
       setCreating(false);
@@ -212,7 +214,7 @@ export default function WorkspaceIssues() {
     const meta = resolveGenreMeta(activeGenre, customGenres);
     const Icon = meta.icon;
     const submitted = isIssueSubmitted(activeIssue);
-    const assignee = activeIssue.assigneeId ? names[activeIssue.assigneeId] : "";
+    const assignee = assigneeNames(activeIssue, names).join("、");
     const due = dueLabel(activeIssue);
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -373,12 +375,15 @@ export default function WorkspaceIssues() {
         {creating ? (
           <form className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3" onSubmit={(event) => void addTask(event)}>
             <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder={tx("課題名", "Task name")} className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm" />
-            <select value={draftAssignee} onChange={(event) => setDraftAssignee(event.target.value)} className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm">
-              <option value="">{tx("担当者なし", "No assignee")}</option>
-              {(project?.members ?? []).map((member) => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
+            <div>
+              <span className="text-sm font-semibold text-zinc-700">{tx("担当（複数可）", "Assignees")}</span>
+              <AssigneeMultiSelect
+                members={project?.members ?? []}
+                selectedIds={draftAssignees}
+                onChange={setDraftAssignees}
+                idPrefix="draft-assignee"
+              />
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="block text-sm">
                 <span className="font-semibold text-zinc-700">{tx("やり始める", "Start")}</span>
@@ -402,7 +407,7 @@ export default function WorkspaceIssues() {
                     <span className="block truncate text-sm font-semibold text-zinc-900">{issue.title}</span>
                     <span className="mt-0.5 block truncate text-xs text-zinc-500">
                       {[
-                        issue.assigneeId ? names[issue.assigneeId] : tx("担当未設定", "No assignee"),
+                        assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee"),
                         issue.beginAt ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`) : "",
                         issue.dueDate ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`) : "",
                       ].filter(Boolean).join(" · ")}

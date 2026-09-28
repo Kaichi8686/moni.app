@@ -29,6 +29,7 @@ import {
   embedWorkflowInDescription,
 } from "@/lib/workspace/issueWorkflow";
 import { packWorkDescription, withBeginLabel, withGenreLabel, type IssueWork, type TaskGenre } from "@/lib/workspace/issueWork";
+import { assigneeWriteFields } from "@/lib/workspace/issueAssignees";
 import { simplifyIssueText } from "@/lib/workspace/issuePlainLanguage";
 import {
   projectIssueContextFromWorkspace,
@@ -126,7 +127,9 @@ type Ctx = {
     description?: string;
     status: Issue["status"];
     priority: Issue["priority"];
+    /** @deprecated assigneeIds を使う */
     assigneeId?: string | null;
+    assigneeIds?: string[] | null;
     dueDate?: string | null;
     beginAt?: string | null;
     phaseId?: string | null;
@@ -142,7 +145,9 @@ type Ctx = {
       description?: string | null;
       priority?: Priority;
       status?: IssueStatus;
+      /** @deprecated assigneeIds を使う */
       assigneeId?: string | null;
+      assigneeIds?: string[] | null;
       dueDate?: string | null;
       beginAt?: string | null;
     },
@@ -455,6 +460,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       status: Issue["status"];
       priority: Issue["priority"];
       assigneeId?: string | null;
+      assigneeIds?: string[] | null;
       dueDate?: string | null;
       beginAt?: string | null;
       phaseId?: string | null;
@@ -489,6 +495,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         });
       }
 
+      const assignees =
+        input.assigneeIds !== undefined
+          ? assigneeWriteFields(input.assigneeIds)
+          : assigneeWriteFields(input.assigneeId ? [input.assigneeId] : []);
+
       const row: Record<string, unknown> = {
         project_id: projectId,
         phase_id: input.phaseId ?? null,
@@ -496,7 +507,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         description: (input.description ?? "").trim(),
         status: input.status,
         priority: input.priority,
-        assignee_id: input.assigneeId ?? null,
+        assignee_id: assignees.assignee_id,
+        assignee_ids: assignees.assignee_ids,
         due_date: dueDate,
         begin_at: input.beginAt ?? null,
         labels: withBeginLabel(withGenreLabel(input.phaseId ? ["roadmap"] : [], genre), input.beginAt ?? null),
@@ -505,6 +517,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         attachment_urls: [],
       };
       let { error: err } = await supabase.from("project_issues").insert(row);
+      if (err && /assignee_ids|schema cache|42703/i.test(err.message)) {
+        delete row.assignee_ids;
+        ({ error: err } = await supabase.from("project_issues").insert(row));
+      }
       if (err && /genre|workspace_text|attachment_urls|begin_at|schema cache|42703/i.test(err.message)) {
         ({ error: err } = await supabase.from("project_issues").insert({
           ...row,
@@ -512,6 +528,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           workspace_text: undefined,
           attachment_urls: undefined,
           begin_at: undefined,
+          assignee_ids: undefined,
         }));
       }
       if (err) throw new Error(err.message);
@@ -629,6 +646,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         priority?: Priority;
         status?: IssueStatus;
         assigneeId?: string | null;
+        assigneeIds?: string[] | null;
         dueDate?: string | null;
         beginAt?: string | null;
       },
@@ -639,10 +657,22 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (patch.description !== undefined) row.description = patch.description === null ? "" : String(patch.description).trim();
       if (patch.priority !== undefined) row.priority = patch.priority;
       if (patch.status !== undefined) row.status = patch.status;
-      if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
+      if (patch.assigneeIds !== undefined) {
+        const assignees = assigneeWriteFields(patch.assigneeIds);
+        row.assignee_ids = assignees.assignee_ids;
+        row.assignee_id = assignees.assignee_id;
+      } else if (patch.assigneeId !== undefined) {
+        const assignees = assigneeWriteFields(patch.assigneeId ? [patch.assigneeId] : []);
+        row.assignee_ids = assignees.assignee_ids;
+        row.assignee_id = assignees.assignee_id;
+      }
       if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
       if (patch.beginAt !== undefined) row.begin_at = patch.beginAt;
       let { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err && /assignee_ids|schema cache|42703/i.test(err.message)) {
+        delete row.assignee_ids;
+        ({ error: err } = await supabase.from("project_issues").update(row).eq("id", issueId));
+      }
       if (err && patch.beginAt !== undefined && /begin_at|schema cache|42703/i.test(err.message)) {
         delete row.begin_at;
         const issue = issues.find((item) => item.id === issueId);

@@ -9,6 +9,7 @@ import type { Issue, IssueWorkflow, Member } from "@/lib/workspace/types";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
 import { getIssueCompletionAnswer, stripWorkflowFromDescription } from "@/lib/workspace/issueWorkflow";
+import { assigneeLabel } from "@/lib/workspace/issueAssignees";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 function formatIso(iso: string | undefined, pattern: string, dateLocale: Locale) {
@@ -65,7 +66,7 @@ export function IssueDetailSheet({
 
   if (!open || !issue || typeof document === "undefined") return null;
 
-  const assignee = issue.assigneeId ? members.find((m) => m.id === issue.assigneeId) : undefined;
+  const assignee = assigneeLabel(issue, members, tx("未割り当て", "Unassigned"));
   const due = formatIso(issue.dueDate, locale === "en" ? "MMM d, yyyy" : "yyyy年M月d日", dateLocale);
   const created = formatIso(issue.createdAt, locale === "en" ? "MMM d, yyyy HH:mm" : "yyyy/M/d HH:mm", dateLocale);
   const updated = formatIso(issue.updatedAt, locale === "en" ? "MMM d, yyyy HH:mm" : "yyyy/M/d HH:mm", dateLocale);
@@ -202,7 +203,7 @@ export function IssueDetailSheet({
                       <User className="h-3.5 w-3.5" />
                       {tx("担当", "Assignee")}
                     </dt>
-                    <dd className="font-medium text-gray-800">{assignee?.name ?? tx("未割り当て", "Unassigned")}</dd>
+                    <dd className="font-medium text-gray-800">{assignee}</dd>
                   </div>
                   <div className="flex gap-2">
                     <dt className="flex shrink-0 items-center gap-1 text-gray-500">

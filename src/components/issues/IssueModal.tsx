@@ -6,6 +6,8 @@ import { enUS, ja } from "date-fns/locale";
 import type { Issue, IssueStatus, Member, Priority } from "@/lib/workspace/types";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
+import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
+import { assigneeLabel, issueAssigneeIds } from "@/lib/workspace/issueAssignees";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const ISSUE_STATUSES: IssueStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"];
@@ -25,6 +27,8 @@ export type IssueSavePatch = {
   description: string;
   priority: Priority;
   status: IssueStatus;
+  assigneeIds: string[];
+  /** @deprecated assigneeIds を使う */
   assigneeId: string | null;
   dueDate: string | null;
 };
@@ -48,7 +52,7 @@ export function IssueModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [status, setStatus] = useState<IssueStatus>("todo");
-  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [dueInput, setDueInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -75,7 +79,7 @@ export function IssueModal({
     setDescription(issue.description ?? "");
     setPriority(issue.priority);
     setStatus(issue.status);
-    setAssigneeId(issue.assigneeId ?? "");
+    setAssigneeIds(issueAssigneeIds(issue));
     setDueInput(dueDateToInputValue(issue.dueDate));
     setErr("");
   }, [issue, open]);
@@ -83,7 +87,7 @@ export function IssueModal({
   if (!open || !issue) return null;
 
   const activeIssue = issue;
-  const assigneeName = activeIssue.assigneeId ? members.find((m) => m.id === activeIssue.assigneeId)?.name : undefined;
+  const assigneeNamesLabel = assigneeLabel(activeIssue, members, "—");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -91,14 +95,14 @@ export function IssueModal({
     setSaving(true);
     setErr("");
     const dueDate = dueInput.trim() ? `${dueInput.trim()}T00:00:00.000Z` : null;
-    const assignee = assigneeId.trim() || null;
     try {
       await onSave(activeIssue.id, {
         title: title.trim(),
         description: description.trim(),
         priority,
         status,
-        assigneeId: assignee,
+        assigneeIds,
+        assigneeId: assigneeIds[0] ?? null,
         dueDate,
       });
       onClose();
@@ -160,22 +164,13 @@ export function IssueModal({
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-assignee">
-                    {tx("担当", "Assignee")}
-                  </label>
-                  <select
-                    id="issue-edit-assignee"
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[13px]"
-                  >
-                    <option value="">{tx("未割り当て", "Unassigned")}</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-[12px] font-medium text-[#6B7280]">{tx("担当（複数可）", "Assignees")}</span>
+                  <AssigneeMultiSelect
+                    members={members}
+                    selectedIds={assigneeIds}
+                    onChange={setAssigneeIds}
+                    idPrefix="issue-edit-assignee"
+                  />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-[12px] font-medium text-[#6B7280]" htmlFor="issue-edit-due">
@@ -237,8 +232,8 @@ export function IssueModal({
             {activeIssue.description ? <p className="whitespace-pre-wrap text-sm text-[#6B7280]">{activeIssue.description}</p> : null}
             <dl className="grid gap-1 text-[12px] text-[#6B7280]">
               <div className="flex gap-2">
-                <dt className="shrink-0 font-medium text-[#9CA3AF]">{tx("担当", "Assignee")}</dt>
-                <dd>{assigneeName ?? "—"}</dd>
+                <dt className="shrink-0 font-medium text-[#9CA3AF]">{tx("担当", "Assignees")}</dt>
+                <dd>{assigneeNamesLabel}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="shrink-0 font-medium text-[#9CA3AF]">{tx("期限", "Due")}</dt>
