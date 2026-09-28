@@ -582,50 +582,61 @@ export function ProjectTabGlide({
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="group flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+                className="group flex flex-col overflow-hidden rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
-                  +
-                </span>
-                <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
-                <span className="text-center text-[11px] text-zinc-500">作って仲間を集める</span>
+                <div className="flex aspect-[4/3] w-full items-center justify-center bg-zinc-100/90">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
+                    +
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
+                  <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
+                  <span className="text-[11px] text-zinc-500">作って仲間を集める</span>
+                </div>
               </button>
 
               {displayList.map((project) => {
                 const color =
                   PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
+                const thumb = project.thumbnail_url?.trim();
                 return (
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}/overview`}
                     prefetch
-                    className="group relative flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
+                    className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
                   >
-                    {project.thumbnail_url?.trim() ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image
-                      <img
-                        src={project.thumbnail_url.trim()}
-                        alt=""
-                        className="h-14 w-14 shrink-0 rounded-2xl border border-zinc-200 object-cover shadow-sm"
-                      />
-                    ) : (
-                      <div
-                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${color} text-2xl text-white shadow-sm`}
-                        aria-hidden
-                      >
-                        {(project.icon?.trim() || project.name.trim().charAt(0) || "P").toUpperCase()}
-                      </div>
-                    )}
-                    <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{project.name}</p>
-                    <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
-                      {projectLineShortLabel(project.business_type)}
-                    </p>
-                    <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
-                      {project.visibility === "public" ? "公開" : "非公開"}
-                      {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
-                      {joinedIds.has(project.id) ? " ・ メンバー" : ""}
-                    </p>
-                    <span className="pointer-events-none absolute right-2 top-1.5 rounded bg-white/90 px-1.5 text-[10px] text-zinc-500 opacity-0 transition group-hover:opacity-100">
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image
+                        <img
+                          src={thumb}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                        />
+                      ) : (
+                        <div
+                          className={`flex h-full w-full items-center justify-center ${color} text-4xl font-semibold text-white sm:text-5xl`}
+                          aria-hidden
+                        >
+                          {(project.icon?.trim() || project.name.trim().charAt(0) || "P").toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
+                      <p className="line-clamp-2 w-full text-sm font-semibold leading-snug text-zinc-900">
+                        {project.name}
+                      </p>
+                      <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
+                        {projectLineShortLabel(project.business_type)}
+                      </p>
+                      <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                        {project.visibility === "public" ? "公開" : "非公開"}
+                        {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
+                        {joinedIds.has(project.id) ? " ・ メンバー" : ""}
+                      </p>
+                    </div>
+                    <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/45 px-1.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
                       ⋯
                     </span>
                   </Link>
