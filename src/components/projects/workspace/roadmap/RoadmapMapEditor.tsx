@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GripVertical, Map, Plus, Sparkles, Trash2 } from "lucide-react";
 import { addDays } from "date-fns";
@@ -10,6 +10,9 @@ import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type DraftMessage = { id: string; role: "user" | "assistant"; content: string };
+
+/** 一覧は未完了から最大この件数まで常時表示し、残りは「もっと見る」 */
+const ROADMAP_VISIBLE_LIMIT = 6;
 
 function parseProposedSteps(text: string): string[] {
   return text
@@ -34,11 +37,29 @@ export function RoadmapMapEditor() {
   const [aiMessages, setAiMessages] = useState<DraftMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
+  const [listExpanded, setListExpanded] = useState(false);
 
   const steps = useMemo(
     () => [...roadmap.phases].sort((a, b) => a.order - b.order),
     [roadmap.phases],
   );
+
+  /** 未完了を先頭に、完了済みはその後ろ（いずれも order 順） */
+  const displaySteps = useMemo(() => {
+    const active = steps.filter((step) => step.status !== "completed");
+    const done = steps.filter((step) => step.status === "completed");
+    return [...active, ...done];
+  }, [steps]);
+
+  const visibleSteps = useMemo(
+    () => (listExpanded ? displaySteps : displaySteps.slice(0, ROADMAP_VISIBLE_LIMIT)),
+    [displaySteps, listExpanded],
+  );
+  const hiddenCount = Math.max(0, displaySteps.length - visibleSteps.length);
+
+  useEffect(() => {
+    setListExpanded(false);
+  }, [projectId]);
 
   async function addStep(title: string) {
     const name = title.trim();
@@ -270,38 +291,68 @@ export function RoadmapMapEditor() {
       ) : null}
 
       <ul className="space-y-2">
-        {steps.map((step, index) => (
-          <li
-            key={step.id}
-            draggable={roadmap.canEdit}
-            onDragStart={() => setDragId(step.id)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={() => {
-              if (dragId) void reorder(dragId, step.id);
-              setDragId(null);
-            }}
-            className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 py-2 shadow-sm"
-          >
-            <button type="button" className="cursor-grab px-1 text-zinc-400 active:cursor-grabbing" aria-label={tx("並び替え", "Reorder")}>
-              <GripVertical className="h-4 w-4" />
-            </button>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-800">
-              {index + 1}
-            </span>
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{step.title}</p>
-            {roadmap.canEdit ? (
-              <button
-                type="button"
-                onClick={() => void removeStep(step.id)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={tx(`${step.title}を削除`, `Delete ${step.title}`)}
-              >
-                <Trash2 className="h-4 w-4" />
+        {visibleSteps.map((step) => {
+          const stepNumber = steps.findIndex((item) => item.id === step.id) + 1;
+          const isDone = step.status === "completed";
+          return (
+            <li
+              key={step.id}
+              draggable={roadmap.canEdit}
+              onDragStart={() => setDragId(step.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragId) void reorder(dragId, step.id);
+                setDragId(null);
+              }}
+              className={`flex items-center gap-2 rounded-2xl border px-2 py-2 shadow-sm ${
+                isDone ? "border-emerald-100 bg-emerald-50/70" : "border-zinc-200 bg-white"
+              }`}
+            >
+              <button type="button" className="cursor-grab px-1 text-zinc-400 active:cursor-grabbing" aria-label={tx("並び替え", "Reorder")}>
+                <GripVertical className="h-4 w-4" />
               </button>
-            ) : null}
-          </li>
-        ))}
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  isDone ? "bg-emerald-600 text-white" : "bg-orange-100 text-orange-800"
+                }`}
+              >
+                {isDone ? "✓" : stepNumber}
+              </span>
+              <p className={`min-w-0 flex-1 truncate text-sm font-semibold ${isDone ? "text-emerald-950" : "text-zinc-900"}`}>
+                {step.title}
+              </p>
+              {roadmap.canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void removeStep(step.id)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label={tx(`${step.title}を削除`, `Delete ${step.title}`)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
+
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setListExpanded(true)}
+          className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+        >
+          {tx(`もっと見る（あと${hiddenCount}件）`, `Show more (${hiddenCount} more)`)}
+        </button>
+      ) : listExpanded && displaySteps.length > ROADMAP_VISIBLE_LIMIT ? (
+        <button
+          type="button"
+          onClick={() => setListExpanded(false)}
+          className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
+        >
+          {tx(`閉じる（${ROADMAP_VISIBLE_LIMIT}件まで表示）`, `Show fewer (up to ${ROADMAP_VISIBLE_LIMIT})`)}
+        </button>
+      ) : null}
 
       {roadmap.canEdit ? (
         adding ? (
