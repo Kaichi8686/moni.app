@@ -240,30 +240,38 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                 <li key={p.id} className="min-w-0">
                   <button
                     type="button"
-                    className="group flex aspect-square w-full min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-zinc-200/90 bg-white p-3 text-center shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
+                    className="group flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white text-left shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
                     onClick={() => {
                       setDetailProject(p);
                       setJoinMsgDraft("");
                     }}
                   >
-                    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl shadow-sm ring-1 ring-zinc-100">
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt="" className="h-full w-full object-cover" />
+                        <img
+                          src={thumb}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                        />
                       ) : (
-                        <span className={`flex h-full w-full items-center justify-center text-lg text-white ${c}`}>
+                        <span
+                          className={`flex h-full w-full items-center justify-center text-4xl font-semibold text-white sm:text-5xl ${c}`}
+                        >
                           {(p.name.trim().charAt(0) || "P").toUpperCase()}
                         </span>
                       )}
                     </div>
-                    <span className="mt-2 flex w-full min-w-0 flex-col items-center">
-                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-tight text-zinc-900 sm:text-[15px]">
+                    <span className="flex w-full min-w-0 flex-col gap-0.5 px-2.5 py-2.5">
+                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
                         {p.name}
                       </span>
-                      <span className="mt-1 line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                      <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
                         {lineLabel(p.business_type)}
                       </span>
-                      <span className={`mt-1 line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}>
+                      <span
+                        className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
+                      >
                         {recruiting ? tx("仲間募集", "Recruiting") : tx("公開中", "Public")}
                       </span>
                     </span>
