@@ -31,7 +31,7 @@ function noticeIcon(item: InboxNoticeItem) {
 }
 
 function isActionable(item: InboxNoticeItem) {
-  return item.kind === "project" || item.id === "follow-request";
+  return item.kind === "project" || item.id === "follow-request" || item.id === "chat-unread";
 }
 
 export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDismiss }: Props<T>) {
