@@ -7,7 +7,19 @@ export type Priority = "no_priority" | "urgent" | "high" | "medium" | "low";
 import type { IssueWorkflow } from "@/lib/workspace/issueWorkflow";
 export type { IssueWorkflow, IssueWorkflowStep } from "@/lib/workspace/issueWorkflow";
 
-export type TaskGenre = "think" | "make" | "talk" | "spread" | "run";
+/** Built-in genres, or custom ids like `custom_ab12cd34` */
+export type BuiltinTaskGenre = "think" | "make" | "talk" | "spread" | "run";
+export type TaskGenre = BuiltinTaskGenre | (string & {});
+
+export type CustomTaskGenreDef = {
+  id: string;
+  labelJa: string;
+  labelEn?: string;
+  hintJa?: string;
+  hintEn?: string;
+  /** Maps to icon background class, e.g. bg-rose-500 */
+  colorKey?: string;
+};
 
 export interface Member {
   id: string;

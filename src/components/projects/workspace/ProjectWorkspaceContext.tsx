@@ -422,7 +422,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
 
   const saveCoachingContext = useCallback(
     async (patch: Partial<CoachingContext>) => {
-      if (!supabase || !canEdit) return;
+      if (!supabase) throw new Error(tx("保存できません", "Can’t save right now"));
+      if (!canEdit) throw new Error(tx("編集権限がありません", "You don’t have edit access"));
       const next = mergeCoachingContext(coachingContext, patch);
       const { error: err } = await supabase
         .from("projects")
@@ -431,7 +432,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (err) throw new Error(err.message);
       setCoachingContext(next);
     },
-    [canEdit, coachingContext, projectId],
+    [canEdit, coachingContext, projectId, tx],
   );
 
   const seedPhasesFromSituation = useCallback(

@@ -1,63 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Camera, ClipboardList, Hammer, Megaphone, MessagesSquare, PenLine, Plus } from "lucide-react";
+import { ArrowLeft, Camera, Plus } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
-import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, TASK_GENRES, type TaskGenre } from "@/lib/workspace/issueWork";
-import type { Issue } from "@/lib/workspace/types";
+import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
+import {
+  createCustomTaskGenreId,
+  CUSTOM_TASK_GENRE_LABEL_MAX,
+  listProjectTaskGenres,
+  MAX_CUSTOM_TASK_GENRES,
+  nextCustomColorKey,
+  normalizeCustomTaskGenreLabel,
+  resolveGenreMeta,
+} from "@/lib/workspace/taskGenres";
+import type { CustomTaskGenreDef, Issue } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-
-const GENRE_META: Record<
-  TaskGenre,
-  { ja: string; en: string; hintJa: string; hintEn: string; icon: typeof PenLine; chip: string; iconBg: string }
-> = {
-  think: {
-    ja: "考える・書く",
-    en: "Think & write",
-    hintJa: "企画書・台本・リサーチなど",
-    hintEn: "Plans, scripts, research",
-    icon: PenLine,
-    chip: "bg-indigo-50 text-indigo-700",
-    iconBg: "bg-indigo-500",
-  },
-  make: {
-    ja: "つくる",
-    en: "Make",
-    hintJa: "デザイン・工作・試作品など",
-    hintEn: "Design, crafts, prototypes",
-    icon: Hammer,
-    chip: "bg-orange-50 text-orange-700",
-    iconBg: "bg-orange-500",
-  },
-  talk: {
-    ja: "話す・つなぐ",
-    en: "Talk & connect",
-    hintJa: "相談・予約・ドアリングなど",
-    hintEn: "Conversations, bookings, outreach",
-    icon: MessagesSquare,
-    chip: "bg-sky-50 text-sky-700",
-    iconBg: "bg-sky-500",
-  },
-  spread: {
-    ja: "広める",
-    en: "Spread the word",
-    hintJa: "SNS投稿・チラシ・案内など",
-    hintEn: "Posts, flyers, outreach",
-    icon: Megaphone,
-    chip: "bg-emerald-50 text-emerald-700",
-    iconBg: "bg-emerald-500",
-  },
-  run: {
-    ja: "運営する",
-    en: "Run it",
-    hintJa: "予算・スケジュール・役割分担",
-    hintEn: "Budget, schedule, roles",
-    icon: ClipboardList,
-    chip: "bg-violet-50 text-violet-700",
-    iconBg: "bg-violet-500",
-  },
-};
 
 type Screen =
   | { kind: "list" }
@@ -66,9 +24,23 @@ type Screen =
 
 export default function WorkspaceIssues() {
   const { tx, locale } = useI18n();
-  const { issues, phases, project, uid, canEdit, createIssue, saveIssueWork, updateIssue } = useProjectWorkspace();
+  const {
+    issues,
+    phases,
+    project,
+    uid,
+    canEdit,
+    createIssue,
+    saveIssueWork,
+    updateIssue,
+    coachingContext,
+    saveCoachingContext,
+  } = useProjectWorkspace();
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [creating, setCreating] = useState(false);
+  const [addingGenre, setAddingGenre] = useState(false);
+  const [draftGenreLabel, setDraftGenreLabel] = useState("");
+  const [draftGenreHint, setDraftGenreHint] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftAssignee, setDraftAssignee] = useState("");
   const [draftBegin, setDraftBegin] = useState("");
@@ -77,10 +49,21 @@ export default function WorkspaceIssues() {
   const [dueDraft, setDueDraft] = useState("");
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [savingGenre, setSavingGenre] = useState(false);
   const [workspaceDraft, setWorkspaceDraft] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const openedFromQuery = useRef(false);
   const taskId = screen.kind === "task" ? screen.issueId : "";
+
+  const customGenres = useMemo(
+    () => coachingContext.customTaskGenres ?? [],
+    [coachingContext.customTaskGenres],
+  );
+
+  const projectGenres = useMemo(
+    () => listProjectTaskGenres(customGenres, issues.map((issue) => issue.genre)),
+    [customGenres, issues],
+  );
 
   useEffect(() => {
     if (!taskId) return;
@@ -88,7 +71,7 @@ export default function WorkspaceIssues() {
     setWorkspaceDraft(issue?.workspaceText ?? "");
     setBeginDraft(isoToDateInput(issue?.beginAt));
     setDueDraft(isoToDateInput(issue?.dueDate));
-  }, [taskId]);
+  }, [taskId, issues]);
 
   useEffect(() => {
     if (openedFromQuery.current) return;
@@ -99,7 +82,7 @@ export default function WorkspaceIssues() {
       openedFromQuery.current = true;
       return;
     }
-    if (issues.length === 0) return;
+    if (issues.length === 0 && !genre) return;
     if (task) {
       const issue = issues.find((item) => item.id === task);
       if (!issue) {
@@ -128,6 +111,43 @@ export default function WorkspaceIssues() {
   const activeIssue = screen.kind === "task" ? issues.find((issue) => issue.id === screen.issueId) ?? null : null;
   const activePhase = activeIssue?.phaseId ? phases.find((phase) => phase.id === activeIssue.phaseId) : undefined;
   const phaseIndex = activePhase ? phases.findIndex((phase) => phase.id === activePhase.id) : -1;
+
+  async function addCustomGenre(event: FormEvent) {
+    event.preventDefault();
+    const labelJa = normalizeCustomTaskGenreLabel(draftGenreLabel);
+    if (!labelJa) {
+      setError(tx("ジャンル名を入力してください", "Enter a genre name"));
+      return;
+    }
+    if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
+      setError(tx(`ジャンルは最大${MAX_CUSTOM_TASK_GENRES}個までです`, `You can add up to ${MAX_CUSTOM_TASK_GENRES} genres`));
+      return;
+    }
+    const duplicate = customGenres.some((g) => g.labelJa.toLowerCase() === labelJa.toLowerCase());
+    if (duplicate) {
+      setError(tx("同じ名前のジャンルがすでにあります", "That genre name already exists"));
+      return;
+    }
+    setSavingGenre(true);
+    setError("");
+    try {
+      const next: CustomTaskGenreDef = {
+        id: createCustomTaskGenreId(),
+        labelJa,
+        hintJa: draftGenreHint.trim().slice(0, 60) || undefined,
+        colorKey: nextCustomColorKey(customGenres.length),
+      };
+      await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
+      setDraftGenreLabel("");
+      setDraftGenreHint("");
+      setAddingGenre(false);
+      setScreen({ kind: "genre", genre: next.id });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("ジャンルを追加できませんでした", "Couldn’t add the genre"));
+    } finally {
+      setSavingGenre(false);
+    }
+  }
 
   async function addTask(event: FormEvent) {
     event.preventDefault();
@@ -189,7 +209,7 @@ export default function WorkspaceIssues() {
   }
 
   if (screen.kind === "task" && activeIssue && activeGenre) {
-    const meta = GENRE_META[activeGenre];
+    const meta = resolveGenreMeta(activeGenre, customGenres);
     const Icon = meta.icon;
     const submitted = isIssueSubmitted(activeIssue);
     const assignee = activeIssue.assigneeId ? names[activeIssue.assigneeId] : "";
@@ -327,7 +347,7 @@ export default function WorkspaceIssues() {
   }
 
   if (screen.kind === "genre" && activeGenre) {
-    const meta = GENRE_META[activeGenre];
+    const meta = resolveGenreMeta(activeGenre, customGenres);
     const Icon = meta.icon;
     const rows = genreIssues(activeGenre);
     const doneCount = rows.filter((issue) => isIssueSubmitted(issue)).length;
@@ -404,10 +424,68 @@ export default function WorkspaceIssues() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-      <h1 className="text-xl font-bold text-zinc-950">{tx("課題", "Tasks")}</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold text-zinc-950">{tx("課題", "Tasks")}</h1>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setAddingGenre((v) => !v);
+            }}
+            className="inline-flex min-h-[40px] items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+          >
+            <Plus className="h-4 w-4" />
+            {tx("ジャンルを追加", "Add genre")}
+          </button>
+        ) : null}
+      </div>
+
+      {addingGenre && canEdit ? (
+        <form className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3" onSubmit={(event) => void addCustomGenre(event)}>
+          <p className="text-sm font-semibold text-zinc-900">{tx("新しいジャンル", "New genre")}</p>
+          <input
+            value={draftGenreLabel}
+            onChange={(event) => setDraftGenreLabel(event.target.value)}
+            maxLength={CUSTOM_TASK_GENRE_LABEL_MAX}
+            placeholder={tx("例: 撮影・編集", "e.g. Filming & editing")}
+            className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
+            autoFocus
+          />
+          <input
+            value={draftGenreHint}
+            onChange={(event) => setDraftGenreHint(event.target.value)}
+            maxLength={60}
+            placeholder={tx("説明（任意）", "Description (optional)")}
+            className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAddingGenre(false);
+                setDraftGenreLabel("");
+                setDraftGenreHint("");
+                setError("");
+              }}
+              className="min-h-[44px] flex-1 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-700"
+            >
+              {tx("キャンセル", "Cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={savingGenre || !draftGenreLabel.trim()}
+              className="min-h-[44px] flex-[2] rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {savingGenre ? tx("追加中…", "Adding…") : tx("追加する", "Add")}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       <ul className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-        {TASK_GENRES.map((genre) => {
-          const meta = GENRE_META[genre];
+        {projectGenres.map((genre) => {
+          const meta = resolveGenreMeta(genre, customGenres);
           const Icon = meta.icon;
           const rows = genreIssues(genre);
           const openCount = rows.filter((issue) => !isIssueSubmitted(issue)).length;
@@ -431,6 +509,7 @@ export default function WorkspaceIssues() {
           );
         })}
       </ul>
+      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
     </div>
   );
 }

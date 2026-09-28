@@ -4,9 +4,10 @@ import {
   workflowFromJson,
   type IssueWorkflow,
 } from "@/lib/workspace/issueWorkflow";
+import { isTaskGenre } from "@/lib/workspace/taskGenres";
 import type { TaskGenre } from "@/lib/workspace/types";
 
-export const TASK_GENRES = ["think", "make", "talk", "spread", "run"] as const;
+export { BUILTIN_TASK_GENRES, isTaskGenre, TASK_GENRES } from "@/lib/workspace/taskGenres";
 export type { TaskGenre };
 
 export const WORK_MARKER = "---moni-work-v1---";
@@ -34,10 +35,6 @@ type WorkRow = {
   attachment_urls?: string[] | null;
   submitted_at?: string | null;
 };
-
-export function isTaskGenre(value: unknown): value is TaskGenre {
-  return typeof value === "string" && (TASK_GENRES as readonly string[]).includes(value);
-}
 
 export function genreFromLabels(labels: string[] | null | undefined): TaskGenre {
   const raw = (labels ?? []).find((label) => label.startsWith(GENRE_PREFIX))?.slice(GENRE_PREFIX.length);
