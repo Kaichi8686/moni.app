@@ -7,6 +7,7 @@ import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills",
   "id,display_name,goal,avatar_url,bio,website,school,location",
@@ -68,6 +69,14 @@ export async function loadProfileView(
   const location = (row.location as string | null | undefined)?.trim() || null;
   const skills = parseStringTagArray(row.skills);
   const traits = parseStringTagArray(row.traits);
+  const ageRaw = row.age;
+  const age =
+    typeof ageRaw === "number" && Number.isFinite(ageRaw)
+      ? ageRaw
+      : typeof ageRaw === "string" && /^\d+$/.test(ageRaw)
+        ? Number(ageRaw)
+        : null;
+  const country = (row.country as string | null | undefined)?.trim()?.toUpperCase() || null;
 
   return {
     id: userId,
@@ -78,6 +87,8 @@ export async function loadProfileView(
     website: (row.website as string | null)?.trim() || null,
     ...(school ? { school } : {}),
     ...(location ? { location } : {}),
+    ...(age != null ? { age } : {}),
+    ...(country ? { country } : {}),
     ...(skills.length ? { skills } : {}),
     ...(traits.length ? { traits } : {}),
     followerCount: followerCount ?? 0,

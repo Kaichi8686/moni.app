@@ -2,10 +2,11 @@
 
 import { Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { sortedCountries } from "@/lib/profile/countries";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { profileUsername } from "@/lib/profile/username";
@@ -13,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 
 export function EditProfileForm() {
   const router = useRouter();
-  const { tx } = useI18n();
+  const { locale, tx } = useI18n();
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({
     displayName: "",
@@ -22,6 +23,8 @@ export function EditProfileForm() {
     website: "",
     school: "",
     location: "",
+    age: "",
+    country: "",
     avatarUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
@@ -30,6 +33,7 @@ export function EditProfileForm() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const countries = useMemo(() => sortedCountries(locale), [locale]);
 
   useEffect(() => {
     const client = supabase;
@@ -43,6 +47,7 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills",
         "display_name,goal,avatar_url,bio,website,school,location",
@@ -56,6 +61,7 @@ export function EditProfileForm() {
         }
       }
       const name = ((data?.display_name as string) || "").trim() || "ユーザー";
+      const ageVal = data?.age;
       const next = {
         displayName: name,
         username: profileUsername(name, uid),
@@ -63,6 +69,13 @@ export function EditProfileForm() {
         website: (data?.website as string | null) ?? "",
         school: (data?.school as string | null) ?? "",
         location: (data?.location as string | null) ?? "",
+        age:
+          typeof ageVal === "number" && Number.isFinite(ageVal)
+            ? String(ageVal)
+            : typeof ageVal === "string"
+              ? ageVal
+              : "",
+        country: ((data?.country as string | null) ?? "").toUpperCase(),
         avatarUrl: (data?.avatar_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
@@ -106,7 +119,9 @@ export function EditProfileForm() {
     setMessage("");
     const skills = normalizeTagList(form.skills);
     const traits = normalizeTagList(form.traits);
-    const payload: Record<string, string | string[]> = {
+    const ageDigits = form.age.replace(/\D/g, "");
+    const ageNum = ageDigits ? Number(ageDigits) : null;
+    const payload: Record<string, string | number | string[] | null> = {
       display_name: form.displayName.trim() || "ユーザー",
       goal: form.bio.trim(),
       bio: form.bio.trim(),
@@ -116,15 +131,19 @@ export function EditProfileForm() {
     if (form.website.trim()) payload.website = form.website.trim();
     if (form.school.trim()) payload.school = form.school.trim();
     if (form.location.trim()) payload.location = form.location.trim();
+    if (ageNum != null && ageNum >= 5 && ageNum <= 120) payload.age = ageNum;
+    if (form.country.trim().length === 2) payload.country = form.country.trim().toUpperCase();
 
     const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
     setSaving(false);
     if (error) {
-      const withoutTraits = { ...payload };
-      delete withoutTraits.traits;
-      let fallback = await supabase.from("profiles").update(withoutTraits).eq("id", userId);
+      const withoutExtra = { ...payload };
+      delete withoutExtra.age;
+      delete withoutExtra.country;
+      delete withoutExtra.traits;
+      let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
       if (fallback.error) {
-        const withoutSkills = { ...withoutTraits };
+        const withoutSkills = { ...withoutExtra };
         delete withoutSkills.skills;
         fallback = await supabase.from("profiles").update(withoutSkills).eq("id", userId);
       }
@@ -139,8 +158,8 @@ export function EditProfileForm() {
         }
         setMessage(
           tx(
-            "特技・性格の保存には Supabase で apply_profile_skills_traits.sql を実行してください（他の項目は保存済み）。",
-            "Run apply_profile_skills_traits.sql in Supabase to save skills/traits (other fields were saved).",
+            "一部項目の保存には Supabase で apply_profile_onboarding.sql / apply_profile_skills_traits.sql を実行してください（基本項目は保存済み）。",
+            "Run apply_profile_onboarding.sql / apply_profile_skills_traits.sql in Supabase for full saves (basic fields were saved).",
           ),
         );
         return;
@@ -156,7 +175,7 @@ export function EditProfileForm() {
     multiline: boolean;
     readOnly?: boolean;
   }> = [
-    { label: tx("表示名", "Display name"), field: "displayName", placeholder: tx("例：カイチ", "e.g. Kaichi"), multiline: false },
+    { label: tx("ニックネーム", "Nickname"), field: "displayName", placeholder: tx("例：カイチ", "e.g. Kaichi"), multiline: false },
     { label: tx("ユーザーID", "Username"), field: "username", placeholder: tx("表示のみ", "Display only"), multiline: false, readOnly: true },
     { label: tx("自己紹介", "Bio"), field: "bio", placeholder: tx("いま挑戦していることを一言で", "What you’re working on, in a sentence"), multiline: true },
     { label: tx("学校", "School"), field: "school", placeholder: tx("例：○○大学 2年", "e.g. University, 2nd year"), multiline: false },
@@ -225,6 +244,48 @@ export function EditProfileForm() {
               }}
             />
           </label>
+          <p className="mt-1 text-[11px] text-zinc-400">
+            {tx("あとからいつでも変更できます", "You can change this anytime")}
+          </p>
+        </div>
+
+        <div className="account-card overflow-hidden">
+          <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
+            <label className="shrink-0 text-[13px] font-medium sm:w-24" style={{ color: "var(--color-text-secondary)" }}>
+              {tx("年齢", "Age")}
+            </label>
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="flex-1 bg-transparent text-[14px] outline-none"
+              style={{ color: "var(--color-text-primary)" }}
+              placeholder="16"
+              value={form.age}
+              maxLength={3}
+              onChange={(e) => setForm((f) => ({ ...f, age: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
+            />
+          </div>
+        </div>
+
+        <div className="account-card overflow-hidden">
+          <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
+            <label className="shrink-0 text-[13px] font-medium sm:w-24" style={{ color: "var(--color-text-secondary)" }}>
+              {tx("国", "Country")}
+            </label>
+            <select
+              className="flex-1 bg-transparent text-[14px] outline-none"
+              style={{ color: "var(--color-text-primary)" }}
+              value={form.country}
+              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+            >
+              <option value="">{tx("選択してください", "Select…")}</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {locale === "en" ? c.en : c.ja}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {fields.map(({ label, field, placeholder, multiline, readOnly }) => (
@@ -262,6 +323,8 @@ export function EditProfileForm() {
         <div className="account-card px-4 py-4">
           <SkillsTraitsEditor
             compact
+            onboardingStyle
+            maxPerSection={3}
             skills={form.skills}
             traits={form.traits}
             onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}

@@ -11,13 +11,15 @@ import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProj
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
-import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
+import { SignupOnboardingWizard } from "@/components/onboarding/SignupOnboardingWizard";
+import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import type { MentorClientContext } from "@/lib/ai/mentorContext";
 import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
-import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import { countryLabel } from "@/lib/profile/countries";
+import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import {
   fetchUnreadProjectNotifications,
   markProjectNotificationRead,
@@ -135,6 +137,10 @@ type MatchMember = {
   strength: string;
   aiType?: AiMatchType;
   avatarUrl?: string | null;
+  age?: number | null;
+  country?: string | null;
+  skills?: string[];
+  traits?: string[];
 };
 
 type PeerProjectSummary = { id: string; name: string; description: string; visibility: string; updated_at?: string };
@@ -331,16 +337,33 @@ function mapProfileToMatchMember(row: {
   goal: string | null;
   role: string | null;
   avatar_url?: string | null;
+  age?: number | string | null;
+  country?: string | null;
+  skills?: unknown;
+  traits?: unknown;
 }): MatchMember {
   const id = row.id;
   const dbAvatar = row.avatar_url ?? null;
-  const strength = strengthFromRole(row.role);
+  const skills = parseStringTagArray(row.skills);
+  const traits = parseStringTagArray(row.traits);
+  const strength = skills[0] || strengthFromRole(row.role);
+  const age =
+    typeof row.age === "number" && Number.isFinite(row.age)
+      ? row.age
+      : typeof row.age === "string" && /^\d+$/.test(row.age)
+        ? Number(row.age)
+        : null;
+  const country = (row.country ?? "").trim().toUpperCase() || null;
   return {
     id,
     name: row.display_name || "ユーザー",
     goal: row.goal || "目標未設定",
     strength,
     avatarUrl: dbAvatar || readStoredAvatarUrl(id),
+    age,
+    country,
+    skills,
+    traits,
     aiType:
       row.role === "investor"
         ? "marketer"
@@ -686,10 +709,6 @@ export default function Home() {
   const [discoveryProblemText, setDiscoveryProblemText] = useState("");
   const [discoveryTarget, setDiscoveryTarget] = useState(DISCOVERY_NAV_TARGETS[0]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
-  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
-  const [onboardingSkills, setOnboardingSkills] = useState<string[]>([]);
-  const [onboardingTraits, setOnboardingTraits] = useState<string[]>([]);
-  const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [ideaDoneMap, setIdeaDoneMap] = useState<Record<string, boolean>>({});
   const [ideaMemoMap, setIdeaMemoMap] = useState<Record<string, string>>({});
   const [favoriteCards, setFavoriteCards] = useState<string[]>([]);
@@ -1723,6 +1742,53 @@ export default function Home() {
     };
   }, [activeProfileMember?.id, supabase]);
 
+  useEffect(() => {
+    if (!supabase || !activeProfileMember?.id) return;
+    const uid = activeProfileMember.id;
+    let cancelled = false;
+    void (async () => {
+      for (const sel of [
+        "id,display_name,goal,role,avatar_url,skills,traits,age,country",
+        "id,display_name,goal,role,avatar_url,skills,traits",
+        "id,display_name,goal,role,avatar_url",
+      ]) {
+        const { data, error } = await supabase.from("profiles").select(sel).eq("id", uid).maybeSingle();
+        if (cancelled) return;
+        if (error || !data) continue;
+        const row = data as unknown as {
+          id: string;
+          display_name: string | null;
+          goal: string | null;
+          role: string | null;
+          avatar_url?: string | null;
+          age?: number | null;
+          country?: string | null;
+          skills?: unknown;
+          traits?: unknown;
+        };
+        const mapped = mapProfileToMatchMember({
+          id: row.id,
+          display_name: row.display_name,
+          goal: row.goal,
+          role: row.role,
+          avatar_url: row.avatar_url ?? null,
+          age: row.age ?? null,
+          country: row.country ?? null,
+          skills: row.skills,
+          traits: row.traits,
+        });
+        setActiveProfileMember((prev) => {
+          if (!prev || prev.id !== uid) return prev;
+          return { ...prev, ...mapped };
+        });
+        return;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfileMember?.id, supabase]);
+
   const loadRoleRef = useRef(loadRole);
   const loadArticlesRef = useRef(loadArticles);
   const loadPitchesRef = useRef(loadPitches);
@@ -2331,13 +2397,38 @@ export default function Home() {
       setOnboardingCompleted(true);
       return;
     }
+    let cancelled = false;
     const key = `moni-onboarding-complete-${session.user.id}`;
-    const done = window.localStorage.getItem(key) === "1";
-    setOnboardingCompleted(done);
-    setOnboardingStep(1);
-    setOnboardingSkills([]);
-    setOnboardingTraits([]);
-    if (!done) trackOpsEvent("onboarding_started");
+    const localDone = window.localStorage.getItem(key) === "1";
+
+    async function resolveOnboarding() {
+      if (localDone) {
+        if (!cancelled) setOnboardingCompleted(true);
+        return;
+      }
+      if (supabase) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("onboarding_completed_at")
+          .eq("id", session!.user.id)
+          .maybeSingle();
+        const dbDone = Boolean((data as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at);
+        if (dbDone) {
+          window.localStorage.setItem(key, "1");
+          if (!cancelled) setOnboardingCompleted(true);
+          return;
+        }
+      }
+      if (!cancelled) {
+        setOnboardingCompleted(false);
+        trackOpsEvent("onboarding_started");
+      }
+    }
+
+    void resolveOnboarding();
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   useEffect(() => {
@@ -2707,14 +2798,41 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,display_name,goal,role,avatar_url,created_at")
+        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,age,country")
         .neq("id", session.user.id)
         .order("created_at", { ascending: false })
         .limit(12)
         .abortSignal(controller.signal);
       if (error) {
-        setMatches([]);
-        setMatchNotice(`おすすめの読み込みに失敗: ${error.message}`);
+        // age/country/skills may be missing until migrations — retry leaner select
+        const fallback = await supabase
+          .from("profiles")
+          .select("id,display_name,goal,role,avatar_url,created_at")
+          .neq("id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(12)
+          .abortSignal(controller.signal);
+        if (fallback.error) {
+          setMatches([]);
+          setMatchNotice(`おすすめの読み込みに失敗: ${fallback.error.message}`);
+          return;
+        }
+        const mapped = (fallback.data ?? []).map((row) =>
+          mapProfileToMatchMember({
+            id: row.id as string,
+            display_name: row.display_name as string | null,
+            goal: row.goal as string | null,
+            role: row.role as string | null,
+            avatar_url: (row.avatar_url as string | null) ?? null,
+          }),
+        );
+        setMatches(mapped);
+        setMatchSource("recommended");
+        setMatchNotice(
+          mapped.length === 0
+            ? "まだおすすめが少ないです。検索して探してみましょう。"
+            : "",
+        );
         return;
       }
       const mapped = (data ?? []).map((row) =>
@@ -2724,6 +2842,10 @@ export default function Home() {
           goal: row.goal as string | null,
           role: row.role as string | null,
           avatar_url: (row.avatar_url as string | null) ?? null,
+          age: (row as { age?: number | null }).age ?? null,
+          country: (row as { country?: string | null }).country ?? null,
+          skills: (row as { skills?: unknown }).skills,
+          traits: (row as { traits?: unknown }).traits,
         }),
       );
       setMatches(mapped);
@@ -2757,14 +2879,44 @@ export default function Home() {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("id,display_name,goal,role,avatar_url")
+          .select("id,display_name,goal,role,avatar_url,skills,traits,age,country")
           .neq("id", session.user.id)
           .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
           .limit(30)
           .abortSignal(controller.signal);
         if (error) {
-          setMatchNotice("");
-          setAuthMessage(`マッチング検索に失敗: ${error.message}`);
+          const fallback = await supabase
+            .from("profiles")
+            .select("id,display_name,goal,role,avatar_url")
+            .neq("id", session.user.id)
+            .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
+            .limit(30)
+            .abortSignal(controller.signal);
+          if (fallback.error) {
+            setMatchNotice("");
+            setAuthMessage(`マッチング検索に失敗: ${fallback.error.message}`);
+            return;
+          }
+          const mapped: MatchMember[] = (fallback.data ?? []).map((row) =>
+            mapProfileToMatchMember({
+              id: row.id as string,
+              display_name: row.display_name as string | null,
+              goal: row.goal as string | null,
+              role: row.role as string | null,
+              avatar_url: (row.avatar_url as string | null) ?? null,
+            }),
+          );
+          setMatches(mapped);
+          setMatchSource("search");
+          if (opts?.fromSubmit) {
+            trackOpsEvent("matching_search");
+            trackOpsEvent("search_started");
+          }
+          setMatchNotice(
+            mapped.length === 0
+              ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
+              : `${mapped.length}件見つかりました。`,
+          );
           return;
         }
         const mapped: MatchMember[] = (data ?? []).map((row) =>
@@ -2774,6 +2926,10 @@ export default function Home() {
             goal: row.goal as string | null,
             role: row.role as string | null,
             avatar_url: (row.avatar_url as string | null) ?? null,
+            age: (row as { age?: number | null }).age ?? null,
+            country: (row as { country?: string | null }).country ?? null,
+            skills: (row as { skills?: unknown }).skills,
+            traits: (row as { traits?: unknown }).traits,
           }),
         );
         setMatches(mapped);
@@ -3261,45 +3417,28 @@ export default function Home() {
     setter([...current, value]);
   }
 
-  function finishOnboarding() {
-    setIdeaBlueprint((prev) => {
-      if (discoveryInterests.length === 0 || prev.title.trim()) return prev;
-      return { ...prev, title: `${discoveryInterests[0]}に関するプロジェクト` };
-    });
-    setOnboardingStep(2);
-  }
-
-  async function saveOnboardingSkillsTraits(skills: string[], traits: string[]) {
-    if (!supabase || !session) return;
-    const payload = {
-      skills: normalizeTagList(skills),
-      traits: normalizeTagList(traits),
-    };
-    const { error } = await supabase.from("profiles").update(payload).eq("id", session.user.id);
-    if (error) {
-      await supabase.from("profiles").update({ skills: payload.skills }).eq("id", session.user.id);
+  function handleSignupOnboardingComplete() {
+    trackOpsEvent("onboarding_completed");
+    setOnboardingCompleted(true);
+    if (session) {
+      const meta = (session.user.user_metadata as { display_name?: string } | undefined)?.display_name;
+      // refresh display name from form save path via local state if needed
+      void (async () => {
+        if (!supabase) return;
+        const { data } = await supabase
+          .from("profiles")
+          .select("display_name,avatar_url")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        if (data?.display_name) setDisplayName(data.display_name as string);
+        if (data?.avatar_url) setProfileAvatarUrl(data.avatar_url as string);
+        else if (meta) setDisplayName(meta);
+      })();
     }
-  }
-
-  async function completeOnboardingAfterSkills(opts?: { skipSave?: boolean }) {
-    if (onboardingSaving) return;
-    setOnboardingSaving(true);
-    try {
-      if (!opts?.skipSave) {
-        await saveOnboardingSkillsTraits(onboardingSkills, onboardingTraits);
-      }
-      if (session && typeof window !== "undefined") {
-        window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
-      }
-      trackOpsEvent("onboarding_completed");
-      setOnboardingCompleted(true);
-      router.replace(HOME_PROJECTS_HREF);
-      setAuthMessage(
-        tx("オンボーディング完了。プロジェクトから始めましょう。", "Setup done. Start from Projects."),
-      );
-    } finally {
-      setOnboardingSaving(false);
-    }
+    router.replace(HOME_PROJECTS_HREF);
+    setAuthMessage(
+      tx("オンボーディング完了。プロジェクトから始めましょう。", "Setup done. Start from Projects."),
+    );
   }
 
   function generateIdeaBlueprint() {
@@ -3801,170 +3940,16 @@ export default function Home() {
   }
 
   if (session && !onboardingCompleted) {
+    const metaName =
+      ((session.user.user_metadata as { display_name?: string } | undefined)?.display_name ?? "").trim() ||
+      displayName.trim() ||
+      "";
     return (
-      <div className="min-h-screen bg-zinc-100 px-4 py-8">
-        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-5">
-          {onboardingStep === 1 ? (
-            <>
-              <h2 className="text-xl font-bold text-zinc-900">{tx("最初の準備", "Quick setup")}</h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                {tx(
-                  "興味や関心を選ぶと、あとからプロジェクトや仲間探しのヒントになります（任意）。",
-                  "Pick interests to get better project and teammate suggestions later (optional).",
-                )}
-              </p>
-              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
-                {tx("後で設定したい場合は、まず使い始めることもできます。", "You can skip this and set it later.")}
-              </div>
-              {authMessage ? (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
-                  {authMessage}
-                </div>
-              ) : null}
-
-              <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-sm font-semibold text-zinc-900">
-                  {tx("興味・強み・関わりたい課題（任意）", "Interests, strengths, and problems (optional)")}
-                </p>
-                <p className="mt-1 text-xs text-zinc-600">
-                  {tx(
-                    "気になるものだけタップしてください。未選択のままでも問題ありません。",
-                    "Tap only what applies. You can leave everything unselected.",
-                  )}
-                </p>
-                <div className="mt-2 space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {DISCOVERY_NAV_INTERESTS.map((item) => (
-                      <button
-                        key={`ob-int-${item}`}
-                        type="button"
-                        className={discoveryInterests.includes(item) ? primaryButtonClass : secondaryButtonClass}
-                        onClick={() => toggleDiscoverySelection(item, discoveryInterests, setDiscoveryInterests)}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DISCOVERY_NAV_STRENGTHS.map((item) => (
-                      <button
-                        key={`ob-str-${item}`}
-                        type="button"
-                        className={discoveryStrengths.includes(item) ? primaryButtonClass : secondaryButtonClass}
-                        onClick={() => toggleDiscoverySelection(item, discoveryStrengths, setDiscoveryStrengths)}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DISCOVERY_NAV_PROBLEMS.map((item) => (
-                      <button
-                        key={`ob-prob-${item}`}
-                        type="button"
-                        className={discoveryProblems.includes(item) ? primaryButtonClass : secondaryButtonClass}
-                        onClick={() => toggleDiscoverySelection(item, discoveryProblems, setDiscoveryProblems, 4)}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DISCOVERY_NAV_TARGETS.map((item) => (
-                      <button
-                        key={`ob-target-${item}`}
-                        type="button"
-                        className={discoveryTarget === item ? primaryButtonClass : secondaryButtonClass}
-                        onClick={() => setDiscoveryTarget(item)}
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    className={inputClass}
-                    placeholder={tx("課題の補足（任意）", "More about the problem (optional)")}
-                    value={discoveryProblemText}
-                    onChange={(e) => setDiscoveryProblemText(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" className={primaryButtonClass} onClick={finishOnboarding}>
-                  {tx("次へ", "Next")}
-                </button>
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={() => {
-                    if (typeof window !== "undefined" && session) {
-                      window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
-                    }
-                    trackOpsEvent("onboarding_completed");
-                    setOnboardingCompleted(true);
-                    router.replace(HOME_PROJECTS_HREF);
-                    setAuthMessage(
-                      tx("プロジェクトから始めましょう。", "Start from Projects."),
-                    );
-                  }}
-                >
-                  {tx("いったんスキップして始める", "Skip for now")}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-[11px] font-semibold tracking-wide text-zinc-400">
-                {tx("ステップ 2 / 2", "Step 2 of 2")}
-              </p>
-              <div className="mt-3">
-                <SkillsTraitsEditor
-                  showIntro
-                  skills={onboardingSkills}
-                  traits={onboardingTraits}
-                  onSkillsChange={setOnboardingSkills}
-                  onTraitsChange={setOnboardingTraits}
-                />
-              </div>
-              <p className="mt-4 text-center text-[12px] text-zinc-400">
-                {tx(
-                  "必須ではありません。スキップしても、あとからプロフィール編集で入力できます。",
-                  "Optional — skip now and add this later in Edit profile.",
-                )}
-              </p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={primaryButtonClass}
-                  disabled={onboardingSaving}
-                  onClick={() => void completeOnboardingAfterSkills()}
-                >
-                  {onboardingSaving
-                    ? tx("保存中…", "Saving…")
-                    : tx("完了してアプリを開始", "Finish and start")}
-                </button>
-                <button
-                  type="button"
-                  className="text-[13px] font-medium text-zinc-500 underline-offset-2 hover:underline"
-                  disabled={onboardingSaving}
-                  onClick={() => void completeOnboardingAfterSkills({ skipSave: true })}
-                >
-                  {tx("スキップ", "Skip")}
-                </button>
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  disabled={onboardingSaving}
-                  onClick={() => setOnboardingStep(1)}
-                >
-                  {tx("戻る", "Back")}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      <SignupOnboardingWizard
+        session={session}
+        initialNickname={metaName}
+        onComplete={handleSignupOnboardingComplete}
+      />
     );
   }
 
@@ -5780,8 +5765,26 @@ export default function Home() {
                     </button>
                   </div>
                   <p className="mt-1.5 line-clamp-3 text-sm leading-snug text-zinc-500">{activeProfileMember.goal}</p>
+                  {(activeProfileMember.age != null || activeProfileMember.country) ? (
+                    <p className="mt-2 text-[12px] text-zinc-500">
+                      {[
+                        activeProfileMember.age != null
+                          ? tx(`${activeProfileMember.age}歳`, `${activeProfileMember.age} yrs`)
+                          : null,
+                        activeProfileMember.country
+                          ? countryLabel(activeProfileMember.country, language === "en" ? "en" : "ja")
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
+              <ProfileSkillsTraits
+                skills={activeProfileMember.skills ?? []}
+                traits={activeProfileMember.traits ?? []}
+              />
               {!activeProfileMember.id ? (
                 <p className="text-center text-xs text-zinc-400">このユーザーはデモ表示のみです。</p>
               ) : null}

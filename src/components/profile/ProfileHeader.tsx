@@ -9,6 +9,7 @@ import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { ProfileStats } from "@/components/profile/ProfileStats";
 import { MONI_TIER_META, type MoniTier } from "@/lib/gamification/moniTier";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { countryLabel } from "@/lib/profile/countries";
 import { supabase } from "@/lib/supabase";
 import type { FollowListUser, ProfileView } from "@/lib/profile/types";
 
@@ -43,7 +44,7 @@ export function ProfileHeader({
   profileUserId,
   streakDays,
 }: Props) {
-  const { tx } = useI18n();
+  const { locale, tx } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState("");
@@ -165,8 +166,19 @@ export function ProfileHeader({
           </a>
         ) : null}
 
-        {profile.school || profile.location ? (
+        {profile.school || profile.location || profile.age != null || profile.country ? (
           <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {profile.age != null ? (
+              <span className="inline-flex items-center gap-1 text-[12px] text-zinc-500">
+                {tx(`${profile.age}歳`, `${profile.age} yrs`)}
+              </span>
+            ) : null}
+            {profile.country ? (
+              <span className="inline-flex items-center gap-1 text-[12px] text-zinc-500">
+                <MapPin className="h-3.5 w-3.5" aria-hidden />
+                {countryLabel(profile.country, locale)}
+              </span>
+            ) : null}
             {profile.school ? (
               <span className="inline-flex items-center gap-1 text-[12px] text-zinc-500">
                 <GraduationCap className="h-3.5 w-3.5" aria-hidden />
