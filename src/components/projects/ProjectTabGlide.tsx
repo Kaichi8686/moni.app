@@ -11,7 +11,11 @@ import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVis
 import { Bell, UserPlus } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
+import {
+  fetchIncomingProjectInvites,
+  fetchMyProjectNotifications,
+  searchProfilesForInvite,
+} from "@/lib/projects/projectInvites";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
@@ -148,6 +152,7 @@ export function ProjectTabGlide({
   const [inviteUserQuery, setInviteUserQuery] = useState("");
   const [inviteCandidates, setInviteCandidates] = useState<Array<{ id: string; name: string }>>([]);
   const [inviteSearchBusy, setInviteSearchBusy] = useState(false);
+  const [inviteSearchDone, setInviteSearchDone] = useState(false);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
   const flashInviteToast = useCallback((message: string) => {
@@ -276,43 +281,45 @@ export function ProjectTabGlide({
   );
 
   async function searchInviteUsers() {
-    if (!supabase || !currentUserId) return;
+    if (!currentUserId) {
+      flashInviteToast("ログインが必要です");
+      return;
+    }
     const q = inviteUserQuery.trim();
     if (q.length < 1) {
       setInviteCandidates([]);
+      setInviteSearchDone(false);
       return;
     }
     setInviteSearchBusy(true);
+    setInviteSearchDone(false);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,display_name")
-        .ilike("display_name", `%${q}%`)
-        .neq("id", currentUserId)
-        .limit(8);
-      if (error) {
-        flashInviteToast(error.message);
-        setInviteCandidates([]);
-        return;
-      }
-      let memberIds = new Set<string>();
-      if (inviteSelectedProject) {
+      const excludeIds = [currentUserId];
+      if (inviteSelectedProject && supabase) {
         const { data: mems } = await supabase
           .from("project_members")
           .select("user_id")
           .eq("project_id", inviteSelectedProject.id);
-        memberIds = new Set((mems ?? []).map((m: { user_id: string }) => m.user_id));
+        for (const m of mems ?? []) {
+          const uid = (m as { user_id: string }).user_id;
+          if (uid) excludeIds.push(uid);
+        }
+      }
+      const { users, error } = await searchProfilesForInvite(q, excludeIds);
+      if (error) {
+        flashInviteToast(error);
+        setInviteCandidates([]);
+        return;
       }
       setInviteCandidates(
-        (data ?? [])
-          .map((row) => ({
-            id: row.id as string,
-            name: ((row.display_name as string | null)?.trim() || "ユーザー") as string,
-          }))
-          .filter((row) => !memberIds.has(row.id)),
+        users.map((row) => ({
+          id: row.id,
+          name: (row.display_name?.trim() || "ユーザー") as string,
+        })),
       );
     } finally {
       setInviteSearchBusy(false);
+      setInviteSearchDone(true);
     }
   }
 
@@ -526,6 +533,7 @@ export function ProjectTabGlide({
                 setInviteProjectId(inviteEligibleProjects[0]?.id ?? "");
                 setInviteUserQuery("");
                 setInviteCandidates([]);
+                setInviteSearchDone(false);
                 setInviteComposeOpen(true);
               }}
               className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -831,6 +839,7 @@ export function ProjectTabGlide({
                 onChange={(e) => {
                   setInviteProjectId(e.target.value);
                   setInviteCandidates([]);
+                  setInviteSearchDone(false);
                 }}
               >
                 {inviteEligibleProjects.map((p) => (
@@ -844,12 +853,15 @@ export function ProjectTabGlide({
             <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
               <p className="text-sm font-semibold text-zinc-900">ユーザーを招待</p>
               <p className="mt-1 text-[11px] text-zinc-500">表示名で検索して招待します。</p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <div className="mt-2 flex items-stretch gap-2">
                 <input
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-zinc-500"
                   placeholder="表示名"
                   value={inviteUserQuery}
-                  onChange={(e) => setInviteUserQuery(e.target.value)}
+                  onChange={(e) => {
+                    setInviteUserQuery(e.target.value);
+                    setInviteSearchDone(false);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -861,7 +873,7 @@ export function ProjectTabGlide({
                   type="button"
                   disabled={inviteSearchBusy || !inviteUserQuery.trim()}
                   onClick={() => void searchInviteUsers()}
-                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 disabled:opacity-60"
+                  className="inline-flex shrink-0 touch-manipulation items-center justify-center rounded-lg border border-zinc-300 bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {inviteSearchBusy ? "検索中…" : "検索"}
                 </button>
@@ -874,12 +886,17 @@ export function ProjectTabGlide({
                       type="button"
                       disabled={inviteBusyId === c.id || !inviteSelectedProject}
                       onClick={() => void inviteUserToSelectedProject(c.id, c.name)}
-                      className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      className="inline-flex shrink-0 items-center justify-center rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                     >
                       {inviteBusyId === c.id ? "招待中…" : "招待する"}
                     </button>
                   </li>
                 ))}
+                {inviteSearchDone && !inviteSearchBusy && inviteCandidates.length === 0 ? (
+                  <li className="rounded-lg px-1 py-2 text-sm text-zinc-500">
+                    該当するユーザーが見つかりません。表示名を変えて再検索するか、すでにメンバーの場合は一覧に出ません。
+                  </li>
+                ) : null}
               </ul>
             </div>
 
