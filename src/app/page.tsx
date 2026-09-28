@@ -3820,10 +3820,14 @@ export default function Home() {
     );
   }
 
+  const searchFullBleed = activePage === "chat";
+
   return (
     <div
       id="moni-app"
-      className="relative min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
+      className={`relative min-h-[100dvh] min-h-screen pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased ${
+        searchFullBleed ? "flex flex-col bg-white" : "bg-[#fafafa]"
+      }`}
     >
       <input
         ref={avatarInputRef}
@@ -3832,7 +3836,13 @@ export default function Home() {
         className="hidden"
         onChange={onAvatarFileChange}
       />
-      <div className="relative mx-auto grid w-full max-w-none grid-cols-1 gap-3 px-4 py-3 sm:gap-4">
+      <div
+        className={
+          searchFullBleed
+            ? "relative mx-auto flex w-full max-w-none flex-1 flex-col pb-bottom-nav"
+            : "relative mx-auto grid w-full max-w-none grid-cols-1 gap-3 px-4 py-3 sm:gap-4"
+        }
+      >
         <aside className="hidden" aria-hidden="true">
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
@@ -3872,15 +3882,15 @@ export default function Home() {
           </div>
         </aside>
 
-        <div className={activePage === "chat" ? "space-y-0" : "space-y-3 sm:space-y-4"}>
+        <div className={searchFullBleed ? "flex min-h-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
           <header
-            className={`flex items-center justify-between gap-2 bg-white px-3 py-2.5 sm:px-4 sm:py-3 ${
-              activePage === "chat"
-                ? "rounded-t-2xl border border-zinc-200"
-                : "border-b border-[#dbdbdb]"
-            }`}
+            className={
+              searchFullBleed
+                ? "flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 bg-white px-4 py-3 sm:px-5"
+                : "flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3"
+            }
           >
-            <h1 className="moni-wordmark text-xl sm:text-2xl">moni</h1>
+            <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
               {!session && canUseSupabase ? (
                 <Link
@@ -3897,7 +3907,13 @@ export default function Home() {
           </header>
 
           {notificationItems.length > 0 ? (
-            <div className="flex flex-wrap justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2">
+            <div
+              className={
+                searchFullBleed
+                  ? "flex flex-wrap justify-center gap-1.5 border-b border-zinc-100 bg-amber-50/80 px-3 py-2"
+                  : "flex flex-wrap justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2"
+              }
+            >
               {notificationItems.map((item) => (
                 <button
                   type="button"
@@ -3914,7 +3930,13 @@ export default function Home() {
             </div>
           ) : null}
 
-          <main className="grid gap-4 pb-bottom-nav md:grid-cols-1">
+          <main
+            className={
+              searchFullBleed
+                ? "flex min-h-0 flex-1 flex-col"
+                : "grid gap-4 pb-bottom-nav md:grid-cols-1"
+            }
+          >
         <section className="hidden rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)]" aria-hidden>
             {accountSubTab === "profile" ? (
               <div className="flex items-start justify-between gap-2">
@@ -4808,26 +4830,20 @@ export default function Home() {
         </section>
 
         <section
-          className={`${cardClass} min-h-[calc(100dvh-9rem)] rounded-t-none border-t-0 ${
+          className={
             activePage === "chat"
-              ? exploreSegment === "friends"
-                ? "flex flex-col"
-                : ""
+              ? "flex min-h-0 flex-1 flex-col bg-white px-4 py-4 sm:px-5"
               : "hidden"
-          }`}
+          }
         >
           <div className="shrink-0">
             <h3 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">{t("searchTitle")}</h3>
             <p className="mt-1 text-sm text-zinc-500">{t("searchHint")}</p>
           </div>
 
-          <div
-            className={`mt-3 flex flex-1 flex-col rounded-xl border border-zinc-200 bg-white ${
-              exploreSegment === "friends" ? "" : ""
-            }`}
-          >
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
             <div
-              className="flex shrink-0 gap-1 border-b border-zinc-100 px-1 pt-2 sm:px-2"
+              className="flex shrink-0 gap-1 border-b border-zinc-100"
               role="tablist"
               aria-label={t("searchTitle")}
             >
@@ -4866,7 +4882,7 @@ export default function Home() {
             </div>
 
             {exploreSegment === "friends" ? (
-              <div className="flex flex-col p-3" role="tabpanel">
+              <div className="flex flex-col pt-3" role="tabpanel">
                 <form onSubmit={runMatching} className="w-full shrink-0">
                   <p className="text-sm font-semibold text-zinc-900">
                     {language === "ja" ? "友達を探す" : "Find friends"}
@@ -4943,7 +4959,7 @@ export default function Home() {
                 </ul>
               </div>
             ) : (
-              <div className="flex-1 p-3" role="tabpanel">
+              <div className="flex-1 pt-3" role="tabpanel">
                 <DiscoverPublicProjects showSectionHeader />
               </div>
             )}
