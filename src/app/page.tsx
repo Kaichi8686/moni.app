@@ -19,6 +19,7 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { countryLabel } from "@/lib/profile/countries";
+import { genderLabel } from "@/lib/profile/gender";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import {
   fetchUnreadProjectNotifications,
@@ -138,6 +139,7 @@ type MatchMember = {
   aiType?: AiMatchType;
   avatarUrl?: string | null;
   age?: number | null;
+  gender?: string | null;
   country?: string | null;
   skills?: string[];
   traits?: string[];
@@ -338,6 +340,7 @@ function mapProfileToMatchMember(row: {
   role: string | null;
   avatar_url?: string | null;
   age?: number | string | null;
+  gender?: string | null;
   country?: string | null;
   skills?: unknown;
   traits?: unknown;
@@ -353,6 +356,11 @@ function mapProfileToMatchMember(row: {
       : typeof row.age === "string" && /^\d+$/.test(row.age)
         ? Number(row.age)
         : null;
+  const genderRaw = (row.gender ?? "").trim();
+  const gender =
+    genderRaw === "male" || genderRaw === "female" || genderRaw === "other" || genderRaw === "prefer_not"
+      ? genderRaw
+      : null;
   const country = (row.country ?? "").trim().toUpperCase() || null;
   return {
     id,
@@ -361,6 +369,7 @@ function mapProfileToMatchMember(row: {
     strength,
     avatarUrl: dbAvatar || readStoredAvatarUrl(id),
     age,
+    gender,
     country,
     skills,
     traits,
@@ -1748,6 +1757,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       for (const sel of [
+        "id,display_name,goal,role,avatar_url,skills,traits,age,gender,country",
         "id,display_name,goal,role,avatar_url,skills,traits,age,country",
         "id,display_name,goal,role,avatar_url,skills,traits",
         "id,display_name,goal,role,avatar_url",
@@ -1762,6 +1772,7 @@ export default function Home() {
           role: string | null;
           avatar_url?: string | null;
           age?: number | null;
+          gender?: string | null;
           country?: string | null;
           skills?: unknown;
           traits?: unknown;
@@ -1773,6 +1784,7 @@ export default function Home() {
           role: row.role,
           avatar_url: row.avatar_url ?? null,
           age: row.age ?? null,
+          gender: row.gender ?? null,
           country: row.country ?? null,
           skills: row.skills,
           traits: row.traits,
@@ -2798,7 +2810,7 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,age,country")
+        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,age,gender,country")
         .neq("id", session.user.id)
         .order("created_at", { ascending: false })
         .limit(12)
@@ -2843,6 +2855,7 @@ export default function Home() {
           role: row.role as string | null,
           avatar_url: (row.avatar_url as string | null) ?? null,
           age: (row as { age?: number | null }).age ?? null,
+          gender: (row as { gender?: string | null }).gender ?? null,
           country: (row as { country?: string | null }).country ?? null,
           skills: (row as { skills?: unknown }).skills,
           traits: (row as { traits?: unknown }).traits,
@@ -2879,7 +2892,7 @@ export default function Home() {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("id,display_name,goal,role,avatar_url,skills,traits,age,country")
+          .select("id,display_name,goal,role,avatar_url,skills,traits,age,gender,country")
           .neq("id", session.user.id)
           .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
           .limit(30)
@@ -2927,6 +2940,7 @@ export default function Home() {
             role: row.role as string | null,
             avatar_url: (row.avatar_url as string | null) ?? null,
             age: (row as { age?: number | null }).age ?? null,
+            gender: (row as { gender?: string | null }).gender ?? null,
             country: (row as { country?: string | null }).country ?? null,
             skills: (row as { skills?: unknown }).skills,
             traits: (row as { traits?: unknown }).traits,
@@ -5765,11 +5779,16 @@ export default function Home() {
                     </button>
                   </div>
                   <p className="mt-1.5 line-clamp-3 text-sm leading-snug text-zinc-500">{activeProfileMember.goal}</p>
-                  {(activeProfileMember.age != null || activeProfileMember.country) ? (
+                  {(activeProfileMember.age != null ||
+                  (activeProfileMember.gender && activeProfileMember.gender !== "prefer_not") ||
+                  activeProfileMember.country) ? (
                     <p className="mt-2 text-[12px] text-zinc-500">
                       {[
                         activeProfileMember.age != null
                           ? tx(`${activeProfileMember.age}歳`, `${activeProfileMember.age} yrs`)
+                          : null,
+                        activeProfileMember.gender && activeProfileMember.gender !== "prefer_not"
+                          ? genderLabel(activeProfileMember.gender, language === "en" ? "en" : "ja")
                           : null,
                         activeProfileMember.country
                           ? countryLabel(activeProfileMember.country, language === "en" ? "en" : "ja")

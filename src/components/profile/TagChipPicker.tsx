@@ -73,7 +73,7 @@ export function TagChipPicker({
             </p>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {presets.map((opt) => {
             const on = selected.has(opt.id);
             const locked = !on && value.length >= max;
@@ -84,7 +84,7 @@ export function TagChipPicker({
                 aria-pressed={on}
                 disabled={locked}
                 onClick={() => toggle(opt.id)}
-                className={`group relative flex min-h-[52px] touch-manipulation items-center justify-between gap-2 rounded-2xl border px-3.5 py-3 text-left text-[13px] font-semibold leading-snug transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`group relative flex min-h-[40px] touch-manipulation items-center justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left text-[12px] font-semibold leading-snug transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
                   on
                     ? "border-zinc-900 bg-zinc-900 text-white shadow-sm"
                     : "border-zinc-200 bg-white text-zinc-800 hover:border-zinc-400 hover:bg-zinc-50"
@@ -92,14 +92,14 @@ export function TagChipPicker({
               >
                 <span className="min-w-0 flex-1">{opt.label}</span>
                 <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
                     on
                       ? "border-white/30 bg-white/15 text-white"
                       : "border-zinc-300 bg-zinc-50 text-transparent group-hover:border-zinc-400"
                   }`}
                   aria-hidden
                 >
-                  <Check className="h-3 w-3" strokeWidth={3} />
+                  <Check className="h-2.5 w-2.5" strokeWidth={3} />
                 </span>
               </button>
             );
@@ -110,12 +110,12 @@ export function TagChipPicker({
               type="button"
               aria-pressed
               onClick={() => toggle(id)}
-              className="relative flex min-h-[52px] touch-manipulation items-center justify-between gap-2 rounded-2xl border border-zinc-900 bg-zinc-900 px-3.5 py-3 text-left text-[13px] font-semibold leading-snug text-white shadow-sm transition active:scale-[0.98]"
+              className="relative flex min-h-[40px] touch-manipulation items-center justify-between gap-1.5 rounded-xl border border-zinc-900 bg-zinc-900 px-2.5 py-2 text-left text-[12px] font-semibold leading-snug text-white shadow-sm transition active:scale-[0.98]"
               title={tx("タップで解除", "Tap to remove")}
             >
               <span className="min-w-0 flex-1">{labelOf(id)}</span>
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/15" aria-hidden>
-                <Check className="h-3 w-3" strokeWidth={3} />
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/15" aria-hidden>
+                <Check className="h-2.5 w-2.5" strokeWidth={3} />
               </span>
             </button>
           ))}

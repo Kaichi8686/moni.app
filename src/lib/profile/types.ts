@@ -9,6 +9,8 @@ export type ProfileView = {
   location?: string | null;
   /** 年齢 */
   age?: number | null;
+  /** male | female | other | prefer_not */
+  gender?: string | null;
   /** ISO 3166-1 alpha-2 */
   country?: string | null;
   /** 興味 / 特技タグ（canonical JA または自由入力） */

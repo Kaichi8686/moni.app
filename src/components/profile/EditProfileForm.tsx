@@ -7,6 +7,7 @@ import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { sortedCountries } from "@/lib/profile/countries";
+import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { profileUsername } from "@/lib/profile/username";
@@ -24,6 +25,7 @@ export function EditProfileForm() {
     school: "",
     location: "",
     age: "",
+    gender: "" as ProfileGender | "",
     country: "",
     avatarUrl: null as string | null,
     skills: [] as string[],
@@ -47,6 +49,7 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills",
@@ -75,6 +78,7 @@ export function EditProfileForm() {
             : typeof ageVal === "string"
               ? ageVal
               : "",
+        gender: isProfileGender(data?.gender) ? data.gender : ("" as const),
         country: ((data?.country as string | null) ?? "").toUpperCase(),
         avatarUrl: (data?.avatar_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
@@ -132,6 +136,7 @@ export function EditProfileForm() {
     if (form.school.trim()) payload.school = form.school.trim();
     if (form.location.trim()) payload.location = form.location.trim();
     if (ageNum != null && ageNum >= 5 && ageNum <= 120) payload.age = ageNum;
+    if (isProfileGender(form.gender)) payload.gender = form.gender;
     if (form.country.trim().length === 2) payload.country = form.country.trim().toUpperCase();
 
     const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
@@ -139,6 +144,7 @@ export function EditProfileForm() {
     if (error) {
       const withoutExtra = { ...payload };
       delete withoutExtra.age;
+      delete withoutExtra.gender;
       delete withoutExtra.country;
       delete withoutExtra.traits;
       let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
@@ -264,6 +270,32 @@ export function EditProfileForm() {
               maxLength={3}
               onChange={(e) => setForm((f) => ({ ...f, age: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
             />
+          </div>
+        </div>
+
+        <div className="account-card overflow-hidden">
+          <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
+            <label className="shrink-0 text-[13px] font-medium sm:w-24" style={{ color: "var(--color-text-secondary)" }}>
+              {tx("性別", "Gender")}
+            </label>
+            <select
+              className="flex-1 bg-transparent text-[14px] outline-none"
+              style={{ color: "var(--color-text-primary)" }}
+              value={form.gender}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  gender: isProfileGender(e.target.value) ? e.target.value : "",
+                }))
+              }
+            >
+              <option value="">{tx("選択してください", "Select…")}</option>
+              {GENDER_OPTIONS.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {locale === "en" ? g.en : g.ja}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

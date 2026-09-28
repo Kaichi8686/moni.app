@@ -44,16 +44,16 @@ export function SkillsTraitsEditor({
   const variant = onboardingStyle ? "cards" : "chips";
 
   return (
-    <div className={compact || onboardingStyle ? "space-y-6" : "space-y-6"}>
+    <div className={onboardingStyle ? "space-y-4" : compact ? "space-y-5" : "space-y-6"}>
       {showIntro ? (
-        <div className="space-y-1.5">
-          <p className="text-[17px] font-semibold leading-snug tracking-tight text-zinc-900">
+        <div className="space-y-1">
+          <p className="text-[15px] font-semibold leading-snug tracking-tight text-zinc-900">
             {tx(
               "興味と性格を教えてください",
               "Tell us your interests and personality",
             )}
           </p>
-          <p className="text-[13px] leading-relaxed text-zinc-500">
+          <p className="text-[12px] leading-relaxed text-zinc-500">
             {tx(
               "探すタブで仲間があなたのプロフィールを見るときに表示されます。あとから変更できます。",
               "These show on your profile when others find you in Search. You can change them later.",
@@ -63,19 +63,19 @@ export function SkillsTraitsEditor({
       ) : null}
 
       <section>
-        <div className="mb-1 flex items-baseline justify-between gap-2">
-          <h3 className="text-[14px] font-semibold text-zinc-900">
+        <div className="mb-0.5 flex items-baseline justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-zinc-900">
             {onboardingStyle
               ? tx("興味のあること", "Interests")
               : tx("特技", "Skills")}
           </h3>
           {onboardingStyle ? (
-            <span className="text-[11px] font-medium text-zinc-400">
+            <span className="text-[10px] font-medium text-zinc-400">
               {tx("3つ選ぶ", "Pick 3")}
             </span>
           ) : null}
         </div>
-        <p className="text-[12px] leading-relaxed text-zinc-500">
+        <p className="text-[11px] leading-relaxed text-zinc-500">
           {onboardingStyle
             ? tx(
                 "いま関心がある分野や、やってみたいことを選びましょう",
@@ -87,7 +87,7 @@ export function SkillsTraitsEditor({
               )}
         </p>
         <TagChipPicker
-          className="mt-3"
+          className="mt-2"
           presets={skillPresets}
           value={skills}
           onChange={onSkillsChange}
@@ -98,24 +98,24 @@ export function SkillsTraitsEditor({
       </section>
 
       <section>
-        <div className="mb-1 flex items-baseline justify-between gap-2">
-          <h3 className="text-[14px] font-semibold text-zinc-900">
+        <div className="mb-0.5 flex items-baseline justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-zinc-900">
             {tx("性格", "Personality")}
           </h3>
           {onboardingStyle ? (
-            <span className="text-[11px] font-medium text-zinc-400">
+            <span className="text-[10px] font-medium text-zinc-400">
               {tx("3つ選ぶ", "Pick 3")}
             </span>
           ) : null}
         </div>
-        <p className="text-[12px] leading-relaxed text-zinc-500">
+        <p className="text-[11px] leading-relaxed text-zinc-500">
           {tx(
             "チームでの関わり方のイメージを教えてください",
             "How do you usually work with others?",
           )}
         </p>
         <TagChipPicker
-          className="mt-3"
+          className="mt-2"
           presets={traitPresets}
           value={traits}
           onChange={onTraitsChange}

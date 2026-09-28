@@ -7,6 +7,7 @@ import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills",
@@ -77,6 +78,11 @@ export async function loadProfileView(
         ? Number(ageRaw)
         : null;
   const country = (row.country as string | null | undefined)?.trim()?.toUpperCase() || null;
+  const genderRaw = (row.gender as string | null | undefined)?.trim() || null;
+  const gender =
+    genderRaw === "male" || genderRaw === "female" || genderRaw === "other" || genderRaw === "prefer_not"
+      ? genderRaw
+      : null;
 
   return {
     id: userId,
@@ -88,6 +94,7 @@ export async function loadProfileView(
     ...(school ? { school } : {}),
     ...(location ? { location } : {}),
     ...(age != null ? { age } : {}),
+    ...(gender ? { gender } : {}),
     ...(country ? { country } : {}),
     ...(skills.length ? { skills } : {}),
     ...(traits.length ? { traits } : {}),

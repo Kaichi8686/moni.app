@@ -7,12 +7,14 @@ import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { countryLabel, sortedCountries } from "@/lib/profile/countries";
+import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 export type OnboardingDraft = {
   age: string;
+  gender: ProfileGender | "";
   country: string;
   nickname: string;
   avatarUrl: string | null;
@@ -49,6 +51,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   const [countryQuery, setCountryQuery] = useState("");
   const [draft, setDraft] = useState<OnboardingDraft>({
     age: "",
+    gender: "",
     country: "",
     nickname: initialNickname,
     avatarUrl: null,
@@ -60,11 +63,12 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     if (!supabase) return;
     void supabase
       .from("profiles")
-      .select("display_name,avatar_url,age,country,skills,traits")
+      .select("display_name,avatar_url,age,gender,country,skills,traits")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return;
+        const genderRaw = (data as { gender?: string | null }).gender;
         setDraft((prev) => ({
           ...prev,
           nickname:
@@ -75,6 +79,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
           age:
             prev.age ||
             (typeof data.age === "number" && Number.isFinite(data.age) ? String(data.age) : ""),
+          gender: prev.gender || (isProfileGender(genderRaw) ? genderRaw : ""),
           country: prev.country || ((data.country as string | null) ?? ""),
         }));
       });
@@ -93,15 +98,16 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   }, [countries, countryQuery]);
 
   const ageValid = parseAge(draft.age) !== null;
+  const genderValid = isProfileGender(draft.gender);
   const countryValid = draft.country.length === 2;
   const nicknameValid = draft.nickname.trim().length >= 1 && draft.nickname.trim().length <= 32;
   const interestsValid = draft.skills.length === 3 && draft.traits.length === 3;
 
   function canContinue(): boolean {
-    if (step === 1) return ageValid;
+    if (step === 1) return ageValid && genderValid;
     if (step === 2) return countryValid;
     if (step === 3) return nicknameValid;
-    if (step === 4) return true; // avatar optional but encouraged
+    if (step === 4) return true;
     if (step === 5) return interestsValid;
     return false;
   }
@@ -136,7 +142,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   async function persistAndFinish() {
     if (!supabase || saving) return;
     const age = parseAge(draft.age);
-    if (age == null || !countryValid || !nicknameValid || !interestsValid) {
+    if (age == null || !genderValid || !countryValid || !nicknameValid || !interestsValid) {
       setError(tx("入力内容を確認してください", "Please check your answers"));
       return;
     }
@@ -150,6 +156,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     const fullPayload: Record<string, unknown> = {
       display_name: nickname,
       age,
+      gender: draft.gender,
       country: draft.country,
       skills,
       traits,
@@ -159,8 +166,8 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
 
     let { error: upErr } = await supabase.from("profiles").update(fullPayload).eq("id", session.user.id);
     if (upErr) {
-      // columns may be missing until SQL applied — degrade gracefully
       const fallbacks: Array<Record<string, unknown>> = [
+        { display_name: nickname, age, country: draft.country, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits },
         { display_name: nickname },
@@ -197,8 +204,10 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   function goNext() {
     setError("");
     if (!canContinue()) {
-      if (step === 1) setError(tx("年齢は数字のみ（5〜120）で入力してください", "Enter age as a number (5–120)"));
-      else if (step === 2) setError(tx("国を選んでください", "Please select a country"));
+      if (step === 1) {
+        if (!ageValid) setError(tx("年齢は数字のみ（5〜120）で入力してください", "Enter age as a number (5–120)"));
+        else setError(tx("性別を選んでください", "Please select a gender"));
+      } else if (step === 2) setError(tx("国を選んでください", "Please select a country"));
       else if (step === 3) setError(tx("ニックネームを入力してください", "Please enter a nickname"));
       else if (step === 5)
         setError(tx("興味と性格をそれぞれ3つ選んでください", "Pick 3 interests and 3 personality traits"));
@@ -217,7 +226,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   }
 
   const stepTitle: Record<Step, string> = {
-    1: tx("年齢を教えてください", "How old are you?"),
+    1: tx("年齢と性別", "Age & gender"),
     2: tx("住んでいる国は？", "Which country are you in?"),
     3: tx("ニックネームを決めよう", "Choose a nickname"),
     4: tx("アイコンを選ぼう", "Pick a profile photo"),
@@ -225,7 +234,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   };
 
   const stepHint: Record<Step, string> = {
-    1: tx("数字のみで入力できます", "Numbers only"),
+    1: tx("年齢は数字のみ。性別は選びたくないも選べます", "Age is numbers only. You can prefer not to say gender."),
     2: tx("リストから選んでください", "Choose from the list"),
     3: tx("あとからプロフィール編集でいつでも変えられます", "You can change this later in Edit profile"),
     4: tx("写真・カメラ・ファイルから選べます。あとから変更もできます", "Use a photo, camera, or file. You can change it later"),
@@ -235,29 +244,29 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#f6f5f2]">
       <div
-        className="pointer-events-none absolute inset-0 opacity-80"
+        className="pointer-events-none absolute inset-0 opacity-70"
         style={{
           background:
-            "radial-gradient(ellipse 80% 50% at 10% -10%, rgba(24,24,27,0.08), transparent 55%), radial-gradient(ellipse 60% 40% at 100% 0%, rgba(82,82,91,0.1), transparent 50%)",
+            "radial-gradient(ellipse 70% 40% at 8% -8%, rgba(24,24,27,0.07), transparent 55%), radial-gradient(ellipse 50% 35% at 100% 0%, rgba(82,82,91,0.08), transparent 50%)",
         }}
         aria-hidden
       />
 
-      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-[calc(1rem+env(safe-area-inset-top,0px))]">
-        <header className="mb-6">
+      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-3.5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))]">
+        <header className="mb-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] font-semibold tracking-tight text-zinc-900">moni</p>
-            <p className="text-[12px] font-medium text-zinc-500">
+            <p className="text-[12px] font-semibold tracking-tight text-zinc-900">moni</p>
+            <p className="text-[11px] font-medium text-zinc-500">
               {tx(`ステップ ${step} / ${TOTAL_STEPS}`, `Step ${step} of ${TOTAL_STEPS}`)}
             </p>
           </div>
-          <div className="mt-3 flex gap-1.5" aria-hidden>
+          <div className="mt-2 flex gap-1" aria-hidden>
             {Array.from({ length: TOTAL_STEPS }, (_, i) => {
               const n = (i + 1) as Step;
               return (
                 <div
                   key={n}
-                  className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                  className={`h-0.5 flex-1 rounded-full transition-colors duration-300 ${
                     n <= step ? "bg-zinc-900" : "bg-zinc-300/80"
                   }`}
                 />
@@ -270,65 +279,91 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="rounded-3xl border border-zinc-200/80 bg-white/95 p-5 shadow-[0_12px_40px_rgba(24,24,27,0.06)] backdrop-blur-sm sm:p-6"
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="rounded-2xl border border-zinc-200/80 bg-white/95 p-4 shadow-[0_8px_24px_rgba(24,24,27,0.05)] backdrop-blur-sm"
             >
-              <h1 className="text-[22px] font-bold leading-tight tracking-tight text-zinc-900">
+              <h1 className="text-[18px] font-bold leading-snug tracking-tight text-zinc-900">
                 {stepTitle[step]}
               </h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{stepHint[step]}</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{stepHint[step]}</p>
 
-              <div className="mt-6">
+              <div className="mt-4">
                 {step === 1 ? (
-                  <div className="space-y-3">
-                    <label className="block text-[12px] font-semibold text-zinc-600" htmlFor="ob-age">
-                      {tx("年齢", "Age")}
-                    </label>
-                    <input
-                      id="ob-age"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="bday-year"
-                      className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3.5 text-[28px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
-                      placeholder="16"
-                      value={draft.age}
-                      maxLength={3}
-                      onChange={(e) => {
-                        const next = e.target.value.replace(/\D/g, "").slice(0, 3);
-                        setDraft((d) => ({ ...d, age: next }));
-                      }}
-                    />
-                    <p className="text-[12px] text-zinc-400">
-                      {tx("半角数字のみ。例: 16", "Digits only. e.g. 16")}
-                    </p>
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-semibold text-zinc-600" htmlFor="ob-age">
+                        {tx("年齢", "Age")}
+                      </label>
+                      <input
+                        id="ob-age"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="bday-year"
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[22px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
+                        placeholder="16"
+                        value={draft.age}
+                        maxLength={3}
+                        onChange={(e) => {
+                          const next = e.target.value.replace(/\D/g, "").slice(0, 3);
+                          setDraft((d) => ({ ...d, age: next }));
+                        }}
+                      />
+                      <p className="text-[11px] text-zinc-400">
+                        {tx("半角数字のみ。例: 16", "Digits only. e.g. 16")}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-semibold text-zinc-600">{tx("性別", "Gender")}</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {GENDER_OPTIONS.map((opt) => {
+                          const on = draft.gender === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => setDraft((d) => ({ ...d, gender: opt.id }))}
+                              className={`min-h-[40px] rounded-xl border px-3 py-2 text-[13px] font-semibold transition active:scale-[0.98] ${
+                                on
+                                  ? "border-zinc-900 bg-zinc-900 text-white"
+                                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50"
+                              }`}
+                            >
+                              {locale === "en" ? opt.en : opt.ja}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 
                 {step === 2 ? (
-                  <div className="space-y-3">
-                    <label className="block text-[12px] font-semibold text-zinc-600" htmlFor="ob-country-q">
+                  <div className="space-y-2.5">
+                    <label className="block text-[11px] font-semibold text-zinc-600" htmlFor="ob-country-q">
                       {tx("国を検索", "Search countries")}
                     </label>
                     <div className="relative">
                       <input
                         id="ob-country-q"
-                        className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-[15px] text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[14px] text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
                         placeholder={tx("国名で検索…", "Search by country…")}
                         value={countryQuery}
                         onChange={(e) => setCountryQuery(e.target.value)}
                       />
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
                     </div>
                     {draft.country ? (
-                      <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-[13px] font-medium text-zinc-800">
+                      <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[12px] font-medium text-zinc-800">
                         {tx("選択中:", "Selected:")}{" "}
                         <span className="font-semibold">{countryLabel(draft.country, locale)}</span>
                       </p>
                     ) : null}
-                    <div className="max-h-[min(52vh,360px)] overflow-y-auto overscroll-contain rounded-2xl border border-zinc-200">
+                    <div className="max-h-[min(46vh,300px)] overflow-y-auto overscroll-contain rounded-xl border border-zinc-200">
                       <ul className="divide-y divide-zinc-100">
                         {filteredCountries.map((c) => {
                           const on = draft.country === c.code;
@@ -340,14 +375,14 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                                   setDraft((d) => ({ ...d, country: c.code }));
                                   setCountryQuery("");
                                 }}
-                                className={`flex w-full items-center justify-between px-4 py-3 text-left text-[14px] transition ${
+                                className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[13px] transition ${
                                   on
                                     ? "bg-zinc-900 font-semibold text-white"
                                     : "bg-white text-zinc-800 hover:bg-zinc-50"
                                 }`}
                               >
                                 <span>{locale === "en" ? c.en : c.ja}</span>
-                                <span className={`text-[11px] ${on ? "text-white/70" : "text-zinc-400"}`}>
+                                <span className={`text-[10px] ${on ? "text-white/70" : "text-zinc-400"}`}>
                                   {c.code}
                                 </span>
                               </button>
@@ -355,7 +390,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                           );
                         })}
                         {filteredCountries.length === 0 ? (
-                          <li className="px-4 py-6 text-center text-[13px] text-zinc-500">
+                          <li className="px-3 py-5 text-center text-[12px] text-zinc-500">
                             {tx("該当する国がありません", "No matching countries")}
                           </li>
                         ) : null}
@@ -365,20 +400,20 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                 ) : null}
 
                 {step === 3 ? (
-                  <div className="space-y-3">
-                    <label className="block text-[12px] font-semibold text-zinc-600" htmlFor="ob-nick">
+                  <div className="space-y-2.5">
+                    <label className="block text-[11px] font-semibold text-zinc-600" htmlFor="ob-nick">
                       {tx("ニックネーム", "Nickname")}
                     </label>
                     <input
                       id="ob-nick"
                       autoComplete="nickname"
-                      className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3.5 text-[18px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
+                      className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[16px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
                       placeholder={tx("例：カイチ", "e.g. Kaichi")}
                       value={draft.nickname}
                       maxLength={32}
                       onChange={(e) => setDraft((d) => ({ ...d, nickname: e.target.value }))}
                     />
-                    <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900">
+                    <p className="rounded-lg border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
                       {tx(
                         "あとからプロフィール編集でいつでも変えられます。まずは気軽に決めましょう。",
                         "You can change this anytime in Edit profile — pick something for now.",
@@ -388,38 +423,38 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                 ) : null}
 
                 {step === 4 ? (
-                  <div className="flex flex-col items-center gap-5">
+                  <div className="flex flex-col items-center gap-3.5">
                     <ProfileAvatar
                       displayName={draft.nickname || "?"}
                       avatarUrl={draft.avatarUrl}
-                      size="xl"
+                      size="lg"
                     />
-                    <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="grid w-full grid-cols-1 gap-1.5 sm:grid-cols-3">
                       <button
                         type="button"
                         disabled={uploading}
                         onClick={() => fileRef.current?.click()}
-                        className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2.5 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
                       >
-                        <ImagePlus className="h-4 w-4" aria-hidden />
+                        <ImagePlus className="h-3.5 w-3.5" aria-hidden />
                         {tx("写真ライブラリ", "Photo library")}
                       </button>
                       <button
                         type="button"
                         disabled={uploading}
                         onClick={() => cameraRef.current?.click()}
-                        className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2.5 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
                       >
-                        <Camera className="h-4 w-4" aria-hidden />
+                        <Camera className="h-3.5 w-3.5" aria-hidden />
                         {tx("カメラ", "Camera")}
                       </button>
                       <button
                         type="button"
                         disabled={uploading}
                         onClick={() => fileRef.current?.click()}
-                        className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2.5 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-50"
                       >
-                        <Upload className="h-4 w-4" aria-hidden />
+                        <Upload className="h-3.5 w-3.5" aria-hidden />
                         {tx("ファイル", "Files")}
                       </button>
                     </div>
@@ -444,7 +479,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                         if (file) void uploadAvatar(file);
                       }}
                     />
-                    <p className="text-center text-[12px] text-zinc-400">
+                    <p className="text-center text-[11px] text-zinc-400">
                       {uploading
                         ? tx("アップロード中…", "Uploading…")
                         : draft.avatarUrl
@@ -468,7 +503,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
               </div>
 
               {error ? (
-                <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800" role="alert">
+                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] text-rose-800" role="alert">
                   {error}
                 </p>
               ) : null}
@@ -476,13 +511,13 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
           </AnimatePresence>
         </div>
 
-        <footer className="mt-5 flex items-center gap-2">
+        <footer className="mt-3.5 flex items-center gap-2">
           {step > 1 ? (
             <button
               type="button"
               onClick={goBack}
               disabled={saving}
-              className="inline-flex min-h-[48px] flex-1 items-center justify-center rounded-2xl border border-zinc-300 bg-white px-4 text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
+              className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-xl border border-zinc-300 bg-white px-3 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-40"
             >
               {tx("戻る", "Back")}
             </button>
@@ -493,7 +528,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
             type="button"
             onClick={goNext}
             disabled={saving || uploading}
-            className="inline-flex min-h-[48px] flex-[1.4] items-center justify-center rounded-2xl bg-zinc-900 px-4 text-[14px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-40"
+            className="inline-flex min-h-[42px] flex-[1.4] items-center justify-center rounded-xl bg-zinc-900 px-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-40"
           >
             {saving
               ? tx("保存中…", "Saving…")
