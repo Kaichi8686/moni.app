@@ -176,7 +176,7 @@ export default function WorkspaceOverview() {
         </div>
         {sortedPhases.length > 0 ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {visiblePhases.map((phase) => {
                 const index = sortedPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
@@ -184,21 +184,21 @@ export default function WorkspaceOverview() {
                 const locked = !complete && !current && index > currentIndex;
                 const card = (
                   <div
-                    className={`relative min-h-[108px] overflow-hidden rounded-2xl border p-3 pt-5 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
+                    className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
                       locked
                         ? "border-zinc-200 bg-zinc-50 text-zinc-400"
                         : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
                     }`}
                   >
                     <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
-                    {current ? <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-orange-100" /> : null}
-                    {locked ? <LockKeyhole className="absolute right-3 top-3 h-4 w-4" aria-hidden /> : null}
-                    <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {index + 1}</p>
-                    <p className={`mt-2 line-clamp-2 text-[13px] font-semibold leading-snug sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
+                    {current ? <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" /> : null}
+                    {locked ? <LockKeyhole className="absolute right-2 top-2.5 h-3.5 w-3.5 sm:right-3 sm:top-3 sm:h-4 sm:w-4" aria-hidden /> : null}
+                    <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
+                    <p className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
                       {phase.title}
                     </p>
                     {complete ? (
-                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
                         <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
                       </span>
                     ) : null}
