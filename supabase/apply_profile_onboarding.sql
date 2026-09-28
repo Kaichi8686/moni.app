@@ -1,8 +1,12 @@
 -- サインアップ後オンボーディング用プロフィール項目
--- age / gender / country / onboarding_completed_at
+-- birthday / gender / country / onboarding_completed_at
+-- age は後方互換のため残し、birthday から導出して保存してもよい
 
 alter table public.profiles
   add column if not exists age integer;
+
+alter table public.profiles
+  add column if not exists birthday date;
 
 alter table public.profiles
   add column if not exists gender text;
@@ -13,7 +17,8 @@ alter table public.profiles
 alter table public.profiles
   add column if not exists onboarding_completed_at timestamptz;
 
-comment on column public.profiles.age is '年齢（オンボーディング・プロフィール）';
+comment on column public.profiles.age is '年齢（birthday から導出、互換用）';
+comment on column public.profiles.birthday is '誕生日 (date, 年含む)';
 comment on column public.profiles.gender is '性別: male | female | other | prefer_not';
 comment on column public.profiles.country is '国コード ISO 3166-1 alpha-2（例: JP）';
 comment on column public.profiles.onboarding_completed_at is '初回オンボーディング完了日時';

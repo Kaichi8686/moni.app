@@ -18,6 +18,7 @@ import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { ageFromBirthday } from "@/lib/profile/birthday";
 import { countryLabel } from "@/lib/profile/countries";
 import { genderLabel } from "@/lib/profile/gender";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
@@ -138,6 +139,7 @@ type MatchMember = {
   strength: string;
   aiType?: AiMatchType;
   avatarUrl?: string | null;
+  birthday?: string | null;
   age?: number | null;
   gender?: string | null;
   country?: string | null;
@@ -339,6 +341,7 @@ function mapProfileToMatchMember(row: {
   goal: string | null;
   role: string | null;
   avatar_url?: string | null;
+  birthday?: string | null;
   age?: number | string | null;
   gender?: string | null;
   country?: string | null;
@@ -350,12 +353,16 @@ function mapProfileToMatchMember(row: {
   const skills = parseStringTagArray(row.skills);
   const traits = parseStringTagArray(row.traits);
   const strength = skills[0] || strengthFromRole(row.role);
-  const age =
+  const birthdayRaw = (row.birthday ?? "").trim().slice(0, 10);
+  const birthday = /^\d{4}-\d{2}-\d{2}$/.test(birthdayRaw) ? birthdayRaw : null;
+  const ageFromDob = ageFromBirthday(birthday);
+  const ageLegacy =
     typeof row.age === "number" && Number.isFinite(row.age)
       ? row.age
       : typeof row.age === "string" && /^\d+$/.test(row.age)
         ? Number(row.age)
         : null;
+  const age = ageFromDob ?? ageLegacy;
   const genderRaw = (row.gender ?? "").trim();
   const gender =
     genderRaw === "male" || genderRaw === "female" || genderRaw === "other" || genderRaw === "prefer_not"
@@ -368,6 +375,7 @@ function mapProfileToMatchMember(row: {
     goal: row.goal || "目標未設定",
     strength,
     avatarUrl: dbAvatar || readStoredAvatarUrl(id),
+    birthday,
     age,
     gender,
     country,
@@ -1757,6 +1765,7 @@ export default function Home() {
     let cancelled = false;
     void (async () => {
       for (const sel of [
+        "id,display_name,goal,role,avatar_url,skills,traits,birthday,age,gender,country",
         "id,display_name,goal,role,avatar_url,skills,traits,age,gender,country",
         "id,display_name,goal,role,avatar_url,skills,traits,age,country",
         "id,display_name,goal,role,avatar_url,skills,traits",
@@ -1771,6 +1780,7 @@ export default function Home() {
           goal: string | null;
           role: string | null;
           avatar_url?: string | null;
+          birthday?: string | null;
           age?: number | null;
           gender?: string | null;
           country?: string | null;
@@ -1783,6 +1793,7 @@ export default function Home() {
           goal: row.goal,
           role: row.role,
           avatar_url: row.avatar_url ?? null,
+          birthday: row.birthday ?? null,
           age: row.age ?? null,
           gender: row.gender ?? null,
           country: row.country ?? null,
@@ -2810,7 +2821,7 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,age,gender,country")
+        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,birthday,age,gender,country")
         .neq("id", session.user.id)
         .order("created_at", { ascending: false })
         .limit(12)
@@ -2854,6 +2865,7 @@ export default function Home() {
           goal: row.goal as string | null,
           role: row.role as string | null,
           avatar_url: (row.avatar_url as string | null) ?? null,
+          birthday: (row as { birthday?: string | null }).birthday ?? null,
           age: (row as { age?: number | null }).age ?? null,
           gender: (row as { gender?: string | null }).gender ?? null,
           country: (row as { country?: string | null }).country ?? null,
@@ -2892,7 +2904,7 @@ export default function Home() {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("id,display_name,goal,role,avatar_url,skills,traits,age,gender,country")
+          .select("id,display_name,goal,role,avatar_url,skills,traits,birthday,age,gender,country")
           .neq("id", session.user.id)
           .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
           .limit(30)
@@ -2939,6 +2951,7 @@ export default function Home() {
             goal: row.goal as string | null,
             role: row.role as string | null,
             avatar_url: (row.avatar_url as string | null) ?? null,
+            birthday: (row as { birthday?: string | null }).birthday ?? null,
             age: (row as { age?: number | null }).age ?? null,
             gender: (row as { gender?: string | null }).gender ?? null,
             country: (row as { country?: string | null }).country ?? null,

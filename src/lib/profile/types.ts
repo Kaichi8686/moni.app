@@ -7,7 +7,9 @@ export type ProfileView = {
   website: string | null;
   school?: string | null;
   location?: string | null;
-  /** 年齢 */
+  /** 誕生日 YYYY-MM-DD */
+  birthday?: string | null;
+  /** 年齢（birthday から導出、互換） */
   age?: number | null;
   /** male | female | other | prefer_not */
   gender?: string | null;

@@ -6,6 +6,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {
+  ageFromBirthday,
+  birthdayInputMax,
+  birthdayInputMin,
+  parseBirthday,
+} from "@/lib/profile/birthday";
 import { countryLabel, sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
@@ -13,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 export type OnboardingDraft = {
-  age: string;
+  birthday: string;
   gender: ProfileGender | "";
   country: string;
   nickname: string;
@@ -33,13 +39,6 @@ type Props = {
 const TOTAL_STEPS = 5;
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
-function parseAge(raw: string): number | null {
-  if (!/^\d{1,3}$/.test(raw)) return null;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 5 || n > 120) return null;
-  return n;
-}
-
 export function SignupOnboardingWizard({ session, initialNickname = "", onComplete }: Props) {
   const { locale, tx } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -50,7 +49,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   const [error, setError] = useState("");
   const [countryQuery, setCountryQuery] = useState("");
   const [draft, setDraft] = useState<OnboardingDraft>({
-    age: "",
+    birthday: "",
     gender: "",
     country: "",
     nickname: initialNickname,
@@ -63,12 +62,13 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     if (!supabase) return;
     void supabase
       .from("profiles")
-      .select("display_name,avatar_url,age,gender,country,skills,traits")
+      .select("display_name,avatar_url,birthday,gender,country,skills,traits")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return;
         const genderRaw = (data as { gender?: string | null }).gender;
+        const birthdayRaw = (data as { birthday?: string | null }).birthday;
         setDraft((prev) => ({
           ...prev,
           nickname:
@@ -76,9 +76,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
             ((data.display_name as string | null)?.trim() ?? "") ||
             initialNickname,
           avatarUrl: (data.avatar_url as string | null) ?? prev.avatarUrl,
-          age:
-            prev.age ||
-            (typeof data.age === "number" && Number.isFinite(data.age) ? String(data.age) : ""),
+          birthday: prev.birthday || (typeof birthdayRaw === "string" ? birthdayRaw.slice(0, 10) : ""),
           gender: prev.gender || (isProfileGender(genderRaw) ? genderRaw : ""),
           country: prev.country || ((data.country as string | null) ?? ""),
         }));
@@ -97,14 +95,14 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     );
   }, [countries, countryQuery]);
 
-  const ageValid = parseAge(draft.age) !== null;
+  const birthdayValid = parseBirthday(draft.birthday) !== null;
   const genderValid = isProfileGender(draft.gender);
   const countryValid = draft.country.length === 2;
   const nicknameValid = draft.nickname.trim().length >= 1 && draft.nickname.trim().length <= 32;
   const interestsValid = draft.skills.length === 3 && draft.traits.length === 3;
 
   function canContinue(): boolean {
-    if (step === 1) return ageValid && genderValid;
+    if (step === 1) return birthdayValid && genderValid;
     if (step === 2) return countryValid;
     if (step === 3) return nicknameValid;
     if (step === 4) return true;
@@ -141,8 +139,9 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
 
   async function persistAndFinish() {
     if (!supabase || saving) return;
-    const age = parseAge(draft.age);
-    if (age == null || !genderValid || !countryValid || !nicknameValid || !interestsValid) {
+    const birthday = parseBirthday(draft.birthday);
+    const age = birthday ? ageFromBirthday(birthday) : null;
+    if (!birthday || age == null || !genderValid || !countryValid || !nicknameValid || !interestsValid) {
       setError(tx("入力内容を確認してください", "Please check your answers"));
       return;
     }
@@ -155,6 +154,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
 
     const fullPayload: Record<string, unknown> = {
       display_name: nickname,
+      birthday,
       age,
       gender: draft.gender,
       country: draft.country,
@@ -167,6 +167,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     let { error: upErr } = await supabase.from("profiles").update(fullPayload).eq("id", session.user.id);
     if (upErr) {
       const fallbacks: Array<Record<string, unknown>> = [
+        { display_name: nickname, birthday, age, country: draft.country, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, age, country: draft.country, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits },
@@ -205,7 +206,8 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     setError("");
     if (!canContinue()) {
       if (step === 1) {
-        if (!ageValid) setError(tx("年齢は数字のみ（5〜120）で入力してください", "Enter age as a number (5–120)"));
+        if (!birthdayValid)
+          setError(tx("誕生日を正しく入力してください（年も含む）", "Enter a valid birthday including the year"));
         else setError(tx("性別を選んでください", "Please select a gender"));
       } else if (step === 2) setError(tx("国を選んでください", "Please select a country"));
       else if (step === 3) setError(tx("ニックネームを入力してください", "Please enter a nickname"));
@@ -226,7 +228,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   }
 
   const stepTitle: Record<Step, string> = {
-    1: tx("年齢と性別", "Age & gender"),
+    1: tx("誕生日と性別", "Birthday & gender"),
     2: tx("住んでいる国は？", "Which country are you in?"),
     3: tx("ニックネームを決めよう", "Choose a nickname"),
     4: tx("アイコンを選ぼう", "Pick a profile photo"),
@@ -234,12 +236,14 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
   };
 
   const stepHint: Record<Step, string> = {
-    1: tx("年齢は数字のみ。性別は選びたくないも選べます", "Age is numbers only. You can prefer not to say gender."),
+    1: tx("年・月・日を入力。性別は選びたくないも選べます", "Enter year, month, and day. You can prefer not to say gender."),
     2: tx("リストから選んでください", "Choose from the list"),
     3: tx("あとからプロフィール編集でいつでも変えられます", "You can change this later in Edit profile"),
     4: tx("写真・カメラ・ファイルから選べます。あとから変更もできます", "Use a photo, camera, or file. You can change it later"),
     5: tx("探すタブで相手があなたのプロフィールを見るときに反映されます", "These appear when others view your profile in Search"),
   };
+
+  const derivedAge = ageFromBirthday(draft.birthday);
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#f6f5f2]">
@@ -294,25 +298,23 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                 {step === 1 ? (
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="block text-[11px] font-semibold text-zinc-600" htmlFor="ob-age">
-                        {tx("年齢", "Age")}
+                      <label className="block text-[11px] font-semibold text-zinc-600" htmlFor="ob-birthday">
+                        {tx("誕生日", "Birthday")}
                       </label>
                       <input
-                        id="ob-age"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        autoComplete="bday-year"
-                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[22px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
-                        placeholder="16"
-                        value={draft.age}
-                        maxLength={3}
-                        onChange={(e) => {
-                          const next = e.target.value.replace(/\D/g, "").slice(0, 3);
-                          setDraft((d) => ({ ...d, age: next }));
-                        }}
+                        id="ob-birthday"
+                        type="date"
+                        autoComplete="bday"
+                        min={birthdayInputMin()}
+                        max={birthdayInputMax()}
+                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[15px] font-semibold tracking-tight text-zinc-900 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-900/10"
+                        value={draft.birthday}
+                        onChange={(e) => setDraft((d) => ({ ...d, birthday: e.target.value }))}
                       />
                       <p className="text-[11px] text-zinc-400">
-                        {tx("半角数字のみ。例: 16", "Digits only. e.g. 16")}
+                        {derivedAge != null
+                          ? tx(`現在 ${derivedAge}歳`, `Currently ${derivedAge} years old`)
+                          : tx("年も含めて選んでください", "Include the year")}
                       </p>
                     </div>
 

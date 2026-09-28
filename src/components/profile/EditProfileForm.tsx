@@ -6,6 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {
+  ageFromBirthday,
+  birthdayInputMax,
+  birthdayInputMin,
+  parseBirthday,
+} from "@/lib/profile/birthday";
 import { sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
@@ -24,7 +30,7 @@ export function EditProfileForm() {
     website: "",
     school: "",
     location: "",
-    age: "",
+    birthday: "",
     gender: "" as ProfileGender | "",
     country: "",
     avatarUrl: null as string | null,
@@ -49,6 +55,7 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
@@ -64,7 +71,7 @@ export function EditProfileForm() {
         }
       }
       const name = ((data?.display_name as string) || "").trim() || "ユーザー";
-      const ageVal = data?.age;
+      const birthdayRaw = typeof data?.birthday === "string" ? data.birthday.slice(0, 10) : "";
       const next = {
         displayName: name,
         username: profileUsername(name, uid),
@@ -72,12 +79,7 @@ export function EditProfileForm() {
         website: (data?.website as string | null) ?? "",
         school: (data?.school as string | null) ?? "",
         location: (data?.location as string | null) ?? "",
-        age:
-          typeof ageVal === "number" && Number.isFinite(ageVal)
-            ? String(ageVal)
-            : typeof ageVal === "string"
-              ? ageVal
-              : "",
+        birthday: birthdayRaw,
         gender: isProfileGender(data?.gender) ? data.gender : ("" as const),
         country: ((data?.country as string | null) ?? "").toUpperCase(),
         avatarUrl: (data?.avatar_url as string | null) ?? null,
@@ -123,8 +125,8 @@ export function EditProfileForm() {
     setMessage("");
     const skills = normalizeTagList(form.skills);
     const traits = normalizeTagList(form.traits);
-    const ageDigits = form.age.replace(/\D/g, "");
-    const ageNum = ageDigits ? Number(ageDigits) : null;
+    const birthday = parseBirthday(form.birthday);
+    const ageNum = birthday ? ageFromBirthday(birthday) : null;
     const payload: Record<string, string | number | string[] | null> = {
       display_name: form.displayName.trim() || "ユーザー",
       goal: form.bio.trim(),
@@ -135,7 +137,8 @@ export function EditProfileForm() {
     if (form.website.trim()) payload.website = form.website.trim();
     if (form.school.trim()) payload.school = form.school.trim();
     if (form.location.trim()) payload.location = form.location.trim();
-    if (ageNum != null && ageNum >= 5 && ageNum <= 120) payload.age = ageNum;
+    if (birthday) payload.birthday = birthday;
+    if (ageNum != null) payload.age = ageNum;
     if (isProfileGender(form.gender)) payload.gender = form.gender;
     if (form.country.trim().length === 2) payload.country = form.country.trim().toUpperCase();
 
@@ -143,6 +146,7 @@ export function EditProfileForm() {
     setSaving(false);
     if (error) {
       const withoutExtra = { ...payload };
+      delete withoutExtra.birthday;
       delete withoutExtra.age;
       delete withoutExtra.gender;
       delete withoutExtra.country;
@@ -258,17 +262,17 @@ export function EditProfileForm() {
         <div className="account-card overflow-hidden">
           <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
             <label className="shrink-0 text-[13px] font-medium sm:w-24" style={{ color: "var(--color-text-secondary)" }}>
-              {tx("年齢", "Age")}
+              {tx("誕生日", "Birthday")}
             </label>
             <input
-              inputMode="numeric"
-              pattern="[0-9]*"
+              type="date"
+              autoComplete="bday"
+              min={birthdayInputMin()}
+              max={birthdayInputMax()}
               className="flex-1 bg-transparent text-[14px] outline-none"
               style={{ color: "var(--color-text-primary)" }}
-              placeholder="16"
-              value={form.age}
-              maxLength={3}
-              onChange={(e) => setForm((f) => ({ ...f, age: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
+              value={form.birthday}
+              onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))}
             />
           </div>
         </div>
