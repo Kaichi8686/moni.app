@@ -1,450 +1,261 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
-import { IssueDetailSheet } from "@/components/issues/IssueDetailSheet";
-import { IssueListDrilldownSheet } from "@/components/issues/IssueListDrilldownSheet";
-import { IssueModal } from "@/components/issues/IssueModal";
-import { format } from "date-fns";
-import { enUS, ja } from "date-fns/locale";
-import { AlertCircle, ArrowRight, Calendar, CheckCircle2, Clock, Target, TrendingUp, Zap } from "lucide-react";
+import { useMemo, type ComponentType } from "react";
+import {
+  ArrowRight,
+  Check,
+  FileText,
+  Lightbulb,
+  ListChecks,
+  LockKeyhole,
+  MessageCircle,
+  PenTool,
+  Sparkles,
+  Vote,
+} from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { WorkspaceOverviewQuickLinks } from "@/components/projects/workspace/WorkspaceOverviewQuickLinks";
-import { ProjectStatusBadge } from "@/components/projects/StatusBadge";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import {
-  buildProjectProgressSummary,
-  HEALTH_TONE,
-  statusBarColor,
-  type IssueStatusCounts,
-  type ProgressHealth,
-} from "@/lib/workspace/progressSummary";
-import {
-  filterDueIssues,
-  filterInProgressIssues,
-} from "@/lib/workspace/issueFilters";
-import type { Issue, IssueStatus } from "@/lib/workspace/types";
+import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
+import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
-type KpiDrilldown = "in_progress" | "due" | null;
+type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
-const HEALTH_EN: Record<ProgressHealth, { label: string; detail: string }> = {
-  empty: {
-    label: "No issues",
-    detail: "Add issues to see completion rate and forecasts here.",
-  },
-  complete: {
-    label: "All complete",
-    detail: "No open issues. You can start the next phase or add new ones.",
-  },
-  at_risk: {
-    label: "At risk",
-    detail: "At the current pace, you’ll finish after the target date. Consider reviewing priorities.",
-  },
-  behind: {
-    label: "Behind",
-    detail: "You’re past the target date, or recent pace is too slow to finish on time.",
-  },
-  ahead: {
-    label: "Ahead",
-    detail: "Recent completion pace looks strong. You’re on track to hit the target.",
-  },
-  on_track: {
-    label: "On track",
-    detail: "If you keep this pace, you should stay on schedule.",
-  },
-};
-
-function statusLabel(status: IssueStatus, tx: (ja: string, en: string) => string): string {
-  const labels: Record<IssueStatus, [string, string]> = {
-    backlog: ["あとで", "Later"],
-    todo: ["これから", "To do"],
-    in_progress: ["いまやってる", "In progress"],
-    in_review: ["確認中", "In review"],
-    done: ["完了", "Done"],
-    cancelled: ["やめた", "Cancelled"],
-  };
-  const [jaLabel, enLabel] = labels[status];
-  return tx(jaLabel, enLabel);
-}
-
-function IssueStatusStack({ counts, total }: { counts: IssueStatusCounts; total: number }) {
-  const { tx } = useI18n();
-  if (total === 0) {
-    return <p className="text-[12px] text-[#6B7280]">{tx("課題がまだありません", "No issues yet")}</p>;
-  }
-  const segments = (
-    [
-      { status: "in_progress" as const, n: counts.in_progress },
-      { status: "in_review" as const, n: counts.in_review },
-      { status: "todo" as const, n: counts.todo },
-      { status: "backlog" as const, n: counts.backlog },
-      { status: "done" as const, n: counts.done },
-    ] as const
-  ).filter((s) => s.n > 0);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-[#E5E7EB]">
-        {segments.map((s) => (
-          <div
-            key={s.status}
-            className={`${statusBarColor(s.status)} transition-all duration-300`}
-            style={{ width: `${(s.n / total) * 100}%` }}
-            title={`${statusLabel(s.status, tx)} ${tx(`${s.n}件`, `${s.n}`)}`}
-          />
-        ))}
-      </div>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
-        {segments.map((s) => (
-          <li key={s.status} className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${statusBarColor(s.status)}`} aria-hidden />
-            <span>
-              {statusLabel(s.status, tx)} <span className="font-medium text-[#374151]">{s.n}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function KpiCard({
-  icon,
+function ActionLink({
+  href,
+  icon: IconComponent,
   label,
-  value,
-  hint,
-  tone = "default",
-  onClick,
+  detail,
+  filled = false,
 }: {
-  icon: ReactNode;
+  href: string;
+  icon: Icon;
   label: string;
-  value: string;
-  hint?: string;
-  tone?: "default" | "warn" | "ok";
-  onClick?: () => void;
+  detail?: string;
+  filled?: boolean;
 }) {
-  const { tx } = useI18n();
-  const toneClass =
-    tone === "warn"
-      ? "border-amber-200 bg-amber-50/50"
-      : tone === "ok"
-        ? "border-emerald-200 bg-emerald-50/40"
-        : "border-[#E5E7EB] bg-[#FAFAFA]";
-  const className = `w-full rounded-md border px-3 py-2.5 text-left transition ${toneClass} ${
-    onClick ? "cursor-pointer hover:border-violet-300 hover:shadow-sm" : ""
-  }`;
-  const body = (
-    <>
-      <div className="flex items-center gap-1.5 text-[#6B7280]">
-        {icon}
-        <span className="text-xs font-semibold tracking-wide">{label}</span>
+  return (
+    <Link
+      href={href}
+      className={`flex min-h-[104px] flex-col justify-between rounded-2xl border p-4 transition active:scale-[0.99] ${
+        filled
+          ? "border-violet-600 bg-violet-600 text-white shadow-sm hover:bg-violet-700"
+          : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-300 hover:bg-zinc-50"
+      }`}
+    >
+      <IconComponent className="h-6 w-6" aria-hidden />
+      <div className="mt-4">
+        <p className="text-[15px] font-semibold">{label}</p>
+        {detail ? <p className={`mt-0.5 text-[12px] ${filled ? "text-violet-100" : "text-zinc-500"}`}>{detail}</p> : null}
       </div>
-      <p className="mt-1 text-base font-semibold tabular-nums text-[#1A1A1A]">{value}</p>
-      {hint ? <p className="mt-0.5 text-sm leading-snug text-[#6B7280]">{hint}</p> : null}
-      {onClick ? <p className="mt-1 text-xs font-medium text-violet-600">{tx("タップで一覧 →", "Tap for list →")}</p> : null}
-    </>
+    </Link>
   );
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        {body}
-      </button>
-    );
-  }
-  return <div className={className}>{body}</div>;
+}
+
+function CompactLink({ href, icon: IconComponent, label }: { href: string; icon: Icon; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 text-center transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] sm:min-h-[104px]"
+    >
+      <IconComponent className="h-6 w-6 text-zinc-700 sm:h-7 sm:w-7" aria-hidden />
+      <span className="text-[13px] font-semibold text-zinc-800 sm:text-sm">{label}</span>
+    </Link>
+  );
 }
 
 export default function WorkspaceOverview() {
-  const { tx, locale } = useI18n();
-  const {
-    project,
-    projectId,
-    issues,
-    phases,
-    schedules,
-    loading,
-    canEdit,
-    updateIssue,
-    updateIssueStatus,
-    updateIssueWorkflow,
-    completeIssue,
-  } = useProjectWorkspace();
-  const [kpiDrilldown, setKpiDrilldown] = useState<KpiDrilldown>(null);
-  const [detailIssue, setDetailIssue] = useState<Issue | null>(null);
-  const [editIssue, setEditIssue] = useState<Issue | null>(null);
+  const { tx } = useI18n();
+  const { project, projectMeta, projectId, issues, phases, loading } = useProjectWorkspace();
 
-  const summary = useMemo(() => {
-    if (!project) return null;
-    return buildProjectProgressSummary(project, issues, phases, schedules);
-  }, [project, issues, phases, schedules]);
+  const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
+  const upcomingIssues = useMemo(
+    () =>
+      sortIssuesByDueDate(
+        issues.filter((issue) => issue.status !== "cancelled" && !isIssueSubmitted(issue)),
+      ).slice(0, 3),
+    [issues],
+  );
 
-  const drilldownIssues = useMemo(() => {
-    if (kpiDrilldown === "in_progress") return filterInProgressIssues(issues);
-    if (kpiDrilldown === "due") return filterDueIssues(issues);
-    return [];
-  }, [issues, kpiDrilldown]);
+  if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
+  if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
-  const detailIssueLive = detailIssue ? issues.find((i) => i.id === detailIssue.id) ?? detailIssue : null;
-  const editIssueLive = editIssue ? issues.find((i) => i.id === editIssue.id) ?? editIssue : null;
-  const detailPhase = detailIssueLive?.phaseId
-    ? phases.find((p) => p.id === detailIssueLive.phaseId)
-    : undefined;
-  const detailPhaseTitle = detailPhase?.title;
-  const detailPhaseGoal = detailPhase?.description;
-
-  if (loading) return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
-  if (!project || !summary) return <p className="text-sm text-[#6B7280]">{tx("プロジェクトがありません。", "No project found.")}</p>;
-
-  const dateLocale = locale === "en" ? enUS : ja;
-  const est = summary.estimatedCompletion ? new Date(summary.estimatedCompletion) : null;
-  const target = project.targetDate ? new Date(project.targetDate) : null;
-  const estLate = Boolean(est && target && est > target);
-  const healthLabel = locale === "en" ? HEALTH_EN[summary.health].label : summary.healthLabel;
-  const healthDetail = locale === "en" ? HEALTH_EN[summary.health].detail : summary.healthDetail;
-
-  let targetValue = tx("未設定", "Not set");
-  if (summary.daysToTarget !== null) {
-    if (locale === "en") {
-      if (summary.daysToTarget === 0) targetValue = "Target is today";
-      else if (summary.daysToTarget > 0) targetValue = `${summary.daysToTarget} days left`;
-      else targetValue = `${Math.abs(summary.daysToTarget)} days overdue`;
-    } else {
-      targetValue = summary.targetDateLabel ?? "未設定";
-    }
-  }
+  const completedSteps = sortedPhases.filter((phase) => phase.status === "completed").length;
+  const inProgressIndex = sortedPhases.findIndex((phase) => phase.status === "in_progress");
+  const firstOpenIndex = sortedPhases.findIndex((phase) => phase.status !== "completed");
+  const currentIndex = Math.max(0, inProgressIndex >= 0 ? inProgressIndex : firstOpenIndex);
+  const progress =
+    sortedPhases.length > 0
+      ? Math.round((completedSteps / sortedPhases.length) * 100)
+      : issues.length > 0
+        ? Math.round((issues.filter((issue) => issue.status === "done").length / issues.length) * 100)
+        : 0;
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-lg font-semibold text-[#1A1A1A]">{tx("概要", "Overview")}</h1>
-        <p className="mt-1 text-[13px] text-[#6B7280]">
-          {tx("進捗の全体像と、各画面へのショートカットです。", "Progress at a glance, plus shortcuts to each screen.")}
-        </p>
-      </header>
-
-      <WorkspaceOverviewQuickLinks projectId={projectId} />
-
-      <section className="overflow-hidden rounded-md border border-[#E5E7EB] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F7F8F8] px-4 py-3">
-          <h2 className="text-sm font-semibold text-[#1A1A1A]">{tx("進捗サマリー", "Progress summary")}</h2>
-          <div className="flex items-center gap-2">
-            <ProjectStatusBadge status={project.status} />
-            <Link
-              href={`/projects/${projectId}/issues`}
-              className="inline-flex items-center gap-1 text-[12px] font-medium text-[#5E6AD2] hover:underline"
-            >
-              {tx("課題一覧", "All issues")}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+    <div className="mx-auto max-w-3xl space-y-7 pb-8">
+      <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-start gap-4">
+          {projectMeta?.thumbnail_url?.trim() ? (
+            // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+            <img
+              src={projectMeta.thumbnail_url.trim()}
+              alt=""
+              className="h-16 w-16 shrink-0 rounded-2xl border border-zinc-200 object-cover sm:h-20 sm:w-20"
+            />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-3xl sm:h-20 sm:w-20">
+              {project.icon ?? "📁"}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{project.name}</h2>
+                <p className="mt-1 text-[12px] text-zinc-500">
+                  {tx(`${project.members.length}人のメンバー`, `${project.members.length} members`)}
+                </p>
+                <p className="mt-1 text-[13px] font-medium text-zinc-700">
+                  {sortedPhases.length > 0
+                    ? tx(
+                        `ステップ ${completedSteps}/${sortedPhases.length} 完了`,
+                        `${completedSteps}/${sortedPhases.length} steps complete`,
+                      )
+                    : tx("ロードマップ未設定", "Roadmap not set")}
+                </p>
+              </div>
+              <p className="shrink-0 text-2xl font-semibold tabular-nums tracking-tight text-orange-500 sm:text-3xl">
+                {progress}%
+              </p>
+            </div>
           </div>
         </div>
-
-        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-end gap-4">
-              <div>
-                <p className="text-[11px] font-medium text-[#6B7280]">{tx("課題の完了率", "Issue completion")}</p>
-                <p className="mt-0.5 text-4xl font-semibold tabular-nums tracking-tight text-[#1A1A1A]">
-                  {summary.donePct}
-                  <span className="text-xl text-[#6B7280]">%</span>
-                </p>
-                <p className="mt-1 text-[12px] text-[#6B7280]">
-                  <span className="font-medium text-[#374151]">{summary.doneCount}</span> / {summary.totalCount}{" "}
-                  {tx("件完了", "done")}
-                  {summary.openCount > 0 ? (
-                    <span className="text-[#9CA3AF]">
-                      {" "}
-                      · {tx(`残り ${summary.openCount} 件`, `${summary.openCount} left`)}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-              <ProgressBar value={summary.donePct} className="min-w-[140px] max-w-xs flex-1" />
-            </div>
-
-            <IssueStatusStack counts={summary.counts} total={summary.totalCount} />
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <KpiCard
-                icon={<Target className="h-3.5 w-3.5" />}
-                label={tx("完成予定", "Target date")}
-                value={targetValue}
-                hint={
-                  target
-                    ? format(target, locale === "en" ? "MMM d, yyyy" : "yyyy年M月d日", { locale: dateLocale })
-                    : tx("上の「完成したい日」から設定できます", "Set a target date from “Want to finish by” above")
-                }
-                tone={summary.daysToTarget !== null && summary.daysToTarget < 0 ? "warn" : "default"}
-              />
-              <KpiCard
-                icon={<TrendingUp className="h-3.5 w-3.5" />}
-                label={tx("完了ペース", "Pace")}
-                value={tx(`${summary.velocityPerWeek} 件/週`, `${summary.velocityPerWeek} / week`)}
-                hint={tx(
-                  `直近14日で ${summary.completedLast14Days} 件完了`,
-                  `${summary.completedLast14Days} done in the last 14 days`,
-                )}
-                tone={summary.velocityPerWeek >= 2 ? "ok" : "default"}
-              />
-              <KpiCard
-                icon={<Zap className="h-3.5 w-3.5" />}
-                label={tx("進行中", "In progress")}
-                value={tx(`${summary.inProgressCount} 件`, `${summary.inProgressCount}`)}
-                hint={
-                  summary.urgentOpenCount > 0
-                    ? tx(
-                        `高優先度の未完了 ${summary.urgentOpenCount} 件`,
-                        `${summary.urgentOpenCount} high-priority open`,
-                      )
-                    : tx("進行中 + レビュー中", "In progress + in review")
-                }
-                onClick={summary.inProgressCount > 0 ? () => setKpiDrilldown("in_progress") : undefined}
-              />
-              <KpiCard
-                icon={<AlertCircle className="h-3.5 w-3.5" />}
-                label={tx("期限", "Due")}
-                value={
-                  summary.overdueCount > 0
-                    ? tx(`超過 ${summary.overdueCount} 件`, `${summary.overdueCount} overdue`)
-                    : summary.dueSoonCount > 0
-                      ? tx(`近日 ${summary.dueSoonCount} 件`, `${summary.dueSoonCount} due soon`)
-                      : tx("問題なし", "On time")
-                }
-                hint={
-                  summary.overdueCount > 0
-                    ? tx("期限を過ぎた課題があります", "Some issues are past due")
-                    : tx("3日以内の期限", "Due within 3 days")
-                }
-                tone={summary.overdueCount > 0 ? "warn" : summary.dueSoonCount > 0 ? "default" : "ok"}
-                onClick={
-                  summary.overdueCount + summary.dueSoonCount > 0 ? () => setKpiDrilldown("due") : undefined
-                }
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className={`rounded-md border px-3 py-3 ${HEALTH_TONE[summary.health]}`}>
-              <div className="flex items-center gap-2">
-                {summary.health === "complete" || summary.health === "ahead" || summary.health === "on_track" ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 opacity-80" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 shrink-0 opacity-80" />
-                )}
-                <p className="text-[13px] font-semibold">{healthLabel}</p>
-              </div>
-              <p className="mt-2 text-[11px] leading-relaxed opacity-90">{healthDetail}</p>
-            </div>
-
-            <div className="rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3 py-3">
-              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                <Clock className="h-3.5 w-3.5" />
-                {tx("完了予測", "Forecast")}
-              </p>
-              <p className="mt-1.5 text-lg font-semibold tabular-nums text-[#1A1A1A]">
-                {est
-                  ? format(est, locale === "en" ? "EEE, MMM d" : "M月d日（E）", { locale: dateLocale })
-                  : summary.openCount === 0
-                    ? "—"
-                    : tx("算出中", "Calculating")}
-              </p>
-              <p className={`mt-1 text-[11px] ${estLate ? "font-medium text-red-600" : "text-[#6B7280]"}`}>
-                {summary.openCount === 0
-                  ? tx("未完了の課題はありません", "No open issues")
-                  : estLate
-                    ? tx("目標日より遅い見込み", "Likely later than the target date")
-                    : tx("直近2週間の完了ペースから推定", "Estimated from the last 2 weeks’ pace")}
-              </p>
-            </div>
-
-            {summary.upcomingSchedule ? (
-              <div className="rounded-md border border-[#E5E7EB] px-3 py-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {tx("次の予定", "Next event")}
-                </p>
-                <p className="mt-1 truncate text-[13px] font-medium text-[#1A1A1A]">{summary.upcomingSchedule.title}</p>
-                <p className="mt-0.5 text-[11px] text-[#6B7280]">
-                  {format(new Date(summary.upcomingSchedule.startsAt), locale === "en" ? "MMM d, HH:mm" : "M月d日 HH:mm", {
-                    locale: dateLocale,
-                  })}
-                </p>
-              </div>
-            ) : null}
-          </div>
+        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-zinc-100">
+          <div
+            className="h-full rounded-full bg-orange-400 transition-[width] duration-500"
+            style={{ width: `${progress}%` }}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          />
         </div>
       </section>
 
-      <IssueListDrilldownSheet
-        open={kpiDrilldown !== null}
-        title={
-          kpiDrilldown === "in_progress"
-            ? tx("進行中の課題", "Issues in progress")
-            : tx("期限が近い・超過の課題", "Due soon or overdue")
-        }
-        description={
-          kpiDrilldown === "in_progress"
-            ? tx("いま進めている課題の一覧です。", "Issues currently in progress or review.")
-            : tx("期限超過と3日以内の課題です。", "Overdue issues and those due within 3 days.")
-        }
-        issues={drilldownIssues}
-        members={project.members}
-        onClose={() => setKpiDrilldown(null)}
-        onOpenIssue={(issue) => {
-          setKpiDrilldown(null);
-          setDetailIssue(issue);
-        }}
-      />
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
+          <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
+            {tx("すべて見る", "View all")} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </div>
+        {sortedPhases.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {sortedPhases.map((phase, index) => {
+              const complete = phase.status === "completed";
+              const current = phase.status === "in_progress" || (!complete && index === currentIndex);
+              const locked = !complete && !current && index > currentIndex;
+              const card = (
+                <div
+                  className={`relative min-h-[108px] overflow-hidden rounded-2xl border p-3 pt-5 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
+                    locked
+                      ? "border-zinc-200 bg-zinc-50 text-zinc-400"
+                      : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
+                  }`}
+                >
+                  <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
+                  {current ? <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-orange-100" /> : null}
+                  {locked ? <LockKeyhole className="absolute right-3 top-3 h-4 w-4" aria-hidden /> : null}
+                  <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {index + 1}</p>
+                  <p className={`mt-2 line-clamp-2 text-[13px] font-semibold leading-snug sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
+                    {phase.title}
+                  </p>
+                  {complete ? (
+                    <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
+                      <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
+                    </span>
+                  ) : null}
+                </div>
+              );
+              return locked ? (
+                <div key={phase.id} aria-disabled="true">{card}</div>
+              ) : (
+                <Link key={phase.id} href={`/projects/${projectId}/roadmap`}>{card}</Link>
+              );
+            })}
+          </div>
+        ) : (
+          <Link href={`/projects/${projectId}/roadmap`} className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600">
+            {tx("ロードマップを作成する", "Create roadmap")}
+          </Link>
+        )}
+      </section>
 
-      <IssueDetailSheet
-        issue={detailIssueLive}
-        open={Boolean(detailIssueLive)}
-        phaseTitle={detailPhaseTitle}
-        phaseGoal={detailPhaseGoal}
-        members={project.members}
-        canEdit={canEdit}
-        onClose={() => setDetailIssue(null)}
-        onEdit={
-          canEdit && detailIssueLive
-            ? () => {
-                setEditIssue(detailIssueLive);
-                setDetailIssue(null);
-              }
-            : undefined
-        }
-        onSaveWorkflow={async (id, workflow) => updateIssueWorkflow(id, workflow)}
-        onMarkIssueDone={async (id, answer) => completeIssue(id, answer)}
-        onToggleDone={async (issue) => {
-          await updateIssueStatus(issue.id, issue.status === "done" ? "todo" : "done");
-        }}
-        onSaveMemo={async (id, memo) => {
-          const issue = issues.find((i) => i.id === id);
-          if (!issue) return;
-          const phase = issue.phaseId ? phases.find((p) => p.id === issue.phaseId) : undefined;
-          const { defaultWorkflowIfMissing } = await import("@/lib/workspace/issueWorkflow");
-          const base = defaultWorkflowIfMissing(issue, phase?.title, phase?.description);
-          await updateIssueWorkflow(id, { ...base, completionAnswer: memo.trim() });
-        }}
-      />
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("今やるべき課題", "What to do now")}</h2>
+          <Link href={`/projects/${projectId}/issues`} className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
+            {tx("課題一覧", "All issues")}
+          </Link>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+          {upcomingIssues.length > 0 ? (
+            <ul className="divide-y divide-zinc-100">
+              {upcomingIssues.map((issue) => {
+                const assignee = project.members.find((member) => member.id === issue.assigneeId);
+                return (
+                  <li key={issue.id}>
+                    <Link
+                      href={`/projects/${projectId}/issues?task=${issue.id}`}
+                      className="flex min-h-[58px] items-center gap-3 px-3.5 py-2.5 hover:bg-zinc-50 sm:px-4"
+                    >
+                      <span className="h-6 w-6 shrink-0 rounded-full border-2 border-zinc-300" aria-hidden />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-zinc-800 sm:text-sm">{issue.title}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                          {[
+                            issue.beginAt ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`) : "",
+                            issue.dueDate ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`) : "",
+                          ].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <span className="max-w-[30%] shrink-0 truncate text-[11px] text-zinc-500 sm:text-xs">
+                        {assignee?.name ?? tx("未担当", "Unassigned")}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 text-center text-[13px] text-zinc-500">{tx("未完了の課題はありません", "No open issues")}</p>
+          )}
+        </div>
+      </section>
 
-      <IssueModal
-        issue={editIssueLive}
-        open={Boolean(editIssueLive)}
-        onClose={() => setEditIssue(null)}
-        members={project.members}
-        canEdit={canEdit}
-        onSave={async (id, patch) => {
-          await updateIssue(id, {
-            title: patch.title,
-            description: patch.description,
-            priority: patch.priority,
-            status: patch.status,
-            assigneeId: patch.assigneeId,
-            dueDate: patch.dueDate,
-          });
-        }}
-      />
+      <section>
+        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <ActionLink href={`/projects/${projectId}/coach`} icon={Sparkles} label={tx("相談AI", "Ask AI")} detail={tx("次の一手を相談", "Plan your next move")} filled />
+          <ActionLink href={`/projects/${projectId}/issues`} icon={ListChecks} label={tx("課題", "Issues")} detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
+        <div className="grid grid-cols-3 gap-3">
+          <CompactLink href={`/projects/${projectId}/business-idea`} icon={Lightbulb} label={tx("アイデア", "Ideas")} />
+          <CompactLink href={`/projects/${projectId}/ideas`} icon={Vote} label={tx("投票", "Voting")} />
+          <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
+          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("チャット", "Chat")} />
+        </div>
+      </section>
     </div>
   );
 }

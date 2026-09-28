@@ -1,5 +1,6 @@
 import type { Issue, IssueStatus, Member, Phase, Priority, Project, ProjectStatus } from "@/lib/workspace/types";
 import { parseWorkflowFromDescription, workflowFromJson } from "@/lib/workspace/issueWorkflow";
+import { beginAtFromLabels, readIssueWork } from "@/lib/workspace/issueWork";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 
 export type PhaseRowDb = {
@@ -26,8 +27,13 @@ export type IssueRowDb = {
   priority: string;
   assignee_id: string | null;
   due_date: string | null;
+  begin_at?: string | null;
   labels: string[] | null;
   workflow_json?: unknown | null;
+  genre?: string | null;
+  workspace_text?: string | null;
+  attachment_urls?: string[] | null;
+  submitted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -59,6 +65,7 @@ export function buildMembers(
 export function mapIssueRow(row: IssueRowDb): Issue {
   const workflow =
     workflowFromJson(row.workflow_json) ?? parseWorkflowFromDescription(row.description ?? undefined) ?? undefined;
+  const work = readIssueWork(row);
   return {
     id: row.id,
     title: row.title,
@@ -68,10 +75,16 @@ export function mapIssueRow(row: IssueRowDb): Issue {
     projectId: row.project_id,
     phaseId: row.phase_id ?? undefined,
     dueDate: row.due_date ?? undefined,
+    beginAt: row.begin_at ?? beginAtFromLabels(row.labels) ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     description: row.description ?? undefined,
     labels: row.labels ?? [],
+    genre: work.genre,
+    workspaceText: work.workspaceText,
+    attachments: work.attachments,
+    submittedAt: work.submittedAt ?? undefined,
+    legacyWorkflow: work.legacyWorkflow,
     workflow,
     completionAnswer: workflow?.completionAnswer?.trim() || undefined,
   };

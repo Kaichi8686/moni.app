@@ -44,26 +44,15 @@ export async function GET(req: NextRequest) {
     );
 
     const ids = (profiles ?? []).map((p) => p.id as string);
-    const [projectRows, postRows] = await Promise.all([
-      ids.length
-        ? admin.from("projects").select("owner_id").in("owner_id", ids)
-        : Promise.resolve({ data: [] as Array<{ owner_id: string }> }),
-      ids.length
-        ? admin.from("posts").select("author_id").in("author_id", ids)
-        : Promise.resolve({ data: [] as Array<{ author_id: string }> }),
-    ]);
+    const projectRows = ids.length
+      ? await admin.from("projects").select("owner_id").in("owner_id", ids)
+      : { data: [] as Array<{ owner_id: string }> };
 
     const projectCountByUser = new Map<string, number>();
     for (const row of projectRows.data ?? []) {
       const id = row.owner_id as string;
       projectCountByUser.set(id, (projectCountByUser.get(id) ?? 0) + 1);
     }
-    const postCountByUser = new Map<string, number>();
-    for (const row of postRows.data ?? []) {
-      const id = row.author_id as string;
-      postCountByUser.set(id, (postCountByUser.get(id) ?? 0) + 1);
-    }
-
     const users: AdminUserRow[] = (profiles ?? []).map((p) => {
       const id = p.id as string;
       const a = authById.get(id);
@@ -76,7 +65,6 @@ export async function GET(req: NextRequest) {
         createdAt: p.created_at as string,
         lastSignInAt: a?.lastSignInAt ?? null,
         projectCount: projectCountByUser.get(id) ?? 0,
-        postCount: postCountByUser.get(id) ?? 0,
       };
     });
 

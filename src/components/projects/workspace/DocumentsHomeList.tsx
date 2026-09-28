@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { LayoutGrid, Menu, MoreVertical, Search, Trash2 } from "lucide-react";
+import { useCallback, useMemo, useState, type ComponentType } from "react";
+import { LayoutGrid, Menu, MoreVertical, Plus, Search, Trash2 } from "lucide-react";
 import type { ProjectDocumentRow } from "@/lib/projects/documents";
 
 function DocIcon() {
@@ -13,14 +13,14 @@ function DocIcon() {
   );
 }
 
-function GoogleFab({ disabled, creating, onClick }: { disabled?: boolean; creating?: boolean; onClick: () => void }) {
+function GoogleFab({ disabled, creating, onClick, label }: { disabled?: boolean; creating?: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       disabled={disabled || creating}
       onClick={onClick}
       className="fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.22)] disabled:opacity-50 md:bottom-8"
-      aria-label="新しいドキュメント"
+      aria-label={label}
     >
       <span className="text-[28px] font-light leading-none" aria-hidden>
         <span className="bg-gradient-to-br from-[#ea4335] via-[#fbbc04] to-[#34a853] bg-clip-text text-transparent">+</span>
@@ -34,7 +34,7 @@ function formatDocDate(iso: string): string {
 }
 
 type Props = {
-  documents: ProjectDocumentRow[];
+  documents: Array<Pick<ProjectDocumentRow, "id" | "title" | "updated_at">>;
   canEdit: boolean;
   docCreating: boolean;
   userInitial?: string;
@@ -43,6 +43,15 @@ type Props = {
   onOpen: (id: string) => void;
   onCreate: () => void;
   onDelete?: (id: string) => void;
+  heading?: string;
+  searchPlaceholder?: string;
+  emptyLabel?: string;
+  untitledLabel?: string;
+  noun?: string;
+  fabLabel?: string;
+  icon?: ComponentType;
+  /** library: 新規作成を見出し横に出し、行の右端のゴミ箱で削除する */
+  variant?: "docs" | "library";
 };
 
 export function DocumentsHomeList({
@@ -55,6 +64,14 @@ export function DocumentsHomeList({
   onOpen,
   onCreate,
   onDelete,
+  heading = "ドキュメント",
+  searchPlaceholder = "ドキュメントを検索",
+  emptyLabel = "ドキュメントがありません",
+  untitledLabel = "無題のドキュメント",
+  noun = "ドキュメント",
+  fabLabel = "新しいドキュメント",
+  icon: Icon = DocIcon,
+  variant = "docs",
 }: Props) {
   const [query, setQuery] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -83,11 +100,31 @@ export function DocumentsHomeList({
   }, [onDelete, selectedDocId]);
 
   return (
-    <div className="relative -mx-4 -mt-4 flex min-h-[min(72dvh,720px)] flex-col bg-white sm:-mx-0 sm:mt-0">
-      <div className="sticky top-0 z-20 border-b border-[#e8eaed] bg-white px-3 pb-2 pt-1 sm:px-4">
-        <div className="mb-2 flex items-center justify-between gap-3 px-1">
-          <h2 className="text-[20px] font-normal text-[#202124]">ドキュメント</h2>
-          {canEdit && onDelete ? (
+    <div
+      className={
+        variant === "library"
+          ? "relative mt-6 flex min-h-[min(72dvh,720px)] flex-col bg-white"
+          : "relative -mx-4 -mt-4 flex min-h-[min(72dvh,720px)] flex-col bg-white sm:-mx-0 sm:mt-0"
+      }
+    >
+      <div
+        className={`sticky top-0 z-20 bg-white ${
+          variant === "library" ? "px-1 pb-2 pt-2" : "border-b border-[#e8eaed] px-3 pb-2 pt-1 sm:px-4"
+        }`}
+      >
+        <div className={`flex items-center justify-between gap-3 px-1 ${variant === "library" ? "mb-5" : "mb-2"}`}>
+          <h2 className="text-[20px] font-normal text-[#202124]">{heading}</h2>
+          {variant === "library" && canEdit ? (
+            <button
+              type="button"
+              disabled={docCreating}
+              onClick={onCreate}
+              aria-label="新規作成"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1a73e8] shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition hover:bg-[#f8f9fa] disabled:opacity-50"
+            >
+              <Plus className="h-6 w-6" aria-hidden />
+            </button>
+          ) : canEdit && onDelete ? (
             <button
               type="button"
               onClick={requestDelete}
@@ -105,14 +142,14 @@ export function DocumentsHomeList({
           </p>
         ) : null}
 
-        <div className="flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5">
-          <Menu className="h-5 w-5 shrink-0 text-[#5f6368]" aria-hidden />
+        <div className={`flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5 ${variant === "library" ? "mt-1" : ""}`}>
+          {variant === "docs" ? <Menu className="h-5 w-5 shrink-0 text-[#5f6368]" aria-hidden /> : null}
           <Search className="h-4 w-4 shrink-0 text-[#5f6368]" aria-hidden />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ドキュメントを検索"
+            placeholder={searchPlaceholder}
             className="min-w-0 flex-1 bg-transparent text-[15px] text-[#202124] outline-none placeholder:text-[#5f6368]"
             aria-label="ドキュメントを検索"
           />
@@ -121,20 +158,15 @@ export function DocumentsHomeList({
           </span>
         </div>
 
-        <div className="mt-3 flex items-center justify-between px-1">
-          <button type="button" className="flex items-center gap-1 text-[14px] text-[#202124]">
-            <span>最近更新</span>
-            <span className="text-[#5f6368]" aria-hidden>
-              ▾
-            </span>
-          </button>
-          <button type="button" className="rounded-full p-2 text-[#5f6368] hover:bg-[#f1f3f4]" aria-label="表示形式">
-            <LayoutGrid className="h-5 w-5" />
-          </button>
-        </div>
+        {variant === "docs" ? (
+          <div className="mt-3 flex items-center justify-between px-1">
+            <p className="text-[14px] text-[#202124]">最近更新</p>
+            <LayoutGrid className="h-5 w-5 text-[#5f6368]" aria-hidden />
+          </div>
+        ) : null}
       </div>
 
-      {selectedDocId ? (
+      {variant === "library" ? null : selectedDocId ? (
         <p className="border-b border-[#e8f0fe] bg-[#e8f0fe] px-4 py-2 text-[13px] text-[#174ea6]">
           選択中 — 右上の「削除」で確認画面が開きます
         </p>
@@ -144,10 +176,10 @@ export function DocumentsHomeList({
         </p>
       )}
 
-      <ul className="min-h-0 flex-1 divide-y divide-[#e8eaed] overflow-y-auto pb-24">
+      <ul className={`min-h-0 flex-1 overflow-y-auto pb-24 ${variant === "library" ? "mt-6 space-y-1" : "divide-y divide-[#e8eaed]"}`}>
         {filtered.length === 0 ? (
           <li className="px-4 py-16 text-center text-[14px] text-[#5f6368]">
-            {query.trim() ? "該当するドキュメントがありません" : "ドキュメントがありません"}
+            {query.trim() ? `該当する${noun}がありません` : emptyLabel}
           </li>
         ) : (
           filtered.map((d) => {
@@ -156,34 +188,47 @@ export function DocumentsHomeList({
               <li key={d.id} className="relative flex items-center gap-1 pr-2">
                 <button
                   type="button"
-                  onClick={() => onSelectDoc(selected ? null : d.id)}
+                  onClick={() => (variant === "library" ? onOpen(d.id) : onSelectDoc(selected ? null : d.id))}
                   className={`flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition sm:px-4 ${
-                    selected ? "bg-[#e8f0fe]" : "hover:bg-[#f8f9fa] active:bg-[#f1f3f4]"
+                    selected && variant === "docs" ? "bg-[#e8f0fe]" : "hover:bg-[#f8f9fa] active:bg-[#f1f3f4]"
                   }`}
                 >
-                  <DocIcon />
+                  <Icon />
                   <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-[15px] ${selected ? "font-medium text-[#174ea6]" : "font-normal text-[#202124]"}`}>
-                      {d.title?.trim() || "無題のドキュメント"}
+                    <span className={`block truncate text-[15px] ${selected && variant === "docs" ? "font-medium text-[#174ea6]" : "font-normal text-[#202124]"}`}>
+                      {d.title?.trim() || untitledLabel}
                     </span>
                     <span className="mt-0.5 block text-[13px] text-[#5f6368]">{formatDocDate(d.updated_at)}</span>
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onOpen(d.id)}
-                  className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe]"
-                >
-                  開く
-                </button>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full p-2 text-[#5f6368] hover:bg-[#f1f3f4]"
-                  aria-label="その他"
-                  onClick={() => setMenuId(menuId === d.id ? null : d.id)}
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </button>
+                {variant === "docs" ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen(d.id)}
+                    className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe]"
+                  >
+                    開く
+                  </button>
+                ) : null}
+                {variant === "library" && canEdit && onDelete ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-full p-2 text-[#d93025] hover:bg-[#fce8e6]"
+                    aria-label="削除"
+                    onClick={() => setConfirmDeleteId(d.id)}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-full p-2 text-[#5f6368] hover:bg-[#f1f3f4]"
+                    aria-label="その他"
+                    onClick={() => setMenuId(menuId === d.id ? null : d.id)}
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                )}
                 {menuId === d.id ? (
                   <>
                     <button
@@ -224,7 +269,7 @@ export function DocumentsHomeList({
         )}
       </ul>
 
-      {canEdit ? <GoogleFab disabled={!canEdit} creating={docCreating} onClick={onCreate} /> : null}
+      {canEdit && variant === "docs" ? <GoogleFab disabled={!canEdit} creating={docCreating} onClick={onCreate} label={fabLabel} /> : null}
 
       {confirmDeleteId && confirmTarget ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
@@ -235,10 +280,10 @@ export function DocumentsHomeList({
             className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
           >
             <h3 id="doc-delete-title" className="text-base font-semibold text-[#202124]">
-              ドキュメントを削除しますか？
+              {noun}を削除しますか？
             </h3>
             <p className="mt-2 text-sm text-[#5f6368]">
-              「{confirmTarget.title?.trim() || "無題のドキュメント"}」を削除します。この操作は取り消せません。
+              「{confirmTarget.title?.trim() || untitledLabel}」を削除します。この操作は取り消せません。
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button

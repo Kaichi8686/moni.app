@@ -72,9 +72,6 @@ export default function PortfolioPage() {
           <p className="mt-2 text-sm text-gray-700">{data.profile.bio || "—"}</p>
           <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600">
             <span>
-              {tx("投稿", "Posts")} {data.postCount}
-            </span>
-            <span>
               {tx("連続", "Streak")} {data.activityStreak}
               {locale === "en" ? "d" : "日"}
             </span>

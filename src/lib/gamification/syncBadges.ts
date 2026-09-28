@@ -9,8 +9,7 @@ function parseBadges(raw: unknown): EarnedBadge[] {
 }
 
 export async function gatherBadgeStats(client: SupabaseClient, userId: string, activityStreak: number) {
-  const [{ count: postCount }, { count: pitchCount }, memberRes, milestoneRes, ownedRes] = await Promise.all([
-    client.from("posts").select("*", { count: "exact", head: true }).eq("author_id", userId),
+  const [{ count: pitchCount }, memberRes, milestoneRes, ownedRes] = await Promise.all([
     client.from("pitches").select("*", { count: "exact", head: true }).eq("author_id", userId),
     client.from("project_members").select("project_id").eq("user_id", userId),
     client.from("milestones").select("type").eq("user_id", userId),
@@ -22,7 +21,6 @@ export async function gatherBadgeStats(client: SupabaseClient, userId: string, a
   const milestoneTypes = new Set((milestoneRes.data ?? []).map((m) => m.type as string));
 
   return {
-    postCount: postCount ?? 0,
     projectCount: projectCount >= 1 ? projectCount : teamProjectCount >= 1 ? 1 : 0,
     teamProjectCount,
     pitchCount: pitchCount ?? 0,

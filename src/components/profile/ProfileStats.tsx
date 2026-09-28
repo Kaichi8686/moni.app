@@ -6,7 +6,6 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { FollowListUser } from "@/lib/profile/types";
 
 type Props = {
-  postCount: number;
   followerCount: number;
   followingCount: number;
   profileId: string;
@@ -23,7 +22,6 @@ function formatStat(n: number) {
 }
 
 export function ProfileStats({
-  postCount,
   followerCount,
   followingCount,
   profileId,
@@ -36,7 +34,6 @@ export function ProfileStats({
   const { tx } = useI18n();
 
   const items = [
-    { value: postCount, label: tx("投稿", "Posts"), onClick: undefined as undefined | (() => void) },
     { value: followerCount, label: tx("フォロワー", "Followers"), onClick: () => setModal("followers") },
     { value: followingCount, label: tx("フォロー中", "Following"), onClick: () => setModal("following") },
   ];

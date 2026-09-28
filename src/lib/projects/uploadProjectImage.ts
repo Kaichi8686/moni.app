@@ -28,7 +28,7 @@ export function validateProjectImageFile(file: File): string | null {
 export async function uploadProjectImage(
   client: SupabaseClient,
   userId: string,
-  scope: "project-chat" | "project-thumb",
+  scope: "project-chat" | "project-thumb" | "issue-photo",
   scopeId: string,
   file: File,
 ): Promise<{ publicUrl: string; path: string }> {

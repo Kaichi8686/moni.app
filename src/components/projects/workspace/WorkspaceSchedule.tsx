@@ -23,6 +23,7 @@ export default function WorkspaceSchedule() {
     updateIssue,
     updateIssueStatus,
     updateIssueWorkflow,
+    saveIssueWork,
     completeIssue,
     loading,
   } = useProjectWorkspace();
@@ -81,12 +82,12 @@ export default function WorkspaceSchedule() {
           await updateIssueStatus(issue.id, issue.status === "done" ? "todo" : "done");
         }}
         onSaveMemo={async (id, memo) => {
-          const issue = issues.find((i) => i.id === id);
+          const issue = issues.find((item) => item.id === id);
           if (!issue) return;
-          const phase = issue.phaseId ? phases.find((p) => p.id === issue.phaseId) : undefined;
-          const { defaultWorkflowIfMissing } = await import("@/lib/workspace/issueWorkflow");
-          const base = defaultWorkflowIfMissing(issue, phase?.title, phase?.description);
-          await updateIssueWorkflow(id, { ...base, completionAnswer: memo.trim() });
+          const next = memo.trim();
+          const current = issue.workspaceText.trim();
+          const workspaceText = !next || current.includes(next) ? current : `${current}\n\n## まとめ\n${next}`.trim();
+          await saveIssueWork(id, { workspaceText });
         }}
       />
       <IssueModal

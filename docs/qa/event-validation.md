@@ -7,8 +7,6 @@ This guide verifies that key activation/retention events are written to `app_eve
 - `signup_completed`
 - `onboarding_started`
 - `onboarding_completed`
-- `first_post_started`
-- `first_post_completed`
 - `first_question_started`
 - `first_question_completed`
 - `first_ai_consult_started`
@@ -40,8 +38,6 @@ where created_at >= now() - interval '7 day'
     'signup_completed',
     'onboarding_started',
     'onboarding_completed',
-    'first_post_started',
-    'first_post_completed',
     'first_question_started',
     'first_question_completed',
     'first_ai_consult_started',
@@ -67,8 +63,6 @@ where created_at >= now() - interval '1 day'
     'onboarding_completed',
     'first_ai_consult_started',
     'first_ai_consult_completed',
-    'first_post_started',
-    'first_post_completed',
     'first_question_started',
     'first_question_completed',
     'search_started',

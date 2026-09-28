@@ -7,7 +7,6 @@ import {
   Flame,
   Gem,
   Mic,
-  PenLine,
   Rocket,
   Users,
   Zap,
@@ -26,7 +25,6 @@ type Props = {
 };
 
 const BADGE_ICONS: Record<string, LucideIcon> = {
-  first_post: PenLine,
   first_project: Rocket,
   team_player: Users,
   first_sale: CircleDollarSign,

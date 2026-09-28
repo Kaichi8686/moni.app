@@ -4,6 +4,7 @@ import { Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
+import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
 import { MyIdeasPanel } from "@/components/idea-hub/MyIdeasPanel";
 import { INTERVIEW_ARTICLE_MOCKS } from "@/lib/idea-hub/interviewMocks";
@@ -40,7 +41,7 @@ function IdeaHubInner() {
           <div
             role="tablist"
             aria-label={tx("アイデア機能の切り替え", "Idea tools")}
-            className="grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1"
+            className="grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1"
           >
             {IDEA_HUB_TABS.map((item) => {
               const active = tab === item.id;
@@ -51,7 +52,7 @@ function IdeaHubInner() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setTab(item.id)}
-                  className={`min-h-[44px] rounded-lg px-1.5 py-2 text-[13px] font-semibold leading-snug transition sm:text-sm ${
+                  className={`min-h-[44px] rounded-lg px-1 py-2 text-[12px] font-semibold leading-snug transition sm:px-1.5 sm:text-[13px] ${
                     active
                       ? "bg-white text-zinc-900 shadow-sm"
                       : "text-zinc-500 hover:text-zinc-800"
@@ -68,6 +69,7 @@ function IdeaHubInner() {
 
       <div role="tabpanel">
         {tab === "excavate" ? <IdeaInterviewApp variant="hub" /> : null}
+        {tab === "qna" ? <IdeaQnAPanel active={tab === "qna"} /> : null}
         {tab === "mine" ? <MyIdeasPanel onGoExcavate={() => setTab("excavate")} /> : null}
         {tab === "interviews" ? (
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />

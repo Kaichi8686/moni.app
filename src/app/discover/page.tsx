@@ -113,7 +113,7 @@ export default function DiscoverPage() {
     <div className="min-h-[100dvh] bg-[#fafaf8] pb-bottom-nav">
       <header className="mobile-sticky-header mobile-content-inset py-3">
         <div className="flex items-center gap-3">
-          <Link href="/?tab=posts" className="touch-target inline-flex items-center justify-center text-lg">
+          <Link href="/projects" className="touch-target inline-flex items-center justify-center text-lg">
             ←
           </Link>
           <h1 className="text-lg font-semibold">{t("discoverTitle")}</h1>

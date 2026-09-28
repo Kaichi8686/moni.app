@@ -14,14 +14,6 @@ export type BadgeDefinition = {
 
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
-    id: "first_post",
-    label: "初投稿",
-    labelEn: "First post",
-    icon: "✍️",
-    description: "はじめて投稿した",
-    descriptionEn: "You shared your first post",
-  },
-  {
     id: "first_project",
     label: "プロジェクト開始",
     labelEn: "Started a project",
@@ -107,7 +99,6 @@ export function mergeEarnedBadges(existing: EarnedBadge[], toAdd: string[]): Ear
 }
 
 export type BadgeStats = {
-  postCount: number;
   projectCount: number;
   teamProjectCount: number;
   pitchCount: number;
@@ -117,7 +108,6 @@ export type BadgeStats = {
 
 export function badgesToGrant(stats: BadgeStats): string[] {
   const grant: string[] = [];
-  if (stats.postCount >= 1) grant.push("first_post");
   if (stats.projectCount >= 1) grant.push("first_project");
   if (stats.teamProjectCount >= 2) grant.push("team_player");
   if (stats.pitchCount >= 1) grant.push("pitch_done");

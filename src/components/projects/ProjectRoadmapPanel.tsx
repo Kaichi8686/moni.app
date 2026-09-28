@@ -1338,13 +1338,13 @@ export function ProjectRoadmapPanel({
         <p className="mt-1 text-xs leading-relaxed text-zinc-600">進捗を共有したり、質問したり、仮説を検証したりできます。</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
-            href="/?tab=posts&community=progress"
+            href="/idea"
             className="min-h-[40px] rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition duration-200 ease-out hover:bg-zinc-50"
           >
-            進捗共有
+            アイデア
           </Link>
           <Link
-            href="/?tab=posts&community=qna"
+            href="/idea?tab=qna"
             className="min-h-[40px] rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition duration-200 ease-out hover:bg-zinc-50"
           >
             質問・相談

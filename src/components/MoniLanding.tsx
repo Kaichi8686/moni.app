@@ -58,29 +58,29 @@ function SectionHeader({
 
 function AppShot({
   locale,
-  variant = "feed",
+  variant = "projects",
 }: {
   locale: "ja" | "en";
-  variant?: "feed" | "chat" | "qna";
+  variant?: "projects" | "chat" | "qna";
 }) {
   const labels =
     locale === "ja"
       ? {
-          post: "投稿",
-          home: "ホーム",
+          action: "開く",
+          idea: "アイデア",
           projects: "プロジェクト",
           search: "検索",
           profile: "プロフィール",
-          progress: "進捗共有",
+          progress: "ロードマップ",
           qna: "質問・相談",
         }
       : {
-          post: "Post",
-          home: "Home",
+          action: "Open",
+          idea: "Ideas",
           projects: "Projects",
           search: "Search",
           profile: "Profile",
-          progress: "Progress",
+          progress: "Roadmap",
           qna: "Q&A",
         };
 
@@ -89,7 +89,7 @@ function AppShot({
       <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
         <span className="moni-wordmark text-lg">moni</span>
         <span className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white">
-          {labels.post}
+          {labels.action}
         </span>
       </div>
       <div className="flex gap-5 border-b border-zinc-100 px-4 pt-2 text-[12px] font-medium">
@@ -99,7 +99,7 @@ function AppShot({
         </span>
         <span className="pb-2 text-zinc-400">{labels.qna}</span>
       </div>
-      {variant === "feed" ? (
+      {variant === "projects" ? (
         <div className="space-y-2.5 bg-zinc-50 p-3">
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
             <p className="text-[11px] font-semibold text-sky-700">
@@ -158,7 +158,7 @@ function AppShot({
         </div>
       ) : null}
       <div className="flex justify-around border-t border-zinc-100 bg-white px-2 py-2.5 text-[10px] font-medium text-zinc-400">
-        {[labels.home, labels.projects, labels.search, labels.profile].map((x, i) => (
+        {[labels.projects, labels.idea, labels.search, labels.profile].map((x, i) => (
           <span key={x} className={i === 0 ? "font-semibold text-zinc-800" : ""}>
             {x}
           </span>
@@ -205,19 +205,19 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
     ? [
         { value: "—", label: "利用中の学校", note: "TODO: 実データ" },
         { value: "—", label: "登録ユーザー", note: "TODO: 実データ" },
-        { value: "—", label: "投稿された企画", note: "TODO: 実データ" },
+        { value: "—", label: "進行中の企画", note: "TODO: 実データ" },
       ]
     : [
         { value: "—", label: "Schools", note: "TODO: live data" },
         { value: "—", label: "Users", note: "TODO: live data" },
-        { value: "—", label: "Projects posted", note: "TODO: live data" },
+        { value: "—", label: "Active projects", note: "TODO: live data" },
       ];
 
   const pains = ja
     ? [
         {
           before: "ビジネスアイデアはあるのに、誰が何をやるか曖昧で前に進まない。",
-          after: "moniで「誰が・いつまでに・何をやるか」を投稿に固定し、流れを止めない。",
+          after: "moniの課題で「誰が・いつまでに・何をやるか」を固定し、流れを止めない。",
         },
         {
           before: "思いついた案を説明するとき、価値と優先順位が散らかって伝わらない。",
@@ -231,7 +231,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
     : [
         {
           before: "You have a business idea, but roles are vague and execution stalls.",
-          after: "Use moni posts to lock who does what by when.",
+          after: "Use moni tasks to lock who does what by when.",
         },
         {
           before: "You can explain the idea, but priorities and value proposition are still messy.",
@@ -254,10 +254,10 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
         },
         {
           marker: "02",
-          title: "タイムライン発信",
-          subtitle: "進捗の見える化で、協力が集まりやすくなる",
-          body: "作業ログが残るので「何をしている人か」が伝わる。初対面でも話が早い。",
-          shot: "feed" as const,
+          title: "プロジェクト管理",
+          subtitle: "ロードマップと課題で、次の一手が見える",
+          body: "進捗・担当・期限をひとつにまとめ、チーム全員が迷わず動ける。",
+          shot: "projects" as const,
         },
         {
           marker: "03",
@@ -277,10 +277,10 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
         },
         {
           marker: "02",
-          title: "Timeline",
-          subtitle: "Visible progress attracts collaborators",
-          body: "Your logs show what you are actually building, so conversations start faster.",
-          shot: "feed" as const,
+          title: "Project management",
+          subtitle: "Roadmaps and tasks clarify the next move",
+          body: "Keep progress, owners, and deadlines together so the whole team can move.",
+          shot: "projects" as const,
         },
         {
           marker: "03",
@@ -389,7 +389,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           note: "TODO: 実名許諾後に差し替え",
         },
         {
-          quote: "投稿と知恵袋を使うと、次にやることが毎回具体化できる。",
+          quote: "課題と知恵袋を使うと、次にやることが毎回具体化できる。",
           who: "高校3年・ビジネス探究",
           note: "TODO: 実名許諾後に差し替え",
         },
@@ -406,7 +406,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           note: "TODO: replace with approved quote",
         },
         {
-          quote: "Posting plus Q&A makes our next action explicit every time.",
+          quote: "Tasks plus Q&A make our next action explicit every time.",
           who: "HS senior · business inquiry",
           note: "TODO: replace with approved quote",
         },
@@ -547,7 +547,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
 
             <div className="relative mx-auto w-full max-w-md lg:mx-0 lg:max-w-none">
               <div className="moni-hero-rise">
-                <AppShot locale={locale} variant="feed" />
+                <AppShot locale={locale} variant="projects" />
               </div>
             </div>
           </div>
@@ -636,8 +636,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
               title={ja ? "機能は、単体ではなく連携して効く。" : "Features work best as a connected flow."}
               body={
                 ja
-                  ? "知恵袋→投稿→検索→チャットの往復で、アイデアが実行に変わる。"
-                  : "Q&A, posting, search, and chat reinforce each other."
+                  ? "知恵袋→課題→検索→チャットの往復で、アイデアが実行に変わる。"
+                  : "Q&A, tasks, search, and chat reinforce each other."
               }
             />
 
@@ -755,8 +755,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                       a: "探究ノートの代替ではなく、仲間探し・検証・発信の場です。提出形式は学校指定に合わせて転記してください。",
                     },
                     {
-                      q: "投稿は誰でも見られますか？",
-                      a: "タイムラインは多くのユーザーが見られる公開エリアです。個別相談はDMや知恵袋の使い分けを推奨します。",
+                      q: "プロジェクトの活動は誰に見えますか？",
+                      a: "プロジェクト内の活動はメンバーに共有されます。内容に応じてDMや知恵袋も使い分けてください。",
                     },
                   ]
                 : [
@@ -769,8 +769,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                       a: "moni supports validation and teamwork. Copy outputs into your required format.",
                     },
                     {
-                      q: "Are posts public?",
-                      a: "Timeline posts are broadly visible. Use DMs and Q&A for sensitive topics.",
+                      q: "Who can see my activity?",
+                      a: "Project activity is shared with project members. Use DMs and Q&A when appropriate.",
                     },
                   ]
               ).map((item) => (
@@ -812,8 +812,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                     ? "概要は以上です。アプリに戻って、続きの行動を進めてください。"
                     : "That's the overview. Return to the app and continue your work."
                   : ja
-                    ? "最初の一行を投稿しよう。そこから仲間と実行が始まる。"
-                    : "Post your first line. Execution with teammates starts there."}
+                    ? "最初のプロジェクトを始めよう。そこから仲間との実行が始まる。"
+                    : "Start your first project. Execution with teammates starts there."}
               </p>
             </div>
 

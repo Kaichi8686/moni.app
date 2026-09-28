@@ -1,8 +1,11 @@
 /** Glide風プロジェクトホーム */
 export const HOME_PROJECTS_HREF = "/projects";
 
-/** ソーシャルホーム（投稿フィード） */
+/** ソーシャルホーム（検索タブなど。エントリはプロジェクト） */
 export const APP_HOME_HREF = "/";
+
+/** 質問・相談（アイデアタブ内） */
+export const IDEA_QNA_HREF = "/idea?tab=qna";
 
 export function projectOverviewHref(projectId: string) {
   return `/projects/${projectId}/overview`;

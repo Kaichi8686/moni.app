@@ -211,7 +211,7 @@ export function WhiteboardToolHint({ tool }: { tool: WhiteboardTool }) {
     highlighter: "ドラッグして半透明でハイライト（太め推奨）",
     eraser: "タップで要素を削除",
     note: "タップで付箋を置く · ダブルタップで編集",
-    text: "タップで文字を置く · ダブルタップで編集",
+    text: "タップして、そのまま文字を入力",
     rect: "ドラッグで四角形",
     circle: "ドラッグで円",
     arrow: "ドラッグで矢印",

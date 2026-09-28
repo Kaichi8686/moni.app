@@ -13,6 +13,8 @@ function createMoniClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // navigator.locks が getSession を永久に待たせ、画面が「読み込み中」のまま止まるのを避ける
+      lock: async <R,>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
     },
     realtime: {
       params: { eventsPerSecond: 20 },

@@ -114,7 +114,6 @@ export function ProfileHeader({
 
         <div className="min-w-0 flex-1 pt-1">
           <ProfileStats
-            postCount={profile.postCount}
             followerCount={profile.followerCount}
             followingCount={profile.followingCount}
             profileId={profile.id}

@@ -34,7 +34,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ userId: string 
     })),
     projects: data.projects,
     stats: {
-      posts: data.postCount,
       streak: data.activityStreak,
       activityTotal: data.activityTotal,
     },

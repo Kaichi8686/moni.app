@@ -11,7 +11,6 @@ export type AdminUserRow = {
   createdAt: string;
   lastSignInAt: string | null;
   projectCount: number;
-  postCount: number;
 };
 
 export type AdminStatsPayload = {
@@ -20,7 +19,6 @@ export type AdminStatsPayload = {
     authUsers: number;
     profiles: number;
     projects: number;
-    posts: number;
     articles: number;
     pitches: number;
     chatMessages: number;

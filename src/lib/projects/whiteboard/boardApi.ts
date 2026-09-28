@@ -21,6 +21,49 @@ function rowToElement(row: DbRow): WhiteboardElement | null {
   };
 }
 
+export type BoardSummary = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+export async function listProjectBoards(projectId: string): Promise<BoardSummary[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("project_boards")
+    .select("id, title, updated_at")
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BoardSummary[];
+}
+
+export async function createProjectBoard(projectId: string, uid: string, title: string): Promise<BoardSummary> {
+  if (!supabase) throw new Error("Supabase が未設定です。");
+  const { data, error } = await supabase
+    .from("project_boards")
+    .insert({ project_id: projectId, title, created_by: uid })
+    .select("id, title, updated_at")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "ボードの作成に失敗しました。");
+  return data as BoardSummary;
+}
+
+export async function renameProjectBoard(boardId: string, title: string): Promise<void> {
+  if (!supabase) throw new Error("Supabase が未設定です。");
+  const { error } = await supabase
+    .from("project_boards")
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq("id", boardId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteProjectBoard(boardId: string): Promise<void> {
+  if (!supabase) throw new Error("Supabase が未設定です。");
+  const { error } = await supabase.from("project_boards").delete().eq("id", boardId);
+  if (error) throw new Error(error.message);
+}
+
 export async function ensureProjectBoard(projectId: string, uid: string): Promise<string> {
   if (!supabase) throw new Error("Supabase が未設定です。");
 

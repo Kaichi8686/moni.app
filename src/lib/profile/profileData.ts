@@ -3,7 +3,7 @@ import { isAppAdminEmail } from "@/lib/auth/appAdmin";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
-import type { FollowListUser, ProfilePost, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
+import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
@@ -57,8 +57,7 @@ export async function loadProfileView(
   if (!row) return null;
   const displayName = ((row.display_name as string) || "ユーザー").trim() || "ユーザー";
 
-  const [{ count: postCount }, { count: followerCount }, { count: followingCount }] = await Promise.all([
-    client.from("posts").select("*", { count: "exact", head: true }).eq("author_id", userId),
+  const [{ count: followerCount }, { count: followingCount }] = await Promise.all([
     client.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
     client.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
   ]);
@@ -81,32 +80,9 @@ export async function loadProfileView(
     ...(location ? { location } : {}),
     ...(skills.length ? { skills } : {}),
     ...(traits.length ? { traits } : {}),
-    postCount: postCount ?? 0,
     followerCount: followerCount ?? 0,
     followingCount: followingCount ?? 0,
   };
-}
-
-export async function loadProfilePosts(client: SupabaseClient, userId: string): Promise<ProfilePost[]> {
-  const { data: rows } = await client
-    .from("posts")
-    .select("id,caption,image_path,created_at")
-    .eq("author_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(60);
-
-  return (rows ?? []).map((r) => {
-    const path = (r.image_path as string | null) ?? null;
-    const { data: pub } = path
-      ? client.storage.from("post-images").getPublicUrl(path)
-      : { data: { publicUrl: null as string | null } };
-    return {
-      id: r.id as string,
-      caption: (r.caption as string) || "",
-      imageUrl: pub.publicUrl,
-      createdAt: r.created_at as string,
-    };
-  });
 }
 
 export async function loadProfileProjects(

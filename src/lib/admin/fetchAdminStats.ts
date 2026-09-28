@@ -36,7 +36,6 @@ export async function fetchAdminStats(admin: SupabaseClient): Promise<AdminStats
     authUsersRes,
     profilesRes,
     projectsCount,
-    postsCount,
     articlesCount,
     pitchesCount,
     chatCount,
@@ -46,7 +45,6 @@ export async function fetchAdminStats(admin: SupabaseClient): Promise<AdminStats
     admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
     admin.from("profiles").select("id,role,display_name,goal,created_at").order("created_at", { ascending: false }),
     countTable(admin, "projects"),
-    countTable(admin, "posts"),
     countTable(admin, "articles"),
     countTable(admin, "pitches"),
     countTable(admin, "chat_messages"),
@@ -77,26 +75,15 @@ export async function fetchAdminStats(admin: SupabaseClient): Promise<AdminStats
   }).length;
 
   const profileIds = profiles.slice(0, 80).map((p) => p.id as string);
-  const [projectRows, postRows] = await Promise.all([
-    profileIds.length
-      ? admin.from("projects").select("owner_id").in("owner_id", profileIds)
-      : Promise.resolve({ data: [] as Array<{ owner_id: string }> }),
-    profileIds.length
-      ? admin.from("posts").select("author_id").in("author_id", profileIds)
-      : Promise.resolve({ data: [] as Array<{ author_id: string }> }),
-  ]);
+  const projectRows = profileIds.length
+    ? await admin.from("projects").select("owner_id").in("owner_id", profileIds)
+    : { data: [] as Array<{ owner_id: string }> };
 
   const projectCountByUser = new Map<string, number>();
   for (const row of projectRows.data ?? []) {
     const id = row.owner_id as string;
     projectCountByUser.set(id, (projectCountByUser.get(id) ?? 0) + 1);
   }
-  const postCountByUser = new Map<string, number>();
-  for (const row of postRows.data ?? []) {
-    const id = row.author_id as string;
-    postCountByUser.set(id, (postCountByUser.get(id) ?? 0) + 1);
-  }
-
   const recentUsers: AdminUserRow[] = profiles.slice(0, 40).map((p) => {
     const id = p.id as string;
     const auth = authById.get(id);
@@ -109,7 +96,6 @@ export async function fetchAdminStats(admin: SupabaseClient): Promise<AdminStats
       createdAt: p.created_at as string,
       lastSignInAt: auth?.lastSignInAt ?? null,
       projectCount: projectCountByUser.get(id) ?? 0,
-      postCount: postCountByUser.get(id) ?? 0,
     };
   });
 
@@ -119,7 +105,6 @@ export async function fetchAdminStats(admin: SupabaseClient): Promise<AdminStats
       authUsers: authUsers.length,
       profiles: profiles.length,
       projects: projectsCount,
-      posts: postsCount,
       articles: articlesCount,
       pitches: pitchesCount,
       chatMessages: chatCount,

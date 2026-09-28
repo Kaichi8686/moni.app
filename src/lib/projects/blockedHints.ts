@@ -1,4 +1,5 @@
 import type { BlockedReasonCode } from "@/lib/projects/types";
+import { IDEA_QNA_HREF } from "@/lib/navigation/homeProjects";
 
 export const BLOCKED_REASON_OPTIONS: Array<{ code: BlockedReasonCode; label: string }> = [
   { code: "unknown_how", label: "やり方が分からない" },
@@ -17,7 +18,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
       return {
         message: "手順を調べる、またはタスクをもっと小さく分けると進めやすくなります。",
         links: [
-          { label: "コミュニティで質問", href: "/?tab=posts&community=qna" },
+          { label: "コミュニティで質問", href: IDEA_QNA_HREF },
           { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
         ],
       };
@@ -26,15 +27,13 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "プロジェクト内チャットで、やってほしいことを一文で伝えると動きやすくなります。",
         links: [
           { label: "仲間・プロジェクトを探す", href: "/?tab=chat" },
-          { label: "進捗を投稿", href: "/?tab=posts&community=progress" },
+          { label: "アイデアを掘る", href: "/idea" },
         ],
       };
     case "missing_info":
       return {
         message: "知りたいことを一つに書き出すと、次に聞く内容がはっきりします。",
-        links: [
-          { label: "コミュニティで質問", href: "/?tab=posts&community=qna" },
-        ],
+        links: [{ label: "コミュニティで質問", href: IDEA_QNA_HREF }],
       };
     case "no_time":
       return {
@@ -45,7 +44,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
       return {
         message: "下書きでも共有すると、フィードバックをもらいやすくなります。",
         links: [
-          { label: "進捗を投稿", href: "/?tab=posts&community=progress" },
+          { label: "質問・相談する", href: IDEA_QNA_HREF },
           { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
         ],
       };

@@ -22,7 +22,6 @@ export type PortfolioData = {
   projects: PortfolioProject[];
   activityStreak: number;
   activityTotal: number;
-  postCount: number;
 };
 
 export async function buildPortfolioData(
@@ -87,6 +86,5 @@ export async function buildPortfolioData(
     projects,
     activityStreak: gam.activityStreak,
     activityTotal,
-    postCount: profile.postCount,
   };
 }

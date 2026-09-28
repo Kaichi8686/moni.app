@@ -16,12 +16,6 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
-    href: "/?tab=posts",
-    labelKey: "navHome",
-    icon: "⌂",
-    match: (p, tab) => p === "/" && tab !== "chat",
-  },
-  {
     href: HOME_PROJECTS_HREF,
     labelKey: "navProjects",
     icon: "▦",

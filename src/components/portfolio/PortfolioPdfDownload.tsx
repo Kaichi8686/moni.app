@@ -22,7 +22,7 @@ function PortfolioDocument({ data }: { data: PortfolioData }) {
         <Text style={styles.line}>{data.tierMeta.label}</Text>
         <Text style={styles.line}>{data.profile?.bio ?? ""}</Text>
         <Text style={styles.line}>
-          投稿 {data.postCount} · 連続 {data.activityStreak}日 · 活動 {data.activityTotal}回
+          連続 {data.activityStreak}日 · 活動 {data.activityTotal}回
         </Text>
 
         <View style={styles.section}>

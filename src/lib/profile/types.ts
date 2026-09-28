@@ -11,16 +11,8 @@ export type ProfileView = {
   skills?: string[];
   /** 性格タグ */
   traits?: string[];
-  postCount: number;
   followerCount: number;
   followingCount: number;
-};
-
-export type ProfilePost = {
-  id: string;
-  caption: string;
-  imageUrl: string | null;
-  createdAt: string;
 };
 
 export type ProfileProjectHighlight = {

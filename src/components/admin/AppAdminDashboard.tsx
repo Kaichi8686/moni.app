@@ -155,7 +155,6 @@ export function AppAdminDashboard({ session, language }: Props) {
               { label: language === "ja" ? "プロフィール" : "Profiles", value: stats.totals.profiles },
               { label: language === "ja" ? "7日以内ログイン" : "Active (7d)", value: stats.activeLast7Days },
               { label: language === "ja" ? "プロジェクト" : "Projects", value: stats.totals.projects },
-              { label: language === "ja" ? "投稿" : "Posts", value: stats.totals.posts },
               { label: language === "ja" ? "記事" : "Articles", value: stats.totals.articles },
               { label: language === "ja" ? "ピッチ" : "Pitches", value: stats.totals.pitches },
               { label: language === "ja" ? "チャット" : "Chat msgs", value: stats.totals.chatMessages },
@@ -217,9 +216,6 @@ export function AppAdminDashboard({ session, language }: Props) {
                     <th className="px-2 py-1.5 font-semibold">Email</th>
                     <th className="px-2 py-1.5 font-semibold">{language === "ja" ? "種類" : "Role"}</th>
                     <th className="px-2 py-1.5 font-semibold text-right">PJ</th>
-                    <th className="px-2 py-1.5 font-semibold text-right">
-                      {language === "ja" ? "投稿" : "Posts"}
-                    </th>
                     <th className="px-2 py-1.5 font-semibold">{language === "ja" ? "最終ログイン" : "Last in"}</th>
                     <th className="px-2 py-1.5 font-semibold text-right">{language === "ja" ? "操作" : ""}</th>
                   </tr>
@@ -240,7 +236,6 @@ export function AppAdminDashboard({ session, language }: Props) {
                         <td className="max-w-[120px] truncate px-2 py-1.5 text-violet-800/80">{u.email ?? "—"}</td>
                         <td className="px-2 py-1.5">{ROLE_LABELS[u.role] ?? u.role}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{u.projectCount}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{u.postCount}</td>
                         <td className="whitespace-nowrap px-2 py-1.5 text-violet-800/75">
                           {formatDateTime(u.lastSignInAt, locale)}
                         </td>

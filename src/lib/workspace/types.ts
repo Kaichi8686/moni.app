@@ -7,6 +7,8 @@ export type Priority = "no_priority" | "urgent" | "high" | "medium" | "low";
 import type { IssueWorkflow } from "@/lib/workspace/issueWorkflow";
 export type { IssueWorkflow, IssueWorkflowStep } from "@/lib/workspace/issueWorkflow";
 
+export type TaskGenre = "think" | "make" | "talk" | "spread" | "run";
+
 export interface Member {
   id: string;
   name: string;
@@ -23,10 +25,17 @@ export interface Issue {
   projectId: string;
   phaseId?: string;
   dueDate?: string;
+  beginAt?: string;
   createdAt: string;
   updatedAt: string;
   description?: string;
   labels: string[];
+  genre: TaskGenre;
+  workspaceText: string;
+  attachments: string[];
+  submittedAt?: string;
+  /** 旧5ステップが残っていて、作業スペースへ移す必要がある */
+  legacyWorkflow?: boolean;
   workflow?: IssueWorkflow;
   /** workflow.completionAnswer のショートカット */
   completionAnswer?: string;

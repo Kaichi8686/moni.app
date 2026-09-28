@@ -35,10 +35,6 @@ export function ProjectsHomeView() {
       router.push("/profile");
       return;
     }
-    if (key === "posts") {
-      router.push("/?tab=posts");
-      return;
-    }
     if (key === "chat") {
       router.push("/?tab=chat");
       return;

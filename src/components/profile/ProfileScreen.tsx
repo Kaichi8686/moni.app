@@ -7,7 +7,6 @@ import { Settings } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { BadgeRow } from "@/components/profile/BadgeRow";
 import { computeMoniTier } from "@/lib/gamification/moniTier";
-import { ProfileGrid } from "@/components/profile/ProfileGrid";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { StoryHighlights } from "@/components/profile/StoryHighlights";
 import { loadProfileGamification } from "@/lib/gamification/profileGamification";
@@ -18,11 +17,10 @@ import {
   hasPendingFollowRequest,
   isFollowingUser,
   loadFollowList,
-  loadProfilePosts,
   loadProfileProjects,
   loadProfileView,
 } from "@/lib/profile/profileData";
-import type { ProfilePost, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
+import type { ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
@@ -30,26 +28,19 @@ type Props = {
   userId?: string;
 };
 
-type ProfileContentTab = "posts" | "projects";
-
-const TAB =
-  "relative -mb-px min-h-[44px] touch-manipulation px-1 text-[13px] transition";
-const TAB_ACTIVE = "font-semibold text-zinc-900";
-const TAB_IDLE = "font-medium text-zinc-400 hover:text-zinc-600";
-
 export function ProfileScreen({ userId: propUserId }: Props) {
   const router = useRouter();
   const { tx } = useI18n();
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileView | null>(null);
-  const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [projects, setProjects] = useState<ProfileProjectHighlight[]>([]);
   const [gamification, setGamification] = useState<ProfileGamification | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPending, setIsPending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [contentTab, setContentTab] = useState<ProfileContentTab>("posts");
+  const [loading, setLoading] = useState(Boolean(supabase));
+  const [error, setError] = useState(() =>
+    supabase ? "" : tx("Supabase が未設定です", "Supabase is not configured"),
+  );
 
   const profileUserId = propUserId ?? viewerId;
   const isOwnProfile = Boolean(viewerId && profileUserId && viewerId === profileUserId);
@@ -76,13 +67,11 @@ export function ProfileScreen({ userId: propUserId }: Props) {
           setError(tx("プロフィールが見つかりません", "Profile not found"));
           return;
         }
-        const [postList, projectList, gam] = await Promise.all([
-          loadProfilePosts(supabase, targetId),
+        const [projectList, gam] = await Promise.all([
           loadProfileProjects(supabase, targetId),
           loadProfileGamification(supabase, targetId),
         ]);
         setProfile(view);
-        setPosts(postList);
         setProjects(projectList);
         if (uid === targetId && gam.gamificationReady) {
           try {
@@ -114,16 +103,15 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   );
 
   useEffect(() => {
-    if (!supabase) {
-      setError(tx("Supabase が未設定です", "Supabase is not configured"));
-      setLoading(false);
-      return;
-    }
+    if (!supabase) return;
 
     let cancelled = false;
     authReadyRef.current = false;
-    setLoading(true);
-    setError("");
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError("");
+    });
 
     const finishAuth = (uid: string | null) => {
       if (cancelled) return;
@@ -281,46 +269,8 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             </div>
           ) : null}
 
-          <div
-            className="flex gap-7 border-b border-zinc-200 bg-white px-4 sm:px-5"
-            role="tablist"
-            aria-label={tx("プロフィールの内容", "Profile content")}
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={contentTab === "posts"}
-              className={`${TAB} ${contentTab === "posts" ? TAB_ACTIVE : TAB_IDLE}`}
-              onClick={() => setContentTab("posts")}
-            >
-              {tx("投稿", "Posts")}
-              {contentTab === "posts" ? (
-                <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-zinc-900" aria-hidden />
-              ) : null}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={contentTab === "projects"}
-              className={`${TAB} ${contentTab === "projects" ? TAB_ACTIVE : TAB_IDLE}`}
-              onClick={() => setContentTab("projects")}
-            >
-              {tx("プロジェクト", "Projects")}
-              {contentTab === "projects" ? (
-                <span className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-zinc-900" aria-hidden />
-              ) : null}
-            </button>
-          </div>
-
-          <div
-            key={contentTab}
-            className="[animation:project-sheet-fade-in_180ms_ease]"
-          >
-            {contentTab === "posts" ? (
-              <ProfileGrid posts={posts} isOwnProfile={isOwnProfile} />
-            ) : (
-              <StoryHighlights projects={projects} isOwnProfile={isOwnProfile} />
-            )}
+          <div className="border-t border-zinc-200 [animation:project-sheet-fade-in_180ms_ease]">
+            <StoryHighlights projects={projects} isOwnProfile={isOwnProfile} />
           </div>
         </div>
       ) : null}

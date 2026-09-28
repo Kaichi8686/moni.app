@@ -75,13 +75,6 @@ html {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* コミュニティフィード: iOS で内側スクロールが効くようにする */
-.community-feed-scroll {
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  touch-action: pan-y;
-}
-
 body {
   background-color: var(--background);
   background-image:

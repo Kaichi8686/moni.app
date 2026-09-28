@@ -8,7 +8,6 @@ export type MentorClientContext = {
   phaseGoal?: string;
   completedTasks?: string[];
   pendingTasks?: string[];
-  recentPosts?: string[];
   milestones?: string[];
 };
 
@@ -28,7 +27,6 @@ export function buildMentorSystemExtension(ctx: MentorClientContext | null | und
   if (ctx.completedTasks?.length) lines.push(`完了タスク: ${ctx.completedTasks.slice(0, 8).join("、")}`);
   if (ctx.pendingTasks?.length) lines.push(`未完了タスク: ${ctx.pendingTasks.slice(0, 8).join("、")}`);
   if (ctx.milestones?.length) lines.push(`マイルストーン: ${ctx.milestones.slice(0, 6).join("、")}`);
-  if (ctx.recentPosts?.length) lines.push(`最近の投稿: ${ctx.recentPosts.slice(0, 3).join(" | ")}`);
 
   lines.push(
     "",

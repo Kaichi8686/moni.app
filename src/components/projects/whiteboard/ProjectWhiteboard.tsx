@@ -5,7 +5,6 @@ import { Trash2, X } from "lucide-react";
 import { WhiteboardToolbar, WhiteboardToolHint } from "@/components/projects/whiteboard/WhiteboardToolbar";
 import {
   deleteBoardElement,
-  ensureProjectBoard,
   insertBoardElement,
   loadBoardElements,
   updateBoardElement,
@@ -31,6 +30,7 @@ const HIGHLIGHTER_OPACITY = 0.35;
 
 type Props = {
   projectId: string;
+  boardId: string;
   uid: string | null;
   canEdit: boolean;
 };
@@ -122,10 +122,11 @@ type HistoryEntry =
   | { type: "remove"; element: WhiteboardElement }
   | { type: "modify"; id: string; before: WhiteboardElement["payload"]; after: WhiteboardElement["payload"] };
 
-export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
+const DRAW_TOOLS = new Set<WhiteboardTool>(["pen", "highlighter", "eraser", "rect", "circle", "arrow", "pan"]);
+
+export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [boardId, setBoardId] = useState<string | null>(null);
   const [elements, setElements] = useState<WhiteboardElement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -139,6 +140,7 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number; color: string } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const drawingRef = useRef<{ points: Pt[] } | null>(null);
@@ -158,6 +160,10 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
   const undoRef = useRef<HistoryEntry[]>([]);
   const redoRef = useRef<HistoryEntry[]>([]);
   const penStrokeWidthRef = useRef<number | null>(null);
+  const inkColorRef = useRef("#1A1A1A");
+  const skipTextDraftRef = useRef(false);
+  const textOpenedAtRef = useRef(0);
+  const textInputRef = useRef<HTMLInputElement | null>(null);
   const [undoLen, setUndoLen] = useState(0);
   const [redoLen, setRedoLen] = useState(0);
 
@@ -188,16 +194,16 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
   );
 
   useEffect(() => {
-    const saved = loadViewport(projectId);
+    const saved = loadViewport(boardId);
     if (saved) setViewport(saved);
-  }, [projectId]);
+  }, [boardId]);
 
   useEffect(() => {
-    saveViewport(projectId, viewport);
-  }, [projectId, viewport]);
+    saveViewport(boardId, viewport);
+  }, [boardId, viewport]);
 
   useEffect(() => {
-    if (!uid) {
+    if (!uid || !boardId) {
       setLoading(false);
       return;
     }
@@ -205,11 +211,11 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
     void (async () => {
       setLoading(true);
       setError("");
+      setElements([]);
+      setTextDraft(null);
+      setEditingTextId(null);
       try {
-        const bid = await ensureProjectBoard(projectId, uid);
-        if (cancelled) return;
-        setBoardId(bid);
-        const els = await loadBoardElements(bid);
+        const els = await loadBoardElements(boardId);
         if (!cancelled) setElements(els);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "読み込み失敗");
@@ -220,7 +226,13 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [projectId, uid]);
+  }, [boardId, uid]);
+
+  useEffect(() => {
+    if (!textDraft) return;
+    const timer = window.setTimeout(() => textInputRef.current?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [textDraft]);
 
   const persistElement = useCallback(
     async (el: Pick<WhiteboardElement, "type" | "payload">) => {
@@ -371,7 +383,14 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
     }
 
     const { x, y } = screenToWorld(e.clientX, e.clientY);
-    rootRef.current?.setPointerCapture(e.pointerId);
+    if (tool === "pen" || tool === "highlighter" || tool === "text" || tool === "eraser") {
+      e.preventDefault();
+    }
+    try {
+      rootRef.current?.setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
 
     if (tool === "select") {
       const tol = 12 / viewport.zoom;
@@ -420,10 +439,21 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
     }
 
     if (tool === "text") {
-      void persistElement({
-        type: "text",
-        payload: { text: "テキスト", x, y, fontSize: 18, color },
-      });
+      try {
+        rootRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not captured */
+      }
+      const tol = 12 / viewport.zoom;
+      const hit = [...elements].reverse().find((el) => el.type === "text" && hitElement(el, x, y, tol));
+      if (hit) {
+        setTextDraft(null);
+        setEditingTextId(hit.id);
+        return;
+      }
+      if (textDraft || editingTextId) return;
+      textOpenedAtRef.current = Date.now();
+      setTextDraft({ x, y, color: color === "#FACC15" ? inkColorRef.current : color });
     }
   };
 
@@ -489,9 +519,18 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
   };
 
   const onPointerUp = async (e: React.PointerEvent) => {
-    rootRef.current?.releasePointerCapture(e.pointerId);
+    try {
+      rootRef.current?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
+
+    if (textDraft && tool === "text") {
+      textInputRef.current?.focus();
+      return;
+    }
 
     const { x, y } = screenToWorld(e.clientX, e.clientY);
 
@@ -624,16 +663,18 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
     (next: WhiteboardTool) => {
       if (next === "highlighter" && tool !== "highlighter") {
         penStrokeWidthRef.current = strokeWidth;
+        inkColorRef.current = color;
         setStrokeWidth(HIGHLIGHTER_DEFAULT_WIDTH);
         setColor("#FACC15");
       } else if (tool === "highlighter" && next !== "highlighter" && penStrokeWidthRef.current !== null) {
         setStrokeWidth(penStrokeWidthRef.current);
         penStrokeWidthRef.current = null;
+        setColor(inkColorRef.current);
       }
       setTool(next);
       if (next !== "select") setSelectedId(null);
     },
-    [tool, strokeWidth],
+    [tool, strokeWidth, color],
   );
 
   const exportPng = useCallback(() => {
@@ -743,12 +784,11 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
       <div className="relative">
         <div
           ref={rootRef}
-          className="wb-canvas-root relative h-[min(72dvh,660px)] w-full touch-none overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FBFCFE]"
+          className="wb-canvas-root relative h-[min(72dvh,660px)] w-full touch-none select-none overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FBFCFE]"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={(e) => void onPointerUp(e)}
           onPointerCancel={(e) => void onPointerUp(e)}
-          onPointerLeave={(e) => void onPointerUp(e)}
           onWheel={(e) => {
             e.preventDefault();
             const rect = rootRef.current?.getBoundingClientRect();
@@ -910,6 +950,7 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
                       minHeight: n.h,
                       backgroundColor: n.color,
                       touchAction: "none",
+                      pointerEvents: DRAW_TOOLS.has(tool) ? "none" : "auto",
                     }}
                     onPointerDown={(e) => {
                       if (tool !== "select" || !canEdit) return;
@@ -951,6 +992,9 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
                       className="absolute rounded border border-violet-400 bg-white/90 px-1 font-semibold outline-none"
                       style={{ left: t.x, top: t.y, fontSize: t.fontSize, color: t.color, minWidth: 80 }}
                       onPointerDown={(e) => e.stopPropagation()}
+                      onFocus={(e) => {
+                        if (e.target.value === "テキスト") e.target.select();
+                      }}
                       onBlur={(e) => void saveTextValue(el.id, e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
@@ -962,8 +1006,15 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
                 return (
                   <p
                     key={el.id}
-                    className="absolute font-semibold"
-                    style={{ left: t.x, top: t.y, fontSize: t.fontSize, color: t.color, touchAction: "none" }}
+                    className="absolute w-max max-w-[280px] select-none font-semibold"
+                    style={{
+                      left: t.x,
+                      top: t.y,
+                      fontSize: t.fontSize,
+                      color: t.color,
+                      touchAction: "none",
+                      pointerEvents: DRAW_TOOLS.has(tool) ? "none" : "auto",
+                    }}
                     onPointerDown={(e) => {
                       if (tool !== "select" || !canEdit) return;
                       e.stopPropagation();
@@ -983,6 +1034,47 @@ export function ProjectWhiteboard({ projectId, uid, canEdit }: Props) {
               return null;
             })}
           </div>
+            {textDraft ? (
+              <input
+                ref={textInputRef}
+                autoFocus
+                className="absolute z-20 rounded border border-violet-400 bg-white/95 px-1 font-semibold outline-none"
+                style={{
+                  left: textDraft.x * viewport.zoom + viewport.panX,
+                  top: textDraft.y * viewport.zoom + viewport.panY,
+                  fontSize: Math.max(16, 18 * viewport.zoom),
+                  color: textDraft.color,
+                  minWidth: 140,
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  if (skipTextDraftRef.current) {
+                    skipTextDraftRef.current = false;
+                    setTextDraft(null);
+                    return;
+                  }
+                  const value = e.target.value.trim();
+                  if (!value && Date.now() - textOpenedAtRef.current < 600) {
+                    window.setTimeout(() => textInputRef.current?.focus(), 0);
+                    return;
+                  }
+                  const draft = textDraft;
+                  setTextDraft(null);
+                  if (!value || !draft) return;
+                  void persistElement({
+                    type: "text",
+                    payload: { text: value, x: draft.x, y: draft.y, fontSize: 18, color: draft.color },
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    skipTextDraftRef.current = true;
+                    setTextDraft(null);
+                  }
+                }}
+              />
+            ) : null}
 
           {selected && canEdit ? (
             <button

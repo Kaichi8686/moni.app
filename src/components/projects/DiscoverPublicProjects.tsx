@@ -24,13 +24,6 @@ function formatLaunchedAt(iso: string, locale: "ja" | "en"): string {
   });
 }
 
-const SEARCH_EXAMPLES = [
-  { q: "マーケ", ja: "マーケ", en: "Marketing" },
-  { q: "アプリ", ja: "アプリ", en: "App" },
-  { q: "教育", ja: "教育", en: "Education" },
-  { q: "デザイン", ja: "デザイン", en: "Design" },
-] as const;
-
 export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   const { tx, locale } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -166,7 +159,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   }
 
   return (
-    <div>
+    <div className="h-full">
       {showSectionHeader ? (
         <div className="mb-3">
           <h4 className="text-sm font-semibold text-zinc-900">{tx("プロジェクトを探す", "Discover projects")}</h4>
@@ -179,26 +172,29 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         </div>
       ) : null}
 
-      <input
-        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 focus:bg-white focus:ring-2 focus:ring-sky-500/15"
-        placeholder={tx("名前・説明・カテゴリで検索…", "Search by name, description, or category…")}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label={tx("公開プロジェクトを検索", "Search public projects")}
-      />
-
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {SEARCH_EXAMPLES.map((example) => (
-          <button
-            key={example.q}
-            type="button"
-            onClick={() => setQuery(example.q)}
-            className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50"
-          >
-            {locale === "en" ? example.en : example.ja}
-          </button>
-        ))}
-      </div>
+      <form
+        className="grid grid-cols-[minmax(0,1fr)_48px] gap-2 sm:grid-cols-[minmax(0,1fr)_112px]"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <input
+          className="min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm"
+          placeholder={tx("キーワードで検索", "Search by keyword")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label={tx("公開プロジェクトを検索", "Search public projects")}
+        />
+        <button
+          type="submit"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-900 bg-zinc-900 px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] sm:px-4 sm:text-sm"
+          aria-label={tx("絞り込む", "Search")}
+        >
+          <svg className="h-5 w-5 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg>
+          <span className="hidden sm:inline">{tx("絞り込む", "Search")}</span>
+        </button>
+      </form>
 
       {toast ? (
         <p className={`mt-2 text-xs font-medium ${toastOk ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
@@ -229,36 +225,28 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
             </p>
             {!query.trim() ? (
               <p className="mt-2 text-[12px] text-zinc-500">
-                {tx(
-                  "例:「マーケ」「アプリ」「教育」をタップしてみてください",
-                  "Try tapping “Marketing”, “App”, or “Education”",
-                )}
+                {tx("名前・説明・カテゴリから検索できます", "Search by name, description, or category.")}
               </p>
             ) : null}
           </div>
         ) : null}
         {!loading && browseList.length > 0 ? (
-          <ul className="space-y-2.5">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {browseList.map((p) => {
               const c = PROJECT_ICON_BG[projectHashIndex(p.id, PROJECT_ICON_BG.length)];
               const thumb = p.thumbnail_url?.trim();
               const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
-              const tags = [
-                lineLabel(p.business_type),
-                p.category?.trim() || null,
-                ...(p.tags ?? []).slice(0, 2),
-              ].filter(Boolean) as string[];
               return (
-                <li key={p.id}>
+                <li key={p.id} className="min-w-0">
                   <button
                     type="button"
-                    className="flex w-full items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3.5 text-left shadow-sm shadow-zinc-900/[0.03] transition hover:border-zinc-300 hover:bg-zinc-50/80 active:scale-[0.995]"
+                    className="group flex aspect-square w-full min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-zinc-200/90 bg-white p-3 text-center shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
                     onClick={() => {
                       setDetailProject(p);
                       setJoinMsgDraft("");
                     }}
                   >
-                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-sm ring-1 ring-zinc-100">
+                    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl shadow-sm ring-1 ring-zinc-100">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={thumb} alt="" className="h-full w-full object-cover" />
@@ -268,34 +256,16 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                         </span>
                       )}
                     </div>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className="truncate text-[14px] font-semibold text-zinc-900">{p.name}</span>
-                        {recruiting ? (
-                          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            {tx("仲間募集", "Recruiting")}
-                          </span>
-                        ) : (
-                          <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
-                            {tx("公開中", "Public")}
-                          </span>
-                        )}
+                    <span className="mt-2 flex w-full min-w-0 flex-col items-center">
+                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-tight text-zinc-900 sm:text-[15px]">
+                        {p.name}
                       </span>
-                      <span className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-zinc-500">
-                        {p.description?.trim() || p.recruitment_target?.trim() || tx("まだ説明がありません", "No description yet")}
+                      <span className="mt-1 line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                        {lineLabel(p.business_type)}
                       </span>
-                      {tags.length > 0 ? (
-                        <span className="mt-2 flex flex-wrap gap-1">
-                          {tags.map((tag) => (
-                            <span
-                              key={`${p.id}-${tag}`}
-                              className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </span>
-                      ) : null}
+                      <span className={`mt-1 line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}>
+                        {recruiting ? tx("仲間募集", "Recruiting") : tx("公開中", "Public")}
+                      </span>
                     </span>
                   </button>
                 </li>

@@ -53,21 +53,7 @@ Result / Notes:
 
 ---
 
-### D. First post
-- [ ] Quick-start action opens post composer.
-- [ ] Starter template text can be inserted.
-- [ ] Post submit succeeds and appears in feed.
-- [ ] Empty state has actionable CTA (not only explanatory text).
-
-Expected events:
-- `first_post_started`
-- `first_post_completed`
-
-Result / Notes:
-
----
-
-### E. First question
+### D. First question
 - [ ] Quick-start action opens question area.
 - [ ] Question template fills title/body.
 - [ ] Submit succeeds and question appears in list.
@@ -81,7 +67,7 @@ Result / Notes:
 
 ---
 
-### F. Search and DM
+### E. Search and DM
 - [ ] Quick-start action opens search/chat list.
 - [ ] Search can run at least once.
 - [ ] DM can be opened from a result.
@@ -95,7 +81,7 @@ Result / Notes:
 
 ---
 
-### G. Mobile UX
+### F. Mobile UX
 - [ ] Bottom nav labels are readable.
 - [ ] Touch targets are easy to tap.
 - [ ] No critical overlap with safe area.
@@ -105,7 +91,7 @@ Result / Notes:
 
 ---
 
-### H. Trust and safety
+### G. Trust and safety
 - [ ] Public visibility is explained where user posts/questions.
 - [ ] Warning against sharing personal info is visible.
 - [ ] Report path is discoverable.

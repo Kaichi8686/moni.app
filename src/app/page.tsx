@@ -8,42 +8,26 @@ import { MoniLanding } from "@/components/MoniLanding";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
-import { ActivityComposer, type ActivityComposerSubmitPayload } from "@/components/feed/ActivityComposer";
-import { ActivityTimeline } from "@/components/feed/ActivityTimeline";
-import { QnABoard } from "@/components/qna/QnABoard";
-import { formatActivityCaption, parseActivityCaption, categoryToPostType } from "@/lib/feed/activityRecord";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
-import {
-  emptyReactionCounts,
-  loadPostReactionMaps,
-  togglePostReaction,
-  type ReactionKind,
-} from "@/lib/feed/postReactions";
 import type { MentorClientContext } from "@/lib/ai/mentorContext";
-import { recordUserActivity } from "@/lib/gamification/recordUserActivity";
 import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
-import { avatarInitial, avatarToneFromName } from "@/lib/ui/avatarTone";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
-const COMMUNITY_TAB =
-  "relative -mb-px min-h-[36px] touch-manipulation px-0.5 text-[13px] font-semibold tracking-[-0.02em] transition";
-const COMMUNITY_TAB_ACTIVE = "text-zinc-900";
-const COMMUNITY_TAB_IDLE = "font-medium text-zinc-400 hover:text-zinc-600";
 const COMMUNITY_CTA =
   "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-3.5 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 const COMMUNITY_CTA_PILL =
   "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-4 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 
 type AppRole = "child" | "parent" | "investor" | "admin";
-type FeaturePage = "projects" | "posts" | "articles" | "mentor" | "discovery" | "chat" | "account";
+type FeaturePage = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 type Language = "ja" | "en";
 type ContactPermission = "all" | "followers" | "message_only" | "none";
 type IdeaTool = { id: string; title: string; description: string; effect: string };
@@ -114,42 +98,6 @@ type Pitch = {
   likes: number;
 };
 
-type FeedPostType = "normal" | "achievement" | "question" | "idea";
-
-type FeedPost = {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorAvatarUrl?: string | null;
-  caption: string;
-  imageUrl: string | null;
-  /** Resolved gallery URLs (primary + extras). */
-  imageUrls?: string[];
-  /** Display/record timestamp when author backdated (from caption meta). */
-  recordedAt?: string | null;
-  postType: FeedPostType;
-  /** Storage object path（Supabase 時のみ。削除時に使用） */
-  storagePath?: string;
-  /** Extra storage paths for multi-image delete */
-  extraStoragePaths?: string[];
-  createdAt: string;
-  likeCount: number;
-  likedByMe: boolean;
-  commentCount: number;
-  comments: FeedComment[];
-  reactionCounts: { fire: number; idea: number; help: number };
-  myReaction: ReactionKind | null;
-};
-
-type FeedComment = {
-  id: string;
-  postId: string;
-  authorId: string;
-  authorName: string;
-  body: string;
-  createdAt: string;
-};
-
 type FollowUser = {
   id: string;
   name: string;
@@ -186,6 +134,12 @@ type MatchMember = {
 type PeerProjectSummary = { id: string; name: string; description: string; visibility: string; updated_at?: string };
 
 type MentorChatMessage = { id: string; role: "user" | "assistant"; content: string };
+type MentorSavedConversation = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: MentorChatMessage[];
+};
 
 const MENTOR_WELCOME_TEXT =
   "こんにちは。なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。";
@@ -201,7 +155,7 @@ type TalkRoomMeta = { previewText: string; timeLabel: string; unread: number };
 type OpsEvent = { id: string; name: string; at: string; page: FeaturePage; userId: string | null };
 type ReportEntry = {
   id: string;
-  targetType: "post" | "article" | "message" | "profile";
+  targetType: "article" | "message" | "profile";
   targetId: string;
   reason: string;
   excerpt: string;
@@ -242,7 +196,6 @@ function formatFeedTime(iso: string, locale: Language = "ja"): string {
 const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   ja: {
     projects: "仲間と動かす。プロジェクトをここから。",
-    posts: "友だちの近況をひと目で",
     articles: "記事",
     mentor: "AIに相談して次の一歩を決めよう",
     discovery: "質問・アイデア相談",
@@ -251,7 +204,6 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   },
   en: {
     projects: "Build together. Your projects start here.",
-    posts: "Friends and updates at a glance",
     articles: "Articles",
     mentor: "Talk to AI and plan your next step",
     discovery: "Ideas Q&A",
@@ -263,7 +215,6 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
 type HomeBottomNavKey = FeaturePage | "idea";
 
 const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
-  { key: "posts", icon: "⌂" },
   { key: "projects", icon: "▦" },
   { key: "idea", icon: "✦" },
   { key: "chat", icon: "⌕" },
@@ -272,7 +223,6 @@ const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
 
 const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
   projects: "navProjects",
-  posts: "navHome",
   idea: "navIdea",
   chat: "navSearch",
   account: "navProfile",
@@ -281,7 +231,6 @@ const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
 const featureLabels: Record<Language, Record<FeaturePage, string>> = {
   ja: {
     projects: "プロジェクト",
-    posts: "ホーム",
     articles: "記事",
     mentor: "AI",
     discovery: "知恵袋",
@@ -290,7 +239,6 @@ const featureLabels: Record<Language, Record<FeaturePage, string>> = {
   },
   en: {
     projects: "Projects",
-    posts: "Home",
     articles: "Articles",
     mentor: "AI",
     discovery: "Ideas",
@@ -364,9 +312,6 @@ function scoreProblemDraft(raw: string): { score: number; hints: string[] } {
 }
 
 const DEMO_MEMBERS: MatchMember[] = [];
-
-const FRIEND_SEARCH_EXAMPLES_JA = ["デザインが得意な人", "マーケティング経験者", "教育 アプリ"];
-const FRIEND_SEARCH_EXAMPLES_EN = ["good at design", "marketing experience", "education app"];
 
 function strengthFromRole(role: string | null | undefined): string {
   if (role === "investor") return "投資/事業経験";
@@ -640,28 +585,6 @@ const initialArticles: Article[] = [
   },
 ];
 
-const DEMO_FEED: FeedPost[] = [
-  {
-    id: "demo-feed-welcome",
-    authorId: "demo",
-    authorName: "moni",
-    caption: "活動記録機能を整えました\n\n---\n\nタイトル・詳細・証跡画像で進捗を残せます。画像は任意です。",
-    postType: "normal",
-    imageUrl:
-      "data:image/svg+xml," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#fce7f3"/><stop offset="50%" style="stop-color:#e0e7ff"/><stop offset="100%" style="stop-color:#cffafe"/></linearGradient></defs><rect width="800" height="800" fill="url(#g)"/><text x="400" y="380" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" fill="#64748b">サンプル</text><text x="400" y="430" text-anchor="middle" font-family="system-ui,sans-serif" font-size="22" fill="#94a3b8">Supabase 接続でみんなの投稿が見られます</text></svg>`,
-      ),
-    createdAt: new Date().toISOString(),
-    likeCount: 0,
-    likedByMe: false,
-    commentCount: 0,
-    comments: [],
-    reactionCounts: { fire: 0, idea: 0, help: 0 },
-    myReaction: null,
-  },
-];
-
 function CommunityConnectChips({
   onProjects,
   onDiscover,
@@ -711,8 +634,7 @@ export default function Home() {
   const bottomNavButtonClass = (page: HomeBottomNavKey) =>
     `app-bottom-nav-item keep-bottom-nav ${page !== "idea" && activePage === page ? "is-active" : ""}`;
   const [role, setRole] = useState<AppRole>("child");
-  const [activePage, setActivePage] = useState<FeaturePage>("posts");
-  const [communityView, setCommunityView] = useState<"progress" | "qna">("progress");
+  const [activePage, setActivePage] = useState<FeaturePage>("chat");
   const { locale: language, setLocale: setLanguage, t, tx } = useI18n();
   const [displayName, setDisplayName] = useState("");
   const [profileGoal, setProfileGoal] = useState("");
@@ -732,6 +654,10 @@ export default function Home() {
   const [mentorMessages, setMentorMessages] = useState<MentorChatMessage[]>(() => [
     createMentorWelcomeMessage(),
   ]);
+  const [mentorConversations, setMentorConversations] = useState<MentorSavedConversation[]>([]);
+  const [activeMentorConversationId, setActiveMentorConversationId] = useState("");
+  const [mentorHistoryOpen, setMentorHistoryOpen] = useState(false);
+  const [mentorHistoryOwnerKey, setMentorHistoryOwnerKey] = useState("");
   const [mentorInput, setMentorInput] = useState("");
   const [mentorLoading, setMentorLoading] = useState(false);
   const [mentorError, setMentorError] = useState("");
@@ -821,8 +747,6 @@ export default function Home() {
   const [accountSubTab, setAccountSubTab] = useState<"profile" | "settings">("profile");
   const [mentorSubTab, setMentorSubTab] = useState<"menu" | "ai" | "validation">("menu");
 
-  const [qnaPrefillTitle, setQnaPrefillTitle] = useState("");
-  const [qnaFocusToken, setQnaFocusToken] = useState(0);
 
   const accountText =
     language === "ja"
@@ -833,22 +757,17 @@ export default function Home() {
           back: "戻る",
           unnamed: "名前未設定",
           notLoggedIn: "未ログイン",
-          posts: "投稿",
           followers: "フォロワー",
           following: "フォロー中",
           googleLogin: "Googleでログイン",
           saveAccount: "アカウント設定を保存",
-          myPosts: "あなたの投稿",
-          noPosts: "まだ投稿がありません。",
-          loginForPosts: "ログインすると自分の投稿一覧が表示されます。",
-          imageOnlyPost: "（画像投稿）",
           suggestedUsers: "おすすめユーザー",
           typeRecommend: "タイプ別AIおすすめ",
           followed: "フォロー中",
           follow: "フォロー",
           settingsSave: "設定を保存",
           username: "ユーザーネーム",
-          usernameHint: "チャット・投稿・コメントに表示される名前です。",
+          usernameHint: "チャット・コメントに表示される名前です。",
           yourType: "あなたのタイプ",
           bio: "自己紹介",
           bioPlaceholder: "あなたの得意なことや挑戦したいことを書いてください",
@@ -863,22 +782,17 @@ export default function Home() {
           back: "Back",
           unnamed: "No name",
           notLoggedIn: "Not logged in",
-          posts: "Posts",
           followers: "Followers",
           following: "Following",
           googleLogin: "Sign in with Google",
           saveAccount: "Save account",
-          myPosts: "Your posts",
-          noPosts: "No posts yet.",
-          loginForPosts: "Sign in to see your post history.",
-          imageOnlyPost: "(Image post)",
           suggestedUsers: "Suggested users",
           typeRecommend: "AI recommendations",
           followed: "Following",
           follow: "Follow",
           settingsSave: "Save settings",
           username: "Username",
-          usernameHint: "Shown in posts and comments.",
+          usernameHint: "Shown in chat and comments.",
           yourType: "Your type",
           bio: "Bio",
           bioPlaceholder: "Tell others what you are good at and want to build.",
@@ -891,14 +805,7 @@ export default function Home() {
   const [pitchBody, setPitchBody] = useState("");
   const [pitches, setPitches] = useState<Pitch[]>([]);
 
-  const [feedPosts, setFeedPosts] = useState<FeedPost[]>(() => (supabaseEnabled ? [] : DEMO_FEED));
   const [mentorContext, setMentorContext] = useState<MentorClientContext | null>(null);
-  const [postComposerOpen, setPostComposerOpen] = useState(false);
-  const [postComposerSeed, setPostComposerSeed] = useState<{ title: string; detail: string }>({ title: "", detail: "" });
-  const [postPosting, setPostPosting] = useState(false);
-  const [activityToast, setActivityToast] = useState("");
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [feedCommentsOpen, setFeedCommentsOpen] = useState<Record<string, boolean>>({});
   const [followingIds, setFollowingIds] = useState<string[]>([]);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -907,7 +814,6 @@ export default function Home() {
   const [incomingFollowRequests, setIncomingFollowRequests] = useState<FollowRequestItem[]>([]);
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [followListModal, setFollowListModal] = useState<"followers" | "following" | "requests" | null>(null);
-  const [accountPostCount, setAccountPostCount] = useState(0);
   const [followSuggestions, setFollowSuggestions] = useState<FollowUser[]>(DEMO_FOLLOW_USERS);
   const visibleFollowSuggestions = followSuggestions;
   const articleCategories = useMemo(() => {
@@ -1066,11 +972,6 @@ export default function Home() {
           : "賛否の分岐条件を質問追加して再投票。";
     return { total, top, sentiment, decision, nextAction, pos, neg };
   }, [testSheetOptions, testSheetThread, testSheetVotes]);
-  const myFeedPosts = useMemo(
-    () => (session ? feedPosts.filter((post) => post.authorId === session.user.id) : []),
-    [feedPosts, session],
-  );
-
   const [chatBody, setChatBody] = useState("");
   const [chatAttachmentName, setChatAttachmentName] = useState("");
   const [chatAttachmentPreview, setChatAttachmentPreview] = useState<string | null>(null);
@@ -1090,8 +991,6 @@ export default function Home() {
   const [groupRoomDraft, setGroupRoomDraft] = useState("");
   const [groupDeleteTarget, setGroupDeleteTarget] = useState<GroupRoomRow | null>(null);
   const [groupDeleting, setGroupDeleting] = useState(false);
-  const [feedDeleteTarget, setFeedDeleteTarget] = useState<FeedPost | null>(null);
-  const [feedDeleting, setFeedDeleting] = useState(false);
   const [exploreSegment, setExploreSegment] = useState<ExploreSegment>("friends");
   const [talkMeta, setTalkMeta] = useState<Record<string, TalkRoomMeta>>({});
   const [opsEvents, setOpsEvents] = useState<OpsEvent[]>([]);
@@ -1136,12 +1035,20 @@ export default function Home() {
       router.replace("/profile");
       return;
     }
-    if (tab === "posts" || tab === "articles" || tab === "mentor" || tab === "chat") {
-      setActivePage(tab);
+    if (tab === "posts" || community === "qna") {
+      router.replace("/idea?tab=qna");
+      return;
     }
-    if (community === "qna" || community === "progress") {
-      setActivePage("posts");
-      setCommunityView(community);
+    if (community === "progress") {
+      router.replace(HOME_PROJECTS_HREF);
+      return;
+    }
+    if (!tab && !mentor) {
+      router.replace(HOME_PROJECTS_HREF);
+      return;
+    }
+    if (tab === "articles" || tab === "mentor" || tab === "chat") {
+      setActivePage(tab);
     }
     if (mentor === "validation") {
       setActivePage("mentor");
@@ -1359,194 +1266,6 @@ export default function Home() {
     setPitches((data as Pitch[]) ?? []);
   }, []);
 
-  const loadPosts = useCallback(async () => {
-    if (!supabaseEnabled || !supabase) {
-      setFeedPosts(DEMO_FEED);
-      return;
-    }
-    const client = supabase;
-    const uid = sessionRef.current?.user.id ?? null;
-    const { data: rows, error } = await client
-      .from("posts")
-      .select("id,author_id,caption,image_path,created_at,post_type")
-      .order("created_at", { ascending: false })
-      .limit(40);
-    if (error) {
-      const hint = `${error.message}${error.code ? ` (${error.code})` : ""}`;
-      if (error.code === "42703" || hint.includes("post_type")) {
-        const fallback = await client
-          .from("posts")
-          .select("id,author_id,caption,image_path,created_at")
-          .order("created_at", { ascending: false })
-          .limit(40);
-        if (!fallback.error && fallback.data) {
-          const rows2 = fallback.data;
-          const authorIds2 = [...new Set(rows2.map((r) => r.author_id as string))];
-          const { data: profs2 } = await client.from("profiles").select("id,display_name,avatar_url").in("id", authorIds2);
-          const nameById2 = new Map(
-            (profs2 ?? []).map((p) => [p.id as string, ((p.display_name as string | null)?.trim() || "ユーザー") as string]),
-          );
-          const avatarById2 = new Map(
-            (profs2 ?? []).map((p) => [p.id as string, ((p.avatar_url as string | null)?.trim() || null) as string | null]),
-          );
-          setFeedPosts(
-            rows2.map((r) => {
-              const path = (r.image_path as string | null) ?? null;
-              const { data: pub } = path ? client.storage.from("post-images").getPublicUrl(path) : { data: { publicUrl: null } };
-              return {
-                id: r.id as string,
-                authorId: r.author_id as string,
-                authorName: nameById2.get(r.author_id as string) || "ユーザー",
-                authorAvatarUrl: avatarById2.get(r.author_id as string) ?? null,
-                caption: (r.caption as string) || "",
-                imageUrl: pub.publicUrl,
-                ...(() => {
-                  const parsed = parseActivityCaption((r.caption as string) || "");
-                  const urls = pub.publicUrl ? [pub.publicUrl] : [];
-                  const extras: string[] = [];
-                  for (const ep of parsed.extraImagePaths) {
-                    const { data } = client.storage.from("post-images").getPublicUrl(ep);
-                    if (data.publicUrl) urls.push(data.publicUrl);
-                    extras.push(ep);
-                  }
-                  return {
-                    imageUrls: urls,
-                    recordedAt: parsed.recordedAt,
-                    extraStoragePaths: extras,
-                  };
-                })(),
-                postType: "normal" as const,
-                storagePath: path ?? undefined,
-                createdAt: r.created_at as string,
-                likeCount: 0,
-                likedByMe: false,
-                commentCount: 0,
-                comments: [],
-                reactionCounts: { fire: 0, idea: 0, help: 0 },
-                myReaction: null,
-              };
-            }),
-          );
-          return;
-        }
-      }
-      if (
-        hint.includes("does not exist") ||
-        hint.includes("schema cache") ||
-        error.code === "42P01" ||
-        error.code === "PGRST205"
-      ) {
-        setFeedPosts([]);
-        return;
-      }
-      setAuthMessage(`投稿の取得に失敗: ${error.message}`);
-      return;
-    }
-    if (!rows?.length) {
-      setFeedPosts([]);
-      return;
-    }
-    const authorIds = [...new Set(rows.map((r) => r.author_id as string))];
-    const { data: profs } = await client.from("profiles").select("id,display_name,avatar_url").in("id", authorIds);
-    const nameById = new Map(
-      (profs ?? []).map((p) => [
-        p.id as string,
-        ((p.display_name as string | null)?.trim() || "ユーザー") as string,
-      ]),
-    );
-    const avatarById = new Map(
-      (profs ?? []).map((p) => [p.id as string, ((p.avatar_url as string | null)?.trim() || null) as string | null]),
-    );
-    const postIds = rows.map((r) => r.id as string);
-    const { data: likesRows } = await client.from("post_likes").select("post_id,user_id").in("post_id", postIds);
-    const { data: commentsRows, error: commentsError } = await client
-      .from("post_comments")
-      .select("id,post_id,author_id,body,created_at")
-      .in("post_id", postIds)
-      .order("created_at", { ascending: true });
-    if (commentsError && commentsError.code !== "42P01" && commentsError.code !== "PGRST205") {
-      setAuthMessage(`コメントの取得に失敗: ${commentsError.message}`);
-    }
-    const countByPost = new Map<string, number>();
-    const likedSet = new Set<string>();
-    for (const lr of likesRows ?? []) {
-      const pid = lr.post_id as string;
-      countByPost.set(pid, (countByPost.get(pid) ?? 0) + 1);
-      if (uid && (lr.user_id as string) === uid) likedSet.add(pid);
-    }
-    const safeCommentsRows = commentsRows ?? [];
-    const commentAuthorIds = [...new Set(safeCommentsRows.map((c) => c.author_id as string))];
-    const { data: commentProfiles } =
-      commentAuthorIds.length > 0
-        ? await client.from("profiles").select("id,display_name").in("id", commentAuthorIds)
-        : { data: [] as { id: string; display_name: string | null }[] };
-    const commentNameById = new Map(
-      (commentProfiles ?? []).map((p) => [
-        p.id as string,
-        ((p.display_name as string | null)?.trim() || "ユーザー") as string,
-      ]),
-    );
-    const commentsByPost = new Map<string, FeedComment[]>();
-    for (const c of safeCommentsRows) {
-      const postId = c.post_id as string;
-      const next: FeedComment = {
-        id: c.id as string,
-        postId,
-        authorId: c.author_id as string,
-        authorName: commentNameById.get(c.author_id as string) || "ユーザー",
-        body: (c.body as string) ?? "",
-        createdAt: c.created_at as string,
-      };
-      commentsByPost.set(postId, [...(commentsByPost.get(postId) ?? []), next]);
-    }
-    const mapped: FeedPost[] = rows.map((r) => {
-      const path = (r.image_path as string | null) ?? null;
-      const { data: pub } = path ? client.storage.from("post-images").getPublicUrl(path) : { data: { publicUrl: null } };
-      const postComments = commentsByPost.get(r.id as string) ?? [];
-      const pt = (r.post_type as FeedPostType | undefined) ?? "normal";
-      const caption = (r.caption as string) || "";
-      const parsed = parseActivityCaption(caption);
-      const urls = pub.publicUrl ? [pub.publicUrl] : [];
-      const extras: string[] = [];
-      for (const ep of parsed.extraImagePaths) {
-        const { data } = client.storage.from("post-images").getPublicUrl(ep);
-        if (data.publicUrl) urls.push(data.publicUrl);
-        extras.push(ep);
-      }
-      return {
-        id: r.id as string,
-        authorId: r.author_id as string,
-        authorName: nameById.get(r.author_id as string) || "ユーザー",
-        authorAvatarUrl: avatarById.get(r.author_id as string) ?? null,
-        caption,
-        imageUrl: urls[0] ?? null,
-        imageUrls: urls,
-        recordedAt: parsed.recordedAt,
-        postType: pt === "achievement" || pt === "question" || pt === "idea" ? pt : "normal",
-        storagePath: path ?? undefined,
-        extraStoragePaths: extras,
-        createdAt: r.created_at as string,
-        likeCount: countByPost.get(r.id as string) ?? 0,
-        likedByMe: likedSet.has(r.id as string),
-        commentCount: postComments.length,
-        comments: postComments,
-        reactionCounts: emptyReactionCounts(),
-        myReaction: null,
-      };
-    });
-    const { counts: reactionCounts, mine: myReactions } = await loadPostReactionMaps(client, postIds, uid);
-    const withReactions = mapped.map((p) => ({
-      ...p,
-      reactionCounts: reactionCounts.get(p.id) ?? emptyReactionCounts(),
-      myReaction: myReactions.get(p.id) ?? null,
-    }));
-    withReactions.sort(
-      (a, b) =>
-        new Date(b.recordedAt || b.createdAt).getTime() - new Date(a.recordedAt || a.createdAt).getTime(),
-    );
-    setFeedPosts(withReactions);
-  }, []);
-
   const loadSocialGraph = useCallback(async (userId: string) => {
     if (!supabase) {
       setFollowSuggestions([]);
@@ -1557,7 +1276,6 @@ export default function Home() {
     const [
       { count: followers },
       { count: following },
-      { count: myPosts },
       followerRowsRes,
       followingRowsRes,
       incomingReqRes,
@@ -1566,7 +1284,6 @@ export default function Home() {
     ] = await Promise.all([
       client.from("follows").select("*", { count: "exact", head: true }).eq("following_id", userId),
       client.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
-      client.from("posts").select("*", { count: "exact", head: true }).eq("author_id", userId),
       client.from("follows").select("follower_id").eq("following_id", userId),
       client.from("follows").select("following_id").eq("follower_id", userId),
       client.from("follow_requests").select("id,follower_id,created_at").eq("following_id", userId).eq("status", "pending"),
@@ -1592,7 +1309,6 @@ export default function Home() {
 
     setFollowerCount(followers ?? 0);
     setFollowingCount(following ?? 0);
-    setAccountPostCount(myPosts ?? 0);
 
     const followerRows = (followerRowsRes as { data?: Array<{ follower_id: string }> }).data ?? [];
     const followingRows = (followingRowsRes as { data?: Array<{ following_id: string }> }).data ?? [];
@@ -1892,23 +1608,6 @@ export default function Home() {
     setDismissedNotificationIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
 
-  async function openProfileByUserId(userId: string, fallbackName: string) {
-    if (!userId || userId === "demo") return;
-    let goal = language === "ja" ? "プロフィール情報" : "Profile";
-    if (supabase) {
-      const { data } = await supabase.from("profiles").select("goal").eq("id", userId).maybeSingle();
-      const profileGoalText = (data as { goal?: string | null } | null)?.goal ?? "";
-      if (profileGoalText.trim()) goal = profileGoalText.trim();
-    }
-    setActiveProfileMember({
-      id: userId,
-      name: fallbackName.trim() || "ユーザー",
-      goal,
-      strength: language === "ja" ? "投稿ユーザー" : "Post author",
-      aiType: inferAiTypeFromMember({ goal, strength: "" }),
-    });
-  }
-
   useEffect(() => {
     setProfilePortalReady(true);
   }, []);
@@ -1969,7 +1668,6 @@ export default function Home() {
   const loadRoleRef = useRef(loadRole);
   const loadArticlesRef = useRef(loadArticles);
   const loadPitchesRef = useRef(loadPitches);
-  const loadPostsRef = useRef(loadPosts);
   const loadSocialGraphRef = useRef(loadSocialGraph);
   const loadMessagesRef = useRef(loadMessages);
 
@@ -1999,13 +1697,6 @@ export default function Home() {
         completedTasks: (issues ?? []).filter((i) => i.status === "done").map((i) => i.title as string),
       };
     }
-    const { data: recentPosts } = await supabase
-      .from("posts")
-      .select("caption")
-      .eq("author_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(3);
-    ctx.recentPosts = (recentPosts ?? []).map((p) => (p.caption as string) || "").filter(Boolean);
     setMentorContext(ctx);
   }, []);
 
@@ -2013,7 +1704,6 @@ export default function Home() {
   loadRoleRef.current = loadRole;
   loadArticlesRef.current = loadArticles;
   loadPitchesRef.current = loadPitches;
-  loadPostsRef.current = loadPosts;
   loadSocialGraphRef.current = loadSocialGraph;
   loadMessagesRef.current = loadMessages;
   loadMentorContextRef.current = loadMentorContext;
@@ -2291,7 +1981,6 @@ export default function Home() {
       } else {
         setFollowSuggestions([]);
       }
-      void loadPostsRef.current();
     });
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -2306,7 +1995,6 @@ export default function Home() {
           loadArticlesRef.current(),
           loadPitchesRef.current(),
           refreshTalkListRef.current?.() ?? Promise.resolve(),
-          loadPostsRef.current(),
           loadSocialGraphRef.current(next.user.id),
           loadMentorContextRef.current?.(next.user.id) ?? Promise.resolve(),
         ]);
@@ -2319,13 +2007,11 @@ export default function Home() {
         setFollowingIds([]);
         setFollowerCount(0);
         setFollowingCount(0);
-        setAccountPostCount(0);
         setFollowerUsers([]);
         setFollowingUsers([]);
         setIncomingFollowRequests([]);
         setOutgoingRequestIds([]);
         setFollowSuggestions([]);
-        void loadPostsRef.current();
       }
     });
     return () => {
@@ -2618,38 +2304,6 @@ export default function Home() {
   }, [canUseSupabase, displayName, session, supabase]);
 
   useEffect(() => {
-    if (!canUseSupabase || !supabase) return;
-    const client = supabase;
-    const channel = client
-      .channel("feed-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "posts" },
-        () => {
-          void loadPostsRef.current();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_likes" },
-        () => {
-          void loadPostsRef.current();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "post_comments" },
-        () => {
-          void loadPostsRef.current();
-        },
-      )
-      .subscribe();
-    return () => {
-      void client.removeChannel(channel);
-    };
-  }, [canUseSupabase, supabase]);
-
-  useEffect(() => {
     if (!canUseSupabase || !supabase || !session) return;
     const client = supabase;
     const channel = client
@@ -2699,6 +2353,101 @@ export default function Home() {
     setSession(null);
     setSessionEmail(null);
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    const ownerKey = session?.user.id ?? "guest";
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const storageKey = `moni.mentorConversations.v1:${ownerKey}`;
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        const parsed = raw
+          ? (JSON.parse(raw) as { activeId?: unknown; conversations?: unknown })
+          : null;
+        const conversations = Array.isArray(parsed?.conversations)
+          ? parsed.conversations
+              .filter((item): item is MentorSavedConversation => {
+                if (!item || typeof item !== "object") return false;
+                const candidate = item as Partial<MentorSavedConversation>;
+                return (
+                  typeof candidate.id === "string" &&
+                  typeof candidate.title === "string" &&
+                  typeof candidate.updatedAt === "string" &&
+                  Array.isArray(candidate.messages)
+                );
+              })
+              .map((conversation) => ({
+                ...conversation,
+                messages: conversation.messages
+                  .filter(
+                    (message) =>
+                      message &&
+                      typeof message.id === "string" &&
+                      (message.role === "user" || message.role === "assistant") &&
+                      typeof message.content === "string",
+                  )
+                  .slice(-100),
+              }))
+              .filter((conversation) => conversation.messages.length > 0)
+              .slice(0, 30)
+          : [];
+        if (conversations.length > 0) {
+          const requestedId = typeof parsed?.activeId === "string" ? parsed.activeId : "";
+          const active = conversations.find((conversation) => conversation.id === requestedId) ?? conversations[0];
+          setMentorConversations(conversations);
+          setActiveMentorConversationId(active.id);
+          setMentorMessages(active.messages);
+        } else {
+          const id = `mentor-${Date.now()}`;
+          const messages = [createMentorWelcomeMessage()];
+          setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+          setActiveMentorConversationId(id);
+          setMentorMessages(messages);
+        }
+      } catch {
+        const id = `mentor-${Date.now()}`;
+        const messages = [createMentorWelcomeMessage()];
+        setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+        setActiveMentorConversationId(id);
+        setMentorMessages(messages);
+      } finally {
+        if (!cancelled) setMentorHistoryOwnerKey(ownerKey);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id, tx]);
+
+  useEffect(() => {
+    const ownerKey = session?.user.id ?? "guest";
+    if (mentorHistoryOwnerKey !== ownerKey || !activeMentorConversationId) return;
+    const title =
+      mentorMessages.find((message) => message.role === "user")?.content.trim().slice(0, 36) ||
+      tx("新しい相談", "New chat");
+    setMentorConversations((previous) => {
+      const nextConversation: MentorSavedConversation = {
+        id: activeMentorConversationId,
+        title,
+        updatedAt: new Date().toISOString(),
+        messages: mentorMessages.slice(-100),
+      };
+      const remaining = previous.filter((conversation) => conversation.id !== activeMentorConversationId);
+      return [nextConversation, ...remaining].slice(0, 30);
+    });
+  }, [activeMentorConversationId, mentorHistoryOwnerKey, mentorMessages, session?.user.id, tx]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !activeMentorConversationId) return;
+    const ownerKey = session?.user.id ?? "guest";
+    if (mentorHistoryOwnerKey !== ownerKey) return;
+    window.localStorage.setItem(
+      `moni.mentorConversations.v1:${ownerKey}`,
+      JSON.stringify({ activeId: activeMentorConversationId, conversations: mentorConversations }),
+    );
+  }, [activeMentorConversationId, mentorConversations, mentorHistoryOwnerKey, session?.user.id]);
 
   useEffect(() => {
     mentorScrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -2757,7 +2506,48 @@ export default function Home() {
   }
 
   function clearMentorChat() {
-    setMentorMessages([createMentorWelcomeMessage()]);
+    if (!mentorMessages.some((message) => message.role === "user")) {
+      setMentorMessages([createMentorWelcomeMessage()]);
+      setMentorError("");
+      return;
+    }
+    const id = `mentor-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+    const messages = [createMentorWelcomeMessage()];
+    setMentorConversations((previous) => [
+      { id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages },
+      ...previous,
+    ].slice(0, 30));
+    setActiveMentorConversationId(id);
+    setMentorMessages(messages);
+    setMentorError("");
+  }
+
+  function openMentorConversation(conversation: MentorSavedConversation) {
+    setActiveMentorConversationId(conversation.id);
+    setMentorMessages(conversation.messages);
+    setMentorError("");
+    setMentorHistoryOpen(false);
+  }
+
+  function deleteMentorConversation(conversationId: string) {
+    const remaining = mentorConversations.filter((conversation) => conversation.id !== conversationId);
+    if (conversationId !== activeMentorConversationId) {
+      setMentorConversations(remaining);
+      return;
+    }
+    const next = remaining[0];
+    if (next) {
+      setMentorConversations(remaining);
+      setActiveMentorConversationId(next.id);
+      setMentorMessages(next.messages);
+      setMentorError("");
+      return;
+    }
+    const id = `mentor-${Date.now()}`;
+    const messages = [createMentorWelcomeMessage()];
+    setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+    setActiveMentorConversationId(id);
+    setMentorMessages(messages);
     setMentorError("");
   }
 
@@ -2769,34 +2559,44 @@ export default function Home() {
       return;
     }
     setMatchLoading(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,display_name,goal,role,avatar_url,created_at")
-      .neq("id", session.user.id)
-      .order("created_at", { ascending: false })
-      .limit(12);
-    setMatchLoading(false);
-    if (error) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,display_name,goal,role,avatar_url,created_at")
+        .neq("id", session.user.id)
+        .order("created_at", { ascending: false })
+        .limit(12)
+        .abortSignal(controller.signal);
+      if (error) {
+        setMatches([]);
+        setMatchNotice(`おすすめの読み込みに失敗: ${error.message}`);
+        return;
+      }
+      const mapped = (data ?? []).map((row) =>
+        mapProfileToMatchMember({
+          id: row.id as string,
+          display_name: row.display_name as string | null,
+          goal: row.goal as string | null,
+          role: row.role as string | null,
+          avatar_url: (row.avatar_url as string | null) ?? null,
+        }),
+      );
+      setMatches(mapped);
+      setMatchSource("recommended");
+      setMatchNotice(
+        mapped.length === 0
+          ? "まだおすすめが少ないです。検索して探してみましょう。"
+          : "",
+      );
+    } catch {
       setMatches([]);
-      setMatchNotice(`おすすめの読み込みに失敗: ${error.message}`);
-      return;
+      setMatchNotice("おすすめを読み込めませんでした。もう一度お試しください。");
+    } finally {
+      window.clearTimeout(timeout);
+      setMatchLoading(false);
     }
-    const mapped = (data ?? []).map((row) =>
-      mapProfileToMatchMember({
-        id: row.id as string,
-        display_name: row.display_name as string | null,
-        goal: row.goal as string | null,
-        role: row.role as string | null,
-        avatar_url: (row.avatar_url as string | null) ?? null,
-      }),
-    );
-    setMatches(mapped);
-    setMatchSource("recommended");
-    setMatchNotice(
-      mapped.length === 0
-        ? "まだおすすめが少ないです。検索して探してみましょう。"
-        : "",
-    );
   }
 
   async function searchFriendsByGoal(rawGoal: string, opts?: { fromSubmit?: boolean }) {
@@ -2809,38 +2609,47 @@ export default function Home() {
 
     if (supabase && session) {
       setMatchLoading(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,display_name,goal,role,avatar_url")
-        .neq("id", session.user.id)
-        .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
-        .limit(30);
-      setMatchLoading(false);
-      if (error) {
-        setMatchNotice("");
-        setAuthMessage(`マッチング検索に失敗: ${error.message}`);
-        return;
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10_000);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id,display_name,goal,role,avatar_url")
+          .neq("id", session.user.id)
+          .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
+          .limit(30)
+          .abortSignal(controller.signal);
+        if (error) {
+          setMatchNotice("");
+          setAuthMessage(`マッチング検索に失敗: ${error.message}`);
+          return;
+        }
+        const mapped: MatchMember[] = (data ?? []).map((row) =>
+          mapProfileToMatchMember({
+            id: row.id as string,
+            display_name: row.display_name as string | null,
+            goal: row.goal as string | null,
+            role: row.role as string | null,
+            avatar_url: (row.avatar_url as string | null) ?? null,
+          }),
+        );
+        setMatches(mapped);
+        setMatchSource("search");
+        if (opts?.fromSubmit) {
+          trackOpsEvent("matching_search");
+          trackOpsEvent("search_started");
+        }
+        setMatchNotice(
+          mapped.length === 0
+            ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
+            : `${mapped.length}件見つかりました。`,
+        );
+      } catch {
+        setMatchNotice("検索結果を読み込めませんでした。もう一度お試しください。");
+      } finally {
+        window.clearTimeout(timeout);
+        setMatchLoading(false);
       }
-      const mapped: MatchMember[] = (data ?? []).map((row) =>
-        mapProfileToMatchMember({
-          id: row.id as string,
-          display_name: row.display_name as string | null,
-          goal: row.goal as string | null,
-          role: row.role as string | null,
-          avatar_url: (row.avatar_url as string | null) ?? null,
-        }),
-      );
-      setMatches(mapped);
-      setMatchSource("search");
-      if (opts?.fromSubmit) {
-        trackOpsEvent("matching_search");
-        trackOpsEvent("search_started");
-      }
-      setMatchNotice(
-        mapped.length === 0
-          ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
-          : `${mapped.length}件見つかりました。`,
-      );
       return;
     }
 
@@ -3341,9 +3150,9 @@ export default function Home() {
       }
       trackOpsEvent("onboarding_completed");
       setOnboardingCompleted(true);
-      setActivePage("posts");
+      router.replace(HOME_PROJECTS_HREF);
       setAuthMessage(
-        tx("オンボーディング完了。ホームでつながりを楽しみましょう。", "Setup done. Explore Home and connect."),
+        tx("オンボーディング完了。プロジェクトから始めましょう。", "Setup done. Start from Projects."),
       );
     } finally {
       setOnboardingSaving(false);
@@ -3535,21 +3344,31 @@ export default function Home() {
     const q =
       ideaBlueprint.hypothesis.trim() ||
       (ideaBlueprint.title.trim() ? `「${ideaBlueprint.title}」は本当に求められていますか？` : "このアイデア、使ってもらえそうですか？");
-    setTestSheetQuestion(q.slice(0, 140));
-    setActivePage("posts");
-    setCommunityView("qna");
-    setQnaPrefillTitle(q.slice(0, 80));
-    setAuthMessage("コミュニティの質問フォームに内容をセットしました。");
+    try {
+      sessionStorage.setItem(
+        "moni.qna.prefill.v1",
+        JSON.stringify({ title: q.slice(0, 80), focus: true }),
+      );
+    } catch {
+      /* ignore */
+    }
+    router.push("/idea?tab=qna");
+    setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
   function sendBlueprintToMentor() {
     const body = ideaBlueprint.mentorSeed.trim() || ideaBlueprint.elevatorPitch;
     const title = ideaBlueprint.title.trim() || "アイデアの進捗";
-    setPostComposerSeed({ title, detail: body });
-    setActivePage("posts");
-    setCommunityView("progress");
-    setPostComposerOpen(true);
-    setAuthMessage("活動記録の下書きを開けました。内容を確認して記録してください。");
+    try {
+      sessionStorage.setItem(
+        "moni.qna.prefill.v1",
+        JSON.stringify({ title: title.slice(0, 80), detail: body, focus: true }),
+      );
+    } catch {
+      /* ignore */
+    }
+    router.push("/idea?tab=qna");
+    setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
   async function addPitch(event: FormEvent) {
@@ -3581,278 +3400,6 @@ export default function Home() {
     }
     setPitchTitle("");
     setPitchBody("");
-  }
-
-  function resetPostComposer() {
-    setPostComposerSeed({ title: "", detail: "" });
-    setPostComposerOpen(false);
-  }
-
-  function showActivityToast(message: string) {
-    setActivityToast(message);
-    window.setTimeout(() => setActivityToast(""), 2600);
-  }
-
-  async function submitActivityRecord(payload: ActivityComposerSubmitPayload) {
-    if (!payload.title.trim()) {
-      setAuthMessage("何をしたか（タイトル）を入力してください。");
-      return;
-    }
-
-    const postType = categoryToPostType(payload.category);
-
-    if (!supabase || !session) {
-      const localUrls = payload.files.map((f) => URL.createObjectURL(f));
-      setFeedPosts((prev) => [
-        {
-          id: `local-post-${Date.now()}`,
-          authorId: "local",
-          authorName: displayName.trim() || "あなた",
-          caption: formatActivityCaption({
-            title: payload.title,
-            detail: payload.detail,
-            recordedAt: payload.recordedAt,
-            category: payload.category,
-          }),
-          postType,
-          imageUrl: localUrls[0] ?? null,
-          imageUrls: localUrls,
-          recordedAt: payload.recordedAt,
-          createdAt: payload.recordedAt || new Date().toISOString(),
-          likeCount: 0,
-          likedByMe: false,
-          commentCount: 0,
-          comments: [],
-          reactionCounts: { fire: 0, idea: 0, help: 0 },
-          myReaction: null,
-        },
-        ...prev,
-      ]);
-      resetPostComposer();
-      showActivityToast("活動を記録しました");
-      return;
-    }
-
-    setPostPosting(true);
-    try {
-      const uploadedPaths: string[] = [];
-      for (let i = 0; i < payload.files.length; i += 1) {
-        const file = payload.files[i];
-        const extFromType =
-          file.type === "image/png"
-            ? "png"
-            : file.type === "image/webp"
-              ? "webp"
-              : file.type === "image/gif"
-                ? "gif"
-                : "jpg";
-        const path = `${session.user.id}/${Date.now()}-${i}.${extFromType}`;
-        const { error: upErr } = await supabase.storage.from("post-images").upload(path, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type || "image/jpeg",
-        });
-        if (upErr) {
-          setAuthMessage(`画像のアップロードに失敗: ${upErr.message}`);
-          if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
-          return;
-        }
-        uploadedPaths.push(path);
-      }
-
-      const primaryPath = uploadedPaths[0] ?? null;
-      const extraPaths = uploadedPaths.slice(1);
-      const finalCaption = formatActivityCaption({
-        title: payload.title,
-        detail: payload.detail,
-        recordedAt: payload.recordedAt,
-        category: payload.category,
-        extraImagePaths: extraPaths,
-      });
-
-      const { error: insErr } = await supabase.from("posts").insert({
-        author_id: session.user.id,
-        caption: finalCaption || payload.title || "活動記録",
-        image_path: primaryPath,
-        post_type: postType,
-      });
-      if (insErr?.message?.includes("post_type")) {
-        const retry = await supabase.from("posts").insert({
-          author_id: session.user.id,
-          caption: finalCaption || payload.title || "活動記録",
-          image_path: primaryPath,
-        });
-        if (retry.error) {
-          setAuthMessage(`投稿の保存に失敗: ${retry.error.message}`);
-          if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
-          return;
-        }
-      } else if (insErr) {
-        setAuthMessage(`投稿の保存に失敗: ${insErr.message}`);
-        if (uploadedPaths.length > 0) await supabase.storage.from("post-images").remove(uploadedPaths);
-        return;
-      }
-      resetPostComposer();
-      await loadPosts();
-      void recordUserActivity(supabase, session.user.id)
-        .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
-        .catch(() => undefined);
-      trackOpsEvent("post_created");
-      trackOpsEvent("first_post_completed");
-      showActivityToast("活動を記録しました");
-    } finally {
-      setPostPosting(false);
-    }
-  }
-
-  async function toggleFeedPostReaction(post: FeedPost, kind: ReactionKind) {
-    if (!supabase || !session || post.authorId === "demo") return;
-    const next = await togglePostReaction(supabase, session.user.id, post.id, kind, post.myReaction);
-    setFeedPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== post.id) return p;
-        const reactionCounts = { ...p.reactionCounts };
-        if (p.myReaction) reactionCounts[p.myReaction] = Math.max(0, reactionCounts[p.myReaction] - 1);
-        if (next) reactionCounts[next] += 1;
-        return { ...p, myReaction: next, reactionCounts };
-      }),
-    );
-    void recordUserActivity(supabase, session.user.id, 1)
-      .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
-      .catch(() => undefined);
-  }
-
-  async function toggleFeedPostLike(post: FeedPost) {
-    if (!supabase || !session) {
-      setFeedPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? {
-                ...p,
-                likedByMe: !p.likedByMe,
-                likeCount: p.likedByMe ? Math.max(0, p.likeCount - 1) : p.likeCount + 1,
-              }
-            : p,
-        ),
-      );
-      return;
-    }
-    if (post.likedByMe) {
-      const { error } = await supabase.from("post_likes").delete().eq("post_id", post.id).eq("user_id", session.user.id);
-      if (error) {
-        setAuthMessage(`いいねの解除に失敗: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("post_likes").insert({ post_id: post.id, user_id: session.user.id });
-      if (error) {
-        setAuthMessage(`いいねに失敗: ${error.message}`);
-        return;
-      }
-    }
-    await loadPosts();
-  }
-
-  function canDeleteFeedPost(post: FeedPost): boolean {
-    if (post.authorId === "demo") return false;
-    if (post.authorId === "local") return !session && !canUseSupabase;
-    const uid = session?.user?.id;
-    if (!uid) return false;
-    if (post.authorId === uid) return true;
-    return isAppAdmin;
-  }
-
-  async function deleteFeedPost(post: FeedPost) {
-    setFeedDeleting(true);
-    try {
-      if (post.authorId === "local") {
-        if (session || canUseSupabase) {
-          setAuthMessage("この投稿を削除する権限がありません。");
-          return;
-        }
-        setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
-        if (post.imageUrl?.startsWith("blob:")) URL.revokeObjectURL(post.imageUrl);
-        return;
-      }
-      const uid = session?.user?.id;
-      if (!uid) {
-        setAuthMessage("ログインしてから削除してください。");
-        return;
-      }
-      const isOwner = uid === post.authorId;
-      if (!isOwner && !isAppAdmin) {
-        setAuthMessage("この投稿を削除する権限がありません。");
-        return;
-      }
-      if (!supabase || !canUseSupabase) {
-        setAuthMessage("接続できないため削除できません。");
-        return;
-      }
-      let deleteQuery = supabase.from("posts").delete().eq("id", post.id);
-      if (isOwner) deleteQuery = deleteQuery.eq("author_id", uid);
-      const { data: deletedRows, error } = await deleteQuery.select("id");
-      if (error) {
-        setAuthMessage(`投稿の削除に失敗: ${error.message}`);
-        return;
-      }
-      if (!deletedRows?.length) {
-        setAuthMessage("この投稿を削除する権限がありません。");
-        return;
-      }
-      if (post.storagePath || (post.extraStoragePaths && post.extraStoragePaths.length > 0)) {
-        const paths = [post.storagePath, ...(post.extraStoragePaths ?? [])].filter(Boolean) as string[];
-        if (paths.length > 0) await supabase.storage.from("post-images").remove(paths);
-      }
-      await loadPosts();
-    } finally {
-      setFeedDeleting(false);
-      setFeedDeleteTarget(null);
-    }
-  }
-
-  async function addFeedComment(post: FeedPost) {
-    const body = (commentDrafts[post.id] ?? "").trim();
-    if (!body) return;
-
-    const appendLocalComment = () => {
-      const newComment: FeedComment = {
-        id: `local-comment-${Date.now()}`,
-        postId: post.id,
-        authorId: session?.user.id ?? "local",
-        authorName: displayName.trim() || "あなた",
-        body,
-        createdAt: new Date().toISOString(),
-      };
-      setFeedPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? { ...p, comments: [...p.comments, newComment], commentCount: p.commentCount + 1 }
-            : p,
-        ),
-      );
-      setCommentDrafts((prev) => ({ ...prev, [post.id]: "" }));
-    };
-
-    if (!supabase || !session) {
-      appendLocalComment();
-      return;
-    }
-
-    const { error } = await supabase.from("post_comments").insert({
-      post_id: post.id,
-      author_id: session.user.id,
-      body,
-    });
-    if (error) {
-      appendLocalComment();
-      setAuthMessage(`コメントの保存でエラーが出たため、この端末では反映しました。(${error.message})`);
-      return;
-    }
-    appendLocalComment();
-    await loadPosts();
-    void recordUserActivity(supabase, session.user.id)
-      .then(() => window.dispatchEvent(new Event("moni-activity-updated")))
-      .catch(() => undefined);
   }
 
   async function toggleFollow(targetUserId: string) {
@@ -4208,9 +3755,9 @@ export default function Home() {
                     }
                     trackOpsEvent("onboarding_completed");
                     setOnboardingCompleted(true);
-                    setActivePage("posts");
+                    router.replace(HOME_PROJECTS_HREF);
                     setAuthMessage(
-                      tx("まずはホームで近況を見たり、投稿してみましょう。", "Start on Home — browse updates or post."),
+                      tx("プロジェクトから始めましょう。", "Start from Projects."),
                     );
                   }}
                 >
@@ -4273,16 +3820,10 @@ export default function Home() {
     );
   }
 
-  const communityFullBleed = activePage === "posts";
-
   return (
     <div
       id="moni-app"
-      className={`relative text-zinc-900 antialiased ${
-        communityFullBleed
-          ? "box-border flex h-[100svh] max-h-[100dvh] min-h-0 flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top,0px)]"
-          : "min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)]"
-      }`}
+      className="relative min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
     >
       <input
         ref={avatarInputRef}
@@ -4291,13 +3832,7 @@ export default function Home() {
         className="hidden"
         onChange={onAvatarFileChange}
       />
-      <div
-        className={
-          communityFullBleed
-            ? "relative flex min-h-0 flex-1 w-full flex-col"
-            : `relative mx-auto w-full max-w-none grid grid-cols-1 gap-3 px-4 py-3 sm:gap-4`
-        }
-      >
+      <div className="relative mx-auto grid w-full max-w-none grid-cols-1 gap-3 px-4 py-3 sm:gap-4">
         <aside className="hidden" aria-hidden="true">
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
@@ -4337,10 +3872,14 @@ export default function Home() {
           </div>
         </aside>
 
-        <div className={communityFullBleed ? "flex min-h-0 min-w-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
-          {!communityFullBleed ? (
-          <>
-          <header className="flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className={activePage === "chat" ? "space-y-0" : "space-y-3 sm:space-y-4"}>
+          <header
+            className={`flex items-center justify-between gap-2 bg-white px-3 py-2.5 sm:px-4 sm:py-3 ${
+              activePage === "chat"
+                ? "rounded-t-2xl border border-zinc-200"
+                : "border-b border-[#dbdbdb]"
+            }`}
+          >
             <h1 className="moni-wordmark text-xl sm:text-2xl">moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
               {!session && canUseSupabase ? (
@@ -4374,16 +3913,8 @@ export default function Home() {
               ))}
             </div>
           ) : null}
-          </>
-          ) : null}
 
-          <main
-            className={
-              communityFullBleed
-                ? "flex min-h-0 flex-1 flex-col pb-bottom-nav"
-                : "grid gap-4 pb-bottom-nav md:grid-cols-1"
-            }
-          >
+          <main className="grid gap-4 pb-bottom-nav md:grid-cols-1">
         <section className="hidden rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)]" aria-hidden>
             {accountSubTab === "profile" ? (
               <div className="flex items-start justify-between gap-2">
@@ -4447,11 +3978,7 @@ export default function Home() {
                   </p>
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 border-y border-[#efefef] py-3 text-center">
-                <div>
-                  <p className="text-base font-semibold">{accountPostCount}</p>
-                  <p className="text-[11px] text-[#8e8e8e]">{accountText.posts}</p>
-                </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[#efefef] py-3 text-center">
                 <button
                   type="button"
                   className="rounded-md py-0.5 transition hover:bg-zinc-50"
@@ -4514,30 +4041,6 @@ export default function Home() {
               <p className="mt-1 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm leading-relaxed text-[#262626]">
                 {profileGoal.trim() || (language === "ja" ? "未設定です。Settingsで設定できます。" : "Not set yet. You can edit it in Settings.")}
               </p>
-            </div>
-            <div className={`mt-4 rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] ${accountSubTab === "profile" ? "" : "hidden"}`}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#262626]">{accountText.myPosts}</h3>
-                <span className="text-[11px] text-[#8e8e8e]">{myFeedPosts.length}件</span>
-              </div>
-              {session ? (
-                myFeedPosts.length > 0 ? (
-                  <ul className="mt-3 space-y-2">
-                    {myFeedPosts.slice(0, 10).map((post) => (
-                    <li key={`my-post-${post.id}`} className="rounded-xl border border-[#efefef] bg-[#fafafa] px-3 py-2">
-                        <p className="text-xs text-[#8e8e8e]">{formatFeedTime(post.createdAt, language)}</p>
-                        <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-sm text-[#262626]">
-                          {post.caption || accountText.imageOnlyPost}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-xs text-[#8e8e8e]">{accountText.noPosts}</p>
-                )
-              ) : (
-                <p className="mt-2 text-xs text-[#8e8e8e]">{accountText.loginForPosts}</p>
-              )}
             </div>
             <div className={`mt-4 rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] ${accountSubTab === "profile" ? "" : "hidden"}`}>
               <div className="flex items-center justify-between">
@@ -4774,111 +4277,12 @@ export default function Home() {
               ) : null}
             </div>
             {authMessage ? <p className="mt-2 text-sm text-[#262626]">{authMessage}</p> : null}
-            {requiresLogin ? (
-              <p className="mt-2 text-sm text-[#ed4956]">
-                {tx(
-                  "投稿系機能を使うにはログインが必要です。Googleログイン後、ヘッダー右にメールが表示されているか確認してください。",
-                  "Log in to post. After Google sign-in, check that your email appears in the header.",
-                )}
-              </p>
-            ) : null}
-        </section>
-
-        <section
-          className={`relative flex min-h-0 flex-1 flex-col bg-white ${
-            activePage === "posts" && communityView === "progress" ? "" : "hidden"
-          }`}
-        >
-          <div className="mobile-sticky-header mobile-content-inset shrink-0 border-b border-zinc-200 bg-white pt-3">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="moni-wordmark text-xl leading-none">moni</h1>
-              {session ? (
-                <button
-                  type="button"
-                  className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
-                  onClick={() => {
-                    setPostComposerSeed({ title: "", detail: "" });
-                    setPostComposerOpen(true);
-                  }}
-                >
-                  {tx("＋ 記録", "+ Record")}
-                </button>
-              ) : null}
-            </div>
-            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label={tx("コミュニティの表示", "Community")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={communityView === "progress"}
-                className={`${COMMUNITY_TAB} ${
-                  communityView === "progress" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
-                }`}
-                onClick={() => setCommunityView("progress")}
-              >
-                {tx("進捗共有", "Updates")}
-                {communityView === "progress" ? (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
-                ) : null}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={communityView === "qna"}
-                className={`${COMMUNITY_TAB} ${
-                  communityView === "qna" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
-                }`}
-                onClick={() => {
-                  setCommunityView("qna");
-                }}
-              >
-                {tx("質問・相談", "Q&A")}
-                {communityView === "qna" ? (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
-                ) : null}
-              </button>
-            </div>
-          </div>
-
-          <div className="community-feed-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-white">
-            <ActivityTimeline
-              posts={feedPosts}
-              currentUserId={session?.user?.id ?? null}
-              locale={language === "en" ? "en" : "ja"}
-              commentsOpen={feedCommentsOpen}
-              commentDrafts={commentDrafts}
-              onOpenAuthor={(authorId, authorName) => void openProfileByUserId(authorId, authorName)}
-              onToggleLike={(post) => void toggleFeedPostLike(post as FeedPost)}
-              onToggleComments={(postId) => {
-                setFeedCommentsOpen((prev) => {
-                  const nextOpen = !prev[postId];
-                  if (nextOpen) {
-                    window.setTimeout(() => {
-                      document
-                        .getElementById(`comment-input-${postId}`)
-                        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-                    }, 80);
-                  }
-                  return { ...prev, [postId]: nextOpen };
-                });
-              }}
-              onCommentDraftChange={(postId, value) => setCommentDrafts((prev) => ({ ...prev, [postId]: value }))}
-              onSubmitComment={(post) => void addFeedComment(post as FeedPost)}
-              onDelete={(post) => setFeedDeleteTarget(post as FeedPost)}
-              canDelete={(post) => canDeleteFeedPost(post as FeedPost)}
-              emptyHint={
-                session
-                  ? tx("右上の「＋ 記録」から活動を残せます。", "Tap + Record in the top right to log activity.")
-                  : tx("ログインすると活動を記録できます。", "Log in to record activity.")
-              }
-            />
-          </div>
-
         </section>
 
         <section className={`${cardClass} ${activePage === "articles" ? "" : "hidden"}`}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold">{tx("記事", "Articles")}</h3>
-            <button type="button" className={secondaryButtonClass} onClick={() => setActivePage("posts")}>{tx("投稿へ", "Back to feed")}</button>
+            <button type="button" className={secondaryButtonClass} onClick={() => router.push(HOME_PROJECTS_HREF)}>{tx("プロジェクトへ", "Back to projects")}</button>
           </div>
           {canModerate ? (
             <form className="mt-3 grid gap-2" onSubmit={addArticle}>
@@ -5248,13 +4652,20 @@ export default function Home() {
               >
                 アイデア発掘
               </a>
-              <div className="grid grid-cols-2 gap-2 sm:flex">
+              <div className="grid grid-cols-3 gap-2 sm:flex">
                 <button
                   type="button"
                   className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
                   onClick={() => setMentorSubTab("menu")}
                 >
                   ← 戻る
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
+                  onClick={() => setMentorHistoryOpen(true)}
+                >
+                  履歴
                 </button>
                 <button
                   type="button"
@@ -5266,6 +4677,68 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          {mentorHistoryOpen ? (
+            <div
+              className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="mentor-history-title"
+              onClick={() => setMentorHistoryOpen(false)}
+            >
+              <div
+                className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h3 id="mentor-history-title" className="text-lg font-bold text-zinc-900">相談履歴</h3>
+                  <button
+                    type="button"
+                    className="min-h-[40px] rounded-lg px-3 text-sm font-semibold text-zinc-500 hover:bg-zinc-100"
+                    onClick={() => setMentorHistoryOpen(false)}
+                  >
+                    閉じる
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {mentorConversations.map((conversation) => (
+                    <li
+                      key={conversation.id}
+                      className={`flex items-center gap-2 rounded-xl border p-2 ${
+                        conversation.id === activeMentorConversationId
+                          ? "border-indigo-200 bg-indigo-50"
+                          : "border-zinc-200 bg-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left hover:bg-white/70"
+                        onClick={() => openMentorConversation(conversation)}
+                      >
+                        <span className="line-clamp-1 block text-sm font-semibold text-zinc-900">{conversation.title}</span>
+                        <span className="mt-0.5 block text-[11px] text-zinc-500">
+                          {new Date(conversation.updatedAt).toLocaleString(language === "en" ? "en-US" : "ja-JP", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-[40px] shrink-0 rounded-lg px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                        aria-label={tx(`${conversation.title}を削除`, `Delete ${conversation.title}`)}
+                        onClick={() => deleteMentorConversation(conversation.id)}
+                      >
+                        削除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-5">
@@ -5335,72 +4808,7 @@ export default function Home() {
         </section>
 
         <section
-          className={`flex min-h-0 flex-1 flex-col bg-white ${
-            activePage === "posts" && communityView === "qna" ? "" : "hidden"
-          }`}
-        >
-          {/* コミュニティ共通ヘッダー（質問・相談） */}
-          <div className="mobile-sticky-header mobile-content-inset shrink-0 border-b border-zinc-200 bg-white pt-3">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="moni-wordmark text-xl leading-none">moni</h1>
-              {session ? (
-                <button
-                  type="button"
-                  className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
-                  onClick={() => setQnaFocusToken((n) => n + 1)}
-                >
-                  {tx("＋ 質問", "+ Ask")}
-                </button>
-              ) : null}
-            </div>
-            <div className="mt-3 flex gap-5 border-b border-zinc-200" role="tablist" aria-label={tx("コミュニティの表示", "Community")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={communityView === "progress"}
-                className={`${COMMUNITY_TAB} ${
-                  communityView === "progress" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
-                }`}
-                onClick={() => setCommunityView("progress")}
-              >
-                {tx("進捗共有", "Updates")}
-                {communityView === "progress" ? (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
-                ) : null}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={communityView === "qna"}
-                className={`${COMMUNITY_TAB} ${
-                  communityView === "qna" ? COMMUNITY_TAB_ACTIVE : COMMUNITY_TAB_IDLE
-                }`}
-                onClick={() => setCommunityView("qna")}
-              >
-                {tx("質問・相談", "Q&A")}
-                {communityView === "qna" ? (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-zinc-900" aria-hidden />
-                ) : null}
-              </button>
-            </div>
-          </div>
-
-          <QnABoard
-            session={session}
-            displayName={displayName || effectiveChatSenderName()}
-            avatarUrl={profileAvatarUrl}
-            prefillTitle={qnaPrefillTitle}
-            onPrefillConsumed={() => setQnaPrefillTitle("")}
-            focusToken={qnaFocusToken}
-            onAuthMessage={setAuthMessage}
-            formatTime={(iso) => formatFeedTime(iso, language)}
-            active={activePage === "posts" && communityView === "qna"}
-            onTrack={trackOpsEvent}
-          />
-        </section>
-
-        <section
-          className={`${cardClass} ${
+          className={`${cardClass} min-h-[calc(100dvh-9rem)] rounded-t-none border-t-0 ${
             activePage === "chat"
               ? exploreSegment === "friends"
                 ? "flex flex-col"
@@ -5409,17 +4817,17 @@ export default function Home() {
           }`}
         >
           <div className="shrink-0">
-            <h3 className="text-base font-semibold">{t("searchTitle")}</h3>
-            <p className="mt-1 text-xs text-zinc-500">{t("searchHint")}</p>
+            <h3 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">{t("searchTitle")}</h3>
+            <p className="mt-1 text-sm text-zinc-500">{t("searchHint")}</p>
           </div>
 
           <div
-            className={`mt-3 flex flex-col rounded-xl border border-zinc-200 bg-white ${
+            className={`mt-3 flex flex-1 flex-col rounded-xl border border-zinc-200 bg-white ${
               exploreSegment === "friends" ? "" : ""
             }`}
           >
             <div
-              className="flex shrink-0 gap-1 border-b border-zinc-100 px-2 pt-2"
+              className="flex shrink-0 gap-1 border-b border-zinc-100 px-1 pt-2 sm:px-2"
               role="tablist"
               aria-label={t("searchTitle")}
             >
@@ -5427,7 +4835,7 @@ export default function Home() {
                 type="button"
                 role="tab"
                 aria-selected={exploreSegment === "friends"}
-                className={`relative min-h-[40px] flex-1 px-3 text-sm font-semibold transition ${
+                className={`relative min-h-[40px] flex-1 px-2 text-[13px] font-semibold transition sm:px-3 sm:text-sm ${
                   exploreSegment === "friends"
                     ? "text-zinc-900"
                     : "text-zinc-400 hover:text-zinc-700"
@@ -5436,14 +4844,14 @@ export default function Home() {
               >
                 {t("searchFriends")}
                 {exploreSegment === "friends" ? (
-                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={exploreSegment === "projects"}
-                className={`relative min-h-[40px] flex-1 px-3 text-sm font-semibold transition ${
+                className={`relative min-h-[40px] flex-1 px-2 text-[13px] font-semibold transition sm:px-3 sm:text-sm ${
                   exploreSegment === "projects"
                     ? "text-zinc-900"
                     : "text-zinc-400 hover:text-zinc-700"
@@ -5452,45 +4860,36 @@ export default function Home() {
               >
                 {t("searchProjects")}
                 {exploreSegment === "projects" ? (
-                  <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
             </div>
 
             {exploreSegment === "friends" ? (
               <div className="flex flex-col p-3" role="tabpanel">
-                <form onSubmit={runMatching} className="shrink-0">
+                <form onSubmit={runMatching} className="w-full shrink-0">
                   <p className="text-sm font-semibold text-zinc-900">
                     {language === "ja" ? "友達を探す" : "Find friends"}
                   </p>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_48px] gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
                     <input
                       className={`min-w-0 w-full flex-1 ${inputClass}`}
-                      placeholder={tx("例: 教育 アプリ 発表 が得意な人", "e.g. education app, good at presenting")}
+                      placeholder={tx("キーワードで検索", "Search by keyword")}
                       value={matchGoal}
                       onChange={(e) => setMatchGoal(e.target.value)}
                     />
-                    <button className={`${primaryButtonClass} w-full shrink-0 sm:w-auto`} type="submit">
-                      {tx("絞り込む", "Search")}
+                    <button
+                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-900 bg-zinc-900 px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] sm:px-4 sm:text-sm"
+                      type="submit"
+                      aria-label={tx("絞り込む", "Search")}
+                    >
+                      <svg className="h-5 w-5 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-4-4" />
+                      </svg>
+                      <span className="hidden sm:inline">{tx("絞り込む", "Search")}</span>
                     </button>
                   </div>
-                  <details className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 open:bg-white">
-                    <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-zinc-700 [&::-webkit-details-marker]:hidden">
-                      {tx("検索例を見る", "See examples")}
-                    </summary>
-                    <div className="flex flex-col gap-2 border-t border-zinc-100 px-3 py-3">
-                      {(language === "en" ? FRIEND_SEARCH_EXAMPLES_EN : FRIEND_SEARCH_EXAMPLES_JA).map((example) => (
-                        <button
-                          key={example}
-                          type="button"
-                          onClick={() => setMatchGoal(example)}
-                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-left text-sm font-medium text-zinc-700 transition hover:border-zinc-300"
-                        >
-                          {example}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
                 </form>
                 {matchNotice ? <p className="mt-2 shrink-0 text-sm text-zinc-500">{matchNotice}</p> : null}
                 {!matchLoading && matches.length > 0 ? (
@@ -5514,10 +4913,10 @@ export default function Home() {
                         ? tx("条件に合うユーザーが見つかりませんでした。", "No matching people found.")
                         : tx("まだおすすめが少ないです。検索して探してみましょう。", "Few suggestions yet. Try a search.")}
                     </p>
-                    <p className="mt-2 text-[12px] text-zinc-500">{tx("上の検索例をタップしてみてください", "Tap an example above to try it.")}</p>
+                    <p className="mt-2 text-[12px] text-zinc-500">{tx("名前・得意分野・目標から検索できます", "Search by name, strengths, or goals.")}</p>
                   </div>
                 ) : null}
-                <ul className="mt-2 space-y-2.5 pb-2">
+                <ul className="mt-2 grid grid-cols-2 gap-3 pb-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {!matchLoading
                     ? matches.map((m) => (
                         <ExploreFriendCard
@@ -5544,7 +4943,7 @@ export default function Home() {
                 </ul>
               </div>
             ) : (
-              <div className="p-3" role="tabpanel">
+              <div className="flex-1 p-3" role="tabpanel">
                 <DiscoverPublicProjects showSectionHeader />
               </div>
             )}
@@ -6354,28 +5753,6 @@ export default function Home() {
                 </Link>
               );
             }
-            if (item.key === "posts") {
-              return (
-                <button
-                  key={item.key}
-                  className={className}
-                  type="button"
-                  onClick={() => {
-                    setCommunityView("progress");
-                    setActivePage("posts");
-                  }}
-                  aria-label={label}
-                  aria-current={activePage === "posts" ? "page" : undefined}
-                  title={label}
-                >
-                  <span className="app-bottom-nav-item-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
-                  {activePage === "posts" ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
-                </button>
-              );
-            }
             const pageKey = item.key as FeaturePage;
             return (
               <button
@@ -6384,7 +5761,6 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   if (pageKey === "chat") setChatSubView("list");
-                  if (pageKey === "posts") setCommunityView("progress");
                   setActivePage(pageKey);
                 }}
                 aria-label={label}
@@ -6406,66 +5782,6 @@ export default function Home() {
           border-color: #111827;
         }
       `}</style>
-
-      <ActivityComposer
-        open={postComposerOpen}
-        posting={postPosting}
-        initialTitle={postComposerSeed.title}
-        initialDetail={postComposerSeed.detail}
-        onClose={resetPostComposer}
-        onSubmit={submitActivityRecord}
-      />
-
-      {activityToast ? (
-        <div
-          className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-[120] flex justify-center px-4"
-          role="status"
-        >
-          <p className="rounded-sm border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
-            {activityToast}
-          </p>
-        </div>
-      ) : null}
-
-      {feedDeleteTarget ? (
-        <div
-          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="feed-delete-title"
-          onClick={() => !feedDeleting && setFeedDeleteTarget(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-t-2xl border border-zinc-200 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="feed-delete-title" className="text-base font-bold text-rose-900">
-              投稿を削除しますか？
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-              この操作は取り消せません。本当に削除する場合は、もう一度「削除する」を押してください。
-            </p>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 disabled:opacity-50"
-                disabled={feedDeleting}
-                onClick={() => setFeedDeleteTarget(null)}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={feedDeleting}
-                onClick={() => void deleteFeedPost(feedDeleteTarget)}
-              >
-                {feedDeleting ? "削除中…" : "削除する"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {groupDeleteTarget ? (
         <div

@@ -4,16 +4,11 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO, type Locale } from "date-fns";
 import { enUS, ja } from "date-fns/locale";
-import { Calendar, Check, Compass, FileText, Layers, Pencil, User, X } from "lucide-react";
+import { Calendar, Check, FileText, Layers, Pencil, User, X } from "lucide-react";
 import type { Issue, IssueWorkflow, Member } from "@/lib/workspace/types";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
-import { IssueResolutionPanel } from "@/components/issues/IssueResolutionPanel";
-import {
-  getIssueCompletionAnswer,
-  issueHasGuideActivity,
-  stripWorkflowFromDescription,
-} from "@/lib/workspace/issueWorkflow";
+import { getIssueCompletionAnswer, stripWorkflowFromDescription } from "@/lib/workspace/issueWorkflow";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 function formatIso(iso: string | undefined, pattern: string, dateLocale: Locale) {
@@ -24,8 +19,6 @@ function formatIso(iso: string | undefined, pattern: string, dateLocale: Locale)
     return null;
   }
 }
-
-type SheetTab = "simple" | "guide";
 
 type Props = {
   issue: Issue | null;
@@ -46,17 +39,13 @@ export function IssueDetailSheet({
   issue,
   open,
   phaseTitle,
-  phaseGoal,
   members,
   canEdit,
   onClose,
   onEdit,
   onToggleDone,
-  onSaveWorkflow,
-  onMarkIssueDone,
   onSaveMemo,
 }: Props) {
-  const [tab, setTab] = useState<SheetTab>("simple");
   const [memo, setMemo] = useState("");
   const [savingMemo, setSavingMemo] = useState(false);
   const { tx, locale } = useI18n();
@@ -71,8 +60,7 @@ export function IssueDetailSheet({
 
   useEffect(() => {
     if (!issue) return;
-    setMemo(getIssueCompletionAnswer(issue));
-    setTab("simple");
+    setMemo(issue.workspaceText || getIssueCompletionAnswer(issue));
   }, [issue?.id]);
 
   if (!open || !issue || typeof document === "undefined") return null;
@@ -83,7 +71,6 @@ export function IssueDetailSheet({
   const updated = formatIso(issue.updatedAt, locale === "en" ? "MMM d, yyyy HH:mm" : "yyyy/M/d HH:mm", dateLocale);
   const description = stripWorkflowFromDescription(issue.description);
   const done = issue.status === "done";
-  const guided = issueHasGuideActivity(issue);
 
   async function commitMemo() {
     if (!canEdit || !onSaveMemo || !issue) return;
@@ -112,15 +99,10 @@ export function IssueDetailSheet({
               <PriorityIcon priority={issue.priority} />
               <IssueStatusBadge status={issue.status} />
               <span className="text-[11px] text-gray-500">{priorityLabel[issue.priority]}</span>
-              {guided ? (
-                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-100">
-                  {tx("ガイドあり", "Has guide")}
-                </span>
-              ) : null}
             </div>
             <h2
               id="issue-detail-title"
-              className={`mt-2 text-lg font-semibold leading-snug ${done ? "text-gray-400 line-through" : "text-gray-900"}`}
+              className="mt-2 text-lg font-semibold leading-snug text-gray-900"
             >
               {issue.title}
             </h2>
@@ -135,33 +117,7 @@ export function IssueDetailSheet({
           </button>
         </div>
 
-        <div className="flex shrink-0 gap-1 border-b border-gray-100 px-5">
-          <button
-            type="button"
-            onClick={() => setTab("simple")}
-            className={`border-b-2 px-3 py-2.5 text-sm font-medium transition ${
-              tab === "simple"
-                ? "border-violet-600 text-violet-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            {tx("詳細", "Details")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("guide")}
-            className={`border-b-2 px-3 py-2.5 text-sm font-medium transition ${
-              tab === "guide"
-                ? "border-violet-600 text-violet-700"
-                : "border-transparent text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            {tx("ガイド", "Guide")}
-          </button>
-        </div>
-
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {tab === "simple" ? (
             <div className="space-y-4">
               {canEdit && onToggleDone ? (
                 <button
@@ -258,26 +214,11 @@ export function IssueDetailSheet({
                 </dl>
               </section>
 
-              <button
-                type="button"
-                onClick={() => setTab("guide")}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-violet-300 bg-white px-4 py-3 text-left transition hover:border-violet-400 hover:bg-violet-50/50"
-              >
-                <span className="flex items-center gap-2">
-                  <Compass className="h-4 w-4 text-violet-600" aria-hidden />
-                  <span>
-                    <span className="block text-sm font-semibold text-violet-900">{tx("ガイド付きで進める", "Use the guide")}</span>
-                    <span className="block text-xs text-violet-800/80">{tx("わかる→しらべる→やってみる…（任意）", "Understand → research → try… (optional)")}</span>
-                  </span>
-                </span>
-                <span className="text-xs font-semibold text-violet-700">{tx("開く", "Open")}</span>
-              </button>
-
-              {issue.labels.length > 0 ? (
+              {issue.labels.filter((label) => !label.startsWith("genre:") && !label.startsWith("begin:")).length > 0 ? (
                 <section>
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{tx("ラベル", "Labels")}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {issue.labels.map((label) => (
+                    {issue.labels.filter((label) => !label.startsWith("genre:") && !label.startsWith("begin:")).map((label) => (
                       <span key={label} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600">
                         {label}
                       </span>
@@ -291,29 +232,6 @@ export function IssueDetailSheet({
                 <p className="mt-0.5">{tx("更新", "Updated")}: {updated ?? "—"}</p>
               </section>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-[12px] leading-relaxed text-violet-900">
-                {tx("ガイドは任意です。途中まで使って止めても、詳細タブからそのまま完了にできます。", "The guide is optional. You can stop anytime and still complete the issue from Details.")}
-              </p>
-              <IssueResolutionPanel
-                issue={issue}
-                phaseTitle={phaseTitle}
-                phaseGoal={phaseGoal}
-                canEdit={canEdit}
-                onSaveWorkflow={async (workflow) => {
-                  if (onSaveWorkflow) await onSaveWorkflow(issue.id, workflow);
-                }}
-                onMarkDone={
-                  onMarkIssueDone
-                    ? async (answer) => {
-                        await onMarkIssueDone(issue.id, answer);
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          )}
         </div>
 
         <div className="flex shrink-0 gap-2 border-t border-gray-100 px-5 py-4">

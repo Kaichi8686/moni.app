@@ -1,18 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { buildRoadmapTemplateRows, PROJECT_LINE_META } from "@/lib/projects/roadmapTemplates";
+import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
-import { ProjectCubeCarousel } from "@/components/projects/ProjectCubeCarousel";
+import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { Bell } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
-export type AppFeatureKey = "projects" | "posts" | "articles" | "mentor" | "discovery" | "chat" | "account";
+export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
 type SortKey = "newest" | "oldest" | "name";
 
@@ -161,17 +162,26 @@ export function ProjectTabGlide({
       setLoading(false);
       return;
     }
+    const uid = userId;
+    if (!uid) {
+      // セッション解決前はスケルトンで固めない（空振り load を避ける）
+      setCurrentUserId(null);
+      setLoading(false);
+      return;
+    }
+
     const client = supabase;
     setLoading(true);
     setErr("");
+    let settled = false;
+    const hardStop = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setLoading(false);
+      setErr((prev) => prev || "読み込みがタイムアウトしました。再読み込みしてください。");
+    }, 10_000);
+
     try {
-      const uid = userId;
-      if (!uid) {
-        setCurrentUserId(null);
-        setProjects([]);
-        setJoinedIds(new Set());
-        return;
-      }
       setCurrentUserId(uid);
 
       const ownedResult = await withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧");
@@ -209,8 +219,8 @@ export function ProjectTabGlide({
       const merged = [...byId.values()].sort(
         (a, b) => new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime(),
       );
-      // オーナーなのに members にいないケースを自己修復
-      await Promise.all(
+      // オーナー修復は一覧表示をブロックしない
+      void Promise.all(
         merged
           .filter((p) => p.owner_id === uid)
           .map((p) => ensureOwnerMembership(p.id, p.owner_id).catch(() => undefined)),
@@ -221,6 +231,8 @@ export function ProjectTabGlide({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました。");
     } finally {
+      settled = true;
+      window.clearTimeout(hardStop);
       setLoading(false);
     }
   }, [userId, refreshBellBadge]);
@@ -461,21 +473,69 @@ export function ProjectTabGlide({
             </div>
           ) : null}
 
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <ProjectCubeCarousel
-              projects={displayList}
-              currentUserId={currentUserId}
-              joinedIds={joinedIds}
-              loading={loading}
-              onCreate={() => setCreateOpen(true)}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-6 sm:p-4">
+            {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="group flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
+                  +
+                </span>
+                <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
+                <span className="text-center text-[11px] text-zinc-500">作って仲間を集める</span>
+              </button>
+
+              {displayList.map((project) => {
+                const color =
+                  PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
+                return (
+                  <Link
+                    key={project.id}
+                    href={`/projects/${project.id}/overview`}
+                    prefetch
+                    className="group relative flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border border-zinc-200/90 bg-white px-2 py-3 text-center shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
+                  >
+                    {project.thumbnail_url?.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image
+                      <img
+                        src={project.thumbnail_url.trim()}
+                        alt=""
+                        className="h-14 w-14 shrink-0 rounded-2xl border border-zinc-200 object-cover shadow-sm"
+                      />
+                    ) : (
+                      <div
+                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${color} text-2xl text-white shadow-sm`}
+                        aria-hidden
+                      >
+                        {(project.icon?.trim() || project.name.trim().charAt(0) || "P").toUpperCase()}
+                      </div>
+                    )}
+                    <p className="line-clamp-2 w-full text-sm font-semibold text-zinc-900">{project.name}</p>
+                    <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
+                      {projectLineShortLabel(project.business_type)}
+                    </p>
+                    <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                      {project.visibility === "public" ? "公開" : "非公開"}
+                      {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
+                      {joinedIds.has(project.id) ? " ・ メンバー" : ""}
+                    </p>
+                    <span className="pointer-events-none absolute right-2 top-1.5 rounded bg-white/90 px-1.5 text-[10px] text-zinc-500 opacity-0 transition group-hover:opacity-100">
+                      ⋯
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
 
           {!loading && displayList.length === 0 ? (
             <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
               <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。キューブの「新規」面からも作成できます。
+                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button

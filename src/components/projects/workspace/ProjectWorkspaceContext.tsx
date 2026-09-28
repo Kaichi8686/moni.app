@@ -1,8 +1,8 @@
 "use client";
 
-import { Calendar, LayoutGrid, Menu, Settings, Share2, Sparkles, Trash2, Users, Radio } from "lucide-react";
+import { ArrowLeft, Calendar, MoreHorizontal, Settings, Share2, Trash2, Users, Radio } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -20,16 +20,15 @@ import { recordUserActivity } from "@/lib/gamification/recordUserActivity";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
-import { ProjectMobileNavSheet } from "@/components/projects/ProjectMobileNavSheet";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 import type { Issue, IssueStatus, IssueWorkflow, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import { applyIssueDueDatesForProject } from "@/lib/workspace/applyIssueDueDates";
 import { dueIsoForNewIssueInPhase, hasMeaningfulTargetDate } from "@/lib/workspace/issueDueSchedule";
 import {
-  buildWorkflowForMilestone,
   defaultWorkflowIfMissing,
   embedWorkflowInDescription,
 } from "@/lib/workspace/issueWorkflow";
+import { packWorkDescription, withBeginLabel, withGenreLabel, type IssueWork, type TaskGenre } from "@/lib/workspace/issueWork";
 import { simplifyIssueText } from "@/lib/workspace/issuePlainLanguage";
 import {
   projectIssueContextFromWorkspace,
@@ -44,7 +43,6 @@ import {
   type PhaseRowDb,
   type ProfileLite,
 } from "@/lib/workspace/mapRows";
-import { ProjectWorkspaceNav } from "@/components/projects/ProjectWorkspaceNav";
 import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
@@ -92,6 +90,7 @@ type Ctx = {
   loading: boolean;
   error: string;
   project: Project | null;
+  projectMeta: ProjectSettingsMeta | null;
   projectContext: ProjectIssueContext | null;
   coachingContext: CoachingContext;
   phases: Phase[];
@@ -129,8 +128,11 @@ type Ctx = {
     priority: Issue["priority"];
     assigneeId?: string | null;
     dueDate?: string | null;
+    beginAt?: string | null;
     phaseId?: string | null;
+    genre?: TaskGenre;
   }) => Promise<void>;
+  saveIssueWork: (issueId: string, patch: Partial<IssueWork>) => Promise<void>;
   saveCoachingContext: (patch: Partial<CoachingContext>) => Promise<void>;
   seedPhasesFromSituation: (situation: UserSituation) => Promise<void>;
   updateIssue: (
@@ -142,6 +144,7 @@ type Ctx = {
       status?: IssueStatus;
       assigneeId?: string | null;
       dueDate?: string | null;
+      beginAt?: string | null;
     },
   ) => Promise<void>;
   updateIssueWorkflow: (issueId: string, workflow: IssueWorkflow) => Promise<void>;
@@ -172,13 +175,13 @@ function isMissingTable(err: { message?: string } | null): boolean {
 
 export function ProjectWorkspaceProvider({ projectId: rawId, children }: { projectId: string; children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { tx } = useI18n();
   const projectId = normalizeProjectIdParam(rawId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [headerNotice, setHeaderNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [inviteBellOpen, setInviteBellOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -238,9 +241,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       const userId = session?.session?.user.id ?? null;
       setUid(userId);
 
-      const { data: prow, error: perr } = await client.from("projects").select("*").eq("id", projectId).single();
+      const { data: prow, error: perr } = await client.from("projects").select("*").eq("id", projectId).maybeSingle();
       if (perr || !prow) {
-        setError(perr?.message ?? "プロジェクトを読み込めませんでした。");
+        setError(userId ? "プロジェクトを読み込めませんでした。" : "ログインが必要です。");
         setProject(null);
         setProjectMeta(null);
         setProjectContext(null);
@@ -452,18 +455,14 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       priority: Issue["priority"];
       assigneeId?: string | null;
       dueDate?: string | null;
+      beginAt?: string | null;
       phaseId?: string | null;
+      genre?: TaskGenre;
     }) => {
       if (!supabase || !canEdit || !uid) return;
       const phase = input.phaseId ? phases.find((p) => p.id === input.phaseId) : undefined;
       const title = simplifyIssueText(input.title.trim());
-      const workflow = buildWorkflowForMilestone({
-        milestoneTitle: title,
-        phaseTitle: phase?.title ?? "段階",
-        phaseGoal: phase?.description,
-        projectName: project?.name,
-        projectAudience: projectContext?.audience,
-      });
+      const genre = input.genre ?? "think";
 
       let dueDate = input.dueDate ?? null;
       if (
@@ -498,18 +497,26 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         priority: input.priority,
         assignee_id: input.assigneeId ?? null,
         due_date: dueDate,
-        labels: input.phaseId ? ["roadmap"] : [],
-        workflow_json: workflow,
+        begin_at: input.beginAt ?? null,
+        labels: withBeginLabel(withGenreLabel(input.phaseId ? ["roadmap"] : [], genre), input.beginAt ?? null),
+        genre,
+        workspace_text: (input.description ?? "").trim(),
+        attachment_urls: [],
       };
       let { error: err } = await supabase.from("project_issues").insert(row);
-      if (err?.message?.toLowerCase().includes("workflow_json")) {
-        const desc = embedWorkflowInDescription(String(row.description ?? ""), workflow);
-        ({ error: err } = await supabase.from("project_issues").insert({ ...row, description: desc, workflow_json: undefined }));
+      if (err && /genre|workspace_text|attachment_urls|begin_at|schema cache|42703/i.test(err.message)) {
+        ({ error: err } = await supabase.from("project_issues").insert({
+          ...row,
+          genre: undefined,
+          workspace_text: undefined,
+          attachment_urls: undefined,
+          begin_at: undefined,
+        }));
       }
       if (err) throw new Error(err.message);
       await reload();
     },
-    [canEdit, issues, phases, project, projectContext, projectId, reload, schedules, uid],
+    [canEdit, issues, phases, project, projectId, reload, schedules, uid],
   );
 
   const createSchedule = useCallback(
@@ -622,6 +629,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         status?: IssueStatus;
         assigneeId?: string | null;
         dueDate?: string | null;
+        beginAt?: string | null;
       },
     ) => {
       if (!supabase || !canEdit) return;
@@ -632,11 +640,18 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
       if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
-      const { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (patch.beginAt !== undefined) row.begin_at = patch.beginAt;
+      let { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err && patch.beginAt !== undefined && /begin_at|schema cache|42703/i.test(err.message)) {
+        delete row.begin_at;
+        const issue = issues.find((item) => item.id === issueId);
+        row.labels = withBeginLabel(issue?.labels ?? [], patch.beginAt);
+        ({ error: err } = await supabase.from("project_issues").update(row).eq("id", issueId));
+      }
       if (err) throw new Error(err.message);
       await reload();
     },
-    [canEdit, reload],
+    [canEdit, issues, reload],
   );
 
   const setProjectCompletionDate = useCallback(
@@ -737,6 +752,87 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     }
   }, [deleteProject]);
 
+  const saveIssueWork = useCallback(
+    async (issueId: string, patch: Partial<IssueWork>) => {
+      if (!supabase || !canEdit) return;
+      const issue = issues.find((i) => i.id === issueId);
+      if (!issue) return;
+      const next: IssueWork = {
+        genre: patch.genre ?? issue.genre,
+        workspaceText: patch.workspaceText ?? issue.workspaceText,
+        attachments: patch.attachments ?? issue.attachments,
+        submittedAt: patch.submittedAt === undefined ? issue.submittedAt ?? null : patch.submittedAt,
+      };
+      const updatedAt = new Date().toISOString();
+      const status = next.submittedAt ? "done" : issue.status === "done" ? "todo" : issue.status;
+      const row: Record<string, unknown> = {
+        description: next.workspaceText,
+        labels: withGenreLabel(issue.labels, next.genre),
+        genre: next.genre,
+        workspace_text: next.workspaceText,
+        attachment_urls: next.attachments,
+        submitted_at: next.submittedAt,
+        status,
+        workflow_json: null,
+        updated_at: updatedAt,
+      };
+      let { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err && /genre|workspace_text|attachment_urls|submitted_at|schema cache|42703/i.test(err.message)) {
+        ({ error: err } = await supabase
+          .from("project_issues")
+          .update({
+            description: packWorkDescription(next),
+            labels: withGenreLabel(issue.labels, next.genre),
+            status,
+            workflow_json: null,
+            updated_at: updatedAt,
+          })
+          .eq("id", issueId));
+      }
+      if (err) throw new Error(err.message);
+      setIssues((prev) =>
+        prev.map((item) =>
+          item.id === issueId
+            ? {
+                ...item,
+                ...next,
+                submittedAt: next.submittedAt ?? undefined,
+                status,
+                labels: withGenreLabel(item.labels, next.genre),
+                description: next.workspaceText,
+                workflow: undefined,
+                legacyWorkflow: false,
+                updatedAt,
+              }
+            : item,
+        ),
+      );
+    },
+    [canEdit, issues],
+  );
+
+  const migratedIssueIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!canEdit || loading) return;
+    const pending = issues.filter((issue) => issue.legacyWorkflow && !migratedIssueIds.current.has(issue.id));
+    if (pending.length === 0) return;
+    for (const issue of pending) migratedIssueIds.current.add(issue.id);
+    void (async () => {
+      for (const issue of pending) {
+        try {
+          await saveIssueWork(issue.id, {
+            genre: issue.genre,
+            workspaceText: issue.workspaceText,
+            attachments: issue.attachments,
+            submittedAt: issue.submittedAt ?? null,
+          });
+        } catch {
+          migratedIssueIds.current.delete(issue.id);
+        }
+      }
+    })();
+  }, [canEdit, issues, loading, saveIssueWork]);
+
   const updateIssueWorkflow = useCallback(
     async (issueId: string, workflow: IssueWorkflow) => {
       if (!supabase || !canEdit) return;
@@ -780,6 +876,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         loading,
         error,
         project,
+        projectMeta,
         projectContext,
         coachingContext,
         phases,
@@ -796,6 +893,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         resizePhase,
         updateIssueStatus,
         createIssue,
+        saveIssueWork,
         saveCoachingContext,
         seedPhasesFromSituation,
         updateIssue,
@@ -812,6 +910,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       loading,
       error,
       project,
+      projectMeta,
       projectContext,
       coachingContext,
       phases,
@@ -828,6 +927,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       resizePhase,
       updateIssueStatus,
       createIssue,
+      saveIssueWork,
       saveCoachingContext,
       seedPhasesFromSituation,
       updateIssue,
@@ -845,6 +945,28 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     ? `${project.description?.slice(0, 40) ?? tx("探究", "Inquiry")} · ${tx(`${project.members.length}人`, `${project.members.length} people`)}`
     : "";
 
+  const sectionLabel = useMemo(() => {
+    const segment = pathname?.split("/").filter(Boolean)[2] ?? "overview";
+    const labels: Record<string, [string, string]> = {
+      overview: ["概要", "Overview"],
+      roadmap: ["ロードマップ", "Roadmap"],
+      issues: ["課題", "Issues"],
+      coach: ["相談AI", "Ask AI"],
+      "business-idea": ["アイデア", "Ideas"],
+      ideas: ["投票", "Voting"],
+      whiteboard: ["ボード", "Board"],
+      documents: ["資料", "Documents"],
+      members: ["メンバー", "Members"],
+      chat: ["チャット", "Chat"],
+      schedule: ["予定", "Schedule"],
+      activity: ["活動", "Activity"],
+    };
+    const label = labels[segment] ?? labels.overview;
+    return tx(label[0], label[1]);
+  }, [pathname, tx]);
+  const isOverview = pathname === `/projects/${projectId}/overview`;
+  const headerBackHref = isOverview ? HOME_PROJECTS_HREF : `/projects/${projectId}/overview`;
+
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
   }, [project?.id, project?.name]);
@@ -857,65 +979,32 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   return (
     <WorkspaceCtx.Provider value={value}>
       <div className="min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A]">
-        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white px-4 py-2.5 shadow-sm sm:py-3 md:px-4">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 sm:gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-              <Link
-                href={HOME_PROJECTS_HREF}
-                className="hidden shrink-0 min-h-[40px] items-center rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3 py-1.5 text-[13px] font-semibold text-[#374151] transition hover:bg-[#F3F4F6] md:inline-flex"
-              >
-                {tx("← 一覧", "← Projects")}
-              </Link>
-              {project ? (
-                <>
-                  {projectMeta?.thumbnail_url?.trim() ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- project cover
-                    <img
-                      src={projectMeta.thumbnail_url.trim()}
-                      alt=""
-                      className="hidden h-10 w-10 shrink-0 rounded-lg border border-[#E5E7EB] object-cover sm:block"
-                    />
-                  ) : (
-                    <span className="hidden text-2xl sm:inline">{project.icon ?? "📁"}</span>
-                  )}
-                  <div className="min-w-0">
-                    <h1 className="break-words text-base font-semibold tracking-tight sm:truncate sm:text-lg">{project.name}</h1>
-                    <p className="hidden text-[12px] text-[#6B7280] sm:block sm:truncate">{subtitle}</p>
-                  </div>
-                </>
-              ) : (
-                <span className="text-base font-semibold sm:text-lg">{tx("読み込み中…", "Loading…")}</span>
-              )}
-            </div>
-            <div className="pointer-events-auto relative z-[110] flex shrink-0 items-center gap-1.5 sm:gap-2">
-              <Link
-                href={`/projects/${projectId}/coach`}
-                className="inline-flex h-10 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[13px] font-semibold text-[#5E6AD2] transition hover:bg-violet-100 md:hidden"
-                aria-label={tx("相談AI", "Ask AI")}
-              >
-                <Sparkles className="h-4 w-4" aria-hidden />
-                {tx("相談AI", "Ask AI")}
-              </Link>
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#374151] transition hover:bg-[#F7F8F8] md:hidden"
-                aria-label={tx("プロジェクトメニュー", "Project menu")}
-                aria-expanded={navMenuOpen}
-                onClick={() => setNavMenuOpen(true)}
-              >
-                <LayoutGrid className="h-4 w-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                disabled={!project}
-                className="hidden h-10 w-10 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#374151] transition hover:bg-[#F7F8F8] disabled:opacity-50 sm:inline-flex"
-                aria-label={tx("予定", "Schedule")}
-                title={tx("予定", "Schedule")}
-                onClick={() => router.push(`/projects/${projectId}/schedule`)}
-              >
-                <Calendar className="h-5 w-5" aria-hidden />
-              </button>
-              <div className="relative" ref={actionMenuRef}>
+        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-4 py-2.5 backdrop-blur sm:py-3">
+          <div className="mx-auto max-w-3xl">
+            <p className="mb-1 truncate text-[11px] font-medium text-[#8A8F98]">
+              {tx("プロジェクト", "Projects")} / {sectionLabel}
+            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <Link
+                  href={headerBackHref}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                  aria-label={
+                    isOverview
+                      ? tx("プロジェクト一覧へ戻る", "Back to projects")
+                      : tx("プロジェクト概要へ戻る", "Back to project overview")
+                  }
+                >
+                  <ArrowLeft className="h-5 w-5" aria-hidden />
+                </Link>
+                <div className="min-w-0">
+                  <h1 className="truncate text-base font-semibold tracking-tight text-[#1A1A1A] sm:text-lg">
+                    {project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))}
+                  </h1>
+                  {project ? <p className="truncate text-[11px] text-[#8A8F98]">{subtitle}</p> : null}
+                </div>
+              </div>
+              <div className="pointer-events-auto relative z-[110] shrink-0" ref={actionMenuRef}>
                 <button
                   type="button"
                   disabled={!project}
@@ -929,22 +1018,17 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   aria-expanded={actionMenuOpen}
                   onClick={() => setActionMenuOpen((v) => !v)}
                 >
-                  <Menu className="h-5 w-5" aria-hidden />
+                  <MoreHorizontal className="h-5 w-5" aria-hidden />
                 </button>
                 {actionMenuOpen ? (
                   <div
                     role="menu"
                     className="absolute right-0 top-[calc(100%+6px)] z-[120] w-56 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-xl"
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8] sm:hidden"
-                      onClick={() => {
-                        setActionMenuOpen(false);
-                        router.push(`/projects/${projectId}/schedule`);
-                      }}
-                    >
+                    <button type="button" role="menuitem" className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]" onClick={() => {
+                      setActionMenuOpen(false);
+                      router.push(`/projects/${projectId}/schedule`);
+                    }}>
                       <Calendar className="h-4 w-4 text-[#6B7280]" aria-hidden />
                       {tx("予定", "Schedule")}
                     </button>
@@ -1026,16 +1110,15 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             </p>
           ) : null}
         </header>
-        <div className="flex min-h-[calc(100dvh-3.75rem)] flex-col md:min-h-[calc(100dvh-4.25rem)] md:flex-row">
-          <ProjectWorkspaceNav projectId={projectId} />
-          <main className="project-workspace-main min-w-0 flex-1 overflow-x-hidden bg-white">
+        <div className="min-h-[calc(100dvh-3.75rem)]">
+          <main className="project-workspace-main min-w-0 overflow-x-hidden bg-white">
             <div className="mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5">
               {error ? (
                 <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {error}
                 </div>
               ) : null}
-              {loading ? <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p> : null}
+              {loading && !error ? <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p> : null}
               {children}
             </div>
           </main>
@@ -1070,8 +1153,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             await confirmDeleteProject();
           }}
         />
-
-        <ProjectMobileNavSheet projectId={projectId} open={navMenuOpen} onClose={() => setNavMenuOpen(false)} />
 
         {inviteBellOpen && uid && project ? (
           <ProjectInviteBellPanel

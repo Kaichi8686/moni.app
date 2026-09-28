@@ -1,4 +1,4 @@
-export type IdeaHubTab = "excavate" | "mine" | "interviews";
+export type IdeaHubTab = "excavate" | "qna" | "mine" | "interviews";
 
 export type MyIdeaSource = "manual" | "interview";
 
@@ -33,11 +33,12 @@ export type InterviewArticle = {
 
 export const IDEA_HUB_TABS: Array<{ id: IdeaHubTab; label: string; labelEn: string; shortLabel: string; shortLabelEn: string }> = [
   { id: "excavate", label: "発掘", labelEn: "Discover", shortLabel: "発掘", shortLabelEn: "Find" },
+  { id: "qna", label: "質問・相談", labelEn: "Q&A", shortLabel: "相談", shortLabelEn: "Q&A" },
   { id: "mine", label: "マイアイデア", labelEn: "My ideas", shortLabel: "マイ", shortLabelEn: "Mine" },
   { id: "interviews", label: "インタビュー", labelEn: "Interviews", shortLabel: "取材", shortLabelEn: "Stories" },
 ];
 
 export function parseIdeaHubTab(value: string | null | undefined): IdeaHubTab {
-  if (value === "mine" || value === "interviews" || value === "excavate") return value;
+  if (value === "mine" || value === "interviews" || value === "excavate" || value === "qna") return value;
   return "excavate";
 }
