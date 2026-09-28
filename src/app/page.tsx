@@ -18,6 +18,12 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import {
+  fetchUnreadProjectNotifications,
+  markProjectNotificationRead,
+  projectNotificationHref,
+  type ProjectNotificationRow,
+} from "@/lib/projects/notifications";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -996,6 +1002,7 @@ export default function Home() {
   const [opsEvents, setOpsEvents] = useState<OpsEvent[]>([]);
   const [reports, setReports] = useState<ReportEntry[]>([]);
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
+  const [projectNotifications, setProjectNotifications] = useState<ProjectNotificationRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1608,6 +1615,36 @@ export default function Home() {
     setDismissedNotificationIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
 
+  const loadProjectNotifications = useCallback(async (userId: string) => {
+    if (!supabase) {
+      setProjectNotifications([]);
+      return;
+    }
+    try {
+      const rows = await fetchUnreadProjectNotifications(supabase, userId);
+      setProjectNotifications(rows);
+    } catch {
+      setProjectNotifications([]);
+    }
+  }, []);
+
+  async function openProjectNotification(row: ProjectNotificationRow) {
+    if (supabase) {
+      try {
+        await markProjectNotificationRead(supabase, row.id);
+      } catch {
+        // ignore mark-read failures; still navigate
+      }
+    }
+    setProjectNotifications((prev) => prev.filter((n) => n.id !== row.id));
+    const href = projectNotificationHref(row);
+    if (href) {
+      router.push(href);
+      return;
+    }
+    setActivePage("projects");
+  }
+
   useEffect(() => {
     setProfilePortalReady(true);
   }, []);
@@ -1669,6 +1706,7 @@ export default function Home() {
   const loadArticlesRef = useRef(loadArticles);
   const loadPitchesRef = useRef(loadPitches);
   const loadSocialGraphRef = useRef(loadSocialGraph);
+  const loadProjectNotificationsRef = useRef(loadProjectNotifications);
   const loadMessagesRef = useRef(loadMessages);
 
   const loadMentorContext = useCallback(async (userId: string) => {
@@ -1705,6 +1743,7 @@ export default function Home() {
   loadArticlesRef.current = loadArticles;
   loadPitchesRef.current = loadPitches;
   loadSocialGraphRef.current = loadSocialGraph;
+  loadProjectNotificationsRef.current = loadProjectNotifications;
   loadMessagesRef.current = loadMessages;
   loadMentorContextRef.current = loadMentorContext;
 
@@ -1835,12 +1874,41 @@ export default function Home() {
     });
   }, [lastReadAt, messages, session]);
 
+  const totalTalkUnread = useMemo(
+    () => Object.values(talkMeta).reduce((s, m) => s + m.unread, 0),
+    [talkMeta],
+  );
   const reportNewCount = useMemo(() => reports.filter((r) => (r.status ?? "new") === "new").length, [reports]);
+  const incomingRequestCount = incomingFollowRequests.length;
   const notificationItems = useMemo(() => {
-    const items: Array<{ id: string; level: "info" | "warn"; text: string }> = [];
-    if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります` });
-    return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 6);
-  }, [dismissedNotificationIds, reportNewCount]);
+    const items: Array<{
+      id: string;
+      level: "info" | "warn";
+      text: string;
+      kind?: "aggregate" | "project";
+      projectNotification?: ProjectNotificationRow;
+    }> = [];
+    if (totalTalkUnread > 0) items.push({ id: "chat-unread", level: "info", text: `未読メッセージが ${totalTalkUnread} 件あります`, kind: "aggregate" });
+    if (incomingRequestCount > 0) {
+      items.push({
+        id: "follow-request",
+        level: "info",
+        text: `フォローリクエストが ${incomingRequestCount} 件届いています`,
+        kind: "aggregate",
+      });
+    }
+    if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります`, kind: "aggregate" });
+    for (const row of projectNotifications) {
+      items.push({
+        id: `project-notice-${row.id}`,
+        level: row.type === "join_request_rejected" ? "warn" : "info",
+        text: row.body,
+        kind: "project",
+        projectNotification: row,
+      });
+    }
+    return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 8);
+  }, [dismissedNotificationIds, incomingRequestCount, projectNotifications, reportNewCount, totalTalkUnread]);
   const eventDailySummary = useMemo(() => {
     const bucket: Record<string, number> = {};
     for (const ev of opsEvents) {
@@ -1978,8 +2046,10 @@ export default function Home() {
         void refreshTalkListRef.current?.();
         void loadSocialGraphRef.current(next.user.id);
         void loadMentorContextRef.current?.(next.user.id);
+        void loadProjectNotificationsRef.current(next.user.id);
       } else {
         setFollowSuggestions([]);
+        setProjectNotifications([]);
       }
     });
 
@@ -1997,6 +2067,7 @@ export default function Home() {
           refreshTalkListRef.current?.() ?? Promise.resolve(),
           loadSocialGraphRef.current(next.user.id),
           loadMentorContextRef.current?.(next.user.id) ?? Promise.resolve(),
+          loadProjectNotificationsRef.current(next.user.id),
         ]);
       } else {
         setMessages([]);
@@ -2012,6 +2083,7 @@ export default function Home() {
         setIncomingFollowRequests([]);
         setOutgoingRequestIds([]);
         setFollowSuggestions([]);
+        setProjectNotifications([]);
       }
     });
     return () => {
@@ -2302,6 +2374,43 @@ export default function Home() {
       void client.removeChannel(channel);
     };
   }, [canUseSupabase, displayName, session, supabase]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !supabase || !session) return;
+    const client = supabase;
+    const channel = client
+      .channel(`project-notifications-live-${session.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_notifications", filter: `user_id=eq.${session.user.id}` },
+        () => {
+          void loadProjectNotificationsRef.current(session.user.id);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [canUseSupabase, session, supabase]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !supabase || !session) return;
+    const refresh = () => {
+      void loadProjectNotificationsRef.current(session.user.id);
+    };
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") refresh();
+    };
+    const poll = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [canUseSupabase, session, supabase]);
 
   useEffect(() => {
     if (!canUseSupabase || !supabase || !session) return;
@@ -3905,10 +4014,27 @@ export default function Home() {
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     item.level === "warn" ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-sky-200 bg-sky-50 text-sky-700"
                   }`}
-                  onClick={() => dismissNotification(item.id)}
-                  title="クリックで非表示"
+                  onClick={() => {
+                    if (item.kind === "project" && item.projectNotification) {
+                      void openProjectNotification(item.projectNotification);
+                      return;
+                    }
+                    if (item.id === "follow-request") {
+                      setActivePage("account");
+                      setFollowListModal("requests");
+                      return;
+                    }
+                    dismissNotification(item.id);
+                  }}
+                  title={
+                    item.kind === "project"
+                      ? "タップして確認"
+                      : item.id === "follow-request"
+                        ? "フォローリクエストを確認"
+                        : "クリックで非表示"
+                  }
                 >
-                  {item.text}
+                  {item.kind === "project" || item.id === "follow-request" ? `🔔 ${item.text}` : item.text}
                 </button>
               ))}
             </div>
@@ -4269,7 +4395,21 @@ export default function Home() {
                       {notificationItems.length === 0 ? (
                         <li>未処理通知はありません</li>
                       ) : (
-                        notificationItems.map((n) => <li key={`center-${n.id}`}>{n.text}</li>)
+                        notificationItems.map((n) => (
+                          <li key={`center-${n.id}`}>
+                            {n.kind === "project" && n.projectNotification ? (
+                              <button
+                                type="button"
+                                className="text-left text-sky-700 underline-offset-2 hover:underline"
+                                onClick={() => void openProjectNotification(n.projectNotification!)}
+                              >
+                                {n.text}
+                              </button>
+                            ) : (
+                              n.text
+                            )}
+                          </li>
+                        ))
                       )}
                     </ul>
                   </div>
