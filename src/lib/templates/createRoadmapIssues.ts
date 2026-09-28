@@ -129,6 +129,7 @@ export async function createRoadmapIssuesFromDefinition(input: {
         status: "todo",
         priority: task.priority ?? "medium",
         assignee_id: null,
+        assignee_ids: [],
         due_date,
         labels: ["roadmap"],
         workflow_json: workflow,
@@ -140,7 +141,25 @@ export async function createRoadmapIssuesFromDefinition(input: {
 
   const { error } = await supabase.from("project_issues").insert(payload);
   if (error) {
-    const missingCol = error.message.toLowerCase().includes("workflow_json");
+    const msg = error.message.toLowerCase();
+    if (msg.includes("assignee_ids") || msg.includes("42703")) {
+      const withoutIds = payload.map((row) => {
+        const { assignee_ids, ...rest } = row;
+        void assignee_ids;
+        return rest;
+      });
+      const { error: errIds } = await supabase.from("project_issues").insert(withoutIds);
+      if (!errIds) return payload.length;
+      if (!errIds.message.toLowerCase().includes("workflow_json")) throw new Error(errIds.message);
+      const fallback = withoutIds.map(({ workflow_json, ...rest }) => ({
+        ...rest,
+        description: `${String(rest.description ?? "")}\n\n---moni-workflow-v1---\n${JSON.stringify(workflow_json)}`,
+      }));
+      const { error: err2 } = await supabase.from("project_issues").insert(fallback);
+      if (err2) throw new Error(err2.message);
+      return payload.length;
+    }
+    const missingCol = msg.includes("workflow_json");
     if (!missingCol) throw new Error(error.message);
     const fallback = payload.map(({ workflow_json, ...rest }) => ({
       ...rest,

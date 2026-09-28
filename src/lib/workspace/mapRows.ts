@@ -1,6 +1,7 @@
 import type { Issue, IssueStatus, Member, Phase, Priority, Project, ProjectStatus } from "@/lib/workspace/types";
 import { parseWorkflowFromDescription, workflowFromJson } from "@/lib/workspace/issueWorkflow";
 import { beginAtFromLabels, readIssueWork } from "@/lib/workspace/issueWork";
+import { normalizeAssigneeIds } from "@/lib/workspace/issueAssignees";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 
 export type PhaseRowDb = {
@@ -26,6 +27,7 @@ export type IssueRowDb = {
   status: string;
   priority: string;
   assignee_id: string | null;
+  assignee_ids?: string[] | null;
   due_date: string | null;
   begin_at?: string | null;
   labels: string[] | null;
@@ -66,12 +68,20 @@ export function mapIssueRow(row: IssueRowDb): Issue {
   const workflow =
     workflowFromJson(row.workflow_json) ?? parseWorkflowFromDescription(row.description ?? undefined) ?? undefined;
   const work = readIssueWork(row);
+  const assigneeIds = normalizeAssigneeIds(
+    row.assignee_ids && row.assignee_ids.length > 0
+      ? row.assignee_ids
+      : row.assignee_id
+        ? [row.assignee_id]
+        : [],
+  );
   return {
     id: row.id,
     title: row.title,
     status: row.status as IssueStatus,
     priority: row.priority as Priority,
-    assigneeId: row.assignee_id ?? undefined,
+    assigneeId: assigneeIds[0],
+    assigneeIds,
     projectId: row.project_id,
     phaseId: row.phase_id ?? undefined,
     dueDate: row.due_date ?? undefined,

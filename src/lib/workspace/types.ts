@@ -33,7 +33,10 @@ export interface Issue {
   title: string;
   status: IssueStatus;
   priority: Priority;
+  /** @deprecated 互換用。assigneeIds[0] と同じ */
   assigneeId?: string;
+  /** 担当メンバー（複数可） */
+  assigneeIds: string[];
   projectId: string;
   phaseId?: string;
   dueDate?: string;

@@ -4,6 +4,7 @@ import type { Issue } from "@/lib/workspace/types";
 import { IssueStatusBadge } from "@/components/projects/StatusBadge";
 import { PriorityIcon } from "@/components/projects/PriorityIcon";
 import { Avatar } from "@/components/ui/Avatar";
+import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { issueHasGuideActivity } from "@/lib/workspace/issueWorkflow";
 import { format } from "date-fns";
 import { enUS, ja } from "date-fns/locale";
@@ -41,6 +42,8 @@ export function IssueList({
           {issues.map((i) => {
             const done = i.status === "done";
             const guided = issueHasGuideActivity(i);
+            const names = assigneeNames(i, nameByUserId);
+            const assigneeText = names.join("、") || "—";
             return (
               <tr
                 key={i.id}
@@ -90,8 +93,8 @@ export function IssueList({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
-                    <Avatar name={i.assigneeId ? nameByUserId[i.assigneeId] ?? "?" : "-"} url={undefined} />
-                    <span className="text-[#6B7280]">{i.assigneeId ? nameByUserId[i.assigneeId] ?? "" : "—"}</span>
+                    <Avatar name={names[0] ?? "-"} url={undefined} />
+                    <span className="text-[#6B7280]">{assigneeText}</span>
                   </div>
                 </td>
                 <td className="px-3 py-2">

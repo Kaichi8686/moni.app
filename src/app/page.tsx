@@ -18,6 +18,12 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import {
+  fetchUnreadProjectNotifications,
+  markProjectNotificationRead,
+  projectNotificationHref,
+  type ProjectNotificationRow,
+} from "@/lib/projects/notifications";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -996,6 +1002,7 @@ export default function Home() {
   const [opsEvents, setOpsEvents] = useState<OpsEvent[]>([]);
   const [reports, setReports] = useState<ReportEntry[]>([]);
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
+  const [projectNotifications, setProjectNotifications] = useState<ProjectNotificationRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1629,6 +1636,36 @@ export default function Home() {
     setDismissedNotificationIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   }
 
+  const loadProjectNotifications = useCallback(async (userId: string) => {
+    if (!supabase) {
+      setProjectNotifications([]);
+      return;
+    }
+    try {
+      const rows = await fetchUnreadProjectNotifications(supabase, userId);
+      setProjectNotifications(rows);
+    } catch {
+      setProjectNotifications([]);
+    }
+  }, []);
+
+  async function openProjectNotification(row: ProjectNotificationRow) {
+    if (supabase) {
+      try {
+        await markProjectNotificationRead(supabase, row.id);
+      } catch {
+        // ignore mark-read failures; still navigate
+      }
+    }
+    setProjectNotifications((prev) => prev.filter((n) => n.id !== row.id));
+    const href = projectNotificationHref(row);
+    if (href) {
+      router.push(href);
+      return;
+    }
+    setActivePage("projects");
+  }
+
   useEffect(() => {
     setProfilePortalReady(true);
   }, []);
@@ -1690,6 +1727,7 @@ export default function Home() {
   const loadArticlesRef = useRef(loadArticles);
   const loadPitchesRef = useRef(loadPitches);
   const loadSocialGraphRef = useRef(loadSocialGraph);
+  const loadProjectNotificationsRef = useRef(loadProjectNotifications);
   const loadMessagesRef = useRef(loadMessages);
 
   const loadMentorContext = useCallback(async (userId: string) => {
@@ -1726,6 +1764,7 @@ export default function Home() {
   loadArticlesRef.current = loadArticles;
   loadPitchesRef.current = loadPitches;
   loadSocialGraphRef.current = loadSocialGraph;
+  loadProjectNotificationsRef.current = loadProjectNotifications;
   loadMessagesRef.current = loadMessages;
   loadMentorContextRef.current = loadMentorContext;
 
@@ -1856,12 +1895,41 @@ export default function Home() {
     });
   }, [lastReadAt, messages, session]);
 
+  const totalTalkUnread = useMemo(
+    () => Object.values(talkMeta).reduce((s, m) => s + m.unread, 0),
+    [talkMeta],
+  );
   const reportNewCount = useMemo(() => reports.filter((r) => (r.status ?? "new") === "new").length, [reports]);
+  const incomingRequestCount = incomingFollowRequests.length;
   const notificationItems = useMemo(() => {
-    const items: Array<{ id: string; level: "info" | "warn"; text: string }> = [];
-    if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります` });
-    return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 6);
-  }, [dismissedNotificationIds, reportNewCount]);
+    const items: Array<{
+      id: string;
+      level: "info" | "warn";
+      text: string;
+      kind?: "aggregate" | "project";
+      projectNotification?: ProjectNotificationRow;
+    }> = [];
+    if (totalTalkUnread > 0) items.push({ id: "chat-unread", level: "info", text: `未読メッセージが ${totalTalkUnread} 件あります`, kind: "aggregate" });
+    if (incomingRequestCount > 0) {
+      items.push({
+        id: "follow-request",
+        level: "info",
+        text: `フォローリクエストが ${incomingRequestCount} 件届いています`,
+        kind: "aggregate",
+      });
+    }
+    if (reportNewCount > 0) items.push({ id: "report-new", level: "warn", text: `未対応の通報が ${reportNewCount} 件あります`, kind: "aggregate" });
+    for (const row of projectNotifications) {
+      items.push({
+        id: `project-notice-${row.id}`,
+        level: row.type === "join_request_rejected" ? "warn" : "info",
+        text: row.body,
+        kind: "project",
+        projectNotification: row,
+      });
+    }
+    return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 8);
+  }, [dismissedNotificationIds, incomingRequestCount, projectNotifications, reportNewCount, totalTalkUnread]);
   const eventDailySummary = useMemo(() => {
     const bucket: Record<string, number> = {};
     for (const ev of opsEvents) {
@@ -1992,8 +2060,10 @@ export default function Home() {
           void refreshTalkListRef.current?.();
           void loadSocialGraphRef.current(next.user.id);
           void loadMentorContextRef.current?.(next.user.id);
+          void loadProjectNotificationsRef.current(next.user.id);
         } else {
           setFollowSuggestions([]);
+          setProjectNotifications([]);
         }
         // setSession と同じ tick で立て、authReady だけ先に true になる瞬間を作らない
         setAuthReady(true);
@@ -2016,6 +2086,7 @@ export default function Home() {
           refreshTalkListRef.current?.() ?? Promise.resolve(),
           loadSocialGraphRef.current(next.user.id),
           loadMentorContextRef.current?.(next.user.id) ?? Promise.resolve(),
+          loadProjectNotificationsRef.current(next.user.id),
         ]);
       } else {
         setMessages([]);
@@ -2031,6 +2102,7 @@ export default function Home() {
         setIncomingFollowRequests([]);
         setOutgoingRequestIds([]);
         setFollowSuggestions([]);
+        setProjectNotifications([]);
       }
     });
     return () => {
@@ -2330,6 +2402,43 @@ export default function Home() {
       void client.removeChannel(channel);
     };
   }, [canUseSupabase, displayName, session, supabase]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !supabase || !session) return;
+    const client = supabase;
+    const channel = client
+      .channel(`project-notifications-live-${session.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_notifications", filter: `user_id=eq.${session.user.id}` },
+        () => {
+          void loadProjectNotificationsRef.current(session.user.id);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [canUseSupabase, session, supabase]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !supabase || !session) return;
+    const refresh = () => {
+      void loadProjectNotificationsRef.current(session.user.id);
+    };
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") refresh();
+    };
+    const poll = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [canUseSupabase, session, supabase]);
 
   useEffect(() => {
     if (!canUseSupabase || !supabase || !session) return;
@@ -3859,10 +3968,14 @@ export default function Home() {
     );
   }
 
+  const searchFullBleed = activePage === "chat";
+
   return (
     <div
       id="moni-app"
-      className="relative min-h-[100dvh] min-h-screen bg-[#fafafa] pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
+      className={`relative min-h-[100dvh] min-h-screen pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased ${
+        searchFullBleed ? "flex flex-col bg-white" : "bg-[#fafafa]"
+      }`}
     >
       <input
         ref={avatarInputRef}
@@ -3871,7 +3984,13 @@ export default function Home() {
         className="hidden"
         onChange={onAvatarFileChange}
       />
-      <div className="relative mx-auto grid w-full max-w-none grid-cols-1 gap-3 px-4 py-3 sm:gap-4">
+      <div
+        className={
+          searchFullBleed
+            ? "relative mx-auto flex w-full max-w-none flex-1 flex-col pb-bottom-nav"
+            : "relative mx-auto grid w-full max-w-none grid-cols-1 gap-3 px-4 py-3 sm:gap-4"
+        }
+      >
         <aside className="hidden" aria-hidden="true">
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
@@ -3911,15 +4030,15 @@ export default function Home() {
           </div>
         </aside>
 
-        <div className={activePage === "chat" ? "space-y-0" : "space-y-3 sm:space-y-4"}>
+        <div className={searchFullBleed ? "flex min-h-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
           <header
-            className={`flex items-center justify-between gap-2 bg-white px-3 py-2.5 sm:px-4 sm:py-3 ${
-              activePage === "chat"
-                ? "rounded-t-2xl border border-zinc-200"
-                : "border-b border-[#dbdbdb]"
-            }`}
+            className={
+              searchFullBleed
+                ? "flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 bg-white px-4 py-3 sm:px-5"
+                : "flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3"
+            }
           >
-            <h1 className="moni-wordmark text-xl sm:text-2xl">moni</h1>
+            <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
               {!session && canUseSupabase ? (
                 <Link
@@ -3936,7 +4055,13 @@ export default function Home() {
           </header>
 
           {notificationItems.length > 0 ? (
-            <div className="flex flex-wrap justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2">
+            <div
+              className={
+                searchFullBleed
+                  ? "flex flex-wrap justify-center gap-1.5 border-b border-zinc-100 bg-amber-50/80 px-3 py-2"
+                  : "flex flex-wrap justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 py-2"
+              }
+            >
               {notificationItems.map((item) => (
                 <button
                   type="button"
@@ -3944,16 +4069,39 @@ export default function Home() {
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     item.level === "warn" ? "border border-amber-200 bg-amber-50 text-amber-800" : "border border-sky-200 bg-sky-50 text-sky-700"
                   }`}
-                  onClick={() => dismissNotification(item.id)}
-                  title="クリックで非表示"
+                  onClick={() => {
+                    if (item.kind === "project" && item.projectNotification) {
+                      void openProjectNotification(item.projectNotification);
+                      return;
+                    }
+                    if (item.id === "follow-request") {
+                      setActivePage("account");
+                      setFollowListModal("requests");
+                      return;
+                    }
+                    dismissNotification(item.id);
+                  }}
+                  title={
+                    item.kind === "project"
+                      ? "タップして確認"
+                      : item.id === "follow-request"
+                        ? "フォローリクエストを確認"
+                        : "クリックで非表示"
+                  }
                 >
-                  {item.text}
+                  {item.kind === "project" || item.id === "follow-request" ? `🔔 ${item.text}` : item.text}
                 </button>
               ))}
             </div>
           ) : null}
 
-          <main className="grid gap-4 pb-bottom-nav md:grid-cols-1">
+          <main
+            className={
+              searchFullBleed
+                ? "flex min-h-0 flex-1 flex-col"
+                : "grid gap-4 pb-bottom-nav md:grid-cols-1"
+            }
+          >
         <section className="hidden rounded-2xl border border-[#dbdbdb] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)]" aria-hidden>
             {accountSubTab === "profile" ? (
               <div className="flex items-start justify-between gap-2">
@@ -4308,7 +4456,21 @@ export default function Home() {
                       {notificationItems.length === 0 ? (
                         <li>未処理通知はありません</li>
                       ) : (
-                        notificationItems.map((n) => <li key={`center-${n.id}`}>{n.text}</li>)
+                        notificationItems.map((n) => (
+                          <li key={`center-${n.id}`}>
+                            {n.kind === "project" && n.projectNotification ? (
+                              <button
+                                type="button"
+                                className="text-left text-sky-700 underline-offset-2 hover:underline"
+                                onClick={() => void openProjectNotification(n.projectNotification!)}
+                              >
+                                {n.text}
+                              </button>
+                            ) : (
+                              n.text
+                            )}
+                          </li>
+                        ))
                       )}
                     </ul>
                   </div>
@@ -4847,26 +5009,20 @@ export default function Home() {
         </section>
 
         <section
-          className={`${cardClass} min-h-[calc(100dvh-9rem)] rounded-t-none border-t-0 ${
+          className={
             activePage === "chat"
-              ? exploreSegment === "friends"
-                ? "flex flex-col"
-                : ""
+              ? "flex min-h-0 flex-1 flex-col bg-white px-4 py-4 sm:px-5"
               : "hidden"
-          }`}
+          }
         >
           <div className="shrink-0">
             <h3 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">{t("searchTitle")}</h3>
             <p className="mt-1 text-sm text-zinc-500">{t("searchHint")}</p>
           </div>
 
-          <div
-            className={`mt-3 flex flex-1 flex-col rounded-xl border border-zinc-200 bg-white ${
-              exploreSegment === "friends" ? "" : ""
-            }`}
-          >
+          <div className="mt-3 flex min-h-0 flex-1 flex-col">
             <div
-              className="flex shrink-0 gap-1 border-b border-zinc-100 px-1 pt-2 sm:px-2"
+              className="flex shrink-0 gap-1 border-b border-zinc-100"
               role="tablist"
               aria-label={t("searchTitle")}
             >
@@ -4905,7 +5061,7 @@ export default function Home() {
             </div>
 
             {exploreSegment === "friends" ? (
-              <div className="flex flex-col p-3" role="tabpanel">
+              <div className="flex flex-col pt-3" role="tabpanel">
                 <form onSubmit={runMatching} className="w-full shrink-0">
                   <p className="text-sm font-semibold text-zinc-900">
                     {language === "ja" ? "友達を探す" : "Find friends"}
@@ -4982,7 +5138,7 @@ export default function Home() {
                 </ul>
               </div>
             ) : (
-              <div className="flex-1 p-3" role="tabpanel">
+              <div className="flex-1 pt-3" role="tabpanel">
                 <DiscoverPublicProjects showSectionHeader />
               </div>
             )}
