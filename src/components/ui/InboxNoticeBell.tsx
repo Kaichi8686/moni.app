@@ -21,6 +21,8 @@ type Props<T extends InboxNoticeItem> = {
   items: T[];
   onOpen: (item: T) => void;
   onDismiss: (id: string) => void;
+  /** パネルの開閉。開いたときにプロジェクト通知を既読化する用途 */
+  onOpenChange?: (open: boolean) => void;
 };
 
 function noticeIcon(item: InboxNoticeItem) {
@@ -34,22 +36,32 @@ function isActionable(item: InboxNoticeItem) {
   return item.kind === "project" || item.id === "follow-request" || item.id === "chat-unread";
 }
 
-export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDismiss }: Props<T>) {
+export function InboxNoticeBell<T extends InboxNoticeItem>({
+  items,
+  onOpen,
+  onDismiss,
+  onOpenChange,
+}: Props<T>) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const count = items.length;
+
+  function setPanelOpen(next: boolean) {
+    setOpen(next);
+    onOpenChange?.(next);
+  }
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: MouseEvent | TouchEvent) {
       const target = event.target as Node | null;
       if (rootRef.current && target && !rootRef.current.contains(target)) {
-        setOpen(false);
+        setPanelOpen(false);
       }
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") setPanelOpen(false);
     }
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("touchstart", onPointerDown);
@@ -59,6 +71,7 @@ export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDi
       document.removeEventListener("touchstart", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- close helpers close over latest onOpenChange
   }, [open]);
 
   if (count === 0) return null;
@@ -71,7 +84,7 @@ export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDi
         aria-label={`お知らせ ${count}件`}
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => setPanelOpen(!open)}
       >
         <Bell className="h-[20px] w-[20px]" strokeWidth={1.75} aria-hidden />
         <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-zinc-900 px-1 text-[10px] font-bold leading-none text-white">
@@ -91,7 +104,7 @@ export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDi
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-              onClick={() => setOpen(false)}
+              onClick={() => setPanelOpen(false)}
               aria-label="閉じる"
             >
               <X className="h-4 w-4" strokeWidth={1.75} aria-hidden />
@@ -113,7 +126,7 @@ export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen, onDi
                     className="flex min-h-[52px] min-w-0 flex-1 touch-manipulation items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
                     onClick={() => {
                       onOpen(item);
-                      if (actionable) setOpen(false);
+                      if (actionable) setPanelOpen(false);
                     }}
                   >
                     <span

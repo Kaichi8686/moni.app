@@ -64,8 +64,10 @@ export function ProjectInviteBellPanel({
 
       const unread = notes.filter((n) => !n.read_at).map((n) => n.id);
       if (unread.length > 0) {
-        void markProjectNotificationsRead(unread);
-        setNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
+        await markProjectNotificationsRead(unread);
+        setNotifications((prev) =>
+          prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })),
+        );
       }
     } finally {
       setLoading(false);
