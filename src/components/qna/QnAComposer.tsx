@@ -44,7 +44,7 @@ export function QnAComposer({
   }, [title]);
 
   return (
-    <form className={`${PANEL} mx-4 mt-4 shrink-0 overflow-hidden`} onSubmit={onSubmit}>
+    <form className={`${PANEL} mx-4 mt-1 shrink-0 overflow-hidden`} onSubmit={onSubmit}>
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <p className="text-[15px] font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           {tx("質問相談", "Q&A")}

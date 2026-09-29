@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
@@ -81,7 +82,7 @@ function IdeaHubInner() {
         {tab === "qna" ? (
           qnaBoard ? (
             <div>
-              <div className="mx-auto max-w-lg px-4 pt-3">
+              <div className="mx-auto max-w-lg px-4 pt-2">
                 <button
                   type="button"
                   aria-label={tx("相談AIに戻る", "Back to consult AI")}
@@ -91,9 +92,9 @@ function IdeaHubInner() {
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-2 inline-flex min-h-[32px] min-w-[32px] items-center justify-start text-[18px] leading-none text-violet-700 hover:opacity-80"
+                  className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 transition hover:bg-zinc-100"
                 >
-                  ◀️
+                  <ArrowLeft className="h-5 w-5" aria-hidden />
                 </button>
               </div>
               <IdeaQnAPanel active={tab === "qna"} />
