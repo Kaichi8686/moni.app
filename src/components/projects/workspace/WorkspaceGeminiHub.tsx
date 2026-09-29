@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GeminiAgentPanel } from "@/components/projects/workspace/gemini/GeminiAgentPanel";
 import type { GeminiAgentMode } from "@/lib/ai/geminiAgents/types";
@@ -15,6 +15,7 @@ function parseMode(raw: string | null): "general" | "ideas" {
 
 export default function WorkspaceGeminiHub() {
   const { tx } = useI18n();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { project, projectId, phases, issues, coachingContext, loading, canEdit, reload } = useProjectWorkspace();
   const modeFromUrl = parseMode(searchParams.get("mode"));
@@ -25,6 +26,15 @@ export default function WorkspaceGeminiHub() {
     setMode(modeFromUrl);
   }, [modeFromUrl]);
 
+  const changeMode = useCallback(
+    (next: "general" | "ideas") => {
+      setMode(next);
+      const qs = next === "ideas" ? "?mode=ideas" : "";
+      router.replace(`/projects/${projectId}/coach${qs}`, { scroll: false });
+    },
+    [projectId, router],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -34,6 +44,7 @@ export default function WorkspaceGeminiHub() {
       const handoff = JSON.parse(raw) as IdeaInterviewHandoff;
       if (!handoff.seedTitle) return;
       setMode("ideas");
+      router.replace(`/projects/${projectId}/coach?mode=ideas`, { scroll: false });
       setHandoffPrompt(
         [
           `ビジネスアイデア発掘インタビューからの引き継ぎです。`,
@@ -50,7 +61,7 @@ export default function WorkspaceGeminiHub() {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [projectId, router]);
 
   const phaseSummary = useMemo(
     () =>
@@ -122,6 +133,7 @@ export default function WorkspaceGeminiHub() {
         initialUserMessage={mode === "ideas" ? handoffPrompt ?? undefined : undefined}
         variant="fullscreen"
         backHref={`/projects/${projectId}/overview`}
+        onModeChange={changeMode}
       />
     </div>
   );

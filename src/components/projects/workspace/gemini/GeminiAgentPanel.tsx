@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, History, Loader2, MessageSquarePlus, X } from "lucide-react";
+import { ArrowLeft, History, Lightbulb, Loader2, MessageCircle, MessageSquarePlus, X } from "lucide-react";
 import type {
   GeminiAgentMode,
   IdeasAgentPayload,
@@ -49,6 +49,8 @@ type Props = {
   /** fullscreen = ChatGPT-like full viewport (coach page) */
   variant?: "card" | "fullscreen";
   backHref?: string;
+  /** Switch between 相談 / アイデア (general | ideas) */
+  onModeChange?: (mode: "general" | "ideas") => void;
 };
 
 export function GeminiAgentPanel({
@@ -65,6 +67,7 @@ export function GeminiAgentPanel({
   initialUserMessage,
   variant = "card",
   backHref,
+  onModeChange,
 }: Props) {
   const { tx, locale } = useI18n();
   const router = useRouter();
@@ -373,9 +376,15 @@ export function GeminiAgentPanel({
             ) : null}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-bold text-[#1A1A1A]">
-                {tx(meta.label, mode === "roadmap" ? "Roadmap" : mode === "general" ? "Ask anything" : "Ideas")}
+                {fullscreen
+                  ? "AI"
+                  : tx(meta.label, mode === "roadmap" ? "Roadmap" : mode === "general" ? "Ask anything" : "Ideas")}
               </p>
-              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">{activeTitle}</p>
+              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
+                {fullscreen
+                  ? `${mode === "ideas" ? tx("アイデア", "Ideas") : tx("相談", "Chat")} · ${activeTitle}`
+                  : activeTitle}
+              </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
               <button
@@ -400,23 +409,59 @@ export function GeminiAgentPanel({
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 ? (
-            <p className="rounded-lg bg-[#FAFAFA] px-3 py-4 text-[13px] leading-relaxed text-[#6B7280]">
-              {mode === "roadmap" &&
-                tx(
-                  "「〇〇の計画を作って」と送ると、ロードマップ案が出ます。反映ボタンで保存できます。",
-                  "Send “make a plan for …” and you’ll get a roadmap draft. Use Apply to save it.",
-                )}
-              {mode === "general" &&
-                tx(
-                  "困っていることや質問を、そのまま送ってください。会話は自動保存され、履歴からいつでも続けられます。",
-                  "Send whatever you’re stuck on. Chats are saved automatically — continue anytime from History.",
-                )}
-              {mode === "ideas" &&
-                tx(
-                  "「アイデアを出して」と送ると、方向性を太字・絵文字で伝えてから案のリストが出ます。会話は自動保存されます。",
-                  "Send “give me ideas” — I’ll outline the direction with bold and emojis, then list options. Chats are saved automatically.",
-                )}
-            </p>
+            <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
+              {onModeChange && (mode === "general" || mode === "ideas") ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onModeChange("general")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      mode === "general"
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <MessageCircle className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("相談", "Chat")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("困りごと・次の一手", "Stuck points & next steps")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onModeChange("ideas")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      mode === "ideas"
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <Lightbulb className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("アイデア", "Ideas")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("企画の案をたくさん出す", "Brainstorm many ideas")}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+              <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
+                {mode === "roadmap" &&
+                  tx(
+                    "「〇〇の計画を作って」と送ると、ロードマップ案が出ます。反映ボタンで保存できます。",
+                    "Send “make a plan for …” and you’ll get a roadmap draft. Use Apply to save it.",
+                  )}
+                {mode === "general" &&
+                  tx(
+                    "困っていることや質問を、そのまま送ってください。会話は自動保存され、履歴からいつでも続けられます。",
+                    "Send whatever you’re stuck on. Chats are saved automatically — continue anytime from History.",
+                  )}
+                {mode === "ideas" &&
+                  tx(
+                    "「アイデアを出して」と送ると、方向性を太字・絵文字で伝えてから案のリストが出ます。会話は自動保存されます。",
+                    "Send “give me ideas” — I’ll outline the direction with bold and emojis, then list options. Chats are saved automatically.",
+                  )}
+              </p>
+            </div>
           ) : null}
 
           {messages.map((m, i) => (

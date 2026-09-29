@@ -989,7 +989,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       overview: ["概要", "Overview"],
       roadmap: ["ロードマップ", "Roadmap"],
       issues: ["課題", "Issues"],
-      coach: ["相談AI", "Ask AI"],
+      coach: ["AI", "AI"],
       "business-idea": ["アイデア", "Ideas"],
       ideas: ["投票", "Voting"],
       whiteboard: ["ボード", "Board"],
