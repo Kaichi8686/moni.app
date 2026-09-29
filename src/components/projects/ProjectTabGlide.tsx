@@ -8,11 +8,9 @@ import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } fr
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
-import { Bell, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
-import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
@@ -24,6 +22,8 @@ type Props = {
   onNavigate: (key: AppFeatureKey) => void;
   /** /projects ホーム用：画面いっぱいに広げる */
   fillViewport?: boolean;
+  /** 招待承認などで一覧を再取得したいときに増やす */
+  reloadSignal?: number;
 };
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
@@ -117,6 +117,7 @@ export function ProjectTabGlide({
   userId,
   onNavigate,
   fillViewport = false,
+  reloadSignal = 0,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -140,9 +141,7 @@ export function ProjectTabGlide({
     thumbnail_url: "",
   });
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteToast, setInviteToast] = useState("");
-  const [bellBadge, setBellBadge] = useState(0);
   const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const [inviteProjectId, setInviteProjectId] = useState<string>("");
   const [inviteUserQuery, setInviteUserQuery] = useState("");
@@ -153,15 +152,6 @@ export function ProjectTabGlide({
   const flashInviteToast = useCallback((message: string) => {
     setInviteToast(message);
     window.setTimeout(() => setInviteToast(""), 2600);
-  }, []);
-
-  const refreshBellBadge = useCallback(async (uid: string) => {
-    const [invites, notes] = await Promise.all([
-      fetchIncomingProjectInvites(uid),
-      fetchMyProjectNotifications(uid, 40),
-    ]);
-    const unreadNotes = notes.filter((n) => !n.read_at && n.type !== "project_invite").length;
-    setBellBadge(invites.length + unreadNotes);
   }, []);
 
   const load = useCallback(async () => {
@@ -234,7 +224,6 @@ export function ProjectTabGlide({
       );
       setProjects(merged.slice(0, 200));
       setJoinedIds(new Set(merged.map((p) => p.id)));
-      void refreshBellBadge(uid);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました。");
     } finally {
@@ -242,11 +231,16 @@ export function ProjectTabGlide({
       window.clearTimeout(hardStop);
       setLoading(false);
     }
-  }, [userId, refreshBellBadge]);
+  }, [userId]);
 
   useEffect(() => {
     void load().catch(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    if (reloadSignal <= 0) return;
+    void load().catch(() => undefined);
+  }, [reloadSignal, load]);
 
   const displayList = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -493,26 +487,6 @@ export function ProjectTabGlide({
                 aria-label="プロジェクトを検索"
               />
             </label>
-            <button
-              type="button"
-              disabled={!hasSession}
-              title={!hasSession ? "ログインが必要です" : "通知"}
-              onClick={() => {
-                if (!hasSession) return;
-                setInviteOpen(true);
-              }}
-              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
-                fillViewport ? "min-h-[36px] min-w-[36px]" : "min-h-[44px] min-w-[44px]"
-              }`}
-              aria-label="通知"
-            >
-              <Bell className={fillViewport ? "h-4 w-4" : "h-5 w-5"} strokeWidth={1.75} aria-hidden />
-              {bellBadge > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
-                  {bellBadge > 9 ? "9+" : bellBadge}
-                </span>
-              ) : null}
-            </button>
             <button
               type="button"
               disabled={!hasSession || inviteEligibleProjects.length === 0}
@@ -790,20 +764,6 @@ export function ProjectTabGlide({
             </button>
           </div>
         </div>
-      ) : null}
-
-      {inviteOpen && currentUserId ? (
-        <ProjectInviteBellPanel
-          open={inviteOpen}
-          onClose={() => {
-            setInviteOpen(false);
-            void refreshBellBadge(currentUserId);
-          }}
-          userId={currentUserId}
-          eligibleProjects={inviteEligibleProjects}
-          onAccepted={() => void load()}
-          toast={flashInviteToast}
-        />
       ) : null}
 
       {inviteComposeOpen ? (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProjectTabGlide, type AppFeatureKey } from "@/components/projects/ProjectTabGlide";
+import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -13,6 +14,7 @@ export function ProjectsHomeView() {
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!supabase) return;
@@ -50,7 +52,7 @@ export function ProjectsHomeView() {
       <div className="relative mx-auto flex w-full max-w-none flex-1 flex-col pb-bottom-nav">
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3 sm:px-5 lg:px-6">
           <h1 className="moni-wordmark text-lg sm:text-xl">moni</h1>
-          <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
             {!hasSession ? (
               <Link
                 href="/login"
@@ -59,9 +61,15 @@ export function ProjectsHomeView() {
                 {tx("ログイン", "Log in")}
               </Link>
             ) : (
-              <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
-                {sessionEmail ?? ""}
-              </div>
+              <>
+                <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
+                  {sessionEmail ?? ""}
+                </div>
+                <ProjectNoticeBell
+                  userId={userId}
+                  onAccepted={() => setListRefreshKey((k) => k + 1)}
+                />
+              </>
             )}
           </div>
         </header>
@@ -72,6 +80,7 @@ export function ProjectsHomeView() {
             userId={userId}
             onNavigate={onNavigate}
             fillViewport
+            reloadSignal={listRefreshKey}
           />
         </main>
       </div>

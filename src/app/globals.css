@@ -177,6 +177,10 @@ html.moni-landing-active .moni-hero-rise {
   .inbox-notice-panel {
     animation: none;
   }
+
+  .project-notice-drawer {
+    transition: none !important;
+  }
 }
 
 /* 相談AI: ChatGPT風 — 字が薄らからはっきり出る */

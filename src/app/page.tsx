@@ -11,7 +11,6 @@ import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
-import { InboxNoticeBell } from "@/components/ui/InboxNoticeBell";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
@@ -4111,25 +4110,6 @@ export default function Home() {
           >
             <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-              <InboxNoticeBell
-                items={notificationItems}
-                onOpen={(item) => {
-                  if (item.kind === "project" && item.projectNotification) {
-                    void openProjectNotification(item.projectNotification);
-                    return;
-                  }
-                  if (item.id === "follow-request") {
-                    // stay on current page — setActivePage("account") redirects to /profile
-                    // and drops this modal before approve/reject can be used
-                    setFollowListModal("requests");
-                    return;
-                  }
-                  if (item.id === "chat-unread") {
-                    // 既読は /messages で会話を開いたときに付く。ここでは遷移のみ
-                    router.push("/messages");
-                  }
-                }}
-              />
               {!session && canUseSupabase ? (
                 <Link
                   href="/login"

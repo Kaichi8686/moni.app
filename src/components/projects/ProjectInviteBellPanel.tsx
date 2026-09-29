@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 import type { ProjectRow } from "@/lib/projects/types";
 import {
   fetchIncomingProjectInvites,
@@ -34,6 +35,8 @@ export function ProjectInviteBellPanel({
   const [projectNames, setProjectNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [entered, setEntered] = useState(false);
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -75,9 +78,32 @@ export function ProjectInviteBellPanel({
   }, [userId, eligibleProjects]);
 
   useEffect(() => {
-    if (!open) return;
-    void loadInbox();
+    if (open) {
+      setVisible(true);
+      const frame = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setEntered(true));
+      });
+      void loadInbox();
+      return () => window.cancelAnimationFrame(frame);
+    }
+    setEntered(false);
+    const timer = window.setTimeout(() => setVisible(false), 300);
+    return () => window.clearTimeout(timer);
   }, [open, loadInbox]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
 
   const otherNotes = useMemo(
     () => notifications.filter((n) => n.type !== "project_invite"),
@@ -98,22 +124,36 @@ export function ProjectInviteBellPanel({
     void loadInbox();
   }
 
-  if (!open) return null;
+  if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="通知">
+      <button
+        type="button"
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-out ${
+          entered ? "opacity-100" : "opacity-0"
+        }`}
+        aria-label="閉じる"
+        onClick={onClose}
+      />
       <div
-        className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className={`project-notice-drawer absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-[-8px_0_32px_rgba(0,0,0,0.12)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          entered ? "translate-x-0" : "translate-x-full"
+        }`}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
-          <h3 className="text-base font-bold text-zinc-900">通知</h3>
-          <button type="button" className="text-sm text-zinc-500" onClick={onClose}>
-            閉じる
+        <div className="flex shrink-0 items-center gap-1 border-b border-zinc-100 px-2 py-2.5 sm:px-3">
+          <button
+            type="button"
+            className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation items-center gap-0.5 rounded-xl px-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 active:bg-zinc-200"
+            onClick={onClose}
+          >
+            <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+            戻る
           </button>
+          <h3 className="flex-1 pr-12 text-center text-base font-bold text-zinc-900">通知</h3>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
           {loading ? (
             <p className="py-8 text-center text-sm text-zinc-400">読み込み中…</p>
           ) : (
