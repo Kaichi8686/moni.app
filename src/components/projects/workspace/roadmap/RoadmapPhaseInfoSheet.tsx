@@ -182,7 +182,7 @@ export function RoadmapPhaseInfoSheet({
               className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
               onClick={onClose}
             >
-              {tx("ロードマップで編集", "Edit on roadmap")}
+              {tx("編集する", "Edit")}
             </Link>
           ) : null}
           <button

@@ -72,8 +72,7 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid, canEdit, reload } =
-    useProjectWorkspace();
+  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
@@ -274,22 +273,9 @@ export default function WorkspaceOverview() {
             : null
         }
         onClose={() => setSelectedPhaseId(null)}
-        canEdit={canEdit}
-        onSave={
-          canEdit && selectedPhaseLive
-            ? async (patch) => {
-                await roadmap.updatePhase(selectedPhaseLive.id, {
-                  goal: patch.goal,
-                  description: patch.description,
-                });
-                await reload();
-              }
-            : undefined
-        }
+        canEdit={false}
         editHref={
-          !canEdit && selectedPhaseLive
-            ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}`
-            : undefined
+          selectedPhaseLive ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}` : undefined
         }
       />
 
