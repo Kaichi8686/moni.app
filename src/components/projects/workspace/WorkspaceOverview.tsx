@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState, type ComponentType } from "react";
 import {
-  ArrowRight,
   Check,
   FileText,
   Lightbulb,
   ListChecks,
   LockKeyhole,
   MessageCircle,
+  PenLine,
   PenTool,
   Sparkles,
   Vote,
@@ -187,7 +187,8 @@ export default function WorkspaceOverview() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
           <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
-            {tx("すべて見る", "View all")} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            <PenLine className="h-3.5 w-3.5" aria-hidden />
+            {tx("編集する", "Edit")}
           </Link>
         </div>
         {sortedPhases.length > 0 ? (
