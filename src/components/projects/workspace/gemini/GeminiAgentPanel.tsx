@@ -552,7 +552,7 @@ export function GeminiAgentPanel({
           <div ref={endRef} />
         </div>
 
-        <form onSubmit={(e) => void onSubmit(e)} className="border-t border-[#E5E7EB] p-3">
+        <form onSubmit={(e) => void onSubmit(e)} className="shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             <input
               value={draft}
