@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Calendar,
-  Camera,
   CheckCircle,
-  Folder,
-  Image as ImageIcon,
+  Paperclip,
   PlusCircle,
   Send,
   Sparkles,
@@ -59,7 +57,6 @@ export function MessageInput({
   const [showTask, setShowTask] = useState(false);
   const [showAi, setShowAi] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
-  const imageRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -118,25 +115,25 @@ export function MessageInput({
     }
   };
 
-  const onImagePicked = async (file: File | undefined) => {
-    if (!file || !supabase) return;
-    try {
-      const { url, width, height } = await uploadMessageImage(supabase, senderId, conversationId, file);
-      await insert({
-        conversationId,
-        senderId,
-        contentType: "image",
-        metadata: { url, width, height },
-        replyToId: replyTo?.id,
-      });
-    } catch (e) {
-      alert(e instanceof Error ? e.message : tx("画像送信に失敗", "Failed to send image"));
-    }
-  };
-
   const onFilePicked = async (file: File | undefined) => {
     if (!file || !supabase) return;
     try {
+      if (file.type.startsWith("image/")) {
+        const { url, width, height } = await uploadMessageImage(
+          supabase,
+          senderId,
+          conversationId,
+          file,
+        );
+        await insert({
+          conversationId,
+          senderId,
+          contentType: "image",
+          metadata: { url, width, height },
+          replyToId: replyTo?.id,
+        });
+        return;
+      }
       const meta = await uploadMessageFile(supabase, senderId, conversationId, file);
       await insert({
         conversationId,
@@ -152,9 +149,7 @@ export function MessageInput({
   };
 
   const extras = [
-    { id: "photo", icon: ImageIcon, label: tx("写真", "Photo"), action: () => imageRef.current?.click() },
-    { id: "camera", icon: Camera, label: tx("カメラ", "Camera"), action: () => imageRef.current?.click() },
-    { id: "file", icon: Folder, label: tx("ファイル", "File"), action: () => fileRef.current?.click() },
+    { id: "file", icon: Paperclip, label: tx("ファイル", "File"), action: () => fileRef.current?.click() },
     { id: "collab", icon: UserPlus, label: tx("コラボ依頼", "Collab request"), action: () => setShowCollab(true) },
     { id: "task", icon: CheckCircle, label: tx("タスク作成", "Create task"), action: () => setShowTask(true) },
     {
@@ -181,8 +176,17 @@ export function MessageInput({
 
   return (
     <div className="border-t border-zinc-100 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={(e) => void onImagePicked(e.target.files?.[0])} />
-      <input ref={fileRef} type="file" className="hidden" onChange={(e) => void onFilePicked(e.target.files?.[0])} />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*,*/*"
+        className="hidden"
+        onChange={(e) => {
+          const picked = e.target.files?.[0];
+          e.target.value = "";
+          void onFilePicked(picked);
+        }}
+      />
 
       {showExtras ? (
         <div className="mb-2 grid grid-cols-4 gap-2 px-1">
