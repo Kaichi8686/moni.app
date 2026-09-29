@@ -19,7 +19,12 @@ import { ScheduleSendModal } from "@/app/messages/_components/ScheduleSendModal"
 import { TaskCreateModal } from "@/app/messages/_components/TaskCreateModal";
 import { VoiceRecordButton } from "@/app/messages/_components/VoiceRecorder";
 import { sendMessage } from "@/lib/messages/api";
-import { bindTypingChannel, broadcastTyping, unbindTypingChannel } from "@/lib/messages/typing";
+import {
+  bindTypingChannel,
+  broadcastTyping,
+  clearTyping,
+  unbindTypingChannel,
+} from "@/lib/messages/typing";
 import { uploadMessageFile, uploadMessageImage, uploadMessageVoice } from "@/lib/messages/upload";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -69,6 +74,7 @@ export function MessageInput({
   ) => {
     if (!supabase || sending) return;
     setSending(true);
+    clearTyping();
     const msg = await sendMessage(supabase, params);
     setSending(false);
     if (msg) {
@@ -207,9 +213,12 @@ export function MessageInput({
           <textarea
             value={text}
             onChange={(e) => {
-              setText(e.target.value);
-              broadcastTyping(senderName);
+              const next = e.target.value;
+              setText(next);
+              if (next.trim()) broadcastTyping(senderName);
+              else clearTyping();
             }}
+            onBlur={() => clearTyping()}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

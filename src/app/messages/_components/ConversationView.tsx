@@ -34,6 +34,7 @@ export function ConversationView({ conversationId }: Props) {
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [myDisplayName, setMyDisplayName] = useState("");
   const [header, setHeader] = useState<{
     title: string;
     subtitle?: string;
@@ -70,6 +71,15 @@ export function ConversationView({ conversationId }: Props) {
       if (!uid) {
         setHeader({ title: "", chrome: "login" });
         return;
+      }
+
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .eq("id", uid)
+        .maybeSingle();
+      if (myProfile) {
+        setMyDisplayName(profileToSender(myProfile).displayName);
       }
 
       // 未読のプロジェクト会話などで membership が薄い場合に再参加を試みる
@@ -376,7 +386,9 @@ export function ConversationView({ conversationId }: Props) {
           conversationId={conversationId}
           senderId={userId}
           senderName={
-            messages.find((m) => m.senderId === userId)?.sender.displayName ?? tx("あなた", "You")
+            myDisplayName ||
+            messages.find((m) => m.senderId === userId)?.sender.displayName ||
+            tx("ユーザー", "User")
           }
           replyTo={replyTo}
           chatContext={chatContext}
