@@ -81,6 +81,7 @@ export type PhaseDraftRow = {
   enabled: boolean;
   title: string;
   goal: string;
+  description: string;
   startDate: string;
   endDate: string;
   durationDays: number;
@@ -109,6 +110,7 @@ export function buildDraftPhasesFromDefinition(
       enabled: true,
       title: item.title,
       goal: item.goal ?? "",
+      description: "",
       startDate: toDateInput(start),
       endDate: toDateInput(end),
       durationDays: item.durationDays,
@@ -162,6 +164,7 @@ export function newEmptyDraftRow(start: Date): PhaseDraftRow {
     enabled: true,
     title: "",
     goal: "",
+    description: "",
     startDate: toDateInput(start),
     endDate: toDateInput(end),
     durationDays: 14,

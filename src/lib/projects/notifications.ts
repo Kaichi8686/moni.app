@@ -49,10 +49,18 @@ export async function markProjectNotificationRead(
   client: SupabaseClient,
   notificationId: string,
 ): Promise<void> {
+  await markProjectNotificationsRead(client, [notificationId]);
+}
+
+export async function markProjectNotificationsRead(
+  client: SupabaseClient,
+  notificationIds: string[],
+): Promise<void> {
+  if (notificationIds.length === 0) return;
   const { error } = await client
     .from("project_notifications")
     .update({ read_at: new Date().toISOString() })
-    .eq("id", notificationId)
+    .in("id", notificationIds)
     .is("read_at", null);
   if (error && error.code !== "42P01" && error.code !== "PGRST205") {
     throw error;

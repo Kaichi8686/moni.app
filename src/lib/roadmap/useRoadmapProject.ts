@@ -159,13 +159,21 @@ export function useRoadmapProject(projectId: string) {
   );
 
   const createPhase = useCallback(
-    async (input: { title: string; goal?: string; startDate: string; endDate: string; status?: PhaseStatus }) => {
+    async (input: {
+      title: string;
+      goal?: string;
+      description?: string;
+      startDate: string;
+      endDate: string;
+      status?: PhaseStatus;
+    }) => {
       if (!supabase || !canEdit) return;
       const maxOrder = phases.reduce((m, p) => Math.max(m, p.order), -1);
       const { error: err } = await supabase.from("project_phases").insert({
         project_id: projectId,
         title: input.title.trim(),
         goal: (input.goal ?? "").trim(),
+        description: (input.description ?? "").trim(),
         start_date: input.startDate,
         end_date: input.endDate,
         status: input.status ?? "planned",
@@ -198,7 +206,7 @@ export function useRoadmapProject(projectId: string) {
 
   const bulkCreatePhases = useCallback(
     async (
-      items: Array<{ title: string; goal?: string; startDate: string; endDate: string }>,
+      items: Array<{ title: string; goal?: string; description?: string; startDate: string; endDate: string }>,
       businessType?: RoadmapBusinessType,
     ) => {
       if (!supabase || !canEdit || items.length === 0) return;
@@ -208,7 +216,7 @@ export function useRoadmapProject(projectId: string) {
         project_id: projectId,
         title: item.title.trim(),
         goal: (item.goal ?? "").trim(),
-        description: "",
+        description: (item.description ?? "").trim(),
         status: phases.length === 0 && i === 0 ? "in_progress" : "planned",
         start_date: new Date(item.startDate).toISOString(),
         end_date: new Date(item.endDate).toISOString(),

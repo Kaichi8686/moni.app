@@ -29,7 +29,7 @@ import {
   embedWorkflowInDescription,
 } from "@/lib/workspace/issueWorkflow";
 import { packWorkDescription, withBeginLabel, withGenreLabel, type IssueWork, type TaskGenre } from "@/lib/workspace/issueWork";
-import { assigneeWriteFields } from "@/lib/workspace/issueAssignees";
+import { assigneeWriteFields, withAssigneeLabels } from "@/lib/workspace/issueAssignees";
 import { simplifyIssueText } from "@/lib/workspace/issuePlainLanguage";
 import {
   projectIssueContextFromWorkspace,
@@ -500,6 +500,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           ? assigneeWriteFields(input.assigneeIds)
           : assigneeWriteFields(input.assigneeId ? [input.assigneeId] : []);
 
+      const baseLabels = withBeginLabel(withGenreLabel(input.phaseId ? ["roadmap"] : [], genre), input.beginAt ?? null);
+
       const row: Record<string, unknown> = {
         project_id: projectId,
         phase_id: input.phaseId ?? null,
@@ -511,7 +513,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         assignee_ids: assignees.assignee_ids,
         due_date: dueDate,
         begin_at: input.beginAt ?? null,
-        labels: withBeginLabel(withGenreLabel(input.phaseId ? ["roadmap"] : [], genre), input.beginAt ?? null),
+        labels: withAssigneeLabels(baseLabels, assignees.assignee_ids),
         genre,
         workspace_text: (input.description ?? "").trim(),
         attachment_urls: [],
@@ -661,10 +663,14 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         const assignees = assigneeWriteFields(patch.assigneeIds);
         row.assignee_ids = assignees.assignee_ids;
         row.assignee_id = assignees.assignee_id;
+        const issue = issues.find((item) => item.id === issueId);
+        row.labels = withAssigneeLabels(issue?.labels ?? [], assignees.assignee_ids);
       } else if (patch.assigneeId !== undefined) {
         const assignees = assigneeWriteFields(patch.assigneeId ? [patch.assigneeId] : []);
         row.assignee_ids = assignees.assignee_ids;
         row.assignee_id = assignees.assignee_id;
+        const issue = issues.find((item) => item.id === issueId);
+        row.labels = withAssigneeLabels(issue?.labels ?? [], assignees.assignee_ids);
       }
       if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
       if (patch.beginAt !== undefined) row.begin_at = patch.beginAt;
@@ -676,7 +682,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (err && patch.beginAt !== undefined && /begin_at|schema cache|42703/i.test(err.message)) {
         delete row.begin_at;
         const issue = issues.find((item) => item.id === issueId);
-        row.labels = withBeginLabel(issue?.labels ?? [], patch.beginAt);
+        const baseLabels = (Array.isArray(row.labels) ? (row.labels as string[]) : null) ?? issue?.labels ?? [];
+        row.labels = withBeginLabel(baseLabels, patch.beginAt);
         ({ error: err } = await supabase.from("project_issues").update(row).eq("id", issueId));
       }
       if (err) throw new Error(err.message);
@@ -982,13 +989,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       overview: ["概要", "Overview"],
       roadmap: ["ロードマップ", "Roadmap"],
       issues: ["課題", "Issues"],
-      coach: ["相談AI", "Ask AI"],
+      coach: ["AI", "AI"],
       "business-idea": ["アイデア", "Ideas"],
       ideas: ["投票", "Voting"],
       whiteboard: ["ボード", "Board"],
       documents: ["資料", "Documents"],
       members: ["メンバー", "Members"],
-      chat: ["チャット", "Chat"],
+      chat: ["メール", "Mail"],
       schedule: ["予定", "Schedule"],
       activity: ["活動", "Activity"],
     };
@@ -996,6 +1003,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     return tx(label[0], label[1]);
   }, [pathname, tx]);
   const isOverview = pathname === `/projects/${projectId}/overview`;
+  const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
   const headerBackHref = isOverview ? HOME_PROJECTS_HREF : `/projects/${projectId}/overview`;
 
   useEffect(() => {
@@ -1009,7 +1017,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
 
   return (
     <WorkspaceCtx.Provider value={value}>
-      <div className="min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A]">
+      <div className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isCoachChat ? "bg-white" : ""}`}>
+        {isCoachChat ? null : (
         <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-4 py-2.5 backdrop-blur sm:py-3">
           <div className="mx-auto max-w-3xl">
             <p className="mb-1 truncate text-[11px] font-medium text-[#8A8F98]">
@@ -1141,15 +1150,16 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             </p>
           ) : null}
         </header>
-        <div className="min-h-[calc(100dvh-3.75rem)]">
-          <main className="project-workspace-main min-w-0 overflow-x-hidden bg-white">
-            <div className="mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5">
-              {error ? (
+        )}
+        <div className={isCoachChat ? "min-h-[100dvh]" : "min-h-[calc(100dvh-3.75rem)]"}>
+          <main className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${isCoachChat ? "h-[100dvh]" : ""}`}>
+            <div className={isCoachChat ? "h-full" : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"}>
+              {error && !isCoachChat ? (
                 <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {error}
                 </div>
               ) : null}
-              {loading && !error ? <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p> : null}
+              {loading && !error && !isCoachChat ? <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p> : null}
               {children}
             </div>
           </main>

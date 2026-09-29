@@ -34,6 +34,7 @@ export function ConversationView({ conversationId }: Props) {
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [myDisplayName, setMyDisplayName] = useState("");
   const [header, setHeader] = useState<{
     title: string;
     subtitle?: string;
@@ -72,6 +73,27 @@ export function ConversationView({ conversationId }: Props) {
         return;
       }
 
+      const { data: myProfile } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .eq("id", uid)
+        .maybeSingle();
+      if (myProfile) {
+        setMyDisplayName(profileToSender(myProfile).displayName);
+      }
+
+      // 未読のプロジェクト会話などで membership が薄い場合に再参加を試みる
+      try {
+        await supabase
+          .from("conversation_members")
+          .upsert(
+            { conversation_id: conversationId, user_id: uid, role: "member" },
+            { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+          );
+      } catch (joinErr) {
+        console.warn("ConversationView ensure membership", joinErr);
+      }
+
       const [msgs, pinned, head] = await Promise.all([
         fetchConversationMessages(supabase, conversationId),
         fetchPinnedMessages(supabase, conversationId),
@@ -79,29 +101,42 @@ export function ConversationView({ conversationId }: Props) {
       ]);
       setMessages(msgs);
       setPinnedMessages(pinned);
-      setHeader(
-        head
-          ? { title: head.title, subtitle: head.subtitle, type: head.type, id: head.id }
-          : { title: "", chrome: "chat" },
-      );
-      const reads = await fetchMemberReadMap(supabase, conversationId);
-      setReadMap(reads);
-      const readerIds = [...reads.keys()].filter((id) => id !== uid);
-      if (readerIds.length) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url")
-          .in("id", readerIds);
-        setReaderProfiles(
-          new Map(
-            (profs ?? []).map((p) => {
-              const s = profileToSender(p);
-              return [s.id, s];
-            }),
-          ),
-        );
+      if (!head) {
+        // ヘッダー取得失敗でも会話自体は開けるようにする
+        setHeader({
+          title: tx("グループチャット", "Group chat"),
+          type: "project",
+          id: conversationId,
+        });
+      } else {
+        setHeader({ title: head.title, subtitle: head.subtitle, type: head.type, id: head.id });
       }
-      await markConversationRead(supabase, conversationId, uid);
+      try {
+        const reads = await fetchMemberReadMap(supabase, conversationId);
+        setReadMap(reads);
+        const readerIds = [...reads.keys()].filter((id) => id !== uid);
+        if (readerIds.length) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url")
+            .in("id", readerIds);
+          setReaderProfiles(
+            new Map(
+              (profs ?? []).map((p) => {
+                const s = profileToSender(p);
+                return [s.id, s];
+              }),
+            ),
+          );
+        }
+      } catch (readErr) {
+        console.warn("ConversationView read map", readErr);
+      }
+      try {
+        await markConversationRead(supabase, conversationId, uid);
+      } catch (markErr) {
+        console.warn("ConversationView mark read", markErr);
+      }
       const newest = msgs.at(-1)?.id ?? null;
       if (newest !== lastMessageIdRef.current) {
         lastMessageIdRef.current = newest;
@@ -109,9 +144,9 @@ export function ConversationView({ conversationId }: Props) {
       }
     } catch (e) {
       console.error("ConversationView load", e);
-      setHeader({ title: "", chrome: "chat" });
+      setHeader({ title: tx("チャット", "Chat"), id: conversationId });
     }
-  }, [conversationId, scrollToBottom]);
+  }, [conversationId, scrollToBottom, tx]);
 
   useEffect(() => {
     void load();
@@ -351,7 +386,9 @@ export function ConversationView({ conversationId }: Props) {
           conversationId={conversationId}
           senderId={userId}
           senderName={
-            messages.find((m) => m.senderId === userId)?.sender.displayName ?? tx("あなた", "You")
+            myDisplayName ||
+            messages.find((m) => m.senderId === userId)?.sender.displayName ||
+            tx("ユーザー", "User")
           }
           replyTo={replyTo}
           chatContext={chatContext}

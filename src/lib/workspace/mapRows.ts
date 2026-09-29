@@ -1,7 +1,7 @@
 import type { Issue, IssueStatus, Member, Phase, Priority, Project, ProjectStatus } from "@/lib/workspace/types";
 import { parseWorkflowFromDescription, workflowFromJson } from "@/lib/workspace/issueWorkflow";
 import { beginAtFromLabels, readIssueWork } from "@/lib/workspace/issueWork";
-import { normalizeAssigneeIds } from "@/lib/workspace/issueAssignees";
+import { resolveAssigneeIds } from "@/lib/workspace/issueAssignees";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 
 export type PhaseRowDb = {
@@ -9,6 +9,7 @@ export type PhaseRowDb = {
   project_id: string;
   title: string;
   description: string | null;
+  goal?: string | null;
   status: string;
   start_date: string;
   end_date: string;
@@ -68,13 +69,7 @@ export function mapIssueRow(row: IssueRowDb): Issue {
   const workflow =
     workflowFromJson(row.workflow_json) ?? parseWorkflowFromDescription(row.description ?? undefined) ?? undefined;
   const work = readIssueWork(row);
-  const assigneeIds = normalizeAssigneeIds(
-    row.assignee_ids && row.assignee_ids.length > 0
-      ? row.assignee_ids
-      : row.assignee_id
-        ? [row.assignee_id]
-        : [],
-  );
+  const assigneeIds = resolveAssigneeIds(row.assignee_ids, row.assignee_id, row.labels);
   return {
     id: row.id,
     title: row.title,
@@ -112,7 +107,8 @@ export function nestPhasesWithIssues(phaseRows: PhaseRowDb[], issues: Issue[]): 
     id: row.id,
     projectId: row.project_id,
     title: row.title,
-    description: row.description ?? undefined,
+    goal: row.goal?.trim() || undefined,
+    description: row.description?.trim() || undefined,
     status: row.status as ProjectStatus,
     startDate: row.start_date,
     endDate: row.end_date,

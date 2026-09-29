@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { useMemo, useState, type ComponentType } from "react";
 import {
-  ArrowRight,
   Check,
   FileText,
-  Lightbulb,
   ListChecks,
   LockKeyhole,
   MessageCircle,
+  PenLine,
   PenTool,
+  PlusCircle,
   Sparkles,
   Vote,
 } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
@@ -70,14 +72,27 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases, loading, uid } = useProjectWorkspace();
+  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid } = useProjectWorkspace();
+  const roadmap = useRoadmapProject(projectId);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
-  const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
+  /**
+   * 「すべて見る」地図ページと同じ project_phases を使う。
+   * 地図側で削除した直後でも概要に戻ったときに連動するよう、
+   * roadmap hook を優先し、初回ロード中のみ workspace のキャッシュを出す。
+   */
+  const sortedPhases = useMemo(() => {
+    const source = !roadmap.loading ? roadmap.phases : workspacePhases;
+    return [...source].sort((a, b) => a.order - b.order);
+  }, [roadmap.loading, roadmap.phases, workspacePhases]);
+  const selectedPhaseLive = selectedPhaseId
+    ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
+    : null;
   /** 未完了を先頭にし、完了済みはその後ろ */
   const displayPhases = useMemo(() => {
     const active = sortedPhases.filter((phase) => phase.status !== "completed");
@@ -171,12 +186,13 @@ export default function WorkspaceOverview() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
           <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
-            {tx("すべて見る", "View all")} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            <PenLine className="h-3.5 w-3.5" aria-hidden />
+            {tx("編集する", "Edit")}
           </Link>
         </div>
         {sortedPhases.length > 0 ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {visiblePhases.map((phase) => {
                 const index = sortedPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
@@ -184,21 +200,21 @@ export default function WorkspaceOverview() {
                 const locked = !complete && !current && index > currentIndex;
                 const card = (
                   <div
-                    className={`relative min-h-[108px] overflow-hidden rounded-2xl border p-3 pt-5 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
+                    className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
                       locked
                         ? "border-zinc-200 bg-zinc-50 text-zinc-400"
                         : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
                     }`}
                   >
                     <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
-                    {current ? <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-orange-100" /> : null}
-                    {locked ? <LockKeyhole className="absolute right-3 top-3 h-4 w-4" aria-hidden /> : null}
-                    <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {index + 1}</p>
-                    <p className={`mt-2 line-clamp-2 text-[13px] font-semibold leading-snug sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
+                    {current ? <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" /> : null}
+                    {locked ? <LockKeyhole className="absolute right-2 top-2.5 h-3.5 w-3.5 sm:right-3 sm:top-3 sm:h-4 sm:w-4" aria-hidden /> : null}
+                    <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
+                    <p className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
                       {phase.title}
                     </p>
                     {complete ? (
-                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
                         <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
                       </span>
                     ) : null}
@@ -207,7 +223,14 @@ export default function WorkspaceOverview() {
                 return locked ? (
                   <div key={phase.id} aria-disabled="true">{card}</div>
                 ) : (
-                  <Link key={phase.id} href={`/projects/${projectId}/roadmap`}>{card}</Link>
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className="text-left"
+                    onClick={() => setSelectedPhaseId(phase.id)}
+                  >
+                    {card}
+                  </button>
                 );
               })}
             </div>
@@ -230,11 +253,40 @@ export default function WorkspaceOverview() {
             ) : null}
           </>
         ) : (
-          <Link href={`/projects/${projectId}/roadmap`} className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600">
+          <Link
+            href={`/projects/${projectId}/roadmap`}
+            className="flex min-h-[108px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600"
+          >
+            <PlusCircle
+              className="h-8 w-8 text-zinc-300"
+              strokeWidth={1.75}
+              strokeDasharray="2.5 2.5"
+              aria-hidden
+            />
             {tx("ロードマップを作成する", "Create roadmap")}
           </Link>
         )}
       </section>
+
+      <RoadmapPhaseInfoSheet
+        open={Boolean(selectedPhaseLive)}
+        phase={
+          selectedPhaseLive
+            ? {
+                id: selectedPhaseLive.id,
+                title: selectedPhaseLive.title,
+                goal: selectedPhaseLive.goal,
+                description: selectedPhaseLive.description,
+                stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+              }
+            : null
+        }
+        onClose={() => setSelectedPhaseId(null)}
+        canEdit={false}
+        editHref={
+          selectedPhaseLive ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}` : undefined
+        }
+      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -282,15 +334,25 @@ export default function WorkspaceOverview() {
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
         <div className="grid grid-cols-2 gap-3">
-          <ActionLink href={`/projects/${projectId}/coach`} icon={Sparkles} label={tx("相談AI", "Ask AI")} detail={tx("次の一手を相談", "Plan your next move")} filled />
-          <ActionLink href={`/projects/${projectId}/issues`} icon={ListChecks} label={tx("課題", "Issues")} detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)} />
+          <ActionLink
+            href={`/projects/${projectId}/coach`}
+            icon={Sparkles}
+            label={tx("AI", "AI")}
+            detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
+            filled
+          />
+          <ActionLink
+            href={`/projects/${projectId}/issues`}
+            icon={ListChecks}
+            label={tx("課題", "Issues")}
+            detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)}
+          />
         </div>
       </section>
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <CompactLink href={`/projects/${projectId}/business-idea`} icon={Lightbulb} label={tx("アイデア", "Ideas")} />
+        <div className="grid grid-cols-2 gap-3">
           <CompactLink href={`/projects/${projectId}/ideas`} icon={Vote} label={tx("投票", "Voting")} />
           <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
         </div>
@@ -300,7 +362,7 @@ export default function WorkspaceOverview() {
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
         <div className="grid grid-cols-2 gap-3">
           <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
-          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("チャット", "Chat")} />
+          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("メール", "Mail")} />
         </div>
       </section>
     </div>
