@@ -28,7 +28,7 @@ export function RoadmapMapEditor() {
   const { tx } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { projectId } = useProjectWorkspace();
+  const { projectId, reload: workspaceReload } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [draftTitle, setDraftTitle] = useState("");
@@ -44,6 +44,11 @@ export function RoadmapMapEditor() {
   const [proposed, setProposed] = useState<string[]>([]);
   const [listExpanded, setListExpanded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /** 地図編集と概要タブのフェーズ一覧を同じ DB 状態に揃える */
+  async function syncReload() {
+    await Promise.all([roadmap.reload(), workspaceReload()]);
+  }
 
   const steps = useMemo(
     () => [...roadmap.phases].sort((a, b) => a.order - b.order),
@@ -100,6 +105,7 @@ export function RoadmapMapEditor() {
         endDate: end.toISOString(),
         status: "planned",
       });
+      await workspaceReload();
       resetDraft();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
@@ -114,6 +120,8 @@ export function RoadmapMapEditor() {
     setError("");
     try {
       await roadmap.deletePhase(phaseId);
+      await workspaceReload();
+      setSelectedId((current) => (current === phaseId ? null : current));
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("削除できませんでした", "Couldn’t delete"));
     } finally {
@@ -141,7 +149,7 @@ export function RoadmapMapEditor() {
       );
       const failed = results.find((result) => result.error);
       if (failed?.error) throw new Error(failed.error.message);
-      await roadmap.reload();
+      await syncReload();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("並び替えに失敗しました", "Couldn’t reorder"));
     } finally {
@@ -204,7 +212,7 @@ export function RoadmapMapEditor() {
       }));
       const { error: insertError } = await supabase.from("project_phases").insert(rows);
       if (insertError) throw new Error(insertError.message);
-      await roadmap.reload();
+      await syncReload();
       setProposed([]);
       setMode("manual");
     } catch (e) {
@@ -518,6 +526,7 @@ export function RoadmapMapEditor() {
             goal: patch.goal,
             description: patch.description,
           });
+          await workspaceReload();
         }}
       />
     </div>
