@@ -149,12 +149,12 @@ export function InboxList() {
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-bottom-nav">
       <div className="mobile-sticky-header mobile-content-inset flex items-center justify-between py-3">
-        <h1 className="text-lg font-bold text-zinc-900">{tx("メッセージ", "Messages")}</h1>
+        <h1 className="text-lg font-bold text-zinc-900">{tx("メール", "Mail")}</h1>
         <button
           type="button"
           onClick={() => setShowNew(true)}
           className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
-          aria-label={tx("新しいチャット", "New chat")}
+          aria-label={tx("新しいメール", "New mail")}
         >
           <Pencil className="h-5 w-5" />
         </button>
@@ -208,7 +208,10 @@ export function InboxList() {
           <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
         ) : filtered.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-500">
-            {tx("まだトークがありません。右上から新規チャットを始めましょう。", "No chats yet. Tap the pencil to start one.")}
+            {tx(
+              "まだトークがありません。右上からフォロー中の人やプロジェクトのグループラインを始めましょう。",
+              "No chats yet. Start one with people you follow or a project group line.",
+            )}
           </p>
         ) : (
           filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)

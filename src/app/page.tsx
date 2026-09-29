@@ -222,10 +222,11 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   },
 };
 
-type HomeBottomNavKey = FeaturePage | "idea";
+type HomeBottomNavKey = FeaturePage | "idea" | "mail";
 
 const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
   { key: "projects", icon: "▦" },
+  { key: "mail", icon: "✉" },
   { key: "idea", icon: "✦" },
   { key: "chat", icon: "⌕" },
   { key: "account", icon: "◉" },
@@ -233,6 +234,7 @@ const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
 
 const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
   projects: "navProjects",
+  mail: "navMail",
   idea: "navIdea",
   chat: "navSearch",
   account: "navProfile",
@@ -5974,6 +5976,22 @@ export default function Home() {
                 <Link
                   key={item.key}
                   href={HOME_PROJECTS_HREF}
+                  className={className}
+                  aria-label={label}
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                </Link>
+              );
+            }
+            if (item.key === "mail") {
+              return (
+                <Link
+                  key={item.key}
+                  href="/messages"
                   className={className}
                   aria-label={label}
                   title={label}

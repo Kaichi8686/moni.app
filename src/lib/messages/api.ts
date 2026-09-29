@@ -16,6 +16,122 @@ export async function getOrCreateDirectConversation(
   return data as string;
 }
 
+export async function getOrCreateProjectConversation(
+  client: SupabaseClient,
+  projectId: string,
+): Promise<string | null> {
+  const { data, error } = await client.rpc("get_or_create_project_conversation", {
+    p_project_id: projectId,
+  });
+  if (!error && data) return data as string;
+
+  // RPC 未適用時のフォールバック
+  const { data: session } = await client.auth.getSession();
+  const uid = session.session?.user.id;
+  if (!uid) return null;
+
+  const { data: existing } = await client
+    .from("conversations")
+    .select("id")
+    .eq("type", "project")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await client.from("conversation_members").upsert(
+      { conversation_id: existing.id as string, user_id: uid, role: "member" },
+      { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+    );
+    return existing.id as string;
+  }
+
+  const { data: project } = await client.from("projects").select("id, name, owner_id").eq("id", projectId).maybeSingle();
+  if (!project) {
+    console.error("get_or_create_project_conversation", error);
+    return null;
+  }
+
+  const { data: created, error: createErr } = await client
+    .from("conversations")
+    .insert({
+      type: "project",
+      name: ((project.name as string | null)?.trim() || "プロジェクト") as string,
+      icon_emoji: "📁",
+      project_id: projectId,
+      created_by: uid,
+    })
+    .select("id")
+    .single();
+
+  if (createErr || !created?.id) {
+    console.error("create project conversation", createErr ?? error);
+    return null;
+  }
+
+  const convId = created.id as string;
+  const { data: memberRows } = await client.from("project_members").select("user_id").eq("project_id", projectId);
+  const memberIds = new Set<string>([(project.owner_id as string) ?? uid, uid]);
+  for (const row of memberRows ?? []) memberIds.add(row.user_id as string);
+
+  await client.from("conversation_members").upsert(
+    [...memberIds].map((id) => ({
+      conversation_id: convId,
+      user_id: id,
+      role: id === uid ? "admin" : "member",
+    })),
+    { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+  );
+
+  return convId;
+}
+
+export async function createGroupConversation(
+  client: SupabaseClient,
+  name: string,
+  memberIds: string[],
+): Promise<string | null> {
+  const { data, error } = await client.rpc("create_group_conversation", {
+    p_name: name,
+    p_member_ids: memberIds,
+  });
+  if (!error && data) return data as string;
+
+  const { data: session } = await client.auth.getSession();
+  const uid = session.session?.user.id;
+  if (!uid) return null;
+
+  const { data: created, error: createErr } = await client
+    .from("conversations")
+    .insert({
+      type: "group",
+      name: name.trim() || "グループ",
+      icon_emoji: "💬",
+      created_by: uid,
+    })
+    .select("id")
+    .single();
+
+  if (createErr || !created?.id) {
+    console.error("create_group_conversation", createErr ?? error);
+    return null;
+  }
+
+  const convId = created.id as string;
+  const ids = [...new Set([uid, ...memberIds.filter((id) => id && id !== uid)])];
+  await client.from("conversation_members").upsert(
+    ids.map((id) => ({
+      conversation_id: convId,
+      user_id: id,
+      role: id === uid ? "admin" : "member",
+    })),
+    { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+  );
+
+  return convId;
+}
+
 export async function fetchInboxConversations(
   client: SupabaseClient,
   userId: string,
