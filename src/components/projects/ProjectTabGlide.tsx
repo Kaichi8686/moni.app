@@ -442,7 +442,7 @@ export function ProjectTabGlide({
     if (data?.id) router.push(`/projects/${data.id as string}/overview`);
   }
 
-  if (!hasSession) {
+  if (!hasSession && !fillViewport) {
     return (
       <div className="flex min-h-[min(70vh,640px)] flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 text-center">
         <p className="text-lg font-bold text-zinc-900">プロジェクトを始めよう</p>
@@ -450,6 +450,44 @@ export function ProjectTabGlide({
         <button type="button" className="mt-4 min-h-[44px] rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white" onClick={() => onNavigate("account")}>
           ログインする
         </button>
+      </div>
+    );
+  }
+
+  if (!hasSession && fillViewport) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <header className="relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-zinc-100/80 bg-white/90 px-3 pb-2 pt-1 backdrop-blur-sm sm:px-5">
+          <div className="relative flex h-11 w-full items-center justify-between">
+            <Link
+              href="/login"
+              className="inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full text-zinc-900 transition active:bg-zinc-100"
+              aria-label="新規プロジェクト（ログインが必要）"
+              title="ログインして作成"
+            >
+              <Plus className="h-[26px] w-[26px]" strokeWidth={1.75} aria-hidden />
+            </Link>
+            <h1 className="moni-wordmark pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[1.65rem] leading-none sm:text-[1.85rem]">
+              moni
+            </h1>
+            <Link
+              href="/login"
+              className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-xs font-semibold text-white transition hover:bg-zinc-800"
+            >
+              ログイン
+            </Link>
+          </div>
+        </header>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+          <p className="text-lg font-bold text-zinc-900">プロジェクトを始めよう</p>
+          <p className="mt-2 max-w-sm text-sm text-zinc-600">ログインすると、プロジェクトの作成・参加ができます。</p>
+          <Link
+            href="/login"
+            className="mt-4 inline-flex min-h-[44px] items-center rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white"
+          >
+            ログインする
+          </Link>
+        </div>
       </div>
     );
   }
