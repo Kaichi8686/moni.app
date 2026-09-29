@@ -189,8 +189,12 @@ export function ProfileScreen({ userId: propUserId }: Props) {
 
   if (!supabaseEnabled) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-zinc-600">
-        {tx("Supabase 未接続です", "Supabase is not connected")}
+      <div className="min-h-[100dvh] bg-white pb-bottom-nav text-zinc-900 antialiased">
+        <AppBrandHeader className="border-zinc-200" />
+        <p className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-zinc-600">
+          {tx("Supabase 未接続です", "Supabase is not connected")}
+        </p>
+        <AppBottomNav />
       </div>
     );
   }

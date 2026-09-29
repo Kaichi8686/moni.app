@@ -5936,7 +5936,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -5952,7 +5951,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -5979,7 +5977,6 @@ export default function Home() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -5995,7 +5992,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6016,7 +6012,6 @@ export default function Home() {
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
-                <span className="max-w-[4.5rem] truncate">{label}</span>
                 {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );
