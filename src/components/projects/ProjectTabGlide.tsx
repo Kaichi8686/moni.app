@@ -8,11 +8,7 @@ import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } fr
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
-import { Bell, UserPlus } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
-import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { fetchIncomingProjectInvites, fetchMyProjectNotifications, sendProjectInvite } from "@/lib/projects/projectInvites";
-import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
@@ -24,6 +20,8 @@ type Props = {
   onNavigate: (key: AppFeatureKey) => void;
   /** /projects ホーム用：画面いっぱいに広げる */
   fillViewport?: boolean;
+  /** 招待承認などで一覧を再取得したいときに増やす */
+  reloadSignal?: number;
 };
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
@@ -117,6 +115,7 @@ export function ProjectTabGlide({
   userId,
   onNavigate,
   fillViewport = false,
+  reloadSignal = 0,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -140,30 +139,6 @@ export function ProjectTabGlide({
     thumbnail_url: "",
   });
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteToast, setInviteToast] = useState("");
-  const [bellBadge, setBellBadge] = useState(0);
-  const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
-  const [inviteProjectId, setInviteProjectId] = useState<string>("");
-  const [inviteUserQuery, setInviteUserQuery] = useState("");
-  const [inviteCandidates, setInviteCandidates] = useState<Array<{ id: string; name: string }>>([]);
-  const [inviteSearchBusy, setInviteSearchBusy] = useState(false);
-  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
-
-  const flashInviteToast = useCallback((message: string) => {
-    setInviteToast(message);
-    window.setTimeout(() => setInviteToast(""), 2600);
-  }, []);
-
-  const refreshBellBadge = useCallback(async (uid: string) => {
-    const [invites, notes] = await Promise.all([
-      fetchIncomingProjectInvites(uid),
-      fetchMyProjectNotifications(uid, 40),
-    ]);
-    const unreadNotes = notes.filter((n) => !n.read_at && n.type !== "project_invite").length;
-    setBellBadge(invites.length + unreadNotes);
-  }, []);
-
   const load = useCallback(async () => {
     if (!supabase) {
       setLoading(false);
@@ -234,7 +209,6 @@ export function ProjectTabGlide({
       );
       setProjects(merged.slice(0, 200));
       setJoinedIds(new Set(merged.map((p) => p.id)));
-      void refreshBellBadge(uid);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました。");
     } finally {
@@ -242,11 +216,16 @@ export function ProjectTabGlide({
       window.clearTimeout(hardStop);
       setLoading(false);
     }
-  }, [userId, refreshBellBadge]);
+  }, [userId]);
 
   useEffect(() => {
     void load().catch(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    if (reloadSignal <= 0) return;
+    void load().catch(() => undefined);
+  }, [reloadSignal, load]);
 
   const displayList = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -263,79 +242,6 @@ export function ProjectTabGlide({
     }
     return list;
   }, [projects, query, sort]);
-
-  /** 招待URLを出してよいのはメンバーまたはオーナーのみ（閲覧のみの公開PJは除外） */
-  const inviteEligibleProjects = useMemo(() => {
-    if (!currentUserId) return [];
-    return displayList.filter((p) => joinedIds.has(p.id) || p.owner_id === currentUserId);
-  }, [displayList, joinedIds, currentUserId]);
-
-  const inviteSelectedProject = useMemo(
-    () => inviteEligibleProjects.find((p) => p.id === inviteProjectId) ?? inviteEligibleProjects[0] ?? null,
-    [inviteEligibleProjects, inviteProjectId],
-  );
-
-  async function searchInviteUsers() {
-    if (!supabase || !currentUserId) return;
-    const q = inviteUserQuery.trim();
-    if (q.length < 1) {
-      setInviteCandidates([]);
-      return;
-    }
-    setInviteSearchBusy(true);
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,display_name")
-        .ilike("display_name", `%${q}%`)
-        .neq("id", currentUserId)
-        .limit(8);
-      if (error) {
-        flashInviteToast(error.message);
-        setInviteCandidates([]);
-        return;
-      }
-      let memberIds = new Set<string>();
-      if (inviteSelectedProject) {
-        const { data: mems } = await supabase
-          .from("project_members")
-          .select("user_id")
-          .eq("project_id", inviteSelectedProject.id);
-        memberIds = new Set((mems ?? []).map((m: { user_id: string }) => m.user_id));
-      }
-      setInviteCandidates(
-        (data ?? [])
-          .map((row) => ({
-            id: row.id as string,
-            name: ((row.display_name as string | null)?.trim() || "ユーザー") as string,
-          }))
-          .filter((row) => !memberIds.has(row.id)),
-      );
-    } finally {
-      setInviteSearchBusy(false);
-    }
-  }
-
-  async function inviteUserToSelectedProject(inviteeId: string, inviteeName: string) {
-    if (!inviteSelectedProject) {
-      flashInviteToast("招待するプロジェクトを選んでください");
-      return;
-    }
-    setInviteBusyId(inviteeId);
-    try {
-      const res = await sendProjectInvite(inviteSelectedProject.id, inviteeId);
-      if (!res.ok) {
-        const msg = res.error;
-        if (msg.includes("すでにメンバー")) flashInviteToast("すでにメンバーです");
-        else flashInviteToast(msg);
-        return;
-      }
-      flashInviteToast(`${inviteeName} さんを「${inviteSelectedProject.name}」に招待しました`);
-      setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
-    } finally {
-      setInviteBusyId(null);
-    }
-  }
 
   async function onCreate() {
     if (!supabase || !form.name.trim()) return;
@@ -488,50 +394,6 @@ export function ProjectTabGlide({
                 aria-label="プロジェクトを検索"
               />
             </label>
-            <button
-              type="button"
-              disabled={!hasSession}
-              title={!hasSession ? "ログインが必要です" : "通知"}
-              onClick={() => {
-                if (!hasSession) return;
-                setInviteOpen(true);
-              }}
-              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
-                fillViewport ? "min-h-[36px] min-w-[36px]" : "min-h-[44px] min-w-[44px]"
-              }`}
-              aria-label="通知"
-            >
-              <Bell className={fillViewport ? "h-4 w-4" : "h-5 w-5"} strokeWidth={1.75} aria-hidden />
-              {bellBadge > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
-                  {bellBadge > 9 ? "9+" : bellBadge}
-                </span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              disabled={!hasSession || inviteEligibleProjects.length === 0}
-              title={
-                !hasSession
-                  ? "ログインが必要です"
-                  : inviteEligibleProjects.length === 0
-                    ? "招待できるプロジェクトがありません"
-                    : "メンバーを招待"
-              }
-              onClick={() => {
-                if (!hasSession || inviteEligibleProjects.length === 0) return;
-                setInviteProjectId(inviteEligibleProjects[0]?.id ?? "");
-                setInviteUserQuery("");
-                setInviteCandidates([]);
-                setInviteComposeOpen(true);
-              }}
-              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
-                fillViewport ? "min-h-[36px] min-w-[36px]" : "min-h-[44px] min-w-[44px]"
-              }`}
-              aria-label="メンバーを招待"
-            >
-              <UserPlus className={fillViewport ? "h-4 w-4" : "h-5 w-5"} strokeWidth={1.75} aria-hidden />
-            </button>
             <label className="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
               <span className="sr-only sm:not-sr-only">並び</span>
               <select
@@ -560,8 +422,6 @@ export function ProjectTabGlide({
             </button>
           </div>
         ) : null}
-        {inviteToast ? <p className="px-4 py-1 text-center text-xs font-medium text-emerald-700">{inviteToast}</p> : null}
-
         <div
           className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
             fillViewport ? "relative min-h-0 p-0" : "mobile-content-inset px-1 pt-1 pb-2 sm:px-2"
@@ -787,141 +647,6 @@ export function ProjectTabGlide({
         </div>
       ) : null}
 
-      {inviteOpen && currentUserId ? (
-        <ProjectInviteBellPanel
-          open={inviteOpen}
-          onClose={() => {
-            setInviteOpen(false);
-            void refreshBellBadge(currentUserId);
-          }}
-          userId={currentUserId}
-          eligibleProjects={inviteEligibleProjects}
-          onAccepted={() => void load()}
-          toast={flashInviteToast}
-        />
-      ) : null}
-
-      {inviteComposeOpen ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-          onClick={() => setInviteComposeOpen(false)}
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-bold text-zinc-900">招待</h3>
-              <button type="button" className="text-sm text-zinc-500" onClick={() => setInviteComposeOpen(false)}>
-                閉じる
-              </button>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-              メンバーとして招待すると相手のお知らせに届きます。URL共有もできます。
-            </p>
-
-            <label className="mt-4 block text-xs font-semibold text-zinc-700">
-              プロジェクト
-              <select
-                className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
-                value={inviteSelectedProject?.id ?? ""}
-                onChange={(e) => {
-                  setInviteProjectId(e.target.value);
-                  setInviteCandidates([]);
-                }}
-              >
-                {inviteEligibleProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
-              <p className="text-sm font-semibold text-zinc-900">ユーザーを招待</p>
-              <p className="mt-1 text-[11px] text-zinc-500">表示名で検索して招待します。</p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <input
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
-                  placeholder="表示名"
-                  value={inviteUserQuery}
-                  onChange={(e) => setInviteUserQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void searchInviteUsers();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={inviteSearchBusy || !inviteUserQuery.trim()}
-                  onClick={() => void searchInviteUsers()}
-                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 disabled:opacity-60"
-                >
-                  {inviteSearchBusy ? "検索中…" : "検索"}
-                </button>
-              </div>
-              <ul className="mt-2 space-y-2">
-                {inviteCandidates.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                    <span className="truncate text-sm font-medium text-zinc-900">{c.name}</span>
-                    <button
-                      type="button"
-                      disabled={inviteBusyId === c.id || !inviteSelectedProject}
-                      onClick={() => void inviteUserToSelectedProject(c.id, c.name)}
-                      className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      {inviteBusyId === c.id ? "招待中…" : "招待する"}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-zinc-900">招待リンク</p>
-              <ul className="mt-2 space-y-2">
-                {inviteEligibleProjects.map((p) => (
-                  <li key={p.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
-                    <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
-                    <p className="text-[11px] text-zinc-500">{p.visibility === "public" ? "公開" : "非公開"}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
-                        onClick={() =>
-                          void (async () => {
-                            const ok = await copyProjectInviteUrl(p.id);
-                            flashInviteToast(ok ? `「${p.name}」のURLをコピーしました` : "コピーに失敗しました");
-                          })()
-                        }
-                      >
-                        URLをコピー
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800"
-                        onClick={() =>
-                          void (async () => {
-                            const r = await shareOrCopyProject(p.name, p.id);
-                            if (r === "failed") flashInviteToast("共有できませんでした");
-                            else if (r === "copied") flashInviteToast("テキストをコピーしました（共有メニューなし）");
-                            else flashInviteToast("共有パネルを開きました");
-                          })()
-                        }
-                      >
-                        共有…
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

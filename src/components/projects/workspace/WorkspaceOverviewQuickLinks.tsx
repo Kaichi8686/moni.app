@@ -10,20 +10,18 @@ import {
   MessageSquare,
   PenSquare,
   Radio,
-  Search,
   Sparkles,
   Users,
 } from "lucide-react";
 
 const LINKS = [
-  { id: "coach", label: "相談AI", labelEn: "Ask AI", desc: "困ったときにすぐ相談", descEn: "Ask when you get stuck", icon: Sparkles, featured: true },
+  { id: "coach", label: "AI", labelEn: "AI", desc: "相談・アイデア出し", descEn: "Ask or brainstorm", icon: Sparkles, featured: true },
   { id: "roadmap", label: "ロードマップ", labelEn: "Roadmap", desc: "フェーズと完成日", descEn: "Phases and due date", icon: GanttChartSquare },
   { id: "issues", label: "課題", labelEn: "Issues", desc: "タスク一覧・カンバン", descEn: "List and board", icon: CircleDot },
-  { id: "business-idea", label: "ビジネスアイデア", labelEn: "Business idea", desc: "最初の種をインタビューで探す", descEn: "Find a starting seed", icon: Search },
   { id: "schedule", label: "予定", labelEn: "Schedule", desc: "カレンダー", descEn: "Calendar", icon: Calendar },
   { id: "whiteboard", label: "ホワイトボード", labelEn: "Whiteboard", desc: "無限キャンバスで描く", descEn: "Infinite canvas", icon: PenSquare },
   { id: "ideas", label: "投票", labelEn: "Vote", desc: "テーマごとに選択肢へ投票する", descEn: "Vote on options", icon: Lightbulb },
-  { id: "chat", label: "チャット", labelEn: "Chat", desc: "チームの会話", descEn: "Team chat", icon: MessageSquare },
+  { id: "chat", label: "メール", labelEn: "Mail", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
   { id: "members", label: "メンバー", labelEn: "Members", desc: "参加メンバー", descEn: "People in this project", icon: Users },
   { id: "activity", label: "活動", labelEn: "Activity", desc: "最近の更新", descEn: "Recent updates", icon: Radio },
 ] as const;

@@ -16,12 +16,19 @@ function IdeaHubInner() {
   const searchParams = useSearchParams();
   const { tx, locale } = useI18n();
   const tab = parseIdeaHubTab(searchParams.get("tab"));
+  const qnaBoard = tab === "qna" && searchParams.get("view") === "board";
 
   const setTab = useCallback(
     (next: IdeaHubTab) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (next === "excavate") params.delete("tab");
-      else params.set("tab", next);
+      if (next === "excavate") {
+        params.delete("tab");
+        params.delete("view");
+      } else {
+        params.set("tab", next);
+        if (next !== "qna") params.delete("view");
+        else params.delete("view"); // default consult AI; board via view=board link
+      }
       const qs = params.toString();
       router.replace(qs ? `/idea?${qs}` : "/idea", { scroll: false });
     },
@@ -68,8 +75,32 @@ function IdeaHubInner() {
       </header>
 
       <div role="tabpanel">
-        {tab === "excavate" ? <IdeaInterviewApp variant="hub" /> : null}
-        {tab === "qna" ? <IdeaQnAPanel active={tab === "qna"} /> : null}
+        {tab === "excavate" ? (
+          <IdeaInterviewApp variant="hub" initialMode="excavate" enableModePicker />
+        ) : null}
+        {tab === "qna" ? (
+          qnaBoard ? (
+            <div>
+              <div className="mx-auto max-w-lg px-4 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("tab", "qna");
+                    params.delete("view");
+                    router.replace(`/idea?${params.toString()}`, { scroll: false });
+                  }}
+                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                >
+                  {tx("← 相談AIに戻る", "← Back to consult AI")}
+                </button>
+              </div>
+              <IdeaQnAPanel active={tab === "qna"} />
+            </div>
+          ) : (
+            <IdeaInterviewApp variant="hub" initialMode="consult" enableModePicker />
+          )
+        ) : null}
         {tab === "mine" ? <MyIdeasPanel onGoExcavate={() => setTab("excavate")} /> : null}
         {tab === "interviews" ? (
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />

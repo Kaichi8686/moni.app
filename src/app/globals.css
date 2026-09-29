@@ -177,6 +177,30 @@ html.moni-landing-active .moni-hero-rise {
   .inbox-notice-panel {
     animation: none;
   }
+
+  .project-notice-drawer {
+    transition: none !important;
+  }
+}
+
+/* 相談AI: ChatGPT風 — 字が薄らからはっきり出る */
+@keyframes ai-chat-glyph-in {
+  from {
+    opacity: 0.12;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ai-chat-glyph {
+  animation: ai-chat-glyph-in 0.42s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-chat-glyph {
+    animation: none;
+  }
 }
 
 html.moni-landing-active {
@@ -376,8 +400,39 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-item-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.35rem;
   line-height: 1;
+}
+
+.app-bottom-nav-svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: block;
+}
+
+.app-bottom-nav-badge {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.55rem;
+  z-index: 1;
+  display: inline-flex;
+  min-width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid #fff;
+  background: #ef4444;
+  padding: 0 0.2rem;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  pointer-events: none;
 }
 
 @media (min-width: 640px) {
@@ -389,6 +444,11 @@ html.moni-landing-active {
 
   .app-bottom-nav-item-icon {
     font-size: 1.35rem;
+  }
+
+  .app-bottom-nav-svg {
+    width: 1.35rem;
+    height: 1.35rem;
   }
 }
 
@@ -702,6 +762,60 @@ html.moni-landing-active {
   to {
     transform: translateY(0);
   }
+}
+
+@keyframes roadmap-phase-sheet-slide-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes roadmap-phase-sheet-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.roadmap-phase-sheet-backdrop-in {
+  animation: project-sheet-fade-in 200ms ease both;
+}
+
+.roadmap-phase-sheet-backdrop-out {
+  animation: roadmap-phase-sheet-fade-out 200ms ease both;
+}
+
+.roadmap-phase-sheet-panel-in {
+  animation: project-sheet-slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.roadmap-phase-sheet-panel-out {
+  animation: roadmap-phase-sheet-slide-down 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.roadmap-phase-sheet-root-in,
+.roadmap-phase-sheet-root-out {
+  pointer-events: auto;
+}
+
+@keyframes roadmap-phase-detail-expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.roadmap-phase-detail-expand {
+  animation: roadmap-phase-detail-expand-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* 文化祭アイデア投票 — モバイル */

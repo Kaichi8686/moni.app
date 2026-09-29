@@ -4,11 +4,13 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Mail } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
+import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
+import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
-import { InboxNoticeBell } from "@/components/ui/InboxNoticeBell";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
@@ -151,7 +153,7 @@ type MentorSavedConversation = {
 };
 
 const MENTOR_WELCOME_TEXT =
-  "こんにちは。なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。";
+  "こんにちは 😊 なんでも気軽に送ってみてください。雑談でも相談でも、そのままの言葉で大丈夫です。**大事なところは太字**で見やすく答えますね。";
 
 function createMentorWelcomeMessage(): MentorChatMessage {
   return { id: "mentor-welcome", role: "assistant", content: MENTOR_WELCOME_TEXT };
@@ -221,10 +223,11 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
   },
 };
 
-type HomeBottomNavKey = FeaturePage | "idea";
+type HomeBottomNavKey = FeaturePage | "idea" | "mail";
 
 const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
   { key: "projects", icon: "▦" },
+  { key: "mail", icon: "mail" },
   { key: "idea", icon: "✦" },
   { key: "chat", icon: "⌕" },
   { key: "account", icon: "◉" },
@@ -232,6 +235,7 @@ const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
 
 const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
   projects: "navProjects",
+  mail: "navMail",
   idea: "navIdea",
   chat: "navSearch",
   account: "navProfile",
@@ -670,6 +674,7 @@ export default function Home() {
   const [mentorInput, setMentorInput] = useState("");
   const [mentorLoading, setMentorLoading] = useState(false);
   const [mentorError, setMentorError] = useState("");
+  const [mentorStreamingId, setMentorStreamingId] = useState<string | null>(null);
   const mentorScrollAnchorRef = useRef<HTMLDivElement>(null);
   const chatScrollAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -1053,7 +1058,7 @@ export default function Home() {
       return;
     }
     if (tab === "posts" || community === "qna") {
-      router.replace("/idea?tab=qna");
+      router.replace("/idea?tab=qna&view=board");
       return;
     }
     if (community === "progress") {
@@ -2602,14 +2607,14 @@ export default function Home() {
         } else {
           const id = `mentor-${Date.now()}`;
           const messages = [createMentorWelcomeMessage()];
-          setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+          setMentorConversations([{ id, title: tx("新しいチャット", "New chat"), updatedAt: new Date().toISOString(), messages }]);
           setActiveMentorConversationId(id);
           setMentorMessages(messages);
         }
       } catch {
         const id = `mentor-${Date.now()}`;
         const messages = [createMentorWelcomeMessage()];
-        setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+        setMentorConversations([{ id, title: tx("新しいチャット", "New chat"), updatedAt: new Date().toISOString(), messages }]);
         setActiveMentorConversationId(id);
         setMentorMessages(messages);
       } finally {
@@ -2626,7 +2631,7 @@ export default function Home() {
     if (mentorHistoryOwnerKey !== ownerKey || !activeMentorConversationId) return;
     const title =
       mentorMessages.find((message) => message.role === "user")?.content.trim().slice(0, 36) ||
-      tx("新しい相談", "New chat");
+      tx("新しいチャット", "New chat");
     setMentorConversations((previous) => {
       const nextConversation: MentorSavedConversation = {
         id: activeMentorConversationId,
@@ -2689,14 +2694,16 @@ export default function Home() {
         setMentorError(result.error ?? "AIメンターの生成に失敗しました。");
         return;
       }
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMentorMessages((prev) => [
         ...prev,
         {
-          id: `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+          id: assistantId,
           role: "assistant",
           content: assistantReply,
         },
       ]);
+      setMentorStreamingId(assistantId);
       trackOpsEvent("first_ai_consult_completed");
     } catch {
       setMentorError("AIメンターに接続できませんでした。");
@@ -2708,23 +2715,28 @@ export default function Home() {
   function clearMentorChat() {
     if (!mentorMessages.some((message) => message.role === "user")) {
       setMentorMessages([createMentorWelcomeMessage()]);
+      setMentorStreamingId(null);
       setMentorError("");
+      setMentorHistoryOpen(false);
       return;
     }
     const id = `mentor-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
     const messages = [createMentorWelcomeMessage()];
     setMentorConversations((previous) => [
-      { id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages },
+      { id, title: tx("新しいチャット", "New chat"), updatedAt: new Date().toISOString(), messages },
       ...previous,
     ].slice(0, 30));
     setActiveMentorConversationId(id);
     setMentorMessages(messages);
+    setMentorStreamingId(null);
     setMentorError("");
+    setMentorHistoryOpen(false);
   }
 
   function openMentorConversation(conversation: MentorSavedConversation) {
     setActiveMentorConversationId(conversation.id);
     setMentorMessages(conversation.messages);
+    setMentorStreamingId(null);
     setMentorError("");
     setMentorHistoryOpen(false);
   }
@@ -2740,14 +2752,16 @@ export default function Home() {
       setMentorConversations(remaining);
       setActiveMentorConversationId(next.id);
       setMentorMessages(next.messages);
+      setMentorStreamingId(null);
       setMentorError("");
       return;
     }
     const id = `mentor-${Date.now()}`;
     const messages = [createMentorWelcomeMessage()];
-    setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
+    setMentorConversations([{ id, title: tx("新しいチャット", "New chat"), updatedAt: new Date().toISOString(), messages }]);
     setActiveMentorConversationId(id);
     setMentorMessages(messages);
+    setMentorStreamingId(null);
     setMentorError("");
   }
 
@@ -3552,7 +3566,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
@@ -3567,7 +3581,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
@@ -4097,25 +4111,6 @@ export default function Home() {
           >
             <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-              <InboxNoticeBell
-                items={notificationItems}
-                onOpen={(item) => {
-                  if (item.kind === "project" && item.projectNotification) {
-                    void openProjectNotification(item.projectNotification);
-                    return;
-                  }
-                  if (item.id === "follow-request") {
-                    // stay on current page — setActivePage("account") redirects to /profile
-                    // and drops this modal before approve/reject can be used
-                    setFollowListModal("requests");
-                    return;
-                  }
-                  if (item.id === "chat-unread") {
-                    // 既読は /messages で会話を開いたときに付く。ここでは遷移のみ
-                    router.push("/messages");
-                  }
-                }}
-              />
               {!session && canUseSupabase ? (
                 <Link
                   href="/login"
@@ -4874,12 +4869,31 @@ export default function Home() {
         </section>
 
         <section
-          className={`overflow-hidden rounded-none border border-[#dbdbdb] bg-[#f7f7f8] sm:rounded-lg ${activePage === "mentor" && mentorSubTab === "ai" ? "" : "hidden"} flex min-h-[min(72vh,620px)] flex-col p-0`}
+          className={`overflow-hidden rounded-none border border-[#dbdbdb] bg-[#f7f7f8] sm:rounded-lg ${activePage === "mentor" && mentorSubTab === "ai" ? "" : "hidden"} flex min-h-[min(72vh,620px)] flex-col p-0 md:flex-row`}
         >
+          <div className="hidden w-[240px] shrink-0 border-r border-[#e5e7eb] md:block">
+            <AiChatHistoryRail
+              conversations={mentorConversations}
+              activeId={activeMentorConversationId}
+              onSelect={openMentorConversation}
+              onNew={clearMentorChat}
+              onDelete={deleteMentorConversation}
+              locale={language === "en" ? "en-US" : "ja-JP"}
+              title={tx("チャット履歴", "Chat history")}
+              newLabel={tx("新しいチャット", "New chat")}
+              emptyLabel={tx("まだ会話がありません", "No chats yet")}
+              className="h-full min-h-[min(72vh,620px)]"
+            />
+          </div>
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-col gap-3 border-b border-[#e5e7eb] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h3 className="text-[17px] font-semibold tracking-tight text-[#202123]">相談AI</h3>
-              <p className="mt-0.5 text-sm text-[#6b7280]">ChatGPT風チャット</p>
+              <p className="mt-0.5 line-clamp-1 text-sm text-[#6b7280]">
+                {mentorConversations.find((c) => c.id === activeMentorConversationId)?.title ||
+                  tx("新しいチャット", "New chat")}
+              </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <a
@@ -4898,7 +4912,7 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb] md:hidden"
                   onClick={() => setMentorHistoryOpen(true)}
                 >
                   履歴
@@ -4908,7 +4922,7 @@ export default function Home() {
                   className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[#d1d5db] bg-white px-3 py-2 text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb]"
                   onClick={clearMentorChat}
                 >
-                  新しい相談
+                  {tx("新しいチャット", "New chat")}
                 </button>
               </div>
             </div>
@@ -4916,62 +4930,40 @@ export default function Home() {
 
           {mentorHistoryOpen ? (
             <div
-              className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+              className="fixed inset-0 z-[100] flex justify-end bg-black/40 md:hidden"
               role="dialog"
               aria-modal="true"
-              aria-labelledby="mentor-history-title"
+              aria-label={tx("チャット履歴", "Chat history")}
               onClick={() => setMentorHistoryOpen(false)}
             >
               <div
-                className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:rounded-2xl"
+                className="flex h-full w-[min(100%,320px)] flex-col bg-[#f7f7f8] shadow-2xl"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 id="mentor-history-title" className="text-lg font-bold text-zinc-900">相談履歴</h3>
+                <div className="flex items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
+                  <p className="text-sm font-semibold text-[#111827]">{tx("チャット履歴", "Chat history")}</p>
                   <button
                     type="button"
-                    className="min-h-[40px] rounded-lg px-3 text-sm font-semibold text-zinc-500 hover:bg-zinc-100"
+                    className="min-h-[40px] rounded-lg px-3 text-sm font-semibold text-zinc-500 hover:bg-white"
                     onClick={() => setMentorHistoryOpen(false)}
                   >
-                    閉じる
+                    {tx("閉じる", "Close")}
                   </button>
                 </div>
-                <ul className="mt-3 space-y-2">
-                  {mentorConversations.map((conversation) => (
-                    <li
-                      key={conversation.id}
-                      className={`flex items-center gap-2 rounded-xl border p-2 ${
-                        conversation.id === activeMentorConversationId
-                          ? "border-indigo-200 bg-indigo-50"
-                          : "border-zinc-200 bg-white"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left hover:bg-white/70"
-                        onClick={() => openMentorConversation(conversation)}
-                      >
-                        <span className="line-clamp-1 block text-sm font-semibold text-zinc-900">{conversation.title}</span>
-                        <span className="mt-0.5 block text-[11px] text-zinc-500">
-                          {new Date(conversation.updatedAt).toLocaleString(language === "en" ? "en-US" : "ja-JP", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-[40px] shrink-0 rounded-lg px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                        aria-label={tx(`${conversation.title}を削除`, `Delete ${conversation.title}`)}
-                        onClick={() => deleteMentorConversation(conversation.id)}
-                      >
-                        削除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="min-h-0 flex-1">
+                  <AiChatHistoryRail
+                    conversations={mentorConversations}
+                    activeId={activeMentorConversationId}
+                    onSelect={openMentorConversation}
+                    onNew={clearMentorChat}
+                    onDelete={deleteMentorConversation}
+                    locale={language === "en" ? "en-US" : "ja-JP"}
+                    title={tx("チャット履歴", "Chat history")}
+                    newLabel={tx("新しいチャット", "New chat")}
+                    emptyLabel={tx("まだ会話がありません", "No chats yet")}
+                    className="h-full"
+                  />
+                </div>
               </div>
             </div>
           ) : null}
@@ -4992,7 +4984,15 @@ export default function Home() {
                       </div>
                       <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#202123]">{m.content}</p>
+                    <AiChatStreamingRichText
+                      text={m.content}
+                      className="break-words text-sm leading-relaxed text-[#202123]"
+                      animate={m.id === mentorStreamingId}
+                      onTick={() =>
+                        mentorScrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+                      }
+                      onComplete={() => setMentorStreamingId((cur) => (cur === m.id ? null : cur))}
+                    />
                   </div>
                 ))}
 
@@ -5040,6 +5040,7 @@ export default function Home() {
               </button>
             </form>
             <p className="mt-2 text-center text-[11px] text-[#6b7280]">AIの回答は参考情報です。必要に応じて大人と一緒に確認してください。</p>
+          </div>
           </div>
         </section>
 
@@ -5963,6 +5964,33 @@ export default function Home() {
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
+                  </span>
+                  <span className="max-w-[4.5rem] truncate">{label}</span>
+                </Link>
+              );
+            }
+            if (item.key === "mail") {
+              return (
+                <Link
+                  key={item.key}
+                  href="/messages"
+                  className={className}
+                  aria-label={
+                    inboxUnreadCount > 0
+                      ? language === "ja"
+                        ? `${label}、未読${inboxUnreadCount}件`
+                        : `${label}, ${inboxUnreadCount} unread`
+                      : label
+                  }
+                  title={label}
+                >
+                  <span className="app-bottom-nav-item-icon" aria-hidden>
+                    <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
+                    {inboxUnreadCount > 0 ? (
+                      <span className="app-bottom-nav-badge">
+                        {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
