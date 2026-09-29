@@ -16,6 +16,27 @@ export async function getOrCreateDirectConversation(
   return data as string;
 }
 
+/** 参加中プロジェクトのグループラインを inbox に揃える */
+export async function ensureMyProjectConversations(
+  client: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const [{ data: owned }, { data: memberRows }] = await Promise.all([
+    client.from("projects").select("id").eq("owner_id", userId).limit(80),
+    client.from("project_members").select("project_id").eq("user_id", userId).limit(80),
+  ]);
+  const ids = new Set<string>();
+  for (const row of owned ?? []) ids.add(row.id as string);
+  for (const row of memberRows ?? []) ids.add(row.project_id as string);
+
+  const convIds: string[] = [];
+  for (const projectId of ids) {
+    const convId = await getOrCreateProjectConversation(client, projectId);
+    if (convId) convIds.push(convId);
+  }
+  return convIds;
+}
+
 export async function getOrCreateProjectConversation(
   client: SupabaseClient,
   projectId: string,

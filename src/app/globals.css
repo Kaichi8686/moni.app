@@ -396,8 +396,17 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.35rem;
   line-height: 1;
+}
+
+.app-bottom-nav-svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: block;
 }
 
 @media (min-width: 640px) {
@@ -409,6 +418,11 @@ html.moni-landing-active {
 
   .app-bottom-nav-item-icon {
     font-size: 1.35rem;
+  }
+
+  .app-bottom-nav-svg {
+    width: 1.35rem;
+    height: 1.35rem;
   }
 }
 
