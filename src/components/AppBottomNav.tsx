@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
+import { Mail } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -10,7 +11,7 @@ import type { MessageKey } from "@/lib/i18n/messages";
 type NavItem = {
   href: string;
   labelKey: MessageKey;
-  icon: string;
+  icon: ReactNode;
   match: (pathname: string, tab: string | null) => boolean;
 };
 
@@ -24,7 +25,7 @@ const NAV: NavItem[] = [
   {
     href: "/messages",
     labelKey: "navMail",
-    icon: "✉",
+    icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
     match: (p) => p === "/messages" || p.startsWith("/messages/"),
   },
   {

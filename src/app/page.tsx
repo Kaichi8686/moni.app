@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Mail } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
@@ -226,7 +227,7 @@ type HomeBottomNavKey = FeaturePage | "idea" | "mail";
 
 const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
   { key: "projects", icon: "▦" },
-  { key: "mail", icon: "✉" },
+  { key: "mail", icon: "mail" },
   { key: "idea", icon: "✦" },
   { key: "chat", icon: "⌕" },
   { key: "account", icon: "◉" },
@@ -5997,7 +5998,7 @@ export default function Home() {
                   title={label}
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
-                    {item.icon}
+                    <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
                   </span>
                   <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
