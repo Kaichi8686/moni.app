@@ -396,6 +396,7 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-item-icon {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -407,6 +408,27 @@ html.moni-landing-active {
   width: 1.35rem;
   height: 1.35rem;
   display: block;
+}
+
+.app-bottom-nav-badge {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.55rem;
+  z-index: 1;
+  display: inline-flex;
+  min-width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid #fff;
+  background: #ef4444;
+  padding: 0 0.2rem;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  pointer-events: none;
 }
 
 @media (min-width: 640px) {

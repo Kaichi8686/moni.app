@@ -5994,11 +5994,22 @@ export default function Home() {
                   key={item.key}
                   href="/messages"
                   className={className}
-                  aria-label={label}
+                  aria-label={
+                    inboxUnreadCount > 0
+                      ? language === "ja"
+                        ? `${label}、未読${inboxUnreadCount}件`
+                        : `${label}, ${inboxUnreadCount} unread`
+                      : label
+                  }
                   title={label}
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
+                    {inboxUnreadCount > 0 ? (
+                      <span className="app-bottom-nav-badge">
+                        {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
