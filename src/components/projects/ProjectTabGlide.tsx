@@ -8,7 +8,7 @@ import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } fr
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
-import { Bell, UserPlus } from "lucide-react";
+import { Bell, Heart, Plus, UserPlus } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
 import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
@@ -464,19 +464,55 @@ export function ProjectTabGlide({
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
         <header
-          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 bg-white/90 px-3 backdrop-blur-sm sm:px-5 ${
-            fillViewport ? "py-1.5" : "px-4 py-2.5 lg:px-6"
+          className={`relative z-20 flex shrink-0 flex-col border-b border-zinc-100/80 bg-white/90 backdrop-blur-sm ${
+            fillViewport ? "gap-1.5 px-3 pb-2 pt-1 sm:px-5" : "flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:px-5 lg:px-6"
           }`}
         >
-          {!fillViewport ? (
+          {fillViewport ? (
+            <div className="relative flex h-11 w-full items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full text-zinc-900 transition active:bg-zinc-100"
+                aria-label="新規プロジェクト"
+                title="新規プロジェクト"
+              >
+                <Plus className="h-[26px] w-[26px]" strokeWidth={1.75} aria-hidden />
+              </button>
+              <h1 className="moni-wordmark pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[1.65rem] leading-none sm:text-[1.85rem]">
+                moni
+              </h1>
+              {!hasSession ? (
+                <Link
+                  href="/login"
+                  className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-xs font-semibold text-white transition hover:bg-zinc-800"
+                >
+                  ログイン
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  title="通知"
+                  onClick={() => setInviteOpen(true)}
+                  className="relative inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-full text-zinc-900 transition active:bg-zinc-100"
+                  aria-label="通知"
+                >
+                  <Heart className="h-[24px] w-[24px]" strokeWidth={1.75} aria-hidden />
+                  {bellBadge > 0 ? (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+                  ) : null}
+                </button>
+              )}
+            </div>
+          ) : (
             <div>
               <h2 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">マイプロジェクト</h2>
               <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
             </div>
-          ) : null}
+          )}
           <div
             className={`flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 ${
-              fillViewport ? "w-full flex-1" : "flex-1 sm:flex-initial sm:min-w-0"
+              fillViewport ? "w-full" : "flex-1 sm:flex-initial sm:min-w-0"
             }`}
           >
             <label className={`relative min-w-0 flex-1 ${fillViewport ? "" : "sm:max-w-xs"}`}>
@@ -493,26 +529,26 @@ export function ProjectTabGlide({
                 aria-label="プロジェクトを検索"
               />
             </label>
-            <button
-              type="button"
-              disabled={!hasSession}
-              title={!hasSession ? "ログインが必要です" : "通知"}
-              onClick={() => {
-                if (!hasSession) return;
-                setInviteOpen(true);
-              }}
-              className={`relative inline-flex shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 ${
-                fillViewport ? "min-h-[36px] min-w-[36px]" : "min-h-[44px] min-w-[44px]"
-              }`}
-              aria-label="通知"
-            >
-              <Bell className={fillViewport ? "h-4 w-4" : "h-5 w-5"} strokeWidth={1.75} aria-hidden />
-              {bellBadge > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
-                  {bellBadge > 9 ? "9+" : bellBadge}
-                </span>
-              ) : null}
-            </button>
+            {!fillViewport ? (
+              <button
+                type="button"
+                disabled={!hasSession}
+                title={!hasSession ? "ログインが必要です" : "通知"}
+                onClick={() => {
+                  if (!hasSession) return;
+                  setInviteOpen(true);
+                }}
+                className="relative inline-flex min-h-[44px] min-w-[44px] shrink-0 touch-manipulation items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="通知"
+              >
+                <Bell className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                {bellBadge > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                    {bellBadge > 9 ? "9+" : bellBadge}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={!hasSession || inviteEligibleProjects.length === 0}
