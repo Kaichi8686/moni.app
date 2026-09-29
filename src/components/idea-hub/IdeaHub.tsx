@@ -84,15 +84,16 @@ function IdeaHubInner() {
               <div className="mx-auto max-w-lg px-4 pt-3">
                 <button
                   type="button"
+                  aria-label={tx("相談AIに戻る", "Back to consult AI")}
                   onClick={() => {
                     const params = new URLSearchParams(searchParams.toString());
                     params.set("tab", "qna");
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                  className="mb-2 inline-flex min-h-[32px] min-w-[32px] items-center justify-start text-[18px] leading-none text-violet-700 hover:opacity-80"
                 >
-                  {tx("← 相談AIに戻る", "← Back to consult AI")}
+                  ◀️
                 </button>
               </div>
               <IdeaQnAPanel active={tab === "qna"} />
