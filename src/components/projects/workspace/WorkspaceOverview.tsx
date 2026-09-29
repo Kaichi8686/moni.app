@@ -72,13 +72,23 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid } = useProjectWorkspace();
+  const {
+    project,
+    projectMeta,
+    projectId,
+    issues,
+    phases: workspacePhases,
+    loading,
+    uid,
+    reload: wsReload,
+  } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [achieveError, setAchieveError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
   /**
@@ -268,6 +278,12 @@ export default function WorkspaceOverview() {
         )}
       </section>
 
+      {achieveError ? (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[13px] text-amber-900" role="alert">
+          {achieveError}
+        </p>
+      ) : null}
+
       <RoadmapPhaseInfoSheet
         open={Boolean(selectedPhaseLive)}
         phase={
@@ -278,14 +294,35 @@ export default function WorkspaceOverview() {
                 goal: selectedPhaseLive.goal,
                 description: selectedPhaseLive.description,
                 stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+                alreadyDone: selectedPhaseLive.status === "completed",
               }
             : null
         }
-        onClose={() => setSelectedPhaseId(null)}
+        onClose={() => {
+          setSelectedPhaseId(null);
+          setAchieveError("");
+        }}
         canEdit={false}
-        editHref={
-          selectedPhaseLive ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}` : undefined
-        }
+        canAchieve={roadmap.canEdit && selectedPhaseLive?.status !== "completed"}
+        onAchieve={async () => {
+          if (!selectedPhaseLive) return;
+          setAchieveError("");
+          try {
+            await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
+            const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
+            const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
+            if (next && next.status !== "completed") {
+              await roadmap.updatePhase(next.id, { status: "in_progress" });
+            }
+            await wsReload();
+            setSelectedPhaseId(null);
+          } catch (e) {
+            setAchieveError(
+              e instanceof Error ? e.message : tx("達成の反映に失敗しました", "Could not mark this step achieved"),
+            );
+            throw e;
+          }
+        }}
       />
 
       <section>
