@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { Avatar } from "@/components/ui/Avatar";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
+import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import type { Member } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -148,30 +149,22 @@ export default function WorkspaceMembers() {
   }
 
   async function inviteMember(inviteeId: string, inviteeName: string) {
-    if (!supabase) return;
     setInviteBusyId(inviteeId);
     setActionErr("");
     setActionOk("");
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: projectId,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) setActionErr(tx("すでにメンバーです。", "Already a member."));
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          setActionErr(
-            tx(
-              "招待機能のDBが未適用です。Supabaseで apply_project_invite_notifications.sql を実行してください。",
-              "Invite DB is not applied. Run apply_project_invite_notifications.sql in Supabase.",
-            ),
-          );
-        } else setActionErr(msg);
+      const res = await sendProjectInvite(projectId, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) setActionErr(tx("すでにメンバーです。", "Already a member."));
+        else setActionErr(msg);
         return;
       }
       setActionOk(
-        tx(`${inviteeName} さんを招待しました。相手のお知らせに届きます。`, `Invited ${inviteeName}. They’ll get a notification.`),
+        tx(
+          `${inviteeName} さんを招待しました。相手が承認・拒否するとあなたにお知らせが届きます。`,
+          `Invited ${inviteeName}. You’ll be notified when they accept or decline.`,
+        ),
       );
       setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
       setInviteQuery("");
@@ -282,7 +275,10 @@ export default function WorkspaceMembers() {
         <div className="rounded-md border border-[#E5E7EB] bg-white p-4">
           <h3 className="text-sm font-semibold text-[#1A1A1A]">{tx("メンバーを招待", "Invite members")}</h3>
           <p className="mt-1 text-[12px] text-[#6B7280]">
-            {tx("表示名で検索して招待すると、相手のお知らせに届きます。", "Search by display name to invite — they’ll get a notification.")}
+            {tx(
+              "表示名で検索して招待すると、相手のお知らせに届きます。承認・拒否されるとあなたにも結果が届きます。",
+              "Search by display name to invite. You’ll be notified when they accept or decline.",
+            )}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
             <input

@@ -163,11 +163,18 @@ export async function searchProfilesForInvite(
 
 /** 通知本文をUI表示用に整形 */
 export function formatNotificationBody(type: string, body: string): string {
-  if (type === "project_invite") {
+  if (type === "project_invite" || type === "project_invite_resolved") {
     const payload = parseInvitePayload(body);
+    if (payload?.status === "accepted" && payload.projectName) {
+      return `「${payload.projectName}」への招待を承認しました。`;
+    }
+    if (payload?.status === "declined" && payload.projectName) {
+      return `「${payload.projectName}」への招待を拒否しました。`;
+    }
     if (payload?.projectName) return `「${payload.projectName}」への招待が届きました。`;
-    if (payload?.status === "accepted") return "招待を承認しました。";
-    if (payload?.status === "declined") return "招待を辞退しました。";
+  }
+  if (type === "project_invite_accepted" || type === "project_invite_declined") {
+    return body;
   }
   if (body.trim().startsWith("{")) {
     const payload = parseInvitePayload(body);
@@ -175,7 +182,10 @@ export function formatNotificationBody(type: string, body: string): string {
       return `「${payload.projectName}」への招待を承認しました。`;
     }
     if (payload?.projectName && payload.status === "declined") {
-      return `「${payload.projectName}」への招待を辞退しました。`;
+      return `「${payload.projectName}」への招待を拒否しました。`;
+    }
+    if (payload?.projectName && payload.status === "pending") {
+      return `「${payload.projectName}」への招待が届きました。`;
     }
   }
   return body;

@@ -92,7 +92,7 @@ export function ProjectInviteBellPanel({
       toast(res.error);
       return;
     }
-    toast(action === "accept" ? "招待を承認しました" : "招待を辞退しました");
+    toast(action === "accept" ? "招待を承認しました" : "招待を拒否しました");
     setInvites((prev) => prev.filter((i) => i.id !== inviteId));
     if (action === "accept") onAccepted?.();
     void loadInbox();
@@ -154,7 +154,7 @@ export function ProjectInviteBellPanel({
                             className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 disabled:opacity-50"
                             onClick={() => void onRespond(inv.id, "decline")}
                           >
-                            辞退
+                            拒否
                           </button>
                         </div>
                       </li>

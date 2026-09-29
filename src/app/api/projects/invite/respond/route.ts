@@ -68,8 +68,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "プロジェクトが不明です" }, { status: 400 });
   }
 
-  const projectName = payload.projectName?.trim() || "プロジェクト";
-  const inviterId = payload.inviterId;
+  const [{ data: project }, { data: inviteeProfile }] = await Promise.all([
+    admin.from("projects").select("name,owner_id").eq("id", projectId).maybeSingle(),
+    admin.from("profiles").select("display_name").eq("id", auth.userId).maybeSingle(),
+  ]);
+
+  const projectName =
+    payload.projectName?.trim() ||
+    (typeof project?.name === "string" ? project.name.trim() : "") ||
+    "プロジェクト";
+  const inviteeLabel =
+    (typeof inviteeProfile?.display_name === "string" ? inviteeProfile.display_name.trim() : "") ||
+    "ユーザー";
+
+  let notifyUserId =
+    (typeof payload.inviterId === "string" && payload.inviterId.trim()) ||
+    (typeof project?.owner_id === "string" ? project.owner_id : "") ||
+    "";
+  if (notifyUserId === auth.userId) {
+    notifyUserId = "";
+  }
 
   if (action === "accept") {
     const { error: mErr } = await admin.from("project_members").upsert(
@@ -85,8 +103,8 @@ export async function POST(req: NextRequest) {
   const { error: uErr } = await admin
     .from("project_notifications")
     .update({
-      type: action === "accept" ? "project_invite_resolved" : "project_invite_resolved",
-      body: JSON.stringify({ ...payload, status: nextStatus }),
+      type: "project_invite_resolved",
+      body: JSON.stringify({ ...payload, status: nextStatus, projectName }),
       read_at: new Date().toISOString(),
     })
     .eq("id", inviteId);
@@ -95,16 +113,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: uErr.message || "更新に失敗しました" }, { status: 500 });
   }
 
-  if (inviterId) {
-    await admin.from("project_notifications").insert({
-      user_id: inviterId,
+  if (notifyUserId) {
+    const { error: notifyErr } = await admin.from("project_notifications").insert({
+      user_id: notifyUserId,
       project_id: projectId,
       type: action === "accept" ? "project_invite_accepted" : "project_invite_declined",
       body:
         action === "accept"
-          ? `招待した相手が「${projectName}」への参加を承認しました。`
-          : `招待した相手が「${projectName}」への参加を辞退しました。`,
+          ? `${inviteeLabel} さんが「${projectName}」への招待を承認しました。`
+          : `${inviteeLabel} さんが「${projectName}」への招待を拒否しました。`,
     });
+    if (notifyErr) {
+      console.error("project invite response notify", notifyErr);
+      return NextResponse.json(
+        { error: notifyErr.message || "結果の通知に失敗しました" },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -11,7 +11,7 @@ import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVis
 import { Bell, UserPlus } from "lucide-react";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
-import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
+import { fetchIncomingProjectInvites, fetchMyProjectNotifications, sendProjectInvite } from "@/lib/projects/projectInvites";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
@@ -317,25 +317,22 @@ export function ProjectTabGlide({
   }
 
   async function inviteUserToSelectedProject(inviteeId: string, inviteeName: string) {
-    if (!supabase || !inviteSelectedProject) {
+    if (!inviteSelectedProject) {
       flashInviteToast("招待するプロジェクトを選んでください");
       return;
     }
     setInviteBusyId(inviteeId);
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: inviteSelectedProject.id,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) flashInviteToast("すでにメンバーです");
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          flashInviteToast("DB未適用: apply_project_invite_notifications.sql を実行してください");
-        } else flashInviteToast(msg);
+      const res = await sendProjectInvite(inviteSelectedProject.id, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) flashInviteToast("すでにメンバーです");
+        else flashInviteToast(msg);
         return;
       }
-      flashInviteToast(`${inviteeName} さんを「${inviteSelectedProject.name}」に招待しました`);
+      flashInviteToast(
+        `${inviteeName} さんを「${inviteSelectedProject.name}」に招待しました。承認・拒否されるとお知らせが届きます`,
+      );
       setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
     } finally {
       setInviteBusyId(null);
@@ -822,7 +819,7 @@ export function ProjectTabGlide({
               </button>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-              メンバーとして招待すると相手のお知らせに届きます。URL共有もできます。
+              メンバーとして招待すると相手のお知らせに届きます。承認・拒否されるとあなたにも結果が届きます。URL共有もできます。
             </p>
 
             <label className="mt-4 block text-xs font-semibold text-zinc-700">

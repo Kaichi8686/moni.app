@@ -4,7 +4,11 @@ export type ProjectNotificationType =
   | "join_request_received"
   | "join_request_accepted"
   | "join_request_rejected"
-  | "project_invited";
+  | "project_invited"
+  | "project_invite"
+  | "project_invite_accepted"
+  | "project_invite_declined"
+  | "project_invite_resolved";
 
 export type ProjectNotificationRow = {
   id: string;
@@ -18,8 +22,11 @@ export type ProjectNotificationRow = {
 
 export function projectNotificationHref(row: Pick<ProjectNotificationRow, "type" | "project_id">): string | null {
   if (!row.project_id) return null;
-  if (row.type === "join_request_received") {
+  if (row.type === "join_request_received" || row.type === "project_invite_accepted" || row.type === "project_invite_declined") {
     return `/projects/${row.project_id}/members`;
+  }
+  if (row.type === "project_invite") {
+    return `/projects`;
   }
   return `/projects/${row.project_id}/overview`;
 }

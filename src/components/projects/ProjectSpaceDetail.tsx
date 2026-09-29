@@ -28,6 +28,7 @@ import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboarding
 import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
+import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
 import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
 
@@ -793,23 +794,20 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   }
 
   async function inviteMemberById(inviteeId: string, inviteeName: string) {
-    if (!supabase || !selectedProject) return;
+    if (!selectedProject) return;
     setInviteBusyId(inviteeId);
     setActionErr("");
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: selectedProject.id,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) setActionErr("すでにメンバーです。");
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          setActionErr("招待機能のDBが未適用です。Supabaseで apply_project_invite_notifications.sql を実行してください。");
-        } else setActionErr(msg);
+      const res = await sendProjectInvite(selectedProject.id, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) setActionErr("すでにメンバーです。");
+        else setActionErr(msg);
         return;
       }
-      setInviteNotice(`${inviteeName} さんを招待しました。お知らせが届きます。`);
+      setInviteNotice(
+        `${inviteeName} さんを招待しました。相手が承認・拒否するとあなたにお知らせが届きます。`,
+      );
       window.setTimeout(() => setInviteNotice(""), 3200);
       setInviteQuery("");
       setInviteCandidates([]);
@@ -1580,7 +1578,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           {canModerateJoinRequests ? (
             <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
               <h3 className="text-sm font-semibold text-zinc-900">メンバーを招待</h3>
-              <p className="mt-1 text-xs text-zinc-500">表示名で検索して招待すると、相手のお知らせに届きます。</p>
+              <p className="mt-1 text-xs text-zinc-500">表示名で検索して招待すると、相手のお知らせに届きます。承認・拒否されるとあなたにも結果が届きます。</p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
                 <input
                   className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
