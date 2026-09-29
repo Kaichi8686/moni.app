@@ -175,7 +175,7 @@ export function EditProfileForm() {
         >
           {tx("キャンセル", "Cancel")}
         </button>
-        <h1 className="text-[15px] font-semibold" style={{ color: "var(--color-text-primary)" }}>
+        <h1 className="moni-wordmark text-[1.65rem] leading-none" style={{ color: "var(--color-text-primary)" }}>
           moni
         </h1>
         <button
