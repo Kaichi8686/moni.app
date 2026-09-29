@@ -81,7 +81,7 @@ export default function WorkspaceGeminiHub() {
     : undefined;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-4">
       <header>
         <h1 className="text-lg font-semibold text-[#1A1A1A]">{tx("相談AI（Gemini）", "Ask AI (Gemini)")}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
