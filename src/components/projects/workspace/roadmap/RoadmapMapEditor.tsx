@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { GripVertical, Map, Plus, Sparkles, Trash2 } from "lucide-react";
 import { addDays } from "date-fns";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -25,10 +26,13 @@ function parseProposedSteps(text: string): string[] {
 export function RoadmapMapEditor() {
   const { tx } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { projectId } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftGoal, setDraftGoal] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +42,7 @@ export function RoadmapMapEditor() {
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
   const [listExpanded, setListExpanded] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const steps = useMemo(
     () => [...roadmap.phases].sort((a, b) => a.order - b.order),
@@ -59,10 +64,27 @@ export function RoadmapMapEditor() {
 
   useEffect(() => {
     setListExpanded(false);
+    setSelectedId(null);
   }, [projectId]);
 
-  async function addStep(title: string) {
-    const name = title.trim();
+  const phaseIdFromUrl = searchParams.get("phase");
+  useEffect(() => {
+    if (!phaseIdFromUrl || steps.length === 0) return;
+    if (steps.some((step) => step.id === phaseIdFromUrl)) setSelectedId(phaseIdFromUrl);
+  }, [phaseIdFromUrl, steps]);
+
+  const selectedStep = selectedId ? steps.find((step) => step.id === selectedId) ?? null : null;
+  const selectedStepNumber = selectedStep ? steps.findIndex((step) => step.id === selectedStep.id) + 1 : undefined;
+
+  function resetDraft() {
+    setDraftTitle("");
+    setDraftGoal("");
+    setDraftDescription("");
+    setAdding(false);
+  }
+
+  async function addStep() {
+    const name = draftTitle.trim();
     if (!name || !roadmap.canEdit) return;
     setBusy(true);
     setError("");
@@ -71,12 +93,13 @@ export function RoadmapMapEditor() {
       const end = addDays(start, 14);
       await roadmap.createPhase({
         title: name,
+        goal: draftGoal.trim() || undefined,
+        description: draftDescription.trim() || undefined,
         startDate: start.toISOString(),
         endDate: end.toISOString(),
         status: "planned",
       });
-      setDraftTitle("");
-      setAdding(false);
+      resetDraft();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
     } finally {
@@ -311,16 +334,31 @@ export function RoadmapMapEditor() {
               <button type="button" className="cursor-grab px-1 text-zinc-400 active:cursor-grabbing" aria-label={tx("並び替え", "Reorder")}>
                 <GripVertical className="h-4 w-4" />
               </button>
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                  isDone ? "bg-emerald-600 text-white" : "bg-orange-100 text-orange-800"
-                }`}
+              <button
+                type="button"
+                onClick={() => setSelectedId(step.id)}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left hover:bg-zinc-50/80"
               >
-                {isDone ? "✓" : stepNumber}
-              </span>
-              <p className={`min-w-0 flex-1 truncate text-sm font-semibold ${isDone ? "text-emerald-950" : "text-zinc-900"}`}>
-                {step.title}
-              </p>
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    isDone ? "bg-emerald-600 text-white" : "bg-orange-100 text-orange-800"
+                  }`}
+                >
+                  {isDone ? "✓" : stepNumber}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-sm font-semibold ${isDone ? "text-emerald-950" : "text-zinc-900"}`}>
+                    {step.title}
+                  </span>
+                  {step.goal?.trim() ? (
+                    <span className="mt-0.5 block truncate text-[11px] text-zinc-500">{step.goal}</span>
+                  ) : (
+                    <span className="mt-0.5 block truncate text-[11px] text-zinc-400">
+                      {tx("タップしてゴール・概要を見る", "Tap to see goal & overview")}
+                    </span>
+                  )}
+                </span>
+              </button>
               {roadmap.canEdit ? (
                 <button
                   type="button"
@@ -357,10 +395,10 @@ export function RoadmapMapEditor() {
       {roadmap.canEdit ? (
         adding ? (
           <form
-            className="flex gap-2"
+            className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm"
             onSubmit={(event) => {
               event.preventDefault();
-              void addStep(draftTitle);
+              void addStep();
             }}
           >
             <input
@@ -368,11 +406,37 @@ export function RoadmapMapEditor() {
               value={draftTitle}
               onChange={(event) => setDraftTitle(event.target.value)}
               placeholder={tx("ステップ名", "Step name")}
-              className="min-h-[48px] min-w-0 flex-1 rounded-2xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
+              className="min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
             />
-            <button type="submit" disabled={busy || !draftTitle.trim()} className="min-h-[48px] rounded-2xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40">
-              {tx("追加", "Add")}
-            </button>
+            <input
+              value={draftGoal}
+              onChange={(event) => setDraftGoal(event.target.value)}
+              placeholder={tx("ゴール（例：10人に話を聞く）", "Goal (e.g. talk to 10 people)")}
+              className="min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
+            />
+            <textarea
+              value={draftDescription}
+              onChange={(event) => setDraftDescription(event.target.value)}
+              placeholder={tx("概要（このステップでやること）", "Overview (what you’ll do in this step)")}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={resetDraft}
+                className="min-h-[44px] rounded-2xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                {tx("キャンセル", "Cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !draftTitle.trim()}
+                className="min-h-[44px] flex-1 rounded-2xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {tx("追加", "Add")}
+              </button>
+            </div>
           </form>
         ) : (
           <button
@@ -384,7 +448,9 @@ export function RoadmapMapEditor() {
               <Plus className="h-5 w-5" />
             </span>
             <span className="mt-2 text-sm font-bold text-zinc-900">{tx("次のステップを追加", "Add the next step")}</span>
-            <span className="mt-0.5 text-xs text-zinc-500">{tx("思いついたことをどんどん書こう", "Write down ideas as they come")}</span>
+            <span className="mt-0.5 text-xs text-zinc-500">
+              {tx("名前・ゴール・概要を書こう", "Add a name, goal, and overview")}
+            </span>
           </button>
         )
       ) : null}
@@ -401,6 +467,30 @@ export function RoadmapMapEditor() {
       >
         {tx("この地図を、歩き始める", "Start walking this map")}
       </button>
+
+      <RoadmapPhaseInfoSheet
+        open={Boolean(selectedStep)}
+        phase={
+          selectedStep
+            ? {
+                id: selectedStep.id,
+                title: selectedStep.title,
+                goal: selectedStep.goal,
+                description: selectedStep.description,
+                stepNumber: selectedStepNumber,
+              }
+            : null
+        }
+        onClose={() => setSelectedId(null)}
+        canEdit={roadmap.canEdit}
+        onSave={async (patch) => {
+          if (!selectedStep) return;
+          await roadmap.updatePhase(selectedStep.id, {
+            goal: patch.goal,
+            description: patch.description,
+          });
+        }}
+      />
     </div>
   );
 }

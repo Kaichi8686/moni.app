@@ -9,6 +9,7 @@ export type PhaseRowDb = {
   project_id: string;
   title: string;
   description: string | null;
+  goal?: string | null;
   status: string;
   start_date: string;
   end_date: string;
@@ -106,7 +107,8 @@ export function nestPhasesWithIssues(phaseRows: PhaseRowDb[], issues: Issue[]): 
     id: row.id,
     projectId: row.project_id,
     title: row.title,
-    description: row.description ?? undefined,
+    goal: row.goal?.trim() || undefined,
+    description: row.description?.trim() || undefined,
     status: row.status as ProjectStatus,
     startDate: row.start_date,
     endDate: row.end_date,

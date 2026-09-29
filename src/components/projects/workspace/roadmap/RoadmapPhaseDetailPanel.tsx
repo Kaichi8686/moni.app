@@ -50,13 +50,15 @@ export function RoadmapPhaseDetailPanel({
   const [goalAiBusy, setGoalAiBusy] = useState(false);
   const [titleDraft, setTitleDraft] = useState(phase.title);
   const [goalDraft, setGoalDraft] = useState(phase.goal ?? "");
+  const [descriptionDraft, setDescriptionDraft] = useState(phase.description ?? "");
 
   useEffect(() => {
     setTitleDraft(phase.title);
     setGoalDraft(phase.goal ?? "");
+    setDescriptionDraft(phase.description ?? "");
     setDeleteConfirm(false);
     setMenuOpen(false);
-  }, [phase.id, phase.title, phase.goal]);
+  }, [phase.id, phase.title, phase.goal, phase.description]);
 
   async function handleDelete() {
     setBusy(true);
@@ -226,12 +228,22 @@ export function RoadmapPhaseDetailPanel({
           />
         </div>
 
-        {phase.description?.trim() ? (
-          <div className="mx-4 mb-3 rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2.5">
-            <p className="text-[11px] font-semibold text-violet-900">このフェーズでやること</p>
-            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{phase.description}</p>
-          </div>
-        ) : null}
+        <div className="px-4 pb-3">
+          <label className="mb-1 block text-xs text-gray-500">概要</label>
+          <textarea
+            readOnly={!canEdit}
+            rows={3}
+            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+            placeholder="このフェーズでやることや背景"
+            value={descriptionDraft}
+            onChange={(e) => setDescriptionDraft(e.target.value)}
+            onBlur={() => {
+              if (canEdit && descriptionDraft !== (phase.description ?? "")) {
+                void onUpdate({ description: descriptionDraft });
+              }
+            }}
+          />
+        </div>
 
         <div className="flex gap-3 px-4 pb-4">
           <div>

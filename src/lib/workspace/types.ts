@@ -60,6 +60,7 @@ export interface Phase {
   id: string;
   projectId: string;
   title: string;
+  goal?: string;
   description?: string;
   status: ProjectStatus;
   startDate: string;

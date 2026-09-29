@@ -20,12 +20,12 @@ type Props = {
   onClose: () => void;
   projectStart?: string;
   onBulkAddPhases: (
-    items: Array<{ title: string; goal?: string; startDate: string; endDate: string }>,
+    items: Array<{ title: string; goal?: string; description?: string; startDate: string; endDate: string }>,
   ) => Promise<void>;
 };
 
 function draftsHaveContent(rows: PhaseDraftRow[]): boolean {
-  return rows.some((d) => d.title.trim() || d.goal.trim());
+  return rows.some((d) => d.title.trim() || d.goal.trim() || d.description.trim());
 }
 
 export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPhases }: Props) {
@@ -92,6 +92,7 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
       .map((d) => ({
         title: d.title.trim(),
         goal: d.goal.trim() || undefined,
+        description: d.description.trim() || undefined,
         startDate: new Date(d.startDate).toISOString(),
         endDate: new Date(d.endDate).toISOString(),
       }));
@@ -178,6 +179,14 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
                   onChange={(e) => updateDraft(row.id, { goal: e.target.value })}
                   className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-violet-500 focus:ring-2 disabled:bg-gray-100"
                   placeholder="このフェーズのゴール（例：10人に話を聞く）"
+                />
+                <textarea
+                  value={row.description}
+                  disabled={!row.enabled}
+                  onChange={(e) => updateDraft(row.id, { description: e.target.value })}
+                  rows={2}
+                  className="mb-2 w-full resize-none rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-violet-500 focus:ring-2 disabled:bg-gray-100"
+                  placeholder="概要（このフェーズでやること）"
                 />
                 <div className="flex gap-2">
                   <div className="flex-1">
