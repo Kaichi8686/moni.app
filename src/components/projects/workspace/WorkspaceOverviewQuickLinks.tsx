@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 
 const LINKS = [
-  { id: "coach", label: "相談AI", labelEn: "Ask AI", desc: "困ったときにすぐ相談", descEn: "Ask when you get stuck", icon: Sparkles, featured: true },
+  { id: "coach?mode=general", label: "なんでも相談", labelEn: "Ask anything", desc: "困ったときにすぐ相談", descEn: "Ask when you get stuck", icon: MessageSquare, featured: true },
+  { id: "coach?mode=ideas", label: "アイデア編", labelEn: "Ideas AI", desc: "企画アイデアを出す", descEn: "Brainstorm ideas", icon: Sparkles, featured: true },
   { id: "roadmap", label: "ロードマップ", labelEn: "Roadmap", desc: "フェーズと完成日", descEn: "Phases and due date", icon: GanttChartSquare },
   { id: "issues", label: "課題", labelEn: "Issues", desc: "タスク一覧・カンバン", descEn: "List and board", icon: CircleDot },
   { id: "business-idea", label: "ビジネスアイデア", labelEn: "Business idea", desc: "最初の種をインタビューで探す", descEn: "Find a starting seed", icon: Search },

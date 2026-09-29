@@ -325,8 +325,26 @@ export default function WorkspaceOverview() {
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
         <div className="grid grid-cols-2 gap-3">
-          <ActionLink href={`/projects/${projectId}/coach`} icon={Sparkles} label={tx("相談AI", "Ask AI")} detail={tx("次の一手を相談", "Plan your next move")} filled />
-          <ActionLink href={`/projects/${projectId}/issues`} icon={ListChecks} label={tx("課題", "Issues")} detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)} />
+          <ActionLink
+            href={`/projects/${projectId}/coach?mode=general`}
+            icon={MessageCircle}
+            label={tx("なんでも相談", "Ask anything")}
+            detail={tx("困りごと・次の一手を相談", "Ask about stuck points or next steps")}
+            filled
+          />
+          <ActionLink
+            href={`/projects/${projectId}/coach?mode=ideas`}
+            icon={Sparkles}
+            label={tx("アイデア編", "Ideas")}
+            detail={tx("企画のアイデアをたくさん出す", "Brainstorm project ideas")}
+            filled
+          />
+          <ActionLink
+            href={`/projects/${projectId}/issues`}
+            icon={ListChecks}
+            label={tx("課題", "Issues")}
+            detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)}
+          />
         </div>
       </section>
 
