@@ -10,6 +10,7 @@ import {
   MessageCircle,
   PenLine,
   PenTool,
+  PlusCircle,
   Sparkles,
   Vote,
 } from "lucide-react";
@@ -252,7 +253,16 @@ export default function WorkspaceOverview() {
             ) : null}
           </>
         ) : (
-          <Link href={`/projects/${projectId}/roadmap`} className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600">
+          <Link
+            href={`/projects/${projectId}/roadmap`}
+            className="flex min-h-[108px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600"
+          >
+            <PlusCircle
+              className="h-8 w-8 text-orange-300"
+              strokeWidth={1.75}
+              strokeDasharray="2.5 2.5"
+              aria-hidden
+            />
             {tx("ロードマップを作成する", "Create roadmap")}
           </Link>
         )}
