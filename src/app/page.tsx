@@ -23,7 +23,6 @@ import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
   fetchUnreadProjectNotifications,
   markProjectNotificationRead,
-  markProjectNotificationsRead,
   projectNotificationHref,
   type ProjectNotificationRow,
 } from "@/lib/projects/notifications";
@@ -1008,7 +1007,6 @@ export default function Home() {
   const [projectNotifications, setProjectNotifications] = useState<ProjectNotificationRow[]>([]);
   /** 新メッセージ（/messages）の未読合計。旧 chat_reads とは別系統 */
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
-  const viewedProjectNoticeIdsRef = useRef<string[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1638,19 +1636,6 @@ export default function Home() {
     trackOpsEvent("report_deadline_set");
   }
 
-  function dismissNotification(id: string) {
-    setDismissedNotificationIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    if (id.startsWith("project-notice-")) {
-      const noticeId = id.slice("project-notice-".length);
-      setProjectNotifications((prev) => prev.filter((n) => n.id !== noticeId));
-      if (supabase) {
-        void markProjectNotificationRead(supabase, noticeId).catch(() => {
-          // ignore mark-read failures; local dismiss still applies
-        });
-      }
-    }
-  }
-
   const loadProjectNotifications = useCallback(async (userId: string) => {
     if (!supabase) {
       setProjectNotifications([]);
@@ -1676,24 +1661,6 @@ export default function Home() {
       setInboxUnreadCount(0);
     }
   }, []);
-
-  function handleNoticePanelOpenChange(open: boolean) {
-    if (open) {
-      const ids = projectNotifications.map((n) => n.id);
-      viewedProjectNoticeIdsRef.current = ids;
-      if (ids.length > 0 && supabase) {
-        void markProjectNotificationsRead(supabase, ids).catch(() => {
-          // keep showing until close; poll will restore if mark failed
-        });
-      }
-      return;
-    }
-    const seen = viewedProjectNoticeIdsRef.current;
-    viewedProjectNoticeIdsRef.current = [];
-    if (seen.length === 0) return;
-    const seenSet = new Set(seen);
-    setProjectNotifications((prev) => prev.filter((n) => !seenSet.has(n.id)));
-  }
 
   async function openProjectNotification(row: ProjectNotificationRow) {
     if (supabase) {
@@ -4131,8 +4098,6 @@ export default function Home() {
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
               <InboxNoticeBell
                 items={notificationItems}
-                onDismiss={dismissNotification}
-                onOpenChange={handleNoticePanelOpenChange}
                 onOpen={(item) => {
                   if (item.kind === "project" && item.projectNotification) {
                     void openProjectNotification(item.projectNotification);
@@ -4145,10 +4110,9 @@ export default function Home() {
                     return;
                   }
                   if (item.id === "chat-unread") {
+                    // 既読は /messages で会話を開いたときに付く。ここでは遷移のみ
                     router.push("/messages");
-                    return;
                   }
-                  dismissNotification(item.id);
                 }}
               />
               {!session && canUseSupabase ? (
