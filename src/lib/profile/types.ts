@@ -7,7 +7,15 @@ export type ProfileView = {
   website: string | null;
   school?: string | null;
   location?: string | null;
-  /** 特技タグ（canonical JA または自由入力） */
+  /** 誕生日 YYYY-MM-DD */
+  birthday?: string | null;
+  /** 年齢（birthday から導出、互換） */
+  age?: number | null;
+  /** male | female | other | prefer_not */
+  gender?: string | null;
+  /** ISO 3166-1 alpha-2 */
+  country?: string | null;
+  /** 興味 / 特技タグ（canonical JA または自由入力） */
   skills?: string[];
   /** 性格タグ */
   traits?: string[];

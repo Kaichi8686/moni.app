@@ -16,6 +16,9 @@ type Props = {
   /** 導入文を出す（オンボーディング向け） */
   showIntro?: boolean;
   compact?: boolean;
+  /** オンボーディング: カードUI + 各3つまで */
+  onboardingStyle?: boolean;
+  maxPerSection?: number;
 };
 
 export function SkillsTraitsEditor({
@@ -25,6 +28,8 @@ export function SkillsTraitsEditor({
   onTraitsChange,
   showIntro = false,
   compact = false,
+  onboardingStyle = false,
+  maxPerSection,
 }: Props) {
   const { locale, tx } = useI18n();
   const skillPresets = SKILL_PRESETS.map((p) => ({
@@ -35,59 +40,88 @@ export function SkillsTraitsEditor({
     id: p.ja,
     label: labelForPreset(p, locale),
   }));
+  const max = maxPerSection ?? (onboardingStyle ? 3 : 12);
+  const variant = onboardingStyle ? "cards" : "chips";
 
   return (
-    <div className={compact ? "space-y-5" : "space-y-6"}>
+    <div className={onboardingStyle ? "space-y-4" : compact ? "space-y-5" : "space-y-6"}>
       {showIntro ? (
-        <div className="space-y-1.5">
-          <p className="text-[15px] font-semibold leading-snug text-zinc-900 dark:text-zinc-100">
+        <div className="space-y-1">
+          <p className="text-[15px] font-semibold leading-snug tracking-tight text-zinc-900">
             {tx(
-              "あなたの得意なことや性格を教えてください",
-              "Tell us your strengths and personality",
+              "興味と性格を教えてください",
+              "Tell us your interests and personality",
             )}
           </p>
-          <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <p className="text-[12px] leading-relaxed text-zinc-500">
             {tx(
-              "相性の良い仲間を見つけやすくなります。後からプロフィール編集でも変更できます。",
-              "This helps match you with compatible teammates. You can edit this later in your profile.",
+              "探すタブで仲間があなたのプロフィールを見るときに表示されます。あとから変更できます。",
+              "These show on your profile when others find you in Search. You can change them later.",
             )}
           </p>
         </div>
       ) : null}
 
       <section>
-        <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">
-          {tx("特技", "Skills")}
-        </h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">
-          {tx(
-            "プロジェクトで活かせそうな得意分野を選んでください",
-            "Pick strengths you can bring to a project",
-          )}
+        <div className="mb-0.5 flex items-baseline justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-zinc-900">
+            {onboardingStyle
+              ? tx("興味のあること", "Interests")
+              : tx("特技", "Skills")}
+          </h3>
+          {onboardingStyle ? (
+            <span className="text-[10px] font-medium text-zinc-400">
+              {tx("3つ選ぶ", "Pick 3")}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-[11px] leading-relaxed text-zinc-500">
+          {onboardingStyle
+            ? tx(
+                "いま関心がある分野や、やってみたいことを選びましょう",
+                "Pick topics you care about or want to explore",
+              )
+            : tx(
+                "プロジェクトで活かせそうな得意分野を選んでください",
+                "Pick strengths you can bring to a project",
+              )}
         </p>
         <TagChipPicker
-          className="mt-2.5"
+          className="mt-2"
           presets={skillPresets}
           value={skills}
           onChange={onSkillsChange}
+          max={max}
+          variant={variant}
+          allowCustom={!onboardingStyle}
         />
       </section>
 
       <section>
-        <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">
-          {tx("性格", "Personality")}
-        </h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">
+        <div className="mb-0.5 flex items-baseline justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-zinc-900">
+            {tx("性格", "Personality")}
+          </h3>
+          {onboardingStyle ? (
+            <span className="text-[10px] font-medium text-zinc-400">
+              {tx("3つ選ぶ", "Pick 3")}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-[11px] leading-relaxed text-zinc-500">
           {tx(
             "チームでの関わり方のイメージを教えてください",
             "How do you usually work with others?",
           )}
         </p>
         <TagChipPicker
-          className="mt-2.5"
+          className="mt-2"
           presets={traitPresets}
           value={traits}
           onChange={onTraitsChange}
+          max={max}
+          variant={variant}
+          allowCustom={!onboardingStyle}
         />
       </section>
     </div>
