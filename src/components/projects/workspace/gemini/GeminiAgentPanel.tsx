@@ -259,7 +259,11 @@ export function GeminiAgentPanel({
                 "困っていることや質問を、そのまま送ってください。大事なところは太字と絵文字で見やすく答えます。",
                 "Send whatever you’re stuck on or curious about. I’ll highlight key points with bold and emojis.",
               )}
-            {mode === "ideas" && tx("「アイデアを10個出して」と送ると、案のリストが出ます。", "Send “give me 10 ideas” and you’ll get a list.")}
+            {mode === "ideas" &&
+              tx(
+                "「アイデアを出して」と送ると、方向性を太字・絵文字で伝えてから案のリストが出ます。",
+                "Send “give me ideas” — I’ll outline the direction with bold and emojis, then list options.",
+              )}
           </p>
         ) : null}
 
@@ -361,14 +365,22 @@ export function GeminiAgentPanel({
           </button>
         ) : null}
 
-        {ideas?.ideas?.length ? (
+        {ideas?.ideas?.length && !streamingId ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px]">
-            <p className="font-bold text-amber-900">{tx(`アイデア ${ideas.ideas.length} 件`, `${ideas.ideas.length} ideas`)}</p>
+            <p className="font-bold text-amber-900">
+              {tx(`💡 アイデア ${ideas.ideas.length} 件`, `💡 ${ideas.ideas.length} ideas`)}
+            </p>
             <ul className="mt-2 space-y-2">
               {ideas.ideas.map((idea, i) => (
                 <li key={i} className="rounded-lg bg-white/90 px-2 py-1.5">
                   <p className="font-semibold">{idea.title}</p>
                   {idea.pitch ? <p className="text-[12px] text-amber-900">{idea.pitch}</p> : null}
+                  {idea.first_step ? (
+                    <p className="mt-0.5 text-[11px] text-amber-800/90">
+                      {tx("最初の一歩: ", "First step: ")}
+                      {idea.first_step}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>

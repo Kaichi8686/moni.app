@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { geminiChat, type GeminiChatMessage } from "@/lib/ai/geminiMessages";
 import {
-  IDEAS_RESPONSE_SCHEMA,
-  extractJsonBlock,
+  ideasSummaryReply,
+  normalizeIdeasPayload,
   normalizeRoadmapPayload,
+  parseIdeasPayload,
   parseRoadmapPayload,
+  proseWithoutJson,
   roadmapSummaryReply,
   ROADMAP_RESPONSE_SCHEMA,
   stripJsonBlock,
@@ -27,6 +29,14 @@ type Body = {
 };
 
 const MODES: GeminiAgentMode[] = ["roadmap", "general", "ideas"];
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -63,12 +73,9 @@ export async function POST(req: Request) {
       ? `${systemPromptForMode(mode)}\n\n【プロジェクト情報】\n${context}`
       : systemPromptForMode(mode);
 
+    // アイデア編は本文（太字・絵文字）＋末尾JSONにしたいので schema 固定しない
     const responseSchema =
-      mode === "roadmap"
-        ? (ROADMAP_RESPONSE_SCHEMA as unknown as Record<string, unknown>)
-        : mode === "ideas"
-          ? (IDEAS_RESPONSE_SCHEMA as unknown as Record<string, unknown>)
-          : undefined;
+      mode === "roadmap" ? (ROADMAP_RESPONSE_SCHEMA as unknown as Record<string, unknown>) : undefined;
 
     // 相談は一貫性重視、アイデア編はやや発散、ロードマップは構造寄り
     const temperature = mode === "general" ? 0.6 : mode === "ideas" ? 0.75 : 0.45;
@@ -100,16 +107,18 @@ export async function POST(req: Request) {
         roadmap = parseRoadmapPayload(result.text) ?? undefined;
       }
     } else if (mode === "ideas") {
-      ideas = extractJsonBlock<IdeasAgentPayload>(result.text) ?? undefined;
+      ideas = parseIdeasPayload(result.text) ?? normalizeIdeasPayload(safeJsonParse(result.text)) ?? undefined;
     }
 
+    const ideasProse = mode === "ideas" ? proseWithoutJson(result.text) : "";
     const reply =
       mode === "general"
         ? result.text.trim()
         : mode === "roadmap" && roadmap
           ? roadmapSummaryReply(roadmap)
-          : stripJsonBlock(result.text) ||
-            (ideas ? "アイデアを出しました。気に入ったものを投票一覧に追加できます。" : result.text.trim());
+          : mode === "ideas" && ideas
+            ? ideasProse || ideasSummaryReply(ideas)
+            : stripJsonBlock(result.text) || result.text.trim();
 
     return NextResponse.json({
       reply,

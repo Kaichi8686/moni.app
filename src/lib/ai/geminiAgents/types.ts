@@ -179,22 +179,39 @@ export const GENERAL_AGENT_SYSTEM = `${SHARED}
 export const IDEAS_AGENT_SYSTEM = `${SHARED}
 
 【あなたの役割: アイデア編AI】
-- ブレスト向けに、具体的でワクワクするアイデアをたくさん出す
-- まず1〜2文で励ましや方向性を書き、そのあと JSON を出す
-- 必ず応答の最後に \`\`\`json コードブロックを1つだけ付ける
+ブレスト向けに、具体的でワクワクするアイデアをたくさん出す。
+
+【読みやすさ・装飾（必須・JSONの前の文章）】
+- 大事なキーワード・方向性は \`**太字**\`（Markdownのアスタリスク2つ）で囲む
+- 絵文字を適度に使う（だいたい2〜5個）。例: 💡 ✨ 🚀 🙂 🎯 📝
+- 見出しは短く、太字＋絵文字（例: **💡 方向性**）
+- HTMLタグは出さない
+
+【回答の流れ】
+1. まず2〜4文で励ましや方向性を書く（太字・絵文字あり）。ここではアイデアの中身を全部並べない
+2. そのあと必ず応答の最後に \`\`\`json コードブロックを1つだけ付ける（文章の途中にJSONを挟まない）
 
 JSONスキーマ:
 {
   "ideas": [
     {
-      "title": "アイデア名（短く）",
+      "title": "アイデア名（短く・絵文字を先頭に1つ付けてよい）",
       "pitch": "なぜいいか（1行）",
       "first_step": "今日できる最初の一歩"
     }
   ]
 }
 - ideas は5〜8個
-- ありきたりすぎないが、高校生でも実行できる案にする`;
+- ありきたりすぎないが、高校生でも実行できる案にする
+
+【良い回答例（文章部分）】
+ユーザー: 文化祭向けのアイデアを出して
+アシスタント:
+文化祭なら、**見てすぐ楽しさが伝わる**案が強いよ 🙂
+今回のプロジェクトなら、立ち寄りやすさと「友だちと一緒にやりたい」を軸に振ってみた。
+
+**💡 方向性**: 体験・食べ物・写真映えの3方向からピックアップしてるよ ✨
+（このあと JSON）`
 
 export function systemPromptForMode(mode: GeminiAgentMode): string {
   if (mode === "roadmap") return ROADMAP_AGENT_SYSTEM;
@@ -242,6 +259,54 @@ export function roadmapSummaryReply(payload: RoadmapAgentPayload): string {
   const taskCount = payload.phases.reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
   const names = payload.phases.map((p) => p.phase_name).slice(0, 3).join(" → ");
   return `計画案を作りました（${payload.phases.length}段階・やること${taskCount}件）。\n${names}${payload.phases.length > 3 ? " …" : ""}\n\n下の「ロードマップに反映」で保存できます。`;
+}
+
+export function normalizeIdeasPayload(raw: unknown): IdeasAgentPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const ideasRaw = (raw as { ideas?: unknown }).ideas;
+  if (!Array.isArray(ideasRaw) || ideasRaw.length === 0) return null;
+  const ideas = ideasRaw
+    .map((item): IdeaBrainstormItem | null => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const title = String(row.title ?? row.name ?? "").trim();
+      if (!title) return null;
+      const pitch = row.pitch ? String(row.pitch).trim() : undefined;
+      const first_step = row.first_step ? String(row.first_step).trim() : undefined;
+      return {
+        title,
+        ...(pitch ? { pitch } : {}),
+        ...(first_step ? { first_step } : {}),
+      };
+    })
+    .filter((x): x is IdeaBrainstormItem => x !== null);
+  return ideas.length > 0 ? { ideas } : null;
+}
+
+export function parseIdeasPayload(text: string): IdeasAgentPayload | null {
+  return normalizeIdeasPayload(extractJsonBlock(text));
+}
+
+/** JSON / コードフェンスを除いた読み上げ用の文章。中身がJSONだけなら空文字。 */
+export function proseWithoutJson(text: string): string {
+  const stripped = stripJsonBlock(text).trim();
+  if (!stripped) return "";
+  if (stripped.startsWith("{") || stripped.startsWith("[")) {
+    try {
+      JSON.parse(stripped);
+      return "";
+    } catch {
+      /* keep prose that merely starts with a bracket */
+    }
+  }
+  return stripped;
+}
+
+export function ideasSummaryReply(payload: IdeasAgentPayload): string {
+  const n = payload.ideas.length;
+  const top = payload.ideas.slice(0, 3).map((idea) => idea.title).filter(Boolean);
+  const lines = top.map((title, i) => `${i + 1}) **${title}**`).join("\n");
+  return `**💡 アイデア ${n} 件** 出してみたよ 🙂\n${lines}${n > 3 ? "\n…" : ""}\n\n気に入ったものを下の **投票に追加** から一覧に入れられるよ ✨`;
 }
 
 export const ROADMAP_RESPONSE_SCHEMA = {
