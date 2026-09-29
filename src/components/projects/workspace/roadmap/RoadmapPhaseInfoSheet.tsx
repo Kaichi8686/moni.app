@@ -34,6 +34,7 @@ export function RoadmapPhaseInfoSheet({
   const { tx } = useI18n();
   const [goalDraft, setGoalDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -42,12 +43,14 @@ export function RoadmapPhaseInfoSheet({
     if (!phase) return;
     setGoalDraft(phase.goal ?? "");
     setDescriptionDraft(phase.description ?? "");
+    setEditing(false);
   }, [phase]);
 
   useEffect(() => {
     if (open && phase) {
       setClosing(false);
       setVisible(true);
+      setEditing(false);
       return;
     }
     if (!open && visible) {
@@ -55,6 +58,7 @@ export function RoadmapPhaseInfoSheet({
       const t = window.setTimeout(() => {
         setVisible(false);
         setClosing(false);
+        setEditing(false);
       }, 220);
       return () => window.clearTimeout(t);
     }
@@ -62,19 +66,36 @@ export function RoadmapPhaseInfoSheet({
 
   if (!visible || !phase) return null;
 
-  const editable = Boolean(canEdit && onSave);
+  const canInlineEdit = Boolean(canEdit && onSave);
+  const showEditor = canInlineEdit && editing;
+  const goalText = (phase.goal ?? "").trim();
+  const descriptionText = (phase.description ?? "").trim();
 
   function requestClose() {
     if (busy) return;
     onClose();
   }
 
+  function startEditing() {
+    if (!canInlineEdit || busy) return;
+    setGoalDraft(phase?.goal ?? "");
+    setDescriptionDraft(phase?.description ?? "");
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (busy) return;
+    setGoalDraft(phase?.goal ?? "");
+    setDescriptionDraft(phase?.description ?? "");
+    setEditing(false);
+  }
+
   async function handleSave() {
-    if (!onSave || !editable) return;
+    if (!onSave || !canInlineEdit) return;
     setBusy(true);
     try {
       await onSave({ goal: goalDraft.trim(), description: descriptionDraft.trim() });
-      onClose();
+      setEditing(false);
     } finally {
       setBusy(false);
     }
@@ -120,34 +141,32 @@ export function RoadmapPhaseInfoSheet({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
-            <label htmlFor="roadmap-phase-goal" className="block text-xs font-bold text-orange-900">
-              {tx("このステップのゴール", "Goal for this step")}
-            </label>
-            <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
-              {tx("達成したら「できた」と言えることを書いてください", "Write what “done” looks like for this step")}
-            </p>
-            {editable ? (
-              <textarea
-                id="roadmap-phase-goal"
-                value={goalDraft}
-                onChange={(e) => setGoalDraft(e.target.value)}
-                placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
-                rows={3}
-                className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
-                disabled={busy}
-              />
-            ) : goalDraft.trim() || phase.goal?.trim() ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{phase.goal}</p>
+            <p className="text-xs font-bold text-orange-900">{tx("このステップのゴール", "Goal for this step")}</p>
+            {showEditor ? (
+              <>
+                <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
+                  {tx("達成したら「できた」と言えることを書いてください", "Write what “done” looks like for this step")}
+                </p>
+                <textarea
+                  id="roadmap-phase-goal"
+                  value={goalDraft}
+                  onChange={(e) => setGoalDraft(e.target.value)}
+                  placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
+                  rows={3}
+                  className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                  disabled={busy}
+                />
+              </>
+            ) : goalText ? (
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{goalText}</p>
             ) : (
               <p className="mt-2 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="roadmap-phase-overview" className="block text-xs font-semibold text-zinc-600">
-              {tx("概要", "Overview")}
-            </label>
-            {editable ? (
+            <p className="text-xs font-semibold text-zinc-600">{tx("概要", "Overview")}</p>
+            {showEditor ? (
               <textarea
                 id="roadmap-phase-overview"
                 value={descriptionDraft}
@@ -157,8 +176,8 @@ export function RoadmapPhaseInfoSheet({
                 className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
                 disabled={busy}
               />
-            ) : descriptionDraft.trim() || phase.description?.trim() ? (
-              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{phase.description}</p>
+            ) : descriptionText ? (
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{descriptionText}</p>
             ) : (
               <p className="mt-1.5 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
             )}
@@ -166,32 +185,54 @@ export function RoadmapPhaseInfoSheet({
         </div>
 
         <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {editable ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleSave()}
-              className="min-h-[44px] w-full rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
-            >
-              {busy ? tx("保存中…", "Saving…") : tx("ゴールを保存", "Save goal")}
-            </button>
-          ) : null}
-          {editHref && !editable ? (
-            <Link
-              href={editHref}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
-              onClick={onClose}
-            >
-              {tx("ロードマップで編集", "Edit on roadmap")}
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={requestClose}
-            className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50"
-          >
-            {tx("閉じる", "Close")}
-          </button>
+          {showEditor ? (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleSave()}
+                className="min-h-[44px] w-full rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
+              >
+                {busy ? tx("保存中…", "Saving…") : tx("ゴールを保存", "Save goal")}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={cancelEditing}
+                className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {tx("キャンセル", "Cancel")}
+              </button>
+            </>
+          ) : (
+            <>
+              {canInlineEdit ? (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+                >
+                  {tx("編集する", "Edit")}
+                </button>
+              ) : null}
+              {editHref && !canInlineEdit ? (
+                <Link
+                  href={editHref}
+                  className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+                  onClick={onClose}
+                >
+                  {tx("ロードマップで編集", "Edit on roadmap")}
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={requestClose}
+                className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50"
+              >
+                {tx("閉じる", "Close")}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

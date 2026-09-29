@@ -17,7 +17,6 @@ import {
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
@@ -73,8 +72,7 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases, loading, uid, canEdit, reload } = useProjectWorkspace();
-  const roadmap = useRoadmapProject(projectId);
+  const { project, projectMeta, projectId, issues, phases, loading, uid } = useProjectWorkspace();
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
@@ -266,23 +264,6 @@ export default function WorkspaceOverview() {
             : null
         }
         onClose={() => setSelectedPhase(null)}
-        canEdit={canEdit}
-        onSave={
-          canEdit && selectedPhaseLive
-            ? async (patch) => {
-                await roadmap.updatePhase(selectedPhaseLive.id, {
-                  goal: patch.goal,
-                  description: patch.description,
-                });
-                await reload();
-              }
-            : undefined
-        }
-        editHref={
-          !canEdit && selectedPhaseLive
-            ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}`
-            : undefined
-        }
       />
 
       <section>
