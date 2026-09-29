@@ -97,20 +97,19 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
   const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
 
   useEffect(() => {
+    setOwnerReady(true);
+    if (!supabase) return;
     let cancelled = false;
     void (async () => {
-      let key = "guest";
-      if (supabase) {
-        try {
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.user.id) key = data.session.user.id;
-        } catch {
-          /* keep guest */
-        }
-      }
-      if (!cancelled) {
-        setOwnerKey(key);
-        setOwnerReady(true);
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2000)),
+        ]);
+        const uid = result && "data" in result ? result.data.session?.user.id : undefined;
+        if (!cancelled && uid) setOwnerKey(uid);
+      } catch {
+        /* keep guest */
       }
     })();
     return () => {
@@ -456,14 +455,12 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
               </Link>
             ) : null}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">
-                {tx("発掘AI", "Discover AI")}
-              </p>
+              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">AI</p>
               <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
                 {session.phase === "results"
-                  ? tx("アイデアの種", "Idea seeds")
+                  ? `${tx("アイデアの種", "Idea seeds")} · ${activeTitle}`
                   : session.theme
-                    ? `${tx("テーマ", "Theme")}: ${tx(
+                    ? `${tx("発掘", "Discover")} · ${tx(
                         themeLabel(session.theme),
                         (
                           {
@@ -476,7 +473,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
                           } as const
                         )[session.theme],
                       )} · ${activeTitle}`
-                    : activeTitle}
+                    : `${tx("発掘", "Discover")} · ${activeTitle}`}
               </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
