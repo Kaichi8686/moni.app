@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import type { ProjectRow } from "@/lib/projects/types";
 import {
@@ -12,6 +12,8 @@ import {
   type ProjectInviteRow,
   type ProjectNotificationRow,
 } from "@/lib/projects/projectInvites";
+
+const EMPTY_PROJECTS: ProjectRow[] = [];
 
 type Props = {
   open: boolean;
@@ -26,7 +28,7 @@ export function ProjectInviteBellPanel({
   open,
   onClose,
   userId,
-  eligibleProjects = [],
+  eligibleProjects = EMPTY_PROJECTS,
   onAccepted,
   toast,
 }: Props) {
@@ -35,8 +37,10 @@ export function ProjectInviteBellPanel({
   const [projectNames, setProjectNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(open);
   const [entered, setEntered] = useState(false);
+  const projectsRef = useRef(eligibleProjects);
+  projectsRef.current = eligibleProjects;
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -52,7 +56,7 @@ export function ProjectInviteBellPanel({
         ...new Set([...incoming.map((i) => i.project_id), ...notes.map((n) => n.project_id).filter(Boolean)]),
       ] as string[];
       const nameMap: Record<string, string> = {};
-      for (const p of eligibleProjects) nameMap[p.id] = p.name;
+      for (const p of projectsRef.current) nameMap[p.id] = p.name;
       const missing = ids.filter((id) => !nameMap[id]);
       if (missing.length > 0) {
         const { supabase } = await import("@/lib/supabase");
@@ -75,7 +79,7 @@ export function ProjectInviteBellPanel({
     } finally {
       setLoading(false);
     }
-  }, [userId, eligibleProjects]);
+  }, [userId]);
 
   useEffect(() => {
     if (open) {
@@ -86,6 +90,7 @@ export function ProjectInviteBellPanel({
       void loadInbox();
       return () => window.cancelAnimationFrame(frame);
     }
+
     setEntered(false);
     const timer = window.setTimeout(() => setVisible(false), 300);
     return () => window.clearTimeout(timer);
