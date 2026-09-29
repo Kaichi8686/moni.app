@@ -12,10 +12,10 @@ import type {
 import { GEMINI_AGENT_META, parseRoadmapPayload } from "@/lib/ai/geminiAgents/types";
 import { appendIdeasToVoting } from "@/lib/projects/ideaVoting/appendIdeas";
 import { applyAgentRoadmapToProject, type ApplyRoadmapMode } from "@/lib/projects/applyAgentRoadmap";
-import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 
 function chatStorageKey(projectId: string, mode: GeminiAgentMode) {
   return `moni-gemini-chat:${projectId}:${mode}`;
@@ -83,7 +83,12 @@ export function GeminiAgentPanel({
   const [applyMode, setApplyMode] = useState<ApplyRoadmapMode>("append");
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToEnd = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     const stored = loadStoredChat(projectId, mode);
@@ -106,6 +111,7 @@ export function GeminiAgentPanel({
     setIdeas(null);
     setError("");
     setApplied(false);
+    setStreamingId(null);
     setApplyMode(phasesCount > 0 ? "append" : "replace");
   }, [mode, projectId, phasesCount, initialUserMessage, tx]);
 
@@ -115,8 +121,8 @@ export function GeminiAgentPanel({
   }, [messages, projectId, mode]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading, roadmap, ideas]);
+    scrollToEnd();
+  }, [messages, loading, roadmap, ideas, scrollToEnd]);
 
   const send = useCallback(
     async (text: string) => {
@@ -154,7 +160,9 @@ export function GeminiAgentPanel({
         if (!res.ok) throw new Error(json.error ?? tx("送信に失敗しました", "Failed to send"));
 
         const replyText = json.reply?.trim() || "…";
-        setMessages((prev) => [...prev, { role: "assistant", content: replyText }]);
+        const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+        setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: replyText }]);
+        setStreamingId(assistantId);
 
         if (json.roadmap?.phases?.length) {
           setRoadmap(json.roadmap);
@@ -185,13 +193,16 @@ export function GeminiAgentPanel({
       const r = await applyAgentRoadmapToProject(projectId, roadmap, { mode: applyMode });
       setApplied(true);
       setRoadmap(null);
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMessages((prev) => [
         ...prev,
         {
+          id: assistantId,
           role: "assistant",
           content: `ロードマップに反映しました（フェーズ${r.phasesCreated}・やること${r.issuesCreated}件）。ロードマップ画面で確認できます。`,
         },
       ]);
+      setStreamingId(assistantId);
       await onReload();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("反映に失敗しました", "Failed to apply"));
@@ -205,10 +216,12 @@ export function GeminiAgentPanel({
     try {
       const n = await appendIdeasToVoting(projectId, ideas.ideas);
       setIdeas(null);
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `投票に ${n} 件追加しました。「投票」画面で確認できます。` },
+        { id: assistantId, role: "assistant", content: `投票に ${n} 件追加しました。「投票」画面で確認できます。` },
       ]);
+      setStreamingId(assistantId);
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("投票への追加に失敗しました", "Failed to add to voting"));
     }
@@ -252,13 +265,19 @@ export function GeminiAgentPanel({
 
         {messages.map((m, i) => (
           <div
-            key={`${m.role}-${i}`}
+            key={m.id ?? `${m.role}-${i}`}
             className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
               m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
             }`}
           >
             {m.role === "assistant" ? (
-              <AiChatRichText text={m.content} className="break-words" />
+              <AiChatStreamingRichText
+                text={m.content}
+                className="break-words"
+                animate={Boolean(m.id && m.id === streamingId)}
+                onTick={scrollToEnd}
+                onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+              />
             ) : (
               <p className="whitespace-pre-wrap break-words">{m.content}</p>
             )}

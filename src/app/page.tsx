@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MoniLanding } from "@/components/MoniLanding";
-import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
@@ -669,6 +669,7 @@ export default function Home() {
   const [mentorInput, setMentorInput] = useState("");
   const [mentorLoading, setMentorLoading] = useState(false);
   const [mentorError, setMentorError] = useState("");
+  const [mentorStreamingId, setMentorStreamingId] = useState<string | null>(null);
   const mentorScrollAnchorRef = useRef<HTMLDivElement>(null);
   const chatScrollAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -2648,14 +2649,16 @@ export default function Home() {
         setMentorError(result.error ?? "AIメンターの生成に失敗しました。");
         return;
       }
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMentorMessages((prev) => [
         ...prev,
         {
-          id: `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+          id: assistantId,
           role: "assistant",
           content: assistantReply,
         },
       ]);
+      setMentorStreamingId(assistantId);
       trackOpsEvent("first_ai_consult_completed");
     } catch {
       setMentorError("AIメンターに接続できませんでした。");
@@ -2667,6 +2670,7 @@ export default function Home() {
   function clearMentorChat() {
     if (!mentorMessages.some((message) => message.role === "user")) {
       setMentorMessages([createMentorWelcomeMessage()]);
+      setMentorStreamingId(null);
       setMentorError("");
       return;
     }
@@ -2678,12 +2682,14 @@ export default function Home() {
     ].slice(0, 30));
     setActiveMentorConversationId(id);
     setMentorMessages(messages);
+    setMentorStreamingId(null);
     setMentorError("");
   }
 
   function openMentorConversation(conversation: MentorSavedConversation) {
     setActiveMentorConversationId(conversation.id);
     setMentorMessages(conversation.messages);
+    setMentorStreamingId(null);
     setMentorError("");
     setMentorHistoryOpen(false);
   }
@@ -2699,6 +2705,7 @@ export default function Home() {
       setMentorConversations(remaining);
       setActiveMentorConversationId(next.id);
       setMentorMessages(next.messages);
+      setMentorStreamingId(null);
       setMentorError("");
       return;
     }
@@ -2707,6 +2714,7 @@ export default function Home() {
     setMentorConversations([{ id, title: tx("新しい相談", "New chat"), updatedAt: new Date().toISOString(), messages }]);
     setActiveMentorConversationId(id);
     setMentorMessages(messages);
+    setMentorStreamingId(null);
     setMentorError("");
   }
 
@@ -4948,9 +4956,14 @@ export default function Home() {
                       </div>
                       <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
                     </div>
-                    <AiChatRichText
+                    <AiChatStreamingRichText
                       text={m.content}
                       className="break-words text-sm leading-relaxed text-[#202123]"
+                      animate={m.id === mentorStreamingId}
+                      onTick={() =>
+                        mentorScrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+                      }
+                      onComplete={() => setMentorStreamingId((cur) => (cur === m.id ? null : cur))}
                     />
                   </div>
                 ))}
