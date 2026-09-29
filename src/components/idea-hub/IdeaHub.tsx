@@ -71,9 +71,7 @@ function IdeaHubInner() {
       </header>
 
       <div role="tabpanel">
-        {tab === "excavate" ? (
-          <IdeaInterviewApp variant="hub" initialMode="excavate" enableModePicker />
-        ) : null}
+        {tab === "excavate" ? <IdeaInterviewApp variant="hub" initialMode="excavate" /> : null}
         {tab === "qna" ? (
           qnaBoard ? (
             <div>
@@ -94,7 +92,7 @@ function IdeaHubInner() {
               <IdeaQnAPanel active={tab === "qna"} />
             </div>
           ) : (
-            <IdeaInterviewApp variant="hub" initialMode="consult" enableModePicker />
+            <IdeaInterviewApp variant="hub" initialMode="consult" />
           )
         ) : null}
         {tab === "mine" ? <MyIdeasPanel onGoExcavate={() => setTab("excavate")} /> : null}
