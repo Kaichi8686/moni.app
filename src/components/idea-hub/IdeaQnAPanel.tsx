@@ -108,24 +108,13 @@ export function IdeaQnAPanel({ active }: { active: boolean }) {
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col">
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-tight text-zinc-900">
-            {tx("質問・相談", "Q&A")}
-          </h2>
-          <p className="mt-0.5 text-[12px] text-zinc-500">
-            {tx("困りごとを聞いて、知恵を分け合う場所", "Ask and share advice")}
-          </p>
-        </div>
-        {session ? (
-          <button
-            type="button"
-            className="inline-flex min-h-[36px] shrink-0 touch-manipulation items-center rounded-md bg-zinc-950 px-3.5 text-[13px] font-semibold tracking-[-0.02em] text-white transition hover:bg-zinc-800"
-            onClick={() => setFocusToken((n) => n + 1)}
-          >
-            {tx("＋ 質問", "+ Ask")}
-          </button>
-        ) : null}
+      <div className="px-4 py-3">
+        <h2 className="text-[15px] font-semibold tracking-tight text-zinc-900">
+          {tx("質問・相談", "Q&A")}
+        </h2>
+        <p className="mt-0.5 text-[12px] text-zinc-500">
+          {tx("困りごとを聞いて、知恵を分け合う場所", "Ask and share advice")}
+        </p>
       </div>
 
       {authMessage ? (
