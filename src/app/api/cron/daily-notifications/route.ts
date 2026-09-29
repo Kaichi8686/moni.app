@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     const r = await sendPushToUser(p.id as string, {
       title: "今日の1アクション",
       body: raw.action,
-      url: "/idea?tab=qna",
+      url: "/idea?tab=qna&view=board",
     });
     sentTotal += r.sent;
   }

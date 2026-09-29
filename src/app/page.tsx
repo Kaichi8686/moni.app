@@ -1057,7 +1057,7 @@ export default function Home() {
       return;
     }
     if (tab === "posts" || community === "qna") {
-      router.replace("/idea?tab=qna");
+      router.replace("/idea?tab=qna&view=board");
       return;
     }
     if (community === "progress") {
@@ -3565,7 +3565,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
@@ -3580,7 +3580,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 

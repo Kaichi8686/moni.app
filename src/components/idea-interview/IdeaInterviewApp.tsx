@@ -1,33 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, BookmarkPlus, Check, Loader2, ArrowUp, Sparkles, Users } from "lucide-react";
-import { useI18n } from "@/lib/i18n/I18nProvider";
-import { createMyIdea } from "@/lib/idea-hub/myIdeas";
-import { firstAssistantForTheme } from "@/lib/idea-interview/ruleEngine";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  clearIdeaInterviewSession,
-  emptySession,
-  loadIdeaInterviewSession,
-  saveIdeaInterviewSession,
-} from "@/lib/idea-interview/session";
+  ArrowLeft,
+  BookmarkPlus,
+  Check,
+  History,
+  Lightbulb,
+  Loader2,
+  MessageCircle,
+  MessageSquarePlus,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
+import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
+import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
+import {
+  newAiId,
+  upsertActiveConversation,
+  type AiChatMessage,
+  type AiSavedConversation,
+} from "@/lib/ai/chatConversations";
+import { createMyIdea } from "@/lib/idea-hub/myIdeas";
+import {
+  blankIdeaInterviewConversation,
+  conversationToSession,
+  loadIdeaInterviewConversations,
+  saveIdeaInterviewConversations,
+  sessionToThreadMeta,
+  upsertIdeaInterviewConversation,
+  type IdeaInterviewConversation,
+} from "@/lib/idea-interview/conversations";
+import {
+  blankConsultConversation,
+  loadConsultConversations,
+  saveConsultConversations,
+  type IdeaPersonalAiMode,
+} from "@/lib/idea-interview/personalAi";
+import { firstAssistantForTheme } from "@/lib/idea-interview/ruleEngine";
+import { emptySession } from "@/lib/idea-interview/session";
 import {
   IDEA_INTERVIEW_HANDOFF_KEY,
   IDEA_INTERVIEW_THEMES,
   type IdeaInterviewHandoff,
-  type IdeaInterviewMessage,
-  type IdeaInterviewPhase,
   type IdeaInterviewSession,
   type IdeaInterviewTheme,
   type IdeaSeed,
   themeLabel,
 } from "@/lib/idea-interview/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { supabase } from "@/lib/supabase";
 
-const THEME_STARTERS: Record<
-  IdeaInterviewTheme,
-  { prompt: string; hint: string }
-> = {
+const THEME_STARTERS: Record<IdeaInterviewTheme, { prompt: string; hint: string }> = {
   school: { prompt: "学校のモヤモヤから探す", hint: "授業・提出・人間関係" },
   parttime: { prompt: "バイトの困りごとから探す", hint: "シフト・接客・シフト表" },
   club: { prompt: "部活・サークルから探す", hint: "練習・運営・メンバー" },
@@ -45,118 +71,338 @@ const THEME_STARTERS_EN: Record<IdeaInterviewTheme, { prompt: string; hint: stri
   other: { prompt: "Start from everyday life", hint: "Anything is fine" },
 };
 
-function uid() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/** Mobile virtual keyboard inset via Visual Viewport API */
-function useKeyboardBottomInset() {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setInset(covered > 8 ? covered : 0);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
-  return inset;
-}
-
-function TypingDots() {
-  const { tx } = useI18n();
-  return (
-    <div className="inline-flex items-center gap-1 px-1 py-0.5" aria-label={tx("入力中", "Typing")}>
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 [animation-delay:0ms]" />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 [animation-delay:150ms]" />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 [animation-delay:300ms]" />
-    </div>
-  );
-}
-
 type Props = {
-  /** standalone = full page; hub = ideas tab excavate panel; project = workspace */
+  /** standalone = full page; hub = ideas tab; project = workspace */
   variant?: "standalone" | "hub" | "project";
   projectId?: string;
+  /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
+  initialMode?: IdeaPersonalAiMode;
+  /** Show 相談 / 発掘 picker (hub & standalone). Project stays excavate-only. */
+  enableModePicker?: boolean;
 };
 
-export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
-  const { tx } = useI18n();
+export function IdeaInterviewApp({
+  variant = "standalone",
+  projectId,
+  initialMode = "excavate",
+  enableModePicker,
+}: Props) {
+  const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
   const isHub = variant === "hub";
+  const modePicker = enableModePicker ?? !isProject;
   const exitHref = isProject ? `/projects/${projectId}/overview` : isHub ? "/idea" : "/";
   const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/?tab=mentor&mentor=ai";
+  const newTitle = tx("新しいチャット", "New chat");
 
-  const [ready, setReady] = useState(false);
-  const [resumePrompt, setResumePrompt] = useState(false);
+  const [ownerKey, setOwnerKey] = useState("guest");
+  const [ownerReady, setOwnerReady] = useState(false);
+  const [aiMode, setAiMode] = useState<IdeaPersonalAiMode>(isProject ? "excavate" : initialMode);
+
+  const [excavateConversations, setExcavateConversations] = useState<IdeaInterviewConversation[]>([]);
+  const [consultConversations, setConsultConversations] = useState<AiSavedConversation[]>([]);
+  const [activeId, setActiveId] = useState("");
   const [session, setSession] = useState<IdeaInterviewSession>(emptySession);
+  const [consultMessages, setConsultMessages] = useState<AiChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [placeholder, setPlaceholder] = useState("");
+  const [placeholder, setPlaceholder] = useState(
+    tx("思いつく範囲でOKです", "Whatever comes to mind is fine"),
+  );
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [savingSeedId, setSavingSeedId] = useState<string | null>(null);
   const [savedSeedIds, setSavedSeedIds] = useState<Record<string, true>>({});
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const keyboardInset = useKeyboardBottomInset();
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const startFreshOnModeChangeRef = useRef(false);
 
-  const isHome = session.phase === "intro" || session.phase === "theme";
-  const composerBottom =
-    keyboardInset > 0 ? keyboardInset : "var(--bottom-nav-clearance)";
+  const isConsult = aiMode === "consult";
+  const messages = isConsult ? consultMessages : (session.messages as AiChatMessage[]);
+  const conversations = isConsult ? consultConversations : excavateConversations;
+  const excavateHome = !isConsult && (session.phase === "intro" || session.phase === "theme");
+  const showModeHome = isConsult
+    ? consultMessages.filter((m) => m.role === "user").length === 0 &&
+      consultMessages.every((m) => m.role === "assistant")
+    : excavateHome;
+  const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
 
   useEffect(() => {
-    const saved = loadIdeaInterviewSession();
-    if (saved && (saved.phase === "chat" || saved.phase === "results" || saved.phase === "theme")) {
-      setResumePrompt(true);
-      setSession(saved);
-    }
-    setReady(true);
+    if (!isProject) setAiMode(initialMode);
+  }, [initialMode, isProject]);
+
+  useEffect(() => {
+    setOwnerReady(true);
+    if (!supabase) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2000)),
+        ]);
+        const uid = result && "data" in result ? result.data.session?.user.id : undefined;
+        if (!cancelled && uid) setOwnerKey(uid);
+      } catch {
+        /* keep guest */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    if (!ready || resumePrompt) return;
-    if (session.phase === "intro" || session.phase === "theme") return;
-    saveIdeaInterviewSession(session);
-  }, [session, ready, resumePrompt]);
+  const hydrateMode = useCallback(
+    (mode: IdeaPersonalAiMode, preferFresh: boolean) => {
+      setHydrated(false);
+      setDraft("");
+      setError("");
+      setStreamingId(null);
+      setHistoryOpen(false);
+      setSavedSeedIds({});
+      setGenerating(false);
+      setSending(false);
+
+      if (mode === "consult") {
+        const loaded = loadConsultConversations(ownerKey, newTitle);
+        if (preferFresh) {
+          const blank = blankConsultConversation(newTitle);
+          const next = [blank, ...loaded.conversations].slice(0, 30);
+          setConsultConversations(next);
+          setActiveId(blank.id);
+          setConsultMessages(blank.messages);
+        } else {
+          setConsultConversations(loaded.conversations);
+          setActiveId(loaded.activeId);
+          const active =
+            loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0]!;
+          setConsultMessages(active.messages);
+        }
+        setSession(emptySession());
+      } else {
+        const loaded = loadIdeaInterviewConversations(ownerKey, newTitle);
+        if (preferFresh) {
+          const blank = blankIdeaInterviewConversation(newTitle);
+          const next = [blank, ...loaded.conversations].slice(0, 30);
+          setExcavateConversations(next);
+          setActiveId(blank.id);
+          setSession(conversationToSession(blank));
+        } else {
+          setExcavateConversations(loaded.conversations);
+          setActiveId(loaded.activeId);
+          const active =
+            loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0]!;
+          setSession(conversationToSession(active));
+        }
+        setConsultMessages([]);
+      }
+      setHydrated(true);
+    },
+    [newTitle, ownerKey],
+  );
 
   useEffect(() => {
-    if (session.phase !== "chat") return;
-    bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-  }, [session.messages, sending, session.phase]);
+    if (!ownerReady) return;
+    const preferFresh = startFreshOnModeChangeRef.current;
+    startFreshOnModeChangeRef.current = false;
+    hydrateMode(aiMode, preferFresh);
+  }, [ownerReady, ownerKey, aiMode, hydrateMode]);
 
-  const setPhase = (phase: IdeaInterviewPhase) =>
-    setSession((s) => ({ ...s, phase }));
+  useEffect(() => {
+    if (!hydrated || !activeId || isConsult) return;
+    setExcavateConversations((prev) =>
+      upsertIdeaInterviewConversation(
+        prev,
+        activeId,
+        messages,
+        sessionToThreadMeta(session),
+        newTitle,
+      ),
+    );
+  }, [messages, session, activeId, hydrated, newTitle, isConsult]);
 
-  const startFresh = () => {
-    clearIdeaInterviewSession();
-    setSession(emptySession());
-    setResumePrompt(false);
+  useEffect(() => {
+    if (!hydrated || !activeId || !isConsult) return;
+    setConsultConversations((prev) => upsertActiveConversation(prev, activeId, consultMessages, newTitle));
+  }, [consultMessages, activeId, hydrated, newTitle, isConsult]);
+
+  useEffect(() => {
+    if (!hydrated || !activeId || !ownerReady) return;
+    if (isConsult) {
+      saveConsultConversations(ownerKey, activeId, consultConversations);
+    } else {
+      saveIdeaInterviewConversations(ownerKey, activeId, excavateConversations);
+    }
+  }, [
+    activeId,
+    consultConversations,
+    excavateConversations,
+    hydrated,
+    isConsult,
+    ownerKey,
+    ownerReady,
+  ]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending, generating, session.phase, session.seeds, aiMode]);
+
+  const changeMode = (next: IdeaPersonalAiMode) => {
+    if (next === aiMode) return;
+    startFreshOnModeChangeRef.current = true;
+    setAiMode(next);
+  };
+
+  const startNewChat = useCallback(() => {
+    if (isConsult) {
+      const hasUser = consultMessages.some((m) => m.role === "user");
+      if (!hasUser) {
+        setDraft("");
+        setError("");
+        setHistoryOpen(false);
+        return;
+      }
+      const blank = blankConsultConversation(newTitle);
+      setConsultConversations((prev) => [blank, ...prev].slice(0, 30));
+      setActiveId(blank.id);
+      setConsultMessages(blank.messages);
+      setStreamingId(blank.messages[0]?.id ?? null);
+      setDraft("");
+      setError("");
+      setHistoryOpen(false);
+      return;
+    }
+
+    if (excavateHome && messages.length === 0) {
+      setDraft("");
+      setError("");
+      setHistoryOpen(false);
+      return;
+    }
+    const blank = blankIdeaInterviewConversation(newTitle);
+    setExcavateConversations((prev) => [blank, ...prev].slice(0, 30));
+    setActiveId(blank.id);
+    setSession(conversationToSession(blank));
     setDraft("");
-    setPlaceholder(tx("思いつく範囲でOKです", "Whatever comes to mind is fine"));
     setError("");
-  };
+    setStreamingId(null);
+    setSavedSeedIds({});
+    setHistoryOpen(false);
+  }, [consultMessages, excavateHome, isConsult, messages.length, newTitle]);
 
-  const continueSaved = () => {
-    setResumePrompt(false);
-  };
+  const openConversation = useCallback(
+    (conversation: { id: string }) => {
+      if (isConsult) {
+        const full = consultConversations.find((c) => c.id === conversation.id);
+        if (!full) return;
+        setActiveId(full.id);
+        setConsultMessages(full.messages);
+        setStreamingId(null);
+        setError("");
+        setDraft("");
+        setHistoryOpen(false);
+        return;
+      }
+      const full = excavateConversations.find((c) => c.id === conversation.id);
+      if (!full) return;
+      setActiveId(full.id);
+      setSession(conversationToSession(full));
+      setDraft("");
+      setError("");
+      setStreamingId(null);
+      setSavedSeedIds({});
+      setHistoryOpen(false);
+    },
+    [consultConversations, excavateConversations, isConsult],
+  );
+
+  const deleteConversation = useCallback(
+    (conversationId: string) => {
+      if (isConsult) {
+        const remaining = consultConversations.filter((c) => c.id !== conversationId);
+        if (conversationId !== activeId) {
+          setConsultConversations(remaining);
+          return;
+        }
+        if (remaining[0]) {
+          setConsultConversations(remaining);
+          setActiveId(remaining[0].id);
+          setConsultMessages(remaining[0].messages);
+          setStreamingId(null);
+          return;
+        }
+        const blank = blankConsultConversation(newTitle);
+        setConsultConversations([blank]);
+        setActiveId(blank.id);
+        setConsultMessages(blank.messages);
+        return;
+      }
+
+      const remaining = excavateConversations.filter((c) => c.id !== conversationId);
+      if (conversationId !== activeId) {
+        setExcavateConversations(remaining);
+        return;
+      }
+      if (remaining[0]) {
+        setExcavateConversations(remaining);
+        setActiveId(remaining[0].id);
+        setSession(conversationToSession(remaining[0]));
+        return;
+      }
+      const blank = blankIdeaInterviewConversation(newTitle);
+      setExcavateConversations([blank]);
+      setActiveId(blank.id);
+      setSession(conversationToSession(blank));
+    },
+    [activeId, consultConversations, excavateConversations, isConsult, newTitle],
+  );
+
+  const generateIdeas = useCallback(
+    async (next: IdeaInterviewSession) => {
+      if (!next.theme) return;
+      setGenerating(true);
+      setError("");
+      try {
+        const res = await fetch("/api/idea-interview/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ theme: next.theme, messages: next.messages }),
+        });
+        const data = (await res.json()) as { seeds?: IdeaSeed[]; error?: string };
+        if (!res.ok || !data.seeds?.length) {
+          throw new Error(data.error || "ideas_failed");
+        }
+        setSession({
+          ...next,
+          seeds: data.seeds,
+          phase: "results",
+          readyForIdeas: true,
+        });
+      } catch {
+        setError(
+          tx("アイデアの生成に失敗しました。もう一度お試しください。", "Couldn’t generate ideas. Please try again."),
+        );
+        setSession({ ...next, phase: "results", seeds: next.seeds });
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [tx],
+  );
 
   const chooseTheme = (theme: IdeaInterviewTheme) => {
     const first = firstAssistantForTheme(theme);
-    const msg: IdeaInterviewMessage = {
-      id: uid(),
+    const msg: AiChatMessage = {
+      id: newAiId("a"),
       role: "assistant",
       content: first.content,
     };
     setPlaceholder(first.placeholder);
     setError("");
+    setStreamingId(msg.id);
     setSession({
       ...emptySession(),
       phase: "chat",
@@ -168,44 +414,54 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const generateIdeas = useCallback(async (next: IdeaInterviewSession) => {
-    if (!next.theme) return;
-    setGenerating(true);
-    setError("");
-    try {
-      const res = await fetch("/api/idea-interview/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ theme: next.theme, messages: next.messages }),
-      });
-      const data = (await res.json()) as { seeds?: IdeaSeed[]; error?: string };
-      if (!res.ok || !data.seeds?.length) {
-        throw new Error(data.error || "ideas_failed");
-      }
-      setSession({
-        ...next,
-        seeds: data.seeds,
-        phase: "results",
-        readyForIdeas: true,
-      });
-    } catch {
-      setError(tx("アイデアの生成に失敗しました。もう一度お試しください。", "Couldn’t generate ideas. Please try again."));
-      setSession({ ...next, phase: "results", seeds: next.seeds });
-    } finally {
-      setGenerating(false);
-    }
-  }, [tx]);
-
-  const sendAnswer = async () => {
-    const text = draft.trim();
-    if (!text || !session.theme || sending) return;
+  const sendConsult = async (text: string) => {
     setSending(true);
     setError("");
-    const userMsg: IdeaInterviewMessage = { id: uid(), role: "user", content: text };
-    const userTurns = session.userTurns + 1;
+    const userMsg: AiChatMessage = { id: newAiId("u"), role: "user", content: text };
+    const next = [...consultMessages, userMsg];
+    setConsultMessages(next);
+    setDraft("");
+    try {
+      const res = await fetch("/api/mentor", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: next.map(({ role, content }) => ({ role, content })),
+        }),
+      });
+      const json = (await res.json()) as { reply?: string; error?: string };
+      if (!res.ok || !json.reply?.trim()) {
+        throw new Error(json.error || "chat_failed");
+      }
+      const assistantId = newAiId("a");
+      setConsultMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: json.reply!.trim() },
+      ]);
+      setStreamingId(assistantId);
+    } catch {
+      setError(
+        tx(
+          "応答に失敗しました。通信状況を確かめてもう一度送ってください。",
+          "Reply failed. Check your connection and try again.",
+        ),
+      );
+    } finally {
+      setSending(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
+  const sendChat = async (text: string, base: IdeaInterviewSession) => {
+    if (!base.theme) return;
+    setSending(true);
+    setError("");
+    const userMsg: AiChatMessage = { id: newAiId("u"), role: "user", content: text };
+    const userTurns = base.userTurns + 1;
     const withUser: IdeaInterviewSession = {
-      ...session,
-      messages: [...session.messages, userMsg],
+      ...base,
+      phase: "chat",
+      messages: [...base.messages, userMsg],
       userTurns,
     };
     setSession(withUser);
@@ -216,7 +472,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          theme: session.theme,
+          theme: base.theme,
           userTurns,
           latestUserMessage: text,
           history: withUser.messages.map((m) => ({ role: m.role, content: m.content })),
@@ -232,22 +488,27 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
         throw new Error(data.error || "chat_failed");
       }
       if (data.placeholder) setPlaceholder(data.placeholder);
-      const assistantMsg: IdeaInterviewMessage = {
-        id: uid(),
-        role: "assistant",
-        content: data.assistantMessage,
-      };
+      const assistantId = newAiId("a");
       const next: IdeaInterviewSession = {
         ...withUser,
-        messages: [...withUser.messages, assistantMsg],
+        messages: [
+          ...withUser.messages,
+          { id: assistantId, role: "assistant", content: data.assistantMessage },
+        ],
         readyForIdeas: Boolean(data.readyForIdeas),
       };
       setSession(next);
+      setStreamingId(assistantId);
       if (data.readyForIdeas) {
         await generateIdeas(next);
       }
     } catch {
-      setError(tx("応答に失敗しました。通信状況を確かめてもう一度送ってください。", "Reply failed. Check your connection and try again."));
+      setError(
+        tx(
+          "応答に失敗しました。通信状況を確かめてもう一度送ってください。",
+          "Reply failed. Check your connection and try again.",
+        ),
+      );
       setSession(withUser);
     } finally {
       setSending(false);
@@ -255,73 +516,43 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
     }
   };
 
-  /** ChatGPT-style: type first message without picking a theme chip → start as "other". */
+  const sendAnswer = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    if (isConsult) {
+      await sendConsult(text);
+      return;
+    }
+    if (!session.theme) return;
+    await sendChat(text, session);
+  };
+
   const startFromComposer = async () => {
     const text = draft.trim();
     if (!text || sending) return;
+    if (isConsult) {
+      await sendConsult(text);
+      return;
+    }
     const theme: IdeaInterviewTheme = "other";
     const first = firstAssistantForTheme(theme);
-    const assistantMsg: IdeaInterviewMessage = {
-      id: uid(),
+    const assistantMsg: AiChatMessage = {
+      id: newAiId("a"),
       role: "assistant",
       content: first.content,
     };
-    const userMsg: IdeaInterviewMessage = { id: uid(), role: "user", content: text };
-    const withUser: IdeaInterviewSession = {
+    const base: IdeaInterviewSession = {
       ...emptySession(),
       phase: "chat",
       theme,
-      messages: [assistantMsg, userMsg],
-      userTurns: 1,
+      messages: [assistantMsg],
+      userTurns: 0,
       updatedAt: new Date().toISOString(),
     };
     setPlaceholder(first.placeholder);
-    setSession(withUser);
-    setDraft("");
-    setSending(true);
-    setError("");
-    try {
-      const res = await fetch("/api/idea-interview/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          theme,
-          userTurns: 1,
-          latestUserMessage: text,
-          history: withUser.messages.map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
-      const data = (await res.json()) as {
-        assistantMessage?: string;
-        placeholder?: string;
-        readyForIdeas?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !data.assistantMessage) {
-        throw new Error(data.error || "chat_failed");
-      }
-      if (data.placeholder) setPlaceholder(data.placeholder);
-      const reply: IdeaInterviewMessage = {
-        id: uid(),
-        role: "assistant",
-        content: data.assistantMessage,
-      };
-      const next: IdeaInterviewSession = {
-        ...withUser,
-        messages: [...withUser.messages, reply],
-        readyForIdeas: Boolean(data.readyForIdeas),
-      };
-      setSession(next);
-      if (data.readyForIdeas) {
-        await generateIdeas(next);
-      }
-    } catch {
-      setError(tx("応答に失敗しました。通信状況を確かめてもう一度送ってください。", "Reply failed. Check your connection and try again."));
-      setSession(withUser);
-    } finally {
-      setSending(false);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    setSession(base);
+    setStreamingId(assistantMsg.id);
+    await sendChat(text, base);
   };
 
   const handoffToCoach = (seed: IdeaSeed) => {
@@ -365,395 +596,410 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
     setSavedSeedIds((prev) => ({ ...prev, [seed.id]: true }));
   };
 
-  // Matching feature not fully productized yet — keep a stub route + query for later wiring.
   const matchingHref = useMemo(() => {
     const theme = session.theme ?? "other";
     return `/discover?from=idea-interview&theme=${encodeURIComponent(theme)}`;
   }, [session.theme]);
 
-  if (!ready) {
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (showModeHome || excavateHome) await startFromComposer();
+    else await sendAnswer();
+  }
+
+  const historyRail = (
+    <AiChatHistoryRail
+      conversations={conversations}
+      activeId={activeId}
+      onSelect={openConversation}
+      onNew={startNewChat}
+      onDelete={deleteConversation}
+      locale={locale === "en" ? "en-US" : "ja-JP"}
+      title={tx("チャット履歴", "Chat history")}
+      newLabel={newTitle}
+      emptyLabel={tx("まだ会話がありません", "No chats yet")}
+      className="h-full"
+    />
+  );
+
+  if (!ownerReady || !hydrated) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center bg-white text-sm text-zinc-500">
+      <div className="flex min-h-[40vh] items-center justify-center bg-white text-sm text-[#6B7280]">
         {tx("読み込み中…", "Loading…")}
       </div>
     );
   }
 
-  if (resumePrompt) {
-    return (
-      <div
-        className={`mx-auto flex max-w-lg flex-col justify-center gap-4 px-4 py-10 ${
-          isProject ? "" : isHub ? "min-h-[50vh]" : "min-h-[calc(100dvh-var(--bottom-nav-clearance))]"
-        }`}
-      >
-        {!isHub ? <p className="moni-wordmark text-xl">moni</p> : null}
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{tx("続きから再開しますか？", "Pick up where you left off?")}</h1>
-        <p className="text-sm text-zinc-500">{tx("途中までのインタビューが保存されています。", "A saved interview is waiting.")}</p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={continueSaved}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
-          >
-            {tx("続きから", "Continue")}
-          </button>
-          <button
-            type="button"
-            onClick={startFresh}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
-          >
-            {tx("最初からやり直す", "Start over")}
-          </button>
-        </div>
-        {!isHub ? (
-          <Link href={exitHref} className="text-center text-sm text-zinc-500 hover:text-zinc-800">
-            {isProject ? tx("プロジェクトに戻る", "Back to project") : tx("ホームに戻る", "Back to home")}
-          </Link>
-        ) : null}
-      </div>
-    );
-  }
+  const shellClass = isHub
+    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-7.5rem)] min-h-[420px] w-full overflow-hidden bg-white"
+    : isProject
+      ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
+      : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
+
+  const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
 
   return (
-    <div
-      className={`flex flex-col bg-white text-zinc-900 ${
-        isProject
-          ? "min-h-[70vh]"
-          : isHub
-            ? "min-h-[calc(100dvh-var(--bottom-nav-clearance)-7.5rem)]"
-            : "min-h-[calc(100dvh-var(--bottom-nav-clearance))]"
-      }`}
-    >
-      {!isHub ? (
-      <header className="sticky top-0 z-20 border-b border-zinc-100 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
-          <Link
-            href={isHome ? exitHref : "#"}
-            onClick={(e) => {
-              if (isHome) return;
-              e.preventDefault();
-              if (session.phase === "results") setPhase("chat");
-              else startFresh();
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div className="min-w-0 flex-1">
-            <p className="moni-wordmark text-[15px]">moni</p>
-            <p className="text-[13px] font-medium text-zinc-500">{tx("ビジネスアイデア発掘", "Business idea excavate")}</p>
-          </div>
-          {session.phase === "chat" || session.phase === "results" ? (
-            <button
-              type="button"
-              onClick={startFresh}
-              className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-800"
-            >
-              {tx("新しい対話", "New chat")}
-            </button>
-          ) : null}
-        </div>
-      </header>
-      ) : !isHome ? (
-        <div className="mx-auto flex w-full max-w-lg items-center justify-between px-4 pt-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (session.phase === "results") setPhase("chat");
-              else startFresh();
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-100"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <p className="text-[13px] font-medium text-zinc-500">{tx("ビジネスアイデア発掘", "Business idea excavate")}</p>
-          {session.phase === "chat" || session.phase === "results" ? (
-            <button
-              type="button"
-              onClick={startFresh}
-              className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-800"
-            >
-              {tx("新しい対話", "New chat")}
-            </button>
-          ) : (
-            <span className="h-9 w-9" aria-hidden />
-          )}
-        </div>
-      ) : null}
+    <div className={shellClass}>
+      <div className={`hidden shrink-0 border-r border-[#E5E7EB] md:block ${isProject ? "w-[240px]" : "w-[260px]"}`}>
+        {historyRail}
+      </div>
 
-      {/* HOME — ChatGPT-style empty state + suggested prompts */}
-      {isHome ? (
-        <main className="relative mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-6">
-          <div className="flex flex-1 flex-col items-center justify-center px-2 pb-8 text-center">
-            <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-700">
-              <Sparkles className="h-6 w-6" aria-hidden />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
+          <div className="flex items-center gap-2">
+            {!isHub ? (
+              <Link
+                href={exitHref}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                aria-label={
+                  isProject
+                    ? tx("プロジェクトに戻る", "Back to project")
+                    : tx("ホームに戻る", "Back to home")
+                }
+              >
+                <ArrowLeft className="h-5 w-5" aria-hidden />
+              </Link>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">AI</p>
+              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
+                {session.phase === "results" && !isConsult
+                  ? `${tx("アイデアの種", "Idea seeds")} · ${activeTitle}`
+                  : !isConsult && session.theme
+                    ? `${modeLabel} · ${tx(
+                        themeLabel(session.theme),
+                        (
+                          {
+                            school: "School",
+                            parttime: "Part-time job",
+                            club: "Club",
+                            friends: "Friends",
+                            family: "Home",
+                            other: "Other",
+                          } as const
+                        )[session.theme],
+                      )} · ${activeTitle}`
+                    : `${modeLabel} · ${activeTitle}`}
+              </p>
             </div>
-            <h1 className="text-[1.55rem] font-semibold tracking-tight text-zinc-950">
-              {tx("何から話しますか？", "What should we talk about?")}
-            </h1>
-            <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-zinc-500">
-              {tx("日常のモヤモヤを聞くところから、ビジネスの種を一緒に探します。", "We’ll start from everyday frustrations and look for business seeds together.")}
-            </p>
-
-            <div className="mt-8 grid w-full max-w-md gap-2 sm:grid-cols-2">
-              {IDEA_INTERVIEW_THEMES.map((t) => {
-                const starter = THEME_STARTERS[t.id];
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => chooseTheme(t.id)}
-                    className="rounded-2xl border border-zinc-200 bg-white px-3.5 py-3.5 text-left shadow-sm shadow-zinc-900/[0.02] transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
-                  >
-                    <span className="block text-[15px] font-semibold leading-snug text-zinc-900">
-                      {tx(starter.prompt, THEME_STARTERS_EN[t.id].prompt)}
-                    </span>
-                    <span className="mt-1.5 block text-[13px] leading-relaxed text-zinc-500">
-                      {tx(starter.hint, THEME_STARTERS_EN[t.id].hint)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {error ? <p className="mb-2 text-center text-sm text-red-600">{error}</p> : null}
-
-          <div
-            className="fixed inset-x-0 z-20 border-t border-zinc-100 bg-white px-3 py-2.5 md:bg-white/95 md:backdrop-blur"
-            style={{ bottom: composerBottom }}
-          >
-            <div className="mx-auto flex max-w-lg items-end gap-2">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")}
-                disabled={sending}
-                className="max-h-28 min-h-[44px] min-w-0 flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-[16px] text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white disabled:opacity-60"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void startFromComposer();
-                  }
-                }}
-              />
+            <div className="flex shrink-0 gap-1.5">
               <button
                 type="button"
-                disabled={!draft.trim() || sending}
-                onClick={() => void startFromComposer()}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
-                aria-label={tx("送信", "Send")}
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] px-2.5 text-[12px] font-semibold text-[#374151] md:hidden"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                <History className="h-3.5 w-3.5" aria-hidden />
+                {tx("履歴", "History")}
+              </button>
+              <button
+                type="button"
+                onClick={startNewChat}
+                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]"
+              >
+                <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+                {tx("新規", "New")}
               </button>
             </div>
           </div>
-        </main>
-      ) : null}
+        </div>
 
-      {/* CHAT */}
-      {session.phase === "chat" ? (
-        <>
-          <main
-            className={`mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pt-4 ${
-              isProject
-                ? "pb-36"
-                : "pb-[calc(8.5rem+var(--bottom-nav-clearance))]"
-            }`}
-          >
-            <p className="mb-3 text-[13px] font-medium text-zinc-500">
-              {tx("テーマ", "Theme")}:{" "}
-              {tx(
-                themeLabel(session.theme),
-                (
-                  {
-                    school: "School",
-                    parttime: "Part-time job",
-                    club: "Club",
-                    friends: "Friends",
-                    family: "Home",
-                    other: "Other",
-                  } as const
-                )[session.theme ?? "other"] ?? "Everyday"
-              )}
-              {session.userTurns > 0 ? (
-                <>
-                  {" "}
-                  · {tx("回答", "Answers")} {session.userTurns}
-                </>
-              ) : null}
-            </p>
-            <div className="flex flex-col gap-3">
-              {session.messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
-                      m.role === "user"
-                        ? "rounded-br-md bg-sky-600 text-white"
-                        : "rounded-bl-md border border-zinc-200 bg-zinc-50 text-zinc-800"
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {showModeHome ? (
+            <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
+              {modePicker ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => changeMode("consult")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
                     }`}
                   >
-                    {m.content}
-                  </div>
-                </div>
-              ))}
-              {sending || generating ? (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-md border border-zinc-200 bg-zinc-50 px-3.5 py-3">
-                    <TypingDots />
-                  </div>
+                    <MessageCircle className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("相談", "Chat")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("困りごと・次の一手", "Stuck points & next steps")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeMode("excavate")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      !isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <Lightbulb className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("発掘", "Discover")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("日常からアイデアの種を探す", "Find idea seeds in daily life")}
+                    </span>
+                  </button>
                 </div>
               ) : null}
-              <div ref={bottomRef} />
-            </div>
-            {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-          </main>
 
-          <div
-            className={`border-t border-zinc-200 bg-white px-3 pt-2 ${
-              isProject ? "sticky bottom-0 pb-3" : "fixed inset-x-0 z-40 pb-3"
-            }`}
-            style={isProject ? undefined : { bottom: composerBottom }}
-          >
-            <div className="mx-auto flex max-w-lg flex-col gap-2">
-              {session.userTurns >= 1 && !sending && !generating ? (
+              <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
+                {isConsult
+                  ? tx(
+                      "困っていることや質問を、そのまま送ってください。会話は個人用として自動保存され、履歴からいつでも続けられます。",
+                      "Send whatever you’re stuck on. Chats are saved privately — continue anytime from History.",
+                    )
+                  : tx(
+                      "日常のモヤモヤを聞くところから、ビジネスの種を一緒に探します。会話は個人用として自動保存されます。",
+                      "We’ll start from everyday frustrations and look for business seeds. Chats are saved privately for you.",
+                    )}
+              </p>
+
+              {!isConsult ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  {IDEA_INTERVIEW_THEMES.map((t) => {
+                    const starter = THEME_STARTERS[t.id];
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => chooseTheme(t.id)}
+                        className="flex min-h-[96px] flex-col items-start justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-3 text-left transition hover:border-violet-200 hover:bg-violet-50/40"
+                      >
+                        <span className="text-[14px] font-bold leading-snug text-[#1A1A1A]">
+                          {tx(starter.prompt, THEME_STARTERS_EN[t.id].prompt)}
+                        </span>
+                        <span className="text-[11px] leading-snug text-[#6B7280]">
+                          {tx(starter.hint, THEME_STARTERS_EN[t.id].hint)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+                  <Sparkles className="h-6 w-6" aria-hidden />
+                </div>
+              )}
+
+              {isConsult && isHub ? (
+                <Link
+                  href="/idea?tab=qna&view=board"
+                  className="text-[12px] font-semibold text-violet-700 hover:underline"
+                >
+                  {tx("みんなに質問する（知恵袋）→", "Ask the community (Q&A) →")}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Consult: show welcome + thread (hide raw welcome-only on mode home) */}
+          {isConsult && !showModeHome
+            ? messages.map((m, i) => (
+                <div
+                  key={m.id ?? `${m.role}-${i}`}
+                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
+                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                  }`}
+                >
+                  {m.role === "assistant" ? (
+                    <AiChatStreamingRichText
+                      text={m.content}
+                      className="break-words"
+                      animate={Boolean(m.id && m.id === streamingId)}
+                      onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+                      onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  )}
+                </div>
+              ))
+            : null}
+
+          {!isConsult && !excavateHome && session.phase !== "results"
+            ? messages.map((m, i) => (
+                <div
+                  key={m.id ?? `${m.role}-${i}`}
+                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
+                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                  }`}
+                >
+                  {m.role === "assistant" ? (
+                    <AiChatStreamingRichText
+                      text={m.content}
+                      className="break-words"
+                      animate={Boolean(m.id && m.id === streamingId)}
+                      onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+                      onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  )}
+                </div>
+              ))
+            : null}
+
+          {(isConsult || session.phase === "chat") && (sending || generating) ? (
+            <div className="flex items-center gap-2 text-[13px] text-[#6B7280]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {generating
+                ? tx("アイデアを考えています…", "Thinking of ideas…")
+                : tx("考え中…", "Thinking…")}
+            </div>
+          ) : null}
+
+          {!isConsult && session.phase === "results" ? (
+            <div className="mx-auto w-full max-w-xl space-y-4">
+              <div>
+                <h2 className="text-[17px] font-bold text-[#1A1A1A]">{tx("アイデアの種", "Idea seeds")}</h2>
+                <p className="mt-1 text-[13px] text-[#6B7280]">
+                  {tx(
+                    "インタビューをもとに候補をまとめました。気になる種を深掘りしてみましょう。",
+                    "We gathered candidates from the interview. Pick a seed to go deeper.",
+                  )}
+                </p>
+              </div>
+
+              {generating ? (
+                <div className="flex items-center gap-2 text-[13px] text-[#6B7280]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {tx("アイデアを考えています…", "Thinking of ideas…")}
+                </div>
+              ) : null}
+
+              <ul className="space-y-3">
+                {session.seeds.map((seed) => (
+                  <li key={seed.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px]">
+                    <p className="font-bold text-amber-900">{seed.title}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-amber-900/90">{seed.summary}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handoffToCoach(seed)}
+                        className="inline-flex min-h-[36px] items-center rounded-lg bg-violet-600 px-3 text-[12px] font-semibold text-white hover:bg-violet-500"
+                      >
+                        {tx("これを深掘りする", "Go deeper on this")}
+                      </button>
+                      {!isProject ? (
+                        <button
+                          type="button"
+                          disabled={Boolean(savedSeedIds[seed.id]) || savingSeedId === seed.id}
+                          onClick={() => void saveSeedToMyIdeas(seed)}
+                          className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB] disabled:cursor-default disabled:border-emerald-200 disabled:bg-emerald-50 disabled:text-emerald-700"
+                        >
+                          {savingSeedId === seed.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : savedSeedIds[seed.id] ? (
+                            <Check className="h-3.5 w-3.5" aria-hidden />
+                          ) : (
+                            <BookmarkPlus className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          {savedSeedIds[seed.id] ? tx("保存済み", "Saved") : tx("マイアイデアへ", "To My Ideas")}
+                        </button>
+                      ) : null}
+                      <Link
+                        href={matchingHref}
+                        className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]"
+                      >
+                        <Users className="h-3.5 w-3.5" aria-hidden />
+                        {tx("仲間を探す", "Find teammates")}
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {!generating && session.seeds.length === 0 ? (
                 <button
                   type="button"
-                  onClick={() => void generateIdeas({ ...session, readyForIdeas: true })}
-                  className="inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-800 transition hover:bg-violet-100"
+                  onClick={() => void generateIdeas(session)}
+                  className="text-sm font-semibold text-violet-700 hover:underline"
                 >
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  {tx("この内容でアイデアの種を出す", "Generate idea seeds from this")}
+                  {tx("もう一度生成する", "Generate again")}
                 </button>
               ) : null}
-              <p className="text-center text-[11px] text-zinc-400">
-                {tx("深掘りしながら話しても、いつでも種出しに進めます", "Keep digging, or jump to seeds anytime")}
-              </p>
-              <div className="flex gap-2">
-              <textarea
-                ref={inputRef}
-                rows={2}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={placeholder}
-                disabled={sending || generating}
-                className="min-h-[44px] min-w-0 flex-1 resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[16px] text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white disabled:opacity-60"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void sendAnswer();
-                  }
-                }}
-              />
+
               <button
                 type="button"
-                disabled={!draft.trim() || sending || generating}
-                onClick={() => void sendAnswer()}
-                className="inline-flex min-h-[44px] shrink-0 items-center justify-center self-end rounded-xl bg-zinc-900 px-4 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+                onClick={() => setSession((s) => ({ ...s, phase: "chat" }))}
+                className="text-[13px] font-semibold text-[#6B7280] hover:text-[#1A1A1A]"
+              >
+                {tx("← 会話に戻る", "← Back to chat")}
+              </button>
+            </div>
+          ) : null}
+
+          {error ? <p className="text-[13px] text-red-600">{error}</p> : null}
+          <div ref={endRef} />
+        </div>
+
+        {isConsult || session.phase !== "results" ? (
+          <form
+            onSubmit={(e) => void onSubmit(e)}
+            className="shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          >
+            {!isConsult && session.phase === "chat" && session.userTurns >= 1 && !sending && !generating ? (
+              <button
+                type="button"
+                onClick={() => void generateIdeas({ ...session, readyForIdeas: true })}
+                className="mb-2 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-800 transition hover:bg-violet-100"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                {tx("この内容でアイデアの種を出す", "Generate idea seeds from this")}
+              </button>
+            ) : null}
+            <div className="flex gap-2">
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={sending || generating}
+                placeholder={
+                  isConsult
+                    ? tx("相談内容を入力…", "Type your question…")
+                    : excavateHome
+                      ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
+                      : placeholder
+                }
+                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2 disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={sending || generating || !draft.trim()}
+                className="min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
-              </div>
             </div>
-          </div>
-        </>
-      ) : null}
+          </form>
+        ) : null}
+      </div>
 
-      {/* RESULTS */}
-      {session.phase === "results" ? (
-        <main className="mx-auto w-full max-w-lg flex-1 px-4 py-6 pb-16">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-950">{tx("アイデアの種", "Idea seeds")}</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            {tx("インタビューをもとに候補をまとめました。気になる種を深掘りしてみましょう。", "We gathered candidates from the interview. Pick a seed to go deeper.")}
-          </p>
-
-          {generating ? (
-            <div className="mt-8 flex items-center gap-2 text-sm text-zinc-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {tx("アイデアを考えています…", "Thinking of ideas…")}
-            </div>
-          ) : null}
-
-          {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-
-          <ul className="mt-6 space-y-3">
-            {session.seeds.map((seed) => (
-              <li
-                key={seed.id}
-                className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/[0.03]"
+      {historyOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex justify-end bg-black/40 md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={tx("チャット履歴", "Chat history")}
+          onClick={() => setHistoryOpen(false)}
+        >
+          <div
+            className="flex h-full w-[min(100%,320px)] flex-col bg-[#f7f7f8] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
+              <p className="text-sm font-semibold text-[#111827]">{tx("チャット履歴", "Chat history")}</p>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#6b7280] hover:bg-white"
+                aria-label={tx("閉じる", "Close")}
               >
-                <h2 className="text-[15px] font-semibold text-zinc-900">{seed.title}</h2>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{seed.summary}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handoffToCoach(seed)}
-                    className="inline-flex min-h-[36px] items-center rounded-md bg-sky-600 px-3 text-[12px] font-semibold text-white hover:bg-sky-500"
-                  >
-                    {tx("これを深掘りする", "Go deeper on this")}
-                  </button>
-                  {!isProject ? (
-                    <button
-                      type="button"
-                      disabled={Boolean(savedSeedIds[seed.id]) || savingSeedId === seed.id}
-                      onClick={() => void saveSeedToMyIdeas(seed)}
-                      className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:cursor-default disabled:border-emerald-200 disabled:bg-emerald-50 disabled:text-emerald-700"
-                    >
-                      {savingSeedId === seed.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : savedSeedIds[seed.id] ? (
-                        <Check className="h-3.5 w-3.5" aria-hidden />
-                      ) : (
-                        <BookmarkPlus className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {savedSeedIds[seed.id] ? tx("保存済み", "Saved") : tx("マイアイデアへ", "To My Ideas")}
-                    </button>
-                  ) : null}
-                  <Link
-                    href={matchingHref}
-                    className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50"
-                  >
-                    <Users className="h-3.5 w-3.5" aria-hidden />
-                    {tx("仲間を探す", "Find teammates")}
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-8 rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4">
-            <p className="text-[13px] font-semibold text-zinc-800">{tx("一人だと難しそう？", "Too hard to do alone?")}</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
-              {tx(
-                "同じテーマに関心がありそうな仲間とつながれます（マッチング機能は今後拡張予定）。",
-                "You can connect with people who care about the same theme (matching will expand later).",
-              )}
-            </p>
-            <Link
-              href={matchingHref}
-              className="mt-3 inline-flex min-h-[40px] items-center justify-center rounded-md border border-zinc-200 bg-white px-4 text-[13px] font-semibold text-zinc-800 hover:bg-zinc-50"
-            >
-              {tx("一緒にやる仲間を探す", "Find people to work with")}
-            </Link>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">{historyRail}</div>
           </div>
-
-          {!generating && session.seeds.length === 0 ? (
-            <button
-              type="button"
-              onClick={() => void generateIdeas(session)}
-              className="mt-4 text-sm font-semibold text-sky-700 hover:underline"
-            >
-              {tx("もう一度生成する", "Generate again")}
-            </button>
-          ) : null}
-        </main>
+        </div>
       ) : null}
     </div>
   );
