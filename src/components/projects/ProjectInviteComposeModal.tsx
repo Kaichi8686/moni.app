@@ -117,9 +117,6 @@ export function ProjectInviteComposeModal({
         <p className="mt-2 text-xs leading-relaxed text-zinc-600">
           メンバーとして招待すると相手のお知らせに届きます。URL共有もできます。
         </p>
-        <p className="mt-3 truncate rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-900">
-          {projectName}
-        </p>
 
         <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
           <p className="text-sm font-semibold text-zinc-900">ユーザーを招待</p>
