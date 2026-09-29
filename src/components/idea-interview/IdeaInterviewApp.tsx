@@ -7,7 +7,9 @@ import {
   BookmarkPlus,
   Check,
   History,
+  Lightbulb,
   Loader2,
+  MessageCircle,
   MessageSquarePlus,
   Sparkles,
   Users,
@@ -15,7 +17,12 @@ import {
 } from "lucide-react";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
-import { newAiId, type AiChatMessage } from "@/lib/ai/chatConversations";
+import {
+  newAiId,
+  upsertActiveConversation,
+  type AiChatMessage,
+  type AiSavedConversation,
+} from "@/lib/ai/chatConversations";
 import { createMyIdea } from "@/lib/idea-hub/myIdeas";
 import {
   blankIdeaInterviewConversation,
@@ -26,6 +33,12 @@ import {
   upsertIdeaInterviewConversation,
   type IdeaInterviewConversation,
 } from "@/lib/idea-interview/conversations";
+import {
+  blankConsultConversation,
+  loadConsultConversations,
+  saveConsultConversations,
+  type IdeaPersonalAiMode,
+} from "@/lib/idea-interview/personalAi";
 import { firstAssistantForTheme } from "@/lib/idea-interview/ruleEngine";
 import { emptySession } from "@/lib/idea-interview/session";
 import {
@@ -59,24 +72,38 @@ const THEME_STARTERS_EN: Record<IdeaInterviewTheme, { prompt: string; hint: stri
 };
 
 type Props = {
-  /** standalone = full page; hub = ideas tab excavate panel; project = workspace */
+  /** standalone = full page; hub = ideas tab; project = workspace */
   variant?: "standalone" | "hub" | "project";
   projectId?: string;
+  /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
+  initialMode?: IdeaPersonalAiMode;
+  /** Show 相談 / 発掘 picker (hub & standalone). Project stays excavate-only. */
+  enableModePicker?: boolean;
 };
 
-export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
+export function IdeaInterviewApp({
+  variant = "standalone",
+  projectId,
+  initialMode = "excavate",
+  enableModePicker,
+}: Props) {
   const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
   const isHub = variant === "hub";
+  const modePicker = enableModePicker ?? !isProject;
   const exitHref = isProject ? `/projects/${projectId}/overview` : isHub ? "/idea" : "/";
   const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/?tab=mentor&mentor=ai";
   const newTitle = tx("新しいチャット", "New chat");
 
   const [ownerKey, setOwnerKey] = useState("guest");
   const [ownerReady, setOwnerReady] = useState(false);
-  const [conversations, setConversations] = useState<IdeaInterviewConversation[]>([]);
+  const [aiMode, setAiMode] = useState<IdeaPersonalAiMode>(isProject ? "excavate" : initialMode);
+
+  const [excavateConversations, setExcavateConversations] = useState<IdeaInterviewConversation[]>([]);
+  const [consultConversations, setConsultConversations] = useState<AiSavedConversation[]>([]);
   const [activeId, setActiveId] = useState("");
   const [session, setSession] = useState<IdeaInterviewSession>(emptySession);
+  const [consultMessages, setConsultMessages] = useState<AiChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [placeholder, setPlaceholder] = useState(
     tx("思いつく範囲でOKです", "Whatever comes to mind is fine"),
@@ -91,10 +118,21 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const startFreshOnModeChangeRef = useRef(false);
 
-  const messages = session.messages as AiChatMessage[];
-  const isHome = session.phase === "intro" || session.phase === "theme";
+  const isConsult = aiMode === "consult";
+  const messages = isConsult ? consultMessages : (session.messages as AiChatMessage[]);
+  const conversations = isConsult ? consultConversations : excavateConversations;
+  const excavateHome = !isConsult && (session.phase === "intro" || session.phase === "theme");
+  const showModeHome = isConsult
+    ? consultMessages.filter((m) => m.role === "user").length === 0 &&
+      consultMessages.every((m) => m.role === "assistant")
+    : excavateHome;
   const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
+
+  useEffect(() => {
+    if (!isProject) setAiMode(initialMode);
+  }, [initialMode, isProject]);
 
   useEffect(() => {
     setOwnerReady(true);
@@ -117,26 +155,65 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!ownerReady) return;
-    setHydrated(false);
-    const loaded = loadIdeaInterviewConversations(ownerKey, newTitle);
-    setConversations(loaded.conversations);
-    setActiveId(loaded.activeId);
-    const active =
-      loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0]!;
-    setSession(conversationToSession(active));
-    setDraft("");
-    setError("");
-    setStreamingId(null);
-    setHistoryOpen(false);
-    setSavedSeedIds({});
-    setHydrated(true);
-  }, [ownerKey, ownerReady, newTitle]);
+  const hydrateMode = useCallback(
+    (mode: IdeaPersonalAiMode, preferFresh: boolean) => {
+      setHydrated(false);
+      setDraft("");
+      setError("");
+      setStreamingId(null);
+      setHistoryOpen(false);
+      setSavedSeedIds({});
+      setGenerating(false);
+      setSending(false);
+
+      if (mode === "consult") {
+        const loaded = loadConsultConversations(ownerKey, newTitle);
+        if (preferFresh) {
+          const blank = blankConsultConversation(newTitle);
+          const next = [blank, ...loaded.conversations].slice(0, 30);
+          setConsultConversations(next);
+          setActiveId(blank.id);
+          setConsultMessages(blank.messages);
+        } else {
+          setConsultConversations(loaded.conversations);
+          setActiveId(loaded.activeId);
+          const active =
+            loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0]!;
+          setConsultMessages(active.messages);
+        }
+        setSession(emptySession());
+      } else {
+        const loaded = loadIdeaInterviewConversations(ownerKey, newTitle);
+        if (preferFresh) {
+          const blank = blankIdeaInterviewConversation(newTitle);
+          const next = [blank, ...loaded.conversations].slice(0, 30);
+          setExcavateConversations(next);
+          setActiveId(blank.id);
+          setSession(conversationToSession(blank));
+        } else {
+          setExcavateConversations(loaded.conversations);
+          setActiveId(loaded.activeId);
+          const active =
+            loaded.conversations.find((c) => c.id === loaded.activeId) ?? loaded.conversations[0]!;
+          setSession(conversationToSession(active));
+        }
+        setConsultMessages([]);
+      }
+      setHydrated(true);
+    },
+    [newTitle, ownerKey],
+  );
 
   useEffect(() => {
-    if (!hydrated || !activeId) return;
-    setConversations((prev) =>
+    if (!ownerReady) return;
+    const preferFresh = startFreshOnModeChangeRef.current;
+    startFreshOnModeChangeRef.current = false;
+    hydrateMode(aiMode, preferFresh);
+  }, [ownerReady, ownerKey, aiMode, hydrateMode]);
+
+  useEffect(() => {
+    if (!hydrated || !activeId || isConsult) return;
+    setExcavateConversations((prev) =>
       upsertIdeaInterviewConversation(
         prev,
         activeId,
@@ -145,65 +222,142 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
         newTitle,
       ),
     );
-  }, [messages, session, activeId, hydrated, newTitle]);
+  }, [messages, session, activeId, hydrated, newTitle, isConsult]);
+
+  useEffect(() => {
+    if (!hydrated || !activeId || !isConsult) return;
+    setConsultConversations((prev) => upsertActiveConversation(prev, activeId, consultMessages, newTitle));
+  }, [consultMessages, activeId, hydrated, newTitle, isConsult]);
 
   useEffect(() => {
     if (!hydrated || !activeId || !ownerReady) return;
-    saveIdeaInterviewConversations(ownerKey, activeId, conversations);
-  }, [activeId, conversations, hydrated, ownerKey, ownerReady]);
+    if (isConsult) {
+      saveConsultConversations(ownerKey, activeId, consultConversations);
+    } else {
+      saveIdeaInterviewConversations(ownerKey, activeId, excavateConversations);
+    }
+  }, [
+    activeId,
+    consultConversations,
+    excavateConversations,
+    hydrated,
+    isConsult,
+    ownerKey,
+    ownerReady,
+  ]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, sending, generating, session.phase, session.seeds]);
+  }, [messages, sending, generating, session.phase, session.seeds, aiMode]);
 
-  const applyConversation = useCallback((conversation: IdeaInterviewConversation) => {
-    setActiveId(conversation.id);
-    setSession(conversationToSession(conversation));
-    setDraft("");
-    setError("");
-    setStreamingId(null);
-    setSavedSeedIds({});
-    setHistoryOpen(false);
-  }, []);
+  const changeMode = (next: IdeaPersonalAiMode) => {
+    if (next === aiMode) return;
+    startFreshOnModeChangeRef.current = true;
+    setAiMode(next);
+  };
 
   const startNewChat = useCallback(() => {
-    if (isHome && messages.length === 0) {
+    if (isConsult) {
+      const hasUser = consultMessages.some((m) => m.role === "user");
+      if (!hasUser) {
+        setDraft("");
+        setError("");
+        setHistoryOpen(false);
+        return;
+      }
+      const blank = blankConsultConversation(newTitle);
+      setConsultConversations((prev) => [blank, ...prev].slice(0, 30));
+      setActiveId(blank.id);
+      setConsultMessages(blank.messages);
+      setStreamingId(blank.messages[0]?.id ?? null);
+      setDraft("");
+      setError("");
+      setHistoryOpen(false);
+      return;
+    }
+
+    if (excavateHome && messages.length === 0) {
       setDraft("");
       setError("");
       setHistoryOpen(false);
       return;
     }
     const blank = blankIdeaInterviewConversation(newTitle);
-    setConversations((prev) => [blank, ...prev].slice(0, 30));
-    applyConversation(blank);
-  }, [applyConversation, isHome, messages.length, newTitle]);
+    setExcavateConversations((prev) => [blank, ...prev].slice(0, 30));
+    setActiveId(blank.id);
+    setSession(conversationToSession(blank));
+    setDraft("");
+    setError("");
+    setStreamingId(null);
+    setSavedSeedIds({});
+    setHistoryOpen(false);
+  }, [consultMessages, excavateHome, isConsult, messages.length, newTitle]);
 
   const openConversation = useCallback(
     (conversation: { id: string }) => {
-      const full = conversations.find((c) => c.id === conversation.id);
+      if (isConsult) {
+        const full = consultConversations.find((c) => c.id === conversation.id);
+        if (!full) return;
+        setActiveId(full.id);
+        setConsultMessages(full.messages);
+        setStreamingId(null);
+        setError("");
+        setDraft("");
+        setHistoryOpen(false);
+        return;
+      }
+      const full = excavateConversations.find((c) => c.id === conversation.id);
       if (!full) return;
-      applyConversation(full);
+      setActiveId(full.id);
+      setSession(conversationToSession(full));
+      setDraft("");
+      setError("");
+      setStreamingId(null);
+      setSavedSeedIds({});
+      setHistoryOpen(false);
     },
-    [applyConversation, conversations],
+    [consultConversations, excavateConversations, isConsult],
   );
 
   const deleteConversation = useCallback(
     (conversationId: string) => {
-      const remaining = conversations.filter((c) => c.id !== conversationId);
+      if (isConsult) {
+        const remaining = consultConversations.filter((c) => c.id !== conversationId);
+        if (conversationId !== activeId) {
+          setConsultConversations(remaining);
+          return;
+        }
+        if (remaining[0]) {
+          setConsultConversations(remaining);
+          setActiveId(remaining[0].id);
+          setConsultMessages(remaining[0].messages);
+          setStreamingId(null);
+          return;
+        }
+        const blank = blankConsultConversation(newTitle);
+        setConsultConversations([blank]);
+        setActiveId(blank.id);
+        setConsultMessages(blank.messages);
+        return;
+      }
+
+      const remaining = excavateConversations.filter((c) => c.id !== conversationId);
       if (conversationId !== activeId) {
-        setConversations(remaining);
+        setExcavateConversations(remaining);
         return;
       }
       if (remaining[0]) {
-        setConversations(remaining);
-        applyConversation(remaining[0]);
+        setExcavateConversations(remaining);
+        setActiveId(remaining[0].id);
+        setSession(conversationToSession(remaining[0]));
         return;
       }
       const blank = blankIdeaInterviewConversation(newTitle);
-      setConversations([blank]);
-      applyConversation(blank);
+      setExcavateConversations([blank]);
+      setActiveId(blank.id);
+      setSession(conversationToSession(blank));
     },
-    [activeId, applyConversation, conversations, newTitle],
+    [activeId, consultConversations, excavateConversations, isConsult, newTitle],
   );
 
   const generateIdeas = useCallback(
@@ -260,6 +414,44 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
+  const sendConsult = async (text: string) => {
+    setSending(true);
+    setError("");
+    const userMsg: AiChatMessage = { id: newAiId("u"), role: "user", content: text };
+    const next = [...consultMessages, userMsg];
+    setConsultMessages(next);
+    setDraft("");
+    try {
+      const res = await fetch("/api/mentor", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          messages: next.map(({ role, content }) => ({ role, content })),
+        }),
+      });
+      const json = (await res.json()) as { reply?: string; error?: string };
+      if (!res.ok || !json.reply?.trim()) {
+        throw new Error(json.error || "chat_failed");
+      }
+      const assistantId = newAiId("a");
+      setConsultMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: json.reply!.trim() },
+      ]);
+      setStreamingId(assistantId);
+    } catch {
+      setError(
+        tx(
+          "応答に失敗しました。通信状況を確かめてもう一度送ってください。",
+          "Reply failed. Check your connection and try again.",
+        ),
+      );
+    } finally {
+      setSending(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
   const sendChat = async (text: string, base: IdeaInterviewSession) => {
     if (!base.theme) return;
     setSending(true);
@@ -299,7 +491,10 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
       const assistantId = newAiId("a");
       const next: IdeaInterviewSession = {
         ...withUser,
-        messages: [...withUser.messages, { id: assistantId, role: "assistant", content: data.assistantMessage }],
+        messages: [
+          ...withUser.messages,
+          { id: assistantId, role: "assistant", content: data.assistantMessage },
+        ],
         readyForIdeas: Boolean(data.readyForIdeas),
       };
       setSession(next);
@@ -323,13 +518,22 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
 
   const sendAnswer = async () => {
     const text = draft.trim();
-    if (!text || !session.theme || sending) return;
+    if (!text || sending) return;
+    if (isConsult) {
+      await sendConsult(text);
+      return;
+    }
+    if (!session.theme) return;
     await sendChat(text, session);
   };
 
   const startFromComposer = async () => {
     const text = draft.trim();
     if (!text || sending) return;
+    if (isConsult) {
+      await sendConsult(text);
+      return;
+    }
     const theme: IdeaInterviewTheme = "other";
     const first = firstAssistantForTheme(theme);
     const assistantMsg: AiChatMessage = {
@@ -399,7 +603,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (isHome) await startFromComposer();
+    if (showModeHome || excavateHome) await startFromComposer();
     else await sendAnswer();
   }
 
@@ -432,6 +636,8 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
+  const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
+
   return (
     <div className={shellClass}>
       <div className={`hidden shrink-0 border-r border-[#E5E7EB] md:block ${isProject ? "w-[240px]" : "w-[260px]"}`}>
@@ -457,10 +663,10 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-bold text-[#1A1A1A]">AI</p>
               <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
-                {session.phase === "results"
+                {session.phase === "results" && !isConsult
                   ? `${tx("アイデアの種", "Idea seeds")} · ${activeTitle}`
-                  : session.theme
-                    ? `${tx("発掘", "Discover")} · ${tx(
+                  : !isConsult && session.theme
+                    ? `${modeLabel} · ${tx(
                         themeLabel(session.theme),
                         (
                           {
@@ -473,7 +679,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
                           } as const
                         )[session.theme],
                       )} · ${activeTitle}`
-                    : `${tx("発掘", "Discover")} · ${activeTitle}`}
+                    : `${modeLabel} · ${activeTitle}`}
               </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
@@ -498,46 +704,95 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {isHome ? (
+          {showModeHome ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
-                <Sparkles className="h-6 w-6" aria-hidden />
-              </div>
-              <div className="max-w-md text-center">
-                <p className="text-[17px] font-bold text-[#1A1A1A]">
-                  {tx("何から話しますか？", "What should we talk about?")}
-                </p>
-                <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
-                  {tx(
-                    "日常のモヤモヤを聞くところから、ビジネスの種を一緒に探します。会話は個人用として自動保存されます。",
-                    "We’ll start from everyday frustrations and look for business seeds. Chats are saved privately for you.",
-                  )}
-                </p>
-              </div>
-              <div className="grid w-full max-w-md grid-cols-2 gap-3">
-                {IDEA_INTERVIEW_THEMES.map((t) => {
-                  const starter = THEME_STARTERS[t.id];
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => chooseTheme(t.id)}
-                      className="flex min-h-[96px] flex-col items-start justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-3 text-left transition hover:border-violet-200 hover:bg-violet-50/40"
-                    >
-                      <span className="text-[14px] font-bold leading-snug text-[#1A1A1A]">
-                        {tx(starter.prompt, THEME_STARTERS_EN[t.id].prompt)}
-                      </span>
-                      <span className="text-[11px] leading-snug text-[#6B7280]">
-                        {tx(starter.hint, THEME_STARTERS_EN[t.id].hint)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {modePicker ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => changeMode("consult")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <MessageCircle className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("相談", "Chat")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("困りごと・次の一手", "Stuck points & next steps")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeMode("excavate")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      !isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <Lightbulb className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("発掘", "Discover")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("日常からアイデアの種を探す", "Find idea seeds in daily life")}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+
+              <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
+                {isConsult
+                  ? tx(
+                      "困っていることや質問を、そのまま送ってください。会話は個人用として自動保存され、履歴からいつでも続けられます。",
+                      "Send whatever you’re stuck on. Chats are saved privately — continue anytime from History.",
+                    )
+                  : tx(
+                      "日常のモヤモヤを聞くところから、ビジネスの種を一緒に探します。会話は個人用として自動保存されます。",
+                      "We’ll start from everyday frustrations and look for business seeds. Chats are saved privately for you.",
+                    )}
+              </p>
+
+              {!isConsult ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  {IDEA_INTERVIEW_THEMES.map((t) => {
+                    const starter = THEME_STARTERS[t.id];
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => chooseTheme(t.id)}
+                        className="flex min-h-[96px] flex-col items-start justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-3 text-left transition hover:border-violet-200 hover:bg-violet-50/40"
+                      >
+                        <span className="text-[14px] font-bold leading-snug text-[#1A1A1A]">
+                          {tx(starter.prompt, THEME_STARTERS_EN[t.id].prompt)}
+                        </span>
+                        <span className="text-[11px] leading-snug text-[#6B7280]">
+                          {tx(starter.hint, THEME_STARTERS_EN[t.id].hint)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+                  <Sparkles className="h-6 w-6" aria-hidden />
+                </div>
+              )}
+
+              {isConsult && isHub ? (
+                <Link
+                  href="/idea?tab=qna&view=board"
+                  className="text-[12px] font-semibold text-violet-700 hover:underline"
+                >
+                  {tx("みんなに質問する（知恵袋）→", "Ask the community (Q&A) →")}
+                </Link>
+              ) : null}
             </div>
           ) : null}
 
-          {!isHome && session.phase !== "results"
+          {/* Consult: show welcome + thread (hide raw welcome-only on mode home) */}
+          {isConsult && !showModeHome
             ? messages.map((m, i) => (
                 <div
                   key={m.id ?? `${m.role}-${i}`}
@@ -560,7 +815,30 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
               ))
             : null}
 
-          {session.phase === "chat" && (sending || generating) ? (
+          {!isConsult && !excavateHome && session.phase !== "results"
+            ? messages.map((m, i) => (
+                <div
+                  key={m.id ?? `${m.role}-${i}`}
+                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
+                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                  }`}
+                >
+                  {m.role === "assistant" ? (
+                    <AiChatStreamingRichText
+                      text={m.content}
+                      className="break-words"
+                      animate={Boolean(m.id && m.id === streamingId)}
+                      onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+                      onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  )}
+                </div>
+              ))
+            : null}
+
+          {(isConsult || session.phase === "chat") && (sending || generating) ? (
             <div className="flex items-center gap-2 text-[13px] text-[#6B7280]">
               <Loader2 className="h-4 w-4 animate-spin" />
               {generating
@@ -569,7 +847,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
             </div>
           ) : null}
 
-          {session.phase === "results" ? (
+          {!isConsult && session.phase === "results" ? (
             <div className="mx-auto w-full max-w-xl space-y-4">
               <div>
                 <h2 className="text-[17px] font-bold text-[#1A1A1A]">{tx("アイデアの種", "Idea seeds")}</h2>
@@ -654,12 +932,12 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
           <div ref={endRef} />
         </div>
 
-        {session.phase !== "results" ? (
+        {isConsult || session.phase !== "results" ? (
           <form
             onSubmit={(e) => void onSubmit(e)}
             className="shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           >
-            {session.phase === "chat" && session.userTurns >= 1 && !sending && !generating ? (
+            {!isConsult && session.phase === "chat" && session.userTurns >= 1 && !sending && !generating ? (
               <button
                 type="button"
                 onClick={() => void generateIdeas({ ...session, readyForIdeas: true })}
@@ -676,9 +954,11 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
                 onChange={(e) => setDraft(e.target.value)}
                 disabled={sending || generating}
                 placeholder={
-                  isHome
-                    ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
-                    : placeholder
+                  isConsult
+                    ? tx("相談内容を入力…", "Type your question…")
+                    : excavateHome
+                      ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
+                      : placeholder
                 }
                 className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2 disabled:opacity-60"
               />
