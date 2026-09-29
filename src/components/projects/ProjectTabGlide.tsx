@@ -468,16 +468,18 @@ export function ProjectTabGlide({
             fillViewport ? "py-1.5" : "px-4 py-2.5 lg:px-6"
           }`}
         >
-          <div className={fillViewport ? "min-w-0" : undefined}>
-            <h2 className={`font-bold tracking-tight text-zinc-900 ${fillViewport ? "text-base sm:text-lg" : "text-xl sm:text-2xl"}`}>
-              マイプロジェクト
-            </h2>
-            {!fillViewport ? (
+          {!fillViewport ? (
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">マイプロジェクト</h2>
               <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
-            ) : null}
-          </div>
-          <div className="flex flex-1 items-center justify-end gap-1.5 sm:flex-initial sm:min-w-0 sm:gap-2">
-            <label className={`relative min-w-0 flex-1 ${fillViewport ? "max-w-[9.5rem] sm:max-w-xs" : "sm:max-w-xs"}`}>
+            </div>
+          ) : null}
+          <div
+            className={`flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 ${
+              fillViewport ? "w-full flex-1" : "flex-1 sm:flex-initial sm:min-w-0"
+            }`}
+          >
+            <label className={`relative min-w-0 flex-1 ${fillViewport ? "" : "sm:max-w-xs"}`}>
               <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] leading-none sm:left-3 sm:text-[15px]" aria-hidden>
                 🔍
               </span>
