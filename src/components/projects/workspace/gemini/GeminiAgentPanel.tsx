@@ -51,6 +51,9 @@ type Props = {
   backHref?: string;
   /** Switch between 相談 / アイデア (general | ideas) */
   onModeChange?: (mode: "general" | "ideas") => void;
+  /** When true, open a blank chat (keep history list) instead of restoring last thread */
+  startFresh?: boolean;
+  onFreshConsumed?: () => void;
 };
 
 export function GeminiAgentPanel({
@@ -68,6 +71,8 @@ export function GeminiAgentPanel({
   variant = "card",
   backHref,
   onModeChange,
+  startFresh = false,
+  onFreshConsumed,
 }: Props) {
   const { tx, locale } = useI18n();
   const router = useRouter();
@@ -90,6 +95,10 @@ export function GeminiAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const handoffAppliedRef = useRef(false);
+  /** Capture mount-time value so clearing the parent flag does not re-hydrate old threads */
+  const startFreshOnMountRef = useRef(startFresh);
+  const onFreshConsumedRef = useRef(onFreshConsumed);
+  onFreshConsumedRef.current = onFreshConsumed;
 
   const scrollToEnd = useCallback(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -107,36 +116,59 @@ export function GeminiAgentPanel({
   useEffect(() => {
     setHydrated(false);
     handoffAppliedRef.current = false;
+    const preferFresh = startFreshOnMountRef.current;
     const storeKey = conversationsKey(projectId, mode);
     const existing = loadConversationStore(storeKey);
+    const openBlank = (prior: AiSavedConversation[]) => {
+      const id = newAiId("gemini");
+      const blank: AiSavedConversation = {
+        id,
+        title: newTitle,
+        updatedAt: new Date().toISOString(),
+        messages: [],
+      };
+      setConversations([blank, ...prior].slice(0, 30));
+      setActiveId(id);
+      setMessages([]);
+    };
+
     if (existing) {
-      setConversations(existing.conversations);
-      setActiveId(existing.activeId);
-      const active = existing.conversations.find((c) => c.id === existing.activeId) ?? existing.conversations[0]!;
-      setMessages(active.messages);
+      if (preferFresh) {
+        openBlank(existing.conversations);
+      } else {
+        setConversations(existing.conversations);
+        setActiveId(existing.activeId);
+        const active = existing.conversations.find((c) => c.id === existing.activeId) ?? existing.conversations[0]!;
+        setMessages(active.messages);
+      }
     } else {
       const migrated = conversationFromLegacyMessages(legacyChatKey(projectId, mode), newTitle);
       if (migrated) {
-        setConversations([migrated]);
-        setActiveId(migrated.id);
-        setMessages(migrated.messages);
-        saveConversationStore(storeKey, { activeId: migrated.id, conversations: [migrated] });
+        if (preferFresh) {
+          openBlank([migrated]);
+        } else {
+          setConversations([migrated]);
+          setActiveId(migrated.id);
+          setMessages(migrated.messages);
+          saveConversationStore(storeKey, { activeId: migrated.id, conversations: [migrated] });
+        }
         try {
           window.localStorage.removeItem(legacyChatKey(projectId, mode));
         } catch {
           /* ignore */
         }
       } else {
-        const id = newAiId("gemini");
-        setConversations([{ id, title: newTitle, updatedAt: new Date().toISOString(), messages: [] }]);
-        setActiveId(id);
-        setMessages([]);
+        openBlank([]);
       }
     }
     setDraft("");
     resetPanels();
     setHistoryOpen(false);
     setHydrated(true);
+    if (preferFresh) {
+      startFreshOnMountRef.current = false;
+      onFreshConsumedRef.current?.();
+    }
   }, [mode, projectId, newTitle, resetPanels]);
 
   useEffect(() => {
@@ -414,7 +446,10 @@ export function GeminiAgentPanel({
                 <div className="grid w-full max-w-md grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => onModeChange("general")}
+                    onClick={() => {
+                      if (mode === "general") return;
+                      onModeChange("general");
+                    }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "general"
                         ? "border-violet-300 bg-violet-50 text-violet-900"
@@ -429,7 +464,10 @@ export function GeminiAgentPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onModeChange("ideas")}
+                    onClick={() => {
+                      if (mode === "ideas") return;
+                      onModeChange("ideas");
+                    }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "ideas"
                         ? "border-violet-300 bg-violet-50 text-violet-900"

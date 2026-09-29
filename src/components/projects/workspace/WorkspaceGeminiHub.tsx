@@ -21,6 +21,8 @@ export default function WorkspaceGeminiHub() {
   const modeFromUrl = parseMode(searchParams.get("mode"));
   const [mode, setMode] = useState<"general" | "ideas">(modeFromUrl);
   const [handoffPrompt, setHandoffPrompt] = useState<string | null>(null);
+  /** Mode picker should open a blank thread; history stays available via 履歴 */
+  const [startFresh, setStartFresh] = useState(false);
 
   useEffect(() => {
     setMode(modeFromUrl);
@@ -28,6 +30,7 @@ export default function WorkspaceGeminiHub() {
 
   const changeMode = useCallback(
     (next: "general" | "ideas") => {
+      setStartFresh(true);
       setMode(next);
       const qs = next === "ideas" ? "?mode=ideas" : "";
       router.replace(`/projects/${projectId}/coach${qs}`, { scroll: false });
@@ -134,6 +137,8 @@ export default function WorkspaceGeminiHub() {
         variant="fullscreen"
         backHref={`/projects/${projectId}/overview`}
         onModeChange={changeMode}
+        startFresh={startFresh}
+        onFreshConsumed={() => setStartFresh(false)}
       />
     </div>
   );
