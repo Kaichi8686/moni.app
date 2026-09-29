@@ -91,7 +91,7 @@ function IdeaHubInner() {
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-0 inline-flex items-center text-[20px] leading-none text-zinc-800"
+                  className="mb-0 inline-flex items-center text-[28px] leading-none text-zinc-800"
                 >
                   ←
                 </button>
