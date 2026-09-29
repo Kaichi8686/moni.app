@@ -22,6 +22,12 @@ const NAV: NavItem[] = [
     match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
   },
   {
+    href: "/messages",
+    labelKey: "navMail",
+    icon: "✉",
+    match: (p) => p === "/messages" || p.startsWith("/messages/"),
+  },
+  {
     href: "/idea",
     labelKey: "navIdea",
     icon: "✦",
