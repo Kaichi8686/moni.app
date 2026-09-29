@@ -5,7 +5,6 @@ import { useMemo, useState, type ComponentType } from "react";
 import {
   Check,
   FileText,
-  Lightbulb,
   ListChecks,
   LockKeyhole,
   MessageCircle,
@@ -326,17 +325,10 @@ export default function WorkspaceOverview() {
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
         <div className="grid grid-cols-2 gap-3">
           <ActionLink
-            href={`/projects/${projectId}/coach?mode=general`}
-            icon={MessageCircle}
-            label={tx("なんでも相談", "Ask anything")}
-            detail={tx("困りごと・次の一手を相談", "Ask about stuck points or next steps")}
-            filled
-          />
-          <ActionLink
-            href={`/projects/${projectId}/coach?mode=ideas`}
+            href={`/projects/${projectId}/coach`}
             icon={Sparkles}
-            label={tx("アイデア編", "Ideas")}
-            detail={tx("企画のアイデアをたくさん出す", "Brainstorm project ideas")}
+            label={tx("AI", "AI")}
+            detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
             filled
           />
           <ActionLink
@@ -350,8 +342,7 @@ export default function WorkspaceOverview() {
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <CompactLink href={`/projects/${projectId}/business-idea`} icon={Lightbulb} label={tx("アイデア", "Ideas")} />
+        <div className="grid grid-cols-2 gap-3">
           <CompactLink href={`/projects/${projectId}/ideas`} icon={Vote} label={tx("投票", "Voting")} />
           <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
         </div>
