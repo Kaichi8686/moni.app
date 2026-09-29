@@ -155,6 +155,9 @@ export function InboxList() {
       });
     }
     list.sort((a, b) => {
+      const aUnread = a.unreadCount > 0 ? 1 : 0;
+      const bUnread = b.unreadCount > 0 ? 1 : 0;
+      if (aUnread !== bUnread) return bUnread - aUnread;
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
     });
@@ -315,7 +318,12 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
           </div>
         )}
         {isUnread ? (
-          <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-violet-600" aria-hidden />
+          <span
+            className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[11px] font-bold leading-none text-white"
+            aria-label={tx(`未読 ${conversation.unreadCount}件`, `${conversation.unreadCount} unread`)}
+          >
+            {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
+          </span>
         ) : null}
       </div>
 
@@ -340,14 +348,9 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className={`truncate text-xs ${isUnread ? "text-zinc-900" : "text-zinc-500"}`}>
+          <span className={`truncate text-xs ${isUnread ? "font-medium text-zinc-900" : "text-zinc-500"}`}>
             {lastMessagePreview(conversation, locale)}
           </span>
-          {isUnread ? (
-            <span className="ml-2 flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-violet-600 px-1 text-xs text-white">
-              {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
-            </span>
-          ) : null}
         </div>
       </div>
     </button>
