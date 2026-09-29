@@ -21,7 +21,6 @@ import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
-import type { Phase } from "@/lib/workspace/types";
 
 /** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -73,20 +72,28 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases, loading, uid, canEdit, reload } = useProjectWorkspace();
+  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid, canEdit, reload } =
+    useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
-  const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
-  const selectedPhaseLive =
-    selectedPhase && selectedPhase.projectId === projectId
-      ? phases.find((phase) => phase.id === selectedPhase.id) ?? selectedPhase
-      : null;
 
-  const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.order - b.order), [phases]);
+  /**
+   * 「すべて見る」地図ページと同じ project_phases を使う。
+   * 地図側で削除した直後でも概要に戻ったときに連動するよう、
+   * roadmap hook を優先し、初回ロード中のみ workspace のキャッシュを出す。
+   */
+  const sortedPhases = useMemo(() => {
+    const source = !roadmap.loading ? roadmap.phases : workspacePhases;
+    return [...source].sort((a, b) => a.order - b.order);
+  }, [roadmap.loading, roadmap.phases, workspacePhases]);
+  const selectedPhaseLive = selectedPhaseId
+    ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
+    : null;
   /** 未完了を先頭にし、完了済みはその後ろ */
   const displayPhases = useMemo(() => {
     const active = sortedPhases.filter((phase) => phase.status !== "completed");
@@ -220,7 +227,7 @@ export default function WorkspaceOverview() {
                     key={phase.id}
                     type="button"
                     className="text-left"
-                    onClick={() => setSelectedPhase(phase)}
+                    onClick={() => setSelectedPhaseId(phase.id)}
                   >
                     {card}
                   </button>
@@ -265,7 +272,7 @@ export default function WorkspaceOverview() {
               }
             : null
         }
-        onClose={() => setSelectedPhase(null)}
+        onClose={() => setSelectedPhaseId(null)}
         canEdit={canEdit}
         onSave={
           canEdit && selectedPhaseLive
