@@ -1948,10 +1948,7 @@ export default function Home() {
     for (const row of projectNotifications) {
       items.push({
         id: `project-notice-${row.id}`,
-        level:
-          row.type === "join_request_rejected" || row.type === "project_invite_declined"
-            ? "warn"
-            : "info",
+        level: row.type === "join_request_rejected" ? "warn" : "info",
         text: formatNotificationBody(row.type, row.body),
         kind: "project",
         projectNotification: row,

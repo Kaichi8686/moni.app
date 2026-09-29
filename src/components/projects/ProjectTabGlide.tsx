@@ -330,9 +330,7 @@ export function ProjectTabGlide({
         else flashInviteToast(msg);
         return;
       }
-      flashInviteToast(
-        `${inviteeName} さんを「${inviteSelectedProject.name}」に招待しました。承認・拒否されるとお知らせが届きます`,
-      );
+      flashInviteToast(`${inviteeName} さんを「${inviteSelectedProject.name}」に招待しました`);
       setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
     } finally {
       setInviteBusyId(null);
@@ -819,7 +817,7 @@ export function ProjectTabGlide({
               </button>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-              メンバーとして招待すると相手のお知らせに届きます。承認・拒否されるとあなたにも結果が届きます。URL共有もできます。
+              メンバーとして招待すると相手のお知らせに届きます。URL共有もできます。
             </p>
 
             <label className="mt-4 block text-xs font-semibold text-zinc-700">

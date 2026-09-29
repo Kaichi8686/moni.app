@@ -68,26 +68,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "プロジェクトが不明です" }, { status: 400 });
   }
 
-  const [{ data: project }, { data: inviteeProfile }] = await Promise.all([
-    admin.from("projects").select("name,owner_id").eq("id", projectId).maybeSingle(),
-    admin.from("profiles").select("display_name").eq("id", auth.userId).maybeSingle(),
-  ]);
+  const { data: project } = await admin
+    .from("projects")
+    .select("name")
+    .eq("id", projectId)
+    .maybeSingle();
 
   const projectName =
     payload.projectName?.trim() ||
     (typeof project?.name === "string" ? project.name.trim() : "") ||
     "プロジェクト";
-  const inviteeLabel =
-    (typeof inviteeProfile?.display_name === "string" ? inviteeProfile.display_name.trim() : "") ||
-    "ユーザー";
-
-  let notifyUserId =
-    (typeof payload.inviterId === "string" && payload.inviterId.trim()) ||
-    (typeof project?.owner_id === "string" ? project.owner_id : "") ||
-    "";
-  if (notifyUserId === auth.userId) {
-    notifyUserId = "";
-  }
 
   if (action === "accept") {
     const { error: mErr } = await admin.from("project_members").upsert(
@@ -113,24 +103,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: uErr.message || "更新に失敗しました" }, { status: 500 });
   }
 
-  if (notifyUserId) {
-    const { error: notifyErr } = await admin.from("project_notifications").insert({
-      user_id: notifyUserId,
-      project_id: projectId,
-      type: action === "accept" ? "project_invite_accepted" : "project_invite_declined",
-      body:
-        action === "accept"
-          ? `${inviteeLabel} さんが「${projectName}」への招待を承認しました。`
-          : `${inviteeLabel} さんが「${projectName}」への招待を拒否しました。`,
-    });
-    if (notifyErr) {
-      console.error("project invite response notify", notifyErr);
-      return NextResponse.json(
-        { error: notifyErr.message || "結果の通知に失敗しました" },
-        { status: 500 },
-      );
-    }
-  }
-
+  // 招待者への結果通知は送らない（お知らせは自分に関することだけ）
   return NextResponse.json({ ok: true });
 }

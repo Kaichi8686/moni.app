@@ -161,10 +161,7 @@ export default function WorkspaceMembers() {
         return;
       }
       setActionOk(
-        tx(
-          `${inviteeName} さんを招待しました。相手が承認・拒否するとあなたにお知らせが届きます。`,
-          `Invited ${inviteeName}. You’ll be notified when they accept or decline.`,
-        ),
+        tx(`${inviteeName} さんを招待しました。相手のお知らせに届きます。`, `Invited ${inviteeName}. They’ll get a notification.`),
       );
       setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
       setInviteQuery("");
@@ -275,10 +272,7 @@ export default function WorkspaceMembers() {
         <div className="rounded-md border border-[#E5E7EB] bg-white p-4">
           <h3 className="text-sm font-semibold text-[#1A1A1A]">{tx("メンバーを招待", "Invite members")}</h3>
           <p className="mt-1 text-[12px] text-[#6B7280]">
-            {tx(
-              "表示名で検索して招待すると、相手のお知らせに届きます。承認・拒否されるとあなたにも結果が届きます。",
-              "Search by display name to invite. You’ll be notified when they accept or decline.",
-            )}
+            {tx("表示名で検索して招待すると、相手のお知らせに届きます。", "Search by display name to invite — they’ll get a notification.")}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
             <input

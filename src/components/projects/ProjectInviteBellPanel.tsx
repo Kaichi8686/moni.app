@@ -80,7 +80,7 @@ export function ProjectInviteBellPanel({
   }, [open, loadInbox]);
 
   const otherNotes = useMemo(
-    () => notifications.filter((n) => n.type !== "project_invite"),
+    () => notifications.filter((n) => n.type !== "project_invite" && n.type !== "project_invite_resolved"),
     [notifications],
   );
 

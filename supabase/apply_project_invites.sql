@@ -108,7 +108,6 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_invite public.project_invites;
-  v_name text;
 begin
   if v_uid is null then
     raise exception 'not authenticated';
@@ -128,9 +127,6 @@ begin
     raise exception 'invite already resolved';
   end if;
 
-  select coalesce(nullif(trim(name), ''), 'プロジェクト') into v_name
-  from public.projects where id = v_invite.project_id;
-
   if p_action = 'accept' then
     insert into public.project_members (project_id, user_id, role)
     values (v_invite.project_id, v_uid, 'member')
@@ -140,28 +136,13 @@ begin
       set status = 'accepted', resolved_at = now()
       where id = v_invite.id
       returning * into v_invite;
-
-    insert into public.project_notifications (user_id, project_id, type, body)
-    values (
-      v_invite.inviter_id,
-      v_invite.project_id,
-      'project_invite_accepted',
-      format('招待した相手が「%s」への参加を承認しました。', v_name)
-    );
   else
     update public.project_invites
       set status = 'declined', resolved_at = now()
       where id = v_invite.id
       returning * into v_invite;
-
-    insert into public.project_notifications (user_id, project_id, type, body)
-    values (
-      v_invite.inviter_id,
-      v_invite.project_id,
-      'project_invite_declined',
-      format('招待した相手が「%s」への参加を辞退しました。', v_name)
-    );
   end if;
+  -- 招待者への結果通知は送らない（お知らせは自分に関することだけ）
 
   return v_invite;
 end;

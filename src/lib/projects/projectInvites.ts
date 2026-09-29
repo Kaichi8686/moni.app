@@ -1,5 +1,8 @@
 import { supabase } from "@/lib/supabase";
-import { markProjectNotificationsRead as markNotificationsRead } from "@/lib/projects/notifications";
+import {
+  isSelfProjectNotification,
+  markProjectNotificationsRead as markNotificationsRead,
+} from "@/lib/projects/notifications";
 
 export type ProjectInviteRow = {
   id: string;
@@ -94,12 +97,14 @@ export async function fetchMyProjectNotifications(userId: string, limit = 30): P
     .select("id,user_id,project_id,type,body,read_at,created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(Math.max(limit * 3, 60));
   if (error) {
     console.error("fetchMyProjectNotifications", error);
     return [];
   }
-  return (data ?? []) as ProjectNotificationRow[];
+  return ((data ?? []) as ProjectNotificationRow[])
+    .filter((row) => isSelfProjectNotification(row.type))
+    .slice(0, limit);
 }
 
 export async function markProjectNotificationsRead(ids: string[]): Promise<void> {
@@ -172,9 +177,6 @@ export function formatNotificationBody(type: string, body: string): string {
       return `「${payload.projectName}」への招待を拒否しました。`;
     }
     if (payload?.projectName) return `「${payload.projectName}」への招待が届きました。`;
-  }
-  if (type === "project_invite_accepted" || type === "project_invite_declined") {
-    return body;
   }
   if (body.trim().startsWith("{")) {
     const payload = parseInvitePayload(body);

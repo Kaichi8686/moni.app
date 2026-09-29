@@ -1,8 +1,8 @@
--- プロジェクト招待の承認・辞退結果を招待者へお知らせする
+-- プロジェクト招待を承認待ちにし、お知らせは「自分宛」だけにする
 -- Run after apply_project_invite_notifications.sql
 --
 -- 1) project_invite_member: 即メンバー追加せず、承認待ちの招待通知を送る
--- 2) （任意）project_invites テーブル経由の応答でも招待者名付きで通知
+-- 2) 他人の行動に関する通知（参加申請が届いた / 相手が招待を承認した等）は作らない・見せない
 
 -- ---------------------------------------------------------------------------
 -- Invite: pending notification (accept/decline via /api/projects/invite/respond)
@@ -91,7 +91,13 @@ revoke all on function public.project_invite_member(uuid, uuid) from public;
 grant execute on function public.project_invite_member(uuid, uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- Optional: project_invites table path — notify inviter with invitee name
+-- Stop creating "someone else requested to join" notices for owners/admins
+-- （参加申請はメンバー画面で確認。お知らせは自分宛だけ）
+-- ---------------------------------------------------------------------------
+drop trigger if exists trg_project_join_request_notify on public.project_join_requests;
+
+-- ---------------------------------------------------------------------------
+-- Optional: project_invites table path — no notify-to-inviter on respond
 -- ---------------------------------------------------------------------------
 do $outer$
 begin
@@ -112,8 +118,6 @@ begin
   declare
     v_uid uuid := auth.uid();
     v_invite public.project_invites;
-    v_name text;
-    v_invitee_label text;
   begin
     if v_uid is null then
       raise exception 'not authenticated';
@@ -133,17 +137,6 @@ begin
       raise exception 'invite already resolved';
     end if;
 
-    select coalesce(nullif(trim(name), ''), 'プロジェクト') into v_name
-    from public.projects where id = v_invite.project_id;
-
-    select coalesce(nullif(btrim(pr.display_name), ''), 'ユーザー')
-      into v_invitee_label
-    from public.profiles pr
-    where pr.id = v_uid;
-    if v_invitee_label is null then
-      v_invitee_label := 'ユーザー';
-    end if;
-
     if p_action = 'accept' then
       insert into public.project_members (project_id, user_id, role)
       values (v_invite.project_id, v_uid, 'member')
@@ -153,29 +146,14 @@ begin
         set status = 'accepted', resolved_at = now()
         where id = v_invite.id
         returning * into v_invite;
-
-      insert into public.project_notifications (user_id, project_id, type, body)
-      values (
-        v_invite.inviter_id,
-        v_invite.project_id,
-        'project_invite_accepted',
-        format('%s さんが「%s」への招待を承認しました。', v_invitee_label, v_name)
-      );
     else
       update public.project_invites
         set status = 'declined', resolved_at = now()
         where id = v_invite.id
         returning * into v_invite;
-
-      insert into public.project_notifications (user_id, project_id, type, body)
-      values (
-        v_invite.inviter_id,
-        v_invite.project_id,
-        'project_invite_declined',
-        format('%s さんが「%s」への招待を拒否しました。', v_invitee_label, v_name)
-      );
     end if;
 
+    -- 招待者への結果通知は送らない（お知らせは自分に関することだけ）
     return v_invite;
   end;
   $body$;
