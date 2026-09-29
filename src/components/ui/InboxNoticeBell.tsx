@@ -70,6 +70,11 @@ export function InboxNoticeBell<T extends InboxNoticeItem>({ items, onOpen }: Pr
         onClick={() => setOpen((prev) => !prev)}
       >
         <Bell className="h-[20px] w-[20px]" strokeWidth={1.75} aria-hidden />
+        {count > 0 ? (
+          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+            {count > 9 ? "9+" : count}
+          </span>
+        ) : null}
       </button>
 
       {open ? (
