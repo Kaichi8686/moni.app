@@ -72,7 +72,16 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid } = useProjectWorkspace();
+  const {
+    project,
+    projectMeta,
+    projectId,
+    issues,
+    phases: workspacePhases,
+    loading,
+    uid,
+    reload: wsReload,
+  } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
@@ -278,14 +287,27 @@ export default function WorkspaceOverview() {
                 goal: selectedPhaseLive.goal,
                 description: selectedPhaseLive.description,
                 stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+                alreadyDone: selectedPhaseLive.status === "completed",
               }
             : null
         }
         onClose={() => setSelectedPhaseId(null)}
         canEdit={false}
-        editHref={
-          selectedPhaseLive ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}` : undefined
-        }
+        canAchieve={roadmap.canEdit && selectedPhaseLive?.status !== "completed"}
+        onAchieve={async () => {
+          if (!selectedPhaseLive) return;
+          if (!roadmap.canEdit) {
+            throw new Error(tx("編集権限がありません", "You don’t have permission to edit"));
+          }
+          await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
+          const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
+          const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
+          if (next && next.status !== "completed") {
+            await roadmap.updatePhase(next.id, { status: "in_progress" });
+          }
+          await wsReload();
+          setSelectedPhaseId(null);
+        }}
       />
 
       <section>
