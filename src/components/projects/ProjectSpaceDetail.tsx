@@ -28,6 +28,7 @@ import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboarding
 import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
+import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
 import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
 
@@ -793,23 +794,18 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   }
 
   async function inviteMemberById(inviteeId: string, inviteeName: string) {
-    if (!supabase || !selectedProject) return;
+    if (!selectedProject) return;
     setInviteBusyId(inviteeId);
     setActionErr("");
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: selectedProject.id,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) setActionErr("すでにメンバーです。");
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          setActionErr("招待機能のDBが未適用です。Supabaseで apply_project_invite_notifications.sql を実行してください。");
-        } else setActionErr(msg);
+      const res = await sendProjectInvite(selectedProject.id, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) setActionErr("すでにメンバーです。");
+        else setActionErr(msg);
         return;
       }
-      setInviteNotice(`${inviteeName} さんを招待しました。お知らせが届きます。`);
+      setInviteNotice(`${inviteeName} さんを招待しました。相手のお知らせに届きます。`);
       window.setTimeout(() => setInviteNotice(""), 3200);
       setInviteQuery("");
       setInviteCandidates([]);

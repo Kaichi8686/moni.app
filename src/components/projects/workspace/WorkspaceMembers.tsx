@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { Avatar } from "@/components/ui/Avatar";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
+import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import type { Member } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -148,26 +149,15 @@ export default function WorkspaceMembers() {
   }
 
   async function inviteMember(inviteeId: string, inviteeName: string) {
-    if (!supabase) return;
     setInviteBusyId(inviteeId);
     setActionErr("");
     setActionOk("");
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: projectId,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) setActionErr(tx("すでにメンバーです。", "Already a member."));
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          setActionErr(
-            tx(
-              "招待機能のDBが未適用です。Supabaseで apply_project_invite_notifications.sql を実行してください。",
-              "Invite DB is not applied. Run apply_project_invite_notifications.sql in Supabase.",
-            ),
-          );
-        } else setActionErr(msg);
+      const res = await sendProjectInvite(projectId, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) setActionErr(tx("すでにメンバーです。", "Already a member."));
+        else setActionErr(msg);
         return;
       }
       setActionOk(

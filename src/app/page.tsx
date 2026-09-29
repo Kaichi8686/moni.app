@@ -28,6 +28,7 @@ import {
   projectNotificationHref,
   type ProjectNotificationRow,
 } from "@/lib/projects/notifications";
+import { formatNotificationBody } from "@/lib/projects/projectInvites";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -1953,7 +1954,7 @@ export default function Home() {
       items.push({
         id: `project-notice-${row.id}`,
         level: row.type === "join_request_rejected" ? "warn" : "info",
-        text: row.body,
+        text: formatNotificationBody(row.type, row.body),
         kind: "project",
         projectNotification: row,
       });
