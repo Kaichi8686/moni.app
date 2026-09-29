@@ -358,7 +358,9 @@ export function RoadmapMapEditor() {
                     <span className="mt-0.5 block truncate text-[11px] text-zinc-400">
                       {expanded
                         ? tx("タップして閉じる", "Tap to close")
-                        : tx("タップしてゴール・概要を見る", "Tap to see goal & overview")}
+                        : roadmap.canEdit
+                          ? tx("タップして名前・ゴール・概要を編集", "Tap to edit name, goal & overview")
+                          : tx("タップしてゴール・概要を見る", "Tap to see goal & overview")}
                     </span>
                   </span>
                 </button>
@@ -379,6 +381,19 @@ export function RoadmapMapEditor() {
                 goal={step.goal}
                 description={step.description}
                 stepNumber={stepNumber}
+                canEdit={roadmap.canEdit}
+                onSave={
+                  roadmap.canEdit
+                    ? async (patch) => {
+                        await roadmap.updatePhase(step.id, {
+                          title: patch.title,
+                          goal: patch.goal,
+                          description: patch.description,
+                        });
+                        await workspaceReload();
+                      }
+                    : undefined
+                }
               />
             </li>
           );
