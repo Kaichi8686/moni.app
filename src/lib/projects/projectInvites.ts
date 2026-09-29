@@ -147,18 +147,35 @@ export async function respondProjectInvite(
 export async function searchProfilesForInvite(
   query: string,
   excludeIds: string[],
-): Promise<ProfileSearchHit[]> {
+): Promise<{ users: ProfileSearchHit[]; error?: string }> {
   const auth = await authHeader();
-  if (!auth) return [];
+  if (!auth) return { users: [], error: "ログインが必要です" };
   const q = query.trim();
-  if (q.length < 1) return [];
+  if (q.length < 1) return { users: [] };
+
+  const exclude = new Set(excludeIds);
   const res = await fetch(`/api/projects/invite/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: auth },
   });
-  if (!res.ok) return [];
-  const json = (await res.json().catch(() => ({}))) as { users?: ProfileSearchHit[] };
-  const exclude = new Set(excludeIds);
-  return (json.users ?? []).filter((p) => !exclude.has(p.id));
+  if (res.ok) {
+    const json = (await res.json().catch(() => ({}))) as { users?: ProfileSearchHit[] };
+    return { users: (json.users ?? []).filter((p) => !exclude.has(p.id)) };
+  }
+
+  // Admin API が使えない環境ではクライアント検索にフォールバック
+  if (!supabase) {
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    return { users: [], error: json.error || "検索に失敗しました" };
+  }
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id,display_name,avatar_url")
+    .ilike("display_name", `%${q}%`)
+    .limit(12);
+  if (error) return { users: [], error: error.message };
+  return {
+    users: ((data ?? []) as ProfileSearchHit[]).filter((p) => !exclude.has(p.id)),
+  };
 }
 
 /** 通知本文をUI表示用に整形 */
