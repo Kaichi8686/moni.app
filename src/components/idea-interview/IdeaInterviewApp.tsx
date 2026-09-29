@@ -92,7 +92,7 @@ export function IdeaInterviewApp({ variant = "standalone", projectId }: Props) {
   const isProject = variant === "project" && Boolean(projectId);
   const isHub = variant === "hub";
   const exitHref = isProject ? `/projects/${projectId}/overview` : isHub ? "/idea" : "/";
-  const deepDiveHref = isProject ? `/projects/${projectId}/coach` : "/?tab=mentor&mentor=ai";
+  const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/?tab=mentor&mentor=ai";
 
   const [ready, setReady] = useState(false);
   const [resumePrompt, setResumePrompt] = useState(false);

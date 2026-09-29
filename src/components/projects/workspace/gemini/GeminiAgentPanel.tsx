@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { History, Loader2, MessageSquarePlus, X } from "lucide-react";
+import { ArrowLeft, History, Loader2, MessageSquarePlus, X } from "lucide-react";
 import type {
   GeminiAgentMode,
   IdeasAgentPayload,
@@ -45,6 +46,9 @@ type Props = {
   onReload: () => Promise<void>;
   /** Prefill draft / seed first user message (e.g. idea-interview handoff) */
   initialUserMessage?: string;
+  /** fullscreen = ChatGPT-like full viewport (coach page) */
+  variant?: "card" | "fullscreen";
+  backHref?: string;
 };
 
 export function GeminiAgentPanel({
@@ -59,6 +63,8 @@ export function GeminiAgentPanel({
   canEdit,
   onReload,
   initialUserMessage,
+  variant = "card",
+  backHref,
 }: Props) {
   const { tx, locale } = useI18n();
   const router = useRouter();
@@ -336,28 +342,46 @@ export function GeminiAgentPanel({
     />
   );
 
-  return (
-    <div className="flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
-      <div className="hidden w-[240px] shrink-0 border-r border-[#E5E7EB] md:block">{historyRail}</div>
+  const fullscreen = variant === "fullscreen";
+  const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-[#F3F4F6] px-4 py-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-[#1A1A1A]">
+  return (
+    <div
+      className={
+        fullscreen
+          ? "flex h-full min-h-0 w-full overflow-hidden bg-white"
+          : "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
+      }
+    >
+      <div
+        className={`hidden shrink-0 border-r border-[#E5E7EB] md:block ${fullscreen ? "w-[260px]" : "w-[240px]"}`}
+      >
+        {historyRail}
+      </div>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
+          <div className="flex items-center gap-2">
+            {fullscreen && backHref ? (
+              <Link
+                href={backHref}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                aria-label={tx("プロジェクトに戻る", "Back to project")}
+              >
+                <ArrowLeft className="h-5 w-5" aria-hidden />
+              </Link>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">
                 {tx(meta.label, mode === "roadmap" ? "Roadmap" : mode === "general" ? "Ask anything" : "Ideas")}
               </p>
-              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
-                {conversations.find((c) => c.id === activeId)?.title || newTitle}
-                {" · "}
-                Google Gemini
-              </p>
+              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">{activeTitle}</p>
             </div>
-            <div className="flex shrink-0 gap-1.5 md:hidden">
+            <div className="flex shrink-0 gap-1.5">
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
-                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] px-2.5 text-[12px] font-semibold text-[#374151]"
+                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] px-2.5 text-[12px] font-semibold text-[#374151] md:hidden"
               >
                 <History className="h-3.5 w-3.5" aria-hidden />
                 {tx("履歴", "History")}
@@ -365,7 +389,7 @@ export function GeminiAgentPanel({
               <button
                 type="button"
                 onClick={startNewChat}
-                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] px-2.5 text-[12px] font-semibold text-[#374151]"
+                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]"
               >
                 <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
                 {tx("新規", "New")}
@@ -374,7 +398,7 @@ export function GeminiAgentPanel({
           </div>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 ? (
             <p className="rounded-lg bg-[#FAFAFA] px-3 py-4 text-[13px] leading-relaxed text-[#6B7280]">
               {mode === "roadmap" &&
@@ -384,8 +408,8 @@ export function GeminiAgentPanel({
                 )}
               {mode === "general" &&
                 tx(
-                  "困っていることや質問を、そのまま送ってください。会話は自動で保存され、左の履歴から続けれます。",
-                  "Send whatever you’re stuck on. Chats are saved automatically — continue from the history on the left.",
+                  "困っていることや質問を、そのまま送ってください。会話は自動保存され、履歴からいつでも続けられます。",
+                  "Send whatever you’re stuck on. Chats are saved automatically — continue anytime from History.",
                 )}
               {mode === "ideas" &&
                 tx(
@@ -528,7 +552,7 @@ export function GeminiAgentPanel({
           <div ref={endRef} />
         </div>
 
-        <form onSubmit={(e) => void onSubmit(e)} className="border-t border-[#E5E7EB] p-3">
+        <form onSubmit={(e) => void onSubmit(e)} className="shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             <input
               value={draft}
