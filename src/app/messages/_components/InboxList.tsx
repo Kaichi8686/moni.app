@@ -152,7 +152,13 @@ export function InboxList() {
         <h1 className="text-lg font-bold text-zinc-900">{tx("メール", "Mail")}</h1>
         <button
           type="button"
-          onClick={() => setShowNew(true)}
+          onClick={() => {
+            if (!userId) {
+              router.push("/login?next=/messages");
+              return;
+            }
+            setShowNew(true);
+          }}
           className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
           aria-label={tx("新しいメール", "New mail")}
         >
