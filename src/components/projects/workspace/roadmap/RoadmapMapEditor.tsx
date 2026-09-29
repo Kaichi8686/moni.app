@@ -395,32 +395,54 @@ export function RoadmapMapEditor() {
       {roadmap.canEdit ? (
         adding ? (
           <form
-            className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm"
+            className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm"
             onSubmit={(event) => {
               event.preventDefault();
               void addStep();
             }}
           >
-            <input
-              autoFocus
-              value={draftTitle}
-              onChange={(event) => setDraftTitle(event.target.value)}
-              placeholder={tx("ステップ名", "Step name")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
-            />
-            <input
-              value={draftGoal}
-              onChange={(event) => setDraftGoal(event.target.value)}
-              placeholder={tx("ゴール（例：10人に話を聞く）", "Goal (e.g. talk to 10 people)")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
-            />
-            <textarea
-              value={draftDescription}
-              onChange={(event) => setDraftDescription(event.target.value)}
-              placeholder={tx("概要（このステップでやること）", "Overview (what you’ll do in this step)")}
-              rows={3}
-              className="w-full resize-none rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-orange-400"
-            />
+            <div>
+              <label htmlFor="roadmap-draft-title" className="block text-xs font-semibold text-zinc-600">
+                {tx("ステップ名", "Step name")}
+              </label>
+              <input
+                id="roadmap-draft-title"
+                autoFocus
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                placeholder={tx("例：ヒアリング", "e.g. Interviews")}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
+              />
+            </div>
+            <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-3">
+              <label htmlFor="roadmap-draft-goal" className="block text-xs font-bold text-orange-900">
+                {tx("このステップのゴール", "Goal for this step")}
+              </label>
+              <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
+                {tx("達成したら「できた」と言えること", "What “done” looks like")}
+              </p>
+              <textarea
+                id="roadmap-draft-goal"
+                value={draftGoal}
+                onChange={(event) => setDraftGoal(event.target.value)}
+                placeholder={tx("例：10人に話を聞く", "e.g. Talk to 10 people")}
+                rows={2}
+                className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+              />
+            </div>
+            <div>
+              <label htmlFor="roadmap-draft-overview" className="block text-xs font-semibold text-zinc-600">
+                {tx("概要", "Overview")}
+              </label>
+              <textarea
+                id="roadmap-draft-overview"
+                value={draftDescription}
+                onChange={(event) => setDraftDescription(event.target.value)}
+                placeholder={tx("このステップでやること", "What you’ll do in this step")}
+                rows={3}
+                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+              />
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -449,7 +471,7 @@ export function RoadmapMapEditor() {
             </span>
             <span className="mt-2 text-sm font-bold text-zinc-900">{tx("次のステップを追加", "Add the next step")}</span>
             <span className="mt-0.5 text-xs text-zinc-500">
-              {tx("名前・ゴール・概要を書こう", "Add a name, goal, and overview")}
+              {tx("名前とゴールを書こう", "Add a name and goal")}
             </span>
           </button>
         )
