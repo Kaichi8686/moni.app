@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { copyProjectInviteUrl, shareOrCopyProject } from "@/lib/projects/inviteLink";
+import { sendProjectInvite } from "@/lib/projects/projectInvites";
 
 type Props = {
   open: boolean;
@@ -75,19 +76,13 @@ export function ProjectInviteComposeModal({
   }
 
   async function inviteUser(inviteeId: string, inviteeName: string) {
-    if (!supabase) return;
     setInviteBusyId(inviteeId);
     try {
-      const { error } = await supabase.rpc("project_invite_member", {
-        p_project_id: projectId,
-        p_invitee_id: inviteeId,
-      });
-      if (error) {
-        const msg = error.message ?? "";
-        if (msg.includes("already a member")) toast("すでにメンバーです");
-        else if (msg.includes("could not find") || msg.includes("schema cache") || msg.includes("does not exist")) {
-          toast("DB未適用: apply_project_invite_notifications.sql を実行してください");
-        } else toast(msg);
+      const res = await sendProjectInvite(projectId, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) toast("すでにメンバーです");
+        else toast(msg);
         return;
       }
       toast(`${inviteeName} さんを「${projectName}」に招待しました`);
