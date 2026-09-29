@@ -19,6 +19,7 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
   fetchUnreadProjectNotifications,
   markProjectNotificationRead,
@@ -1004,6 +1005,8 @@ export default function Home() {
   const [reports, setReports] = useState<ReportEntry[]>([]);
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const [projectNotifications, setProjectNotifications] = useState<ProjectNotificationRow[]>([]);
+  /** 新メッセージ（/messages）の未読合計。旧 chat_reads とは別系統 */
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1633,10 +1636,6 @@ export default function Home() {
     trackOpsEvent("report_deadline_set");
   }
 
-  function dismissNotification(id: string) {
-    setDismissedNotificationIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }
-
   const loadProjectNotifications = useCallback(async (userId: string) => {
     if (!supabase) {
       setProjectNotifications([]);
@@ -1647,6 +1646,19 @@ export default function Home() {
       setProjectNotifications(rows);
     } catch {
       setProjectNotifications([]);
+    }
+  }, []);
+
+  const loadInboxUnread = useCallback(async (userId: string) => {
+    if (!supabase) {
+      setInboxUnreadCount(0);
+      return;
+    }
+    try {
+      const count = await fetchInboxUnreadCount(supabase, userId);
+      setInboxUnreadCount(count);
+    } catch {
+      setInboxUnreadCount(0);
     }
   }, []);
 
@@ -1729,6 +1741,7 @@ export default function Home() {
   const loadPitchesRef = useRef(loadPitches);
   const loadSocialGraphRef = useRef(loadSocialGraph);
   const loadProjectNotificationsRef = useRef(loadProjectNotifications);
+  const loadInboxUnreadRef = useRef(loadInboxUnread);
   const loadMessagesRef = useRef(loadMessages);
 
   const loadMentorContext = useCallback(async (userId: string) => {
@@ -1766,6 +1779,7 @@ export default function Home() {
   loadPitchesRef.current = loadPitches;
   loadSocialGraphRef.current = loadSocialGraph;
   loadProjectNotificationsRef.current = loadProjectNotifications;
+  loadInboxUnreadRef.current = loadInboxUnread;
   loadMessagesRef.current = loadMessages;
   loadMentorContextRef.current = loadMentorContext;
 
@@ -1896,10 +1910,6 @@ export default function Home() {
     });
   }, [lastReadAt, messages, session]);
 
-  const totalTalkUnread = useMemo(
-    () => Object.values(talkMeta).reduce((s, m) => s + m.unread, 0),
-    [talkMeta],
-  );
   const reportNewCount = useMemo(() => reports.filter((r) => (r.status ?? "new") === "new").length, [reports]);
   const incomingRequestCount = incomingFollowRequests.length;
   const notificationItems = useMemo(() => {
@@ -1910,11 +1920,11 @@ export default function Home() {
       kind?: "aggregate" | "project";
       projectNotification?: ProjectNotificationRow;
     }> = [];
-    if (totalTalkUnread > 0) {
+    if (inboxUnreadCount > 0) {
       items.push({
         id: "chat-unread",
         level: "info",
-        text: `未読メッセージ ${totalTalkUnread}件`,
+        text: `未読メッセージ ${inboxUnreadCount}件`,
         kind: "aggregate",
       });
     }
@@ -1944,7 +1954,7 @@ export default function Home() {
       });
     }
     return items.filter((item) => !dismissedNotificationIds.includes(item.id)).slice(0, 8);
-  }, [dismissedNotificationIds, incomingRequestCount, projectNotifications, reportNewCount, totalTalkUnread]);
+  }, [dismissedNotificationIds, inboxUnreadCount, incomingRequestCount, projectNotifications, reportNewCount]);
   const eventDailySummary = useMemo(() => {
     const bucket: Record<string, number> = {};
     for (const ev of opsEvents) {
@@ -2076,9 +2086,11 @@ export default function Home() {
           void loadSocialGraphRef.current(next.user.id);
           void loadMentorContextRef.current?.(next.user.id);
           void loadProjectNotificationsRef.current(next.user.id);
+          void loadInboxUnreadRef.current(next.user.id);
         } else {
           setFollowSuggestions([]);
           setProjectNotifications([]);
+          setInboxUnreadCount(0);
         }
         // setSession と同じ tick で立て、authReady だけ先に true になる瞬間を作らない
         setAuthReady(true);
@@ -2102,6 +2114,7 @@ export default function Home() {
           loadSocialGraphRef.current(next.user.id),
           loadMentorContextRef.current?.(next.user.id) ?? Promise.resolve(),
           loadProjectNotificationsRef.current(next.user.id),
+          loadInboxUnreadRef.current(next.user.id),
         ]);
       } else {
         setMessages([]);
@@ -2110,6 +2123,7 @@ export default function Home() {
         setTalkMeta({});
         setActiveRoomId("global");
         setFollowingIds([]);
+        setInboxUnreadCount(0);
         setFollowerCount(0);
         setFollowingCount(0);
         setFollowerUsers([]);
@@ -2441,6 +2455,7 @@ export default function Home() {
     if (!canUseSupabase || !supabase || !session) return;
     const refresh = () => {
       void loadProjectNotificationsRef.current(session.user.id);
+      void loadInboxUnreadRef.current(session.user.id);
     };
     const onVisible = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") refresh();
@@ -2452,6 +2467,32 @@ export default function Home() {
       window.clearInterval(poll);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [canUseSupabase, session, supabase]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !supabase || !session) return;
+    const client = supabase;
+    const channel = client
+      .channel(`inbox-unread-live-${session.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        () => {
+          void loadInboxUnreadRef.current(session.user.id);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_members", filter: `user_id=eq.${session.user.id}` },
+        () => {
+          void loadInboxUnreadRef.current(session.user.id);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
     };
   }, [canUseSupabase, session, supabase]);
 
@@ -4057,7 +4098,6 @@ export default function Home() {
             <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
               <InboxNoticeBell
                 items={notificationItems}
-                onDismiss={dismissNotification}
                 onOpen={(item) => {
                   if (item.kind === "project" && item.projectNotification) {
                     void openProjectNotification(item.projectNotification);
@@ -4070,10 +4110,9 @@ export default function Home() {
                     return;
                   }
                   if (item.id === "chat-unread") {
+                    // 既読は /messages で会話を開いたときに付く。ここでは遷移のみ
                     router.push("/messages");
-                    return;
                   }
-                  dismissNotification(item.id);
                 }}
               />
               {!session && canUseSupabase ? (

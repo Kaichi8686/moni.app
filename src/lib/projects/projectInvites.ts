@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { markProjectNotificationsRead as markNotificationsRead } from "@/lib/projects/notifications";
 
 export type ProjectInviteRow = {
   id: string;
@@ -103,11 +104,7 @@ export async function fetchMyProjectNotifications(userId: string, limit = 30): P
 
 export async function markProjectNotificationsRead(ids: string[]): Promise<void> {
   if (!supabase || ids.length === 0) return;
-  await supabase
-    .from("project_notifications")
-    .update({ read_at: new Date().toISOString() })
-    .in("id", ids)
-    .is("read_at", null);
+  await markNotificationsRead(supabase, ids);
 }
 
 export async function sendProjectInvite(
