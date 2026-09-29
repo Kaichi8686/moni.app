@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Calendar, MoreHorizontal, Settings, Share2, Trash2, Users, Radio } from "lucide-react";
+import { ArrowLeft, Calendar, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -21,6 +21,7 @@ import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
+import { ProjectInviteComposeModal } from "@/components/projects/ProjectInviteComposeModal";
 import type { Issue, IssueStatus, IssueWorkflow, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import { applyIssueDueDatesForProject } from "@/lib/workspace/applyIssueDueDates";
 import { dueIsoForNewIssueInPhase, hasMeaningfulTargetDate } from "@/lib/workspace/issueDueSchedule";
@@ -189,6 +190,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [inviteBellOpen, setInviteBellOpen] = useState(false);
+  const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
@@ -1084,6 +1086,20 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       <Users className="h-4 w-4 text-[#6B7280]" aria-hidden />
                       {tx("メンバー", "Members")}
                     </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
+                        onClick={() => {
+                          setActionMenuOpen(false);
+                          setInviteComposeOpen(true);
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4 text-[#6B7280]" aria-hidden />
+                        {tx("メンバーを招待", "Invite members")}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
@@ -1216,6 +1232,21 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 updated_at: project.updatedAt ?? new Date().toISOString(),
               },
             ]}
+            toast={(message) => {
+              setHeaderNotice(message);
+              window.setTimeout(() => setHeaderNotice(""), 3200);
+            }}
+          />
+        ) : null}
+
+        {inviteComposeOpen && uid && project ? (
+          <ProjectInviteComposeModal
+            open={inviteComposeOpen}
+            projectId={projectId}
+            projectName={project.name}
+            projectVisibility={projectMeta?.visibility ?? "public"}
+            currentUserId={uid}
+            onClose={() => setInviteComposeOpen(false)}
             toast={(message) => {
               setHeaderNotice(message);
               window.setTimeout(() => setHeaderNotice(""), 3200);
