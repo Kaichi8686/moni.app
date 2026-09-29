@@ -41,12 +41,14 @@ export function RoadmapPhaseInfoSheet({
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     if (!phase) return;
     setGoalDraft(phase.goal ?? "");
     setDescriptionDraft(phase.description ?? "");
     setConfirming(false);
+    setActionError("");
   }, [phase]);
 
   useEffect(() => {
@@ -93,10 +95,17 @@ export function RoadmapPhaseInfoSheet({
   async function handleConfirmAchieve() {
     if (!onAchieve) return;
     setBusy(true);
+    setActionError("");
     try {
       await onAchieve();
       setConfirming(false);
       onClose();
+    } catch (e) {
+      setActionError(
+        e instanceof Error
+          ? e.message
+          : tx("達成の反映に失敗しました", "Could not mark this step achieved"),
+      );
     } finally {
       setBusy(false);
     }
@@ -161,6 +170,11 @@ export function RoadmapPhaseInfoSheet({
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {actionError ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[12px] text-amber-900" role="alert">
+                  {actionError}
+                </p>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}
@@ -173,7 +187,10 @@ export function RoadmapPhaseInfoSheet({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setConfirming(false)}
+                onClick={() => {
+                  setConfirming(false);
+                  setActionError("");
+                }}
                 className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
               >
                 {tx("まだ", "Not yet")}

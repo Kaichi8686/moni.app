@@ -88,7 +88,6 @@ export default function WorkspaceOverview() {
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
-  const [achieveError, setAchieveError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
   /**
@@ -278,12 +277,6 @@ export default function WorkspaceOverview() {
         )}
       </section>
 
-      {achieveError ? (
-        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[13px] text-amber-900" role="alert">
-          {achieveError}
-        </p>
-      ) : null}
-
       <RoadmapPhaseInfoSheet
         open={Boolean(selectedPhaseLive)}
         phase={
@@ -298,30 +291,22 @@ export default function WorkspaceOverview() {
               }
             : null
         }
-        onClose={() => {
-          setSelectedPhaseId(null);
-          setAchieveError("");
-        }}
+        onClose={() => setSelectedPhaseId(null)}
         canEdit={false}
         canAchieve={roadmap.canEdit && selectedPhaseLive?.status !== "completed"}
         onAchieve={async () => {
           if (!selectedPhaseLive) return;
-          setAchieveError("");
-          try {
-            await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
-            const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
-            const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
-            if (next && next.status !== "completed") {
-              await roadmap.updatePhase(next.id, { status: "in_progress" });
-            }
-            await wsReload();
-            setSelectedPhaseId(null);
-          } catch (e) {
-            setAchieveError(
-              e instanceof Error ? e.message : tx("達成の反映に失敗しました", "Could not mark this step achieved"),
-            );
-            throw e;
+          if (!roadmap.canEdit) {
+            throw new Error(tx("編集権限がありません", "You don’t have permission to edit"));
           }
+          await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
+          const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
+          const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
+          if (next && next.status !== "completed") {
+            await roadmap.updatePhase(next.id, { status: "in_progress" });
+          }
+          await wsReload();
+          setSelectedPhaseId(null);
         }}
       />
 
