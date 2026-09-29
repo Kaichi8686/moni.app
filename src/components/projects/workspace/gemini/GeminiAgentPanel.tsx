@@ -12,9 +12,10 @@ import type {
 import { GEMINI_AGENT_META, parseRoadmapPayload } from "@/lib/ai/geminiAgents/types";
 import { appendIdeasToVoting } from "@/lib/projects/ideaVoting/appendIdeas";
 import { applyAgentRoadmapToProject, type ApplyRoadmapMode } from "@/lib/projects/applyAgentRoadmap";
+import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; id?: string };
 
 function chatStorageKey(projectId: string, mode: GeminiAgentMode) {
   return `moni-gemini-chat:${projectId}:${mode}`;
@@ -82,7 +83,12 @@ export function GeminiAgentPanel({
   const [applyMode, setApplyMode] = useState<ApplyRoadmapMode>("append");
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToEnd = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     const stored = loadStoredChat(projectId, mode);
@@ -105,6 +111,7 @@ export function GeminiAgentPanel({
     setIdeas(null);
     setError("");
     setApplied(false);
+    setStreamingId(null);
     setApplyMode(phasesCount > 0 ? "append" : "replace");
   }, [mode, projectId, phasesCount, initialUserMessage, tx]);
 
@@ -114,8 +121,8 @@ export function GeminiAgentPanel({
   }, [messages, projectId, mode]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading, roadmap, ideas]);
+    scrollToEnd();
+  }, [messages, loading, roadmap, ideas, scrollToEnd]);
 
   const send = useCallback(
     async (text: string) => {
@@ -153,7 +160,9 @@ export function GeminiAgentPanel({
         if (!res.ok) throw new Error(json.error ?? tx("送信に失敗しました", "Failed to send"));
 
         const replyText = json.reply?.trim() || "…";
-        setMessages((prev) => [...prev, { role: "assistant", content: replyText }]);
+        const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+        setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: replyText }]);
+        setStreamingId(assistantId);
 
         if (json.roadmap?.phases?.length) {
           setRoadmap(json.roadmap);
@@ -184,13 +193,16 @@ export function GeminiAgentPanel({
       const r = await applyAgentRoadmapToProject(projectId, roadmap, { mode: applyMode });
       setApplied(true);
       setRoadmap(null);
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMessages((prev) => [
         ...prev,
         {
+          id: assistantId,
           role: "assistant",
           content: `ロードマップに反映しました（フェーズ${r.phasesCreated}・やること${r.issuesCreated}件）。ロードマップ画面で確認できます。`,
         },
       ]);
+      setStreamingId(assistantId);
       await onReload();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("反映に失敗しました", "Failed to apply"));
@@ -204,10 +216,12 @@ export function GeminiAgentPanel({
     try {
       const n = await appendIdeasToVoting(projectId, ideas.ideas);
       setIdeas(null);
+      const assistantId = `a-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `投票に ${n} 件追加しました。「投票」画面で確認できます。` },
+        { id: assistantId, role: "assistant", content: `投票に ${n} 件追加しました。「投票」画面で確認できます。` },
       ]);
+      setStreamingId(assistantId);
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("投票への追加に失敗しました", "Failed to add to voting"));
     }
@@ -240,19 +254,37 @@ export function GeminiAgentPanel({
                 "「〇〇の計画を作って」と送ると、ロードマップ案が出ます。反映ボタンで保存できます。",
                 "Send “make a plan for …” and you’ll get a roadmap draft. Use Apply to save it.",
               )}
-            {mode === "general" && tx("困っていることや質問を、そのまま送ってください。", "Send whatever you’re stuck on or curious about.")}
-            {mode === "ideas" && tx("「アイデアを10個出して」と送ると、案のリストが出ます。", "Send “give me 10 ideas” and you’ll get a list.")}
+            {mode === "general" &&
+              tx(
+                "困っていることや質問を、そのまま送ってください。大事なところは太字と絵文字で見やすく答えます。",
+                "Send whatever you’re stuck on or curious about. I’ll highlight key points with bold and emojis.",
+              )}
+            {mode === "ideas" &&
+              tx(
+                "「アイデアを出して」と送ると、方向性を太字・絵文字で伝えてから案のリストが出ます。",
+                "Send “give me ideas” — I’ll outline the direction with bold and emojis, then list options.",
+              )}
           </p>
         ) : null}
 
         {messages.map((m, i) => (
           <div
-            key={`${m.role}-${i}`}
-            className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed whitespace-pre-wrap ${
+            key={m.id ?? `${m.role}-${i}`}
+            className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
               m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
             }`}
           >
-            {m.content}
+            {m.role === "assistant" ? (
+              <AiChatStreamingRichText
+                text={m.content}
+                className="break-words"
+                animate={Boolean(m.id && m.id === streamingId)}
+                onTick={scrollToEnd}
+                onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+              />
+            ) : (
+              <p className="whitespace-pre-wrap break-words">{m.content}</p>
+            )}
           </div>
         ))}
 
@@ -333,14 +365,22 @@ export function GeminiAgentPanel({
           </button>
         ) : null}
 
-        {ideas?.ideas?.length ? (
+        {ideas?.ideas?.length && !streamingId ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px]">
-            <p className="font-bold text-amber-900">{tx(`アイデア ${ideas.ideas.length} 件`, `${ideas.ideas.length} ideas`)}</p>
+            <p className="font-bold text-amber-900">
+              {tx(`💡 アイデア ${ideas.ideas.length} 件`, `💡 ${ideas.ideas.length} ideas`)}
+            </p>
             <ul className="mt-2 space-y-2">
               {ideas.ideas.map((idea, i) => (
                 <li key={i} className="rounded-lg bg-white/90 px-2 py-1.5">
                   <p className="font-semibold">{idea.title}</p>
                   {idea.pitch ? <p className="text-[12px] text-amber-900">{idea.pitch}</p> : null}
+                  {idea.first_step ? (
+                    <p className="mt-0.5 text-[11px] text-amber-800/90">
+                      {tx("最初の一歩: ", "First step: ")}
+                      {idea.first_step}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>

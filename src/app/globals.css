@@ -179,6 +179,26 @@ html.moni-landing-active .moni-hero-rise {
   }
 }
 
+/* 相談AI: ChatGPT風 — 字が薄らからはっきり出る */
+@keyframes ai-chat-glyph-in {
+  from {
+    opacity: 0.12;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ai-chat-glyph {
+  animation: ai-chat-glyph-in 0.42s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-chat-glyph {
+    animation: none;
+  }
+}
+
 html.moni-landing-active {
   scroll-behavior: smooth;
 }
