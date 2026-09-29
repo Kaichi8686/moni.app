@@ -3,6 +3,7 @@
 import { Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
@@ -38,17 +39,12 @@ function IdeaHubInner() {
   return (
     <div className="min-h-[100dvh] bg-white pb-bottom-nav">
       <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-        <div className="mx-auto max-w-lg px-4 pt-3 pb-2">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <p className="moni-wordmark text-[15px]">moni</p>
-              <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("アイデア", "Ideas")}</h1>
-            </div>
-          </div>
+        <div className="mx-auto max-w-lg pb-2">
+          <AppBrandHeader bare className="px-4 pt-1" />
           <div
             role="tablist"
             aria-label={tx("アイデア機能の切り替え", "Idea tools")}
-            className="grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1"
+            className="mx-4 mt-1 grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1"
           >
             {IDEA_HUB_TABS.map((item) => {
               const active = tab === item.id;

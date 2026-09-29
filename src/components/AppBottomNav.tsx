@@ -148,9 +148,6 @@ function AppBottomNavInner({ className }: { className?: string }) {
                   </span>
                 ) : null}
               </span>
-              <span className="max-w-[5rem] whitespace-normal break-keep text-center text-[11px] leading-tight sm:text-[12px]">
-                {label}
-              </span>
               {active ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
             </Link>
           );

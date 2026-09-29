@@ -14,6 +14,7 @@ import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProj
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import type { MentorClientContext } from "@/lib/ai/mentorContext";
 import { readLastProject } from "@/lib/workspace/lastProject";
@@ -4102,28 +4103,19 @@ export default function Home() {
         </aside>
 
         <div className={searchFullBleed ? "flex min-h-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
-          <header
-            className={
-              searchFullBleed
-                ? "flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 bg-white px-4 py-3 sm:px-5"
-                : "flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3"
-            }
-          >
-            <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
-            <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-              {!session && canUseSupabase ? (
+          <AppBrandHeader
+            className={searchFullBleed ? "border-zinc-100" : "border-[#dbdbdb]"}
+            right={
+              !session && canUseSupabase ? (
                 <Link
                   href="/login"
                   className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
-              ) : null}
-              <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
-                {sessionEmail ? sessionEmail : accountText.loginStatus}
-              </div>
-            </div>
-          </header>
+              ) : undefined
+            }
+          />
 
           <main
             className={
@@ -5051,12 +5043,7 @@ export default function Home() {
               : "hidden"
           }
         >
-          <div className="shrink-0">
-            <h3 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">{t("searchTitle")}</h3>
-            <p className="mt-1 text-sm text-zinc-500">{t("searchHint")}</p>
-          </div>
-
-          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <div
               className="flex shrink-0 gap-1 border-b border-zinc-100"
               role="tablist"
@@ -5175,7 +5162,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="flex-1 pt-3" role="tabpanel">
-                <DiscoverPublicProjects showSectionHeader />
+                <DiscoverPublicProjects showSectionHeader={false} />
               </div>
             )}
           </div>
@@ -5949,7 +5936,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -5965,7 +5951,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -5992,7 +5977,6 @@ export default function Home() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6008,7 +5992,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6029,7 +6012,6 @@ export default function Home() {
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
-                <span className="max-w-[4.5rem] truncate">{label}</span>
                 {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );

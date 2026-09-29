@@ -99,15 +99,15 @@ body {
   }
 }
 
-/* App wordmark — thin, tight, geometric (not soft JP bold) */
+/* App wordmark — Instagram-style brush script */
 .moni-wordmark {
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  font-weight: 500;
-  letter-spacing: -0.06em;
-  font-feature-settings: "ss01" 1, "cv01" 1, "calt" 1;
+  font-family: var(--font-moni-script), "Grand Hotel", cursive;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
   color: #09090b;
 }
 
@@ -404,13 +404,13 @@ html.moni-landing-active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.35rem;
+  font-size: 1.55rem;
   line-height: 1;
 }
 
 .app-bottom-nav-svg {
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1.55rem;
+  height: 1.55rem;
   display: block;
 }
 

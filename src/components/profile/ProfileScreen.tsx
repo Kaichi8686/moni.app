@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { BadgeRow } from "@/components/profile/BadgeRow";
 import { computeMoniTier } from "@/lib/gamification/moniTier";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
@@ -188,17 +189,22 @@ export function ProfileScreen({ userId: propUserId }: Props) {
 
   if (!supabaseEnabled) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-zinc-600">
-        {tx("Supabase 未接続です", "Supabase is not connected")}
+      <div className="min-h-[100dvh] bg-white pb-bottom-nav text-zinc-900 antialiased">
+        <AppBrandHeader className="border-zinc-200" />
+        <p className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-zinc-600">
+          {tx("Supabase 未接続です", "Supabase is not connected")}
+        </p>
+        <AppBottomNav />
       </div>
     );
   }
 
   return (
     <div className="min-h-[100dvh] bg-white pb-bottom-nav text-zinc-900 antialiased">
-      <header className="flex items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
-          {!isOwnProfile && propUserId ? (
+      <AppBrandHeader
+        className="border-zinc-200"
+        left={
+          !isOwnProfile && propUserId ? (
             <button
               type="button"
               onClick={() => router.back()}
@@ -207,17 +213,18 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             >
               ←
             </button>
-          ) : null}
-          <h1 className="moni-wordmark truncate text-lg">moni</h1>
-        </div>
-        <Link
-          href="/settings"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
-          aria-label={tx("設定", "Settings")}
-        >
-          <Settings className="h-5 w-5" />
-        </Link>
-      </header>
+          ) : undefined
+        }
+        right={
+          <Link
+            href="/settings"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
+            aria-label={tx("設定", "Settings")}
+          >
+            <Settings className="h-5 w-5" />
+          </Link>
+        }
+      />
 
       {loading ? (
         <p className="px-4 py-12 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
