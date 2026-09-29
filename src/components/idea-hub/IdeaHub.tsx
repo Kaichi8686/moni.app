@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
@@ -92,9 +91,9 @@ function IdeaHubInner() {
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="-ml-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 transition hover:bg-zinc-100"
+                  className="mb-0 inline-flex items-center text-[20px] leading-none text-zinc-800"
                 >
-                  <ArrowLeft className="h-5 w-5" aria-hidden />
+                  ←
                 </button>
               </div>
               <IdeaQnAPanel active={tab === "qna"} />
