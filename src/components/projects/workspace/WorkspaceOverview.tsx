@@ -15,18 +15,15 @@ import {
   Vote,
 } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { RoadmapPhaseDetailExpand } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailExpand";
-import {
-  nextOrderIds,
-  RoadmapReorderMenu,
-  type RoadmapReorderAction,
-} from "@/components/projects/workspace/roadmap/RoadmapReorderMenu";
+import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
-import { supabase } from "@/lib/supabase";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+
+/** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
+const ROADMAP_VISIBLE_LIMIT = 6;
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
@@ -78,44 +75,36 @@ export default function WorkspaceOverview() {
   const { project, projectMeta, projectId, issues, phases: workspacePhases, loading, uid, canEdit, reload } =
     useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
+    projectId,
+    open: false,
+  });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
-  const [reorderBusy, setReorderBusy] = useState(false);
+  const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
   /**
-   * 地図ページと同じ project_phases を使う。
+   * 「すべて見る」地図ページと同じ project_phases を使う。
+   * 地図側で削除した直後でも概要に戻ったときに連動するよう、
    * roadmap hook を優先し、初回ロード中のみ workspace のキャッシュを出す。
    */
   const sortedPhases = useMemo(() => {
     const source = !roadmap.loading ? roadmap.phases : workspacePhases;
     return [...source].sort((a, b) => a.order - b.order);
   }, [roadmap.loading, roadmap.phases, workspacePhases]);
+  const selectedPhaseLive = selectedPhaseId
+    ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
+    : null;
   /** 未完了を先頭にし、完了済みはその後ろ */
   const displayPhases = useMemo(() => {
     const active = sortedPhases.filter((phase) => phase.status !== "completed");
     const done = sortedPhases.filter((phase) => phase.status === "completed");
     return [...active, ...done];
   }, [sortedPhases]);
-
-  async function movePhase(phaseId: string, action: RoadmapReorderAction) {
-    if (!supabase || !canEdit || reorderBusy) return;
-    const ids = sortedPhases.map((phase) => phase.id);
-    const next = nextOrderIds(ids, phaseId, action);
-    if (!next) return;
-    setReorderBusy(true);
-    try {
-      const client = supabase;
-      const results = await Promise.all(
-        next.map((id, index) =>
-          client.from("project_phases").update({ order: index, updated_at: new Date().toISOString() }).eq("id", id),
-        ),
-      );
-      const failed = results.find((result) => result.error);
-      if (failed?.error) throw new Error(failed.error.message);
-      await Promise.all([roadmap.reload(), reload()]);
-    } finally {
-      setReorderBusy(false);
-    }
-  }
+  const visiblePhases = useMemo(
+    () => (roadmapExpanded ? displayPhases : displayPhases.slice(0, ROADMAP_VISIBLE_LIMIT)),
+    [displayPhases, roadmapExpanded],
+  );
+  const hiddenPhaseCount = Math.max(0, displayPhases.length - visiblePhases.length);
 
   const upcomingIssues = useMemo(
     () =>
@@ -197,94 +186,112 @@ export default function WorkspaceOverview() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
-          <Link
-            href={`/projects/${projectId}/roadmap`}
-            className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
-          >
+          <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
             <PenLine className="h-3.5 w-3.5" aria-hidden />
             {tx("編集する", "Edit")}
           </Link>
         </div>
-        {displayPhases.length > 0 ? (
-          <div className="grid grid-cols-3 items-start gap-2 sm:gap-3">
-            {displayPhases.map((phase) => {
-              const index = sortedPhases.findIndex((item) => item.id === phase.id);
-              const complete = phase.status === "completed";
-              const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-              const locked = !complete && !current && index > currentIndex;
-              const expanded = selectedPhaseId === phase.id;
-              return (
-                <div key={phase.id} className="min-w-0">
+        {sortedPhases.length > 0 ? (
+          <>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {visiblePhases.map((phase) => {
+                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                const complete = phase.status === "completed";
+                const current = phase.status === "in_progress" || (!complete && index === currentIndex);
+                const locked = !complete && !current && index > currentIndex;
+                const card = (
                   <div
-                    className={`relative rounded-2xl border transition ${
+                    className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
                       locked
                         ? "border-zinc-200 bg-zinc-50 text-zinc-400"
-                        : expanded
-                          ? "border-orange-200 bg-white text-zinc-900 shadow-sm"
-                          : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
+                        : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
                     }`}
                   >
-                    <span
-                      className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-2xl ${
-                        complete || current ? "bg-orange-400" : "bg-zinc-200"
-                      }`}
-                    />
-                    <div className="flex items-start gap-0.5 px-1 pb-2.5 pt-3.5 sm:px-1.5 sm:pb-3 sm:pt-5">
-                      <RoadmapReorderMenu
-                        disabled={!canEdit || reorderBusy}
-                        canMoveUp={index > 0}
-                        canMoveDown={index >= 0 && index < sortedPhases.length - 1}
-                        onMove={(action) => void movePhase(phase.id, action)}
-                      />
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 px-0.5 pb-0.5 text-left sm:px-1"
-                        aria-expanded={expanded}
-                        onClick={() => setSelectedPhaseId((currentId) => (currentId === phase.id ? null : phase.id))}
-                      >
-                        {current ? (
-                          <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" />
-                        ) : null}
-                        {locked ? (
-                          <LockKeyhole className="absolute right-2 top-2.5 h-3.5 w-3.5 sm:right-3 sm:top-3 sm:h-4 sm:w-4" aria-hidden />
-                        ) : null}
-                        <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
-                        <p
-                          className={`mt-1.5 line-clamp-2 min-h-[2.4em] text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${
-                            locked ? "text-zinc-400" : "text-zinc-800"
-                          }`}
-                        >
-                          {phase.title}
-                        </p>
-                        {complete ? (
-                          <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
-                            <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
-                          </span>
-                        ) : null}
-                      </button>
-                    </div>
+                    <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
+                    {current ? <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" /> : null}
+                    {locked ? <LockKeyhole className="absolute right-2 top-2.5 h-3.5 w-3.5 sm:right-3 sm:top-3 sm:h-4 sm:w-4" aria-hidden /> : null}
+                    <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
+                    <p className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
+                      {phase.title}
+                    </p>
+                    {complete ? (
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
+                        <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
+                      </span>
+                    ) : null}
                   </div>
-                  <RoadmapPhaseDetailExpand
-                    open={expanded}
-                    title={phase.title}
-                    goal={phase.goal}
-                    description={phase.description}
-                    stepNumber={index + 1}
-                    compact
-                  />
-                </div>
-              );
-            })}
-          </div>
+                );
+                return locked ? (
+                  <div key={phase.id} aria-disabled="true">{card}</div>
+                ) : (
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className="text-left"
+                    onClick={() => setSelectedPhaseId(phase.id)}
+                  >
+                    {card}
+                  </button>
+                );
+              })}
+            </div>
+            {hiddenPhaseCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setExpandState({ projectId, open: true })}
+                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13px] font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+              >
+                {tx(`もっと見る（あと${hiddenPhaseCount}件）`, `Show more (${hiddenPhaseCount} more)`)}
+              </button>
+            ) : roadmapExpanded && displayPhases.length > ROADMAP_VISIBLE_LIMIT ? (
+              <button
+                type="button"
+                onClick={() => setExpandState({ projectId, open: false })}
+                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-100"
+              >
+                {tx(`閉じる（${ROADMAP_VISIBLE_LIMIT}件まで表示）`, `Show fewer (up to ${ROADMAP_VISIBLE_LIMIT})`)}
+              </button>
+            ) : null}
+          </>
         ) : (
-          <Link
-            href={`/projects/${projectId}/roadmap`}
-            className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600"
-          >
+          <Link href={`/projects/${projectId}/roadmap`} className="flex min-h-[108px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600">
             {tx("ロードマップを作成する", "Create roadmap")}
           </Link>
         )}
       </section>
+
+      <RoadmapPhaseInfoSheet
+        open={Boolean(selectedPhaseLive)}
+        phase={
+          selectedPhaseLive
+            ? {
+                id: selectedPhaseLive.id,
+                title: selectedPhaseLive.title,
+                goal: selectedPhaseLive.goal,
+                description: selectedPhaseLive.description,
+                stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+              }
+            : null
+        }
+        onClose={() => setSelectedPhaseId(null)}
+        canEdit={canEdit}
+        onSave={
+          canEdit && selectedPhaseLive
+            ? async (patch) => {
+                await roadmap.updatePhase(selectedPhaseLive.id, {
+                  goal: patch.goal,
+                  description: patch.description,
+                });
+                await reload();
+              }
+            : undefined
+        }
+        editHref={
+          !canEdit && selectedPhaseLive
+            ? `/projects/${projectId}/roadmap?phase=${selectedPhaseLive.id}`
+            : undefined
+        }
+      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
