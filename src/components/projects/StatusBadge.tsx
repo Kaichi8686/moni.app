@@ -5,8 +5,8 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const projectTone: Record<ProjectStatus, string> = {
   backlog: "bg-zinc-100 text-zinc-600",
-  planned: "bg-sky-50 text-sky-700",
-  in_progress: "bg-indigo-50 text-[#5E6AD2]",
+  planned: "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]",
+  in_progress: "bg-[var(--brand-muted,#ffd9cc)] text-[var(--brand-ink,#9a3412)]",
   paused: "bg-amber-50 text-amber-800",
   completed: "bg-emerald-50 text-emerald-800",
   cancelled: "bg-red-50 text-red-700",
@@ -14,9 +14,9 @@ const projectTone: Record<ProjectStatus, string> = {
 
 const issueTone: Record<IssueStatus, string> = {
   backlog: "bg-zinc-100 text-zinc-600",
-  todo: "bg-sky-50 text-sky-700",
-  in_progress: "bg-indigo-50 text-[#5E6AD2]",
-  in_review: "bg-violet-50 text-violet-800",
+  todo: "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]",
+  in_progress: "bg-[var(--brand-muted,#ffd9cc)] text-[var(--brand-ink,#9a3412)]",
+  in_review: "bg-amber-50 text-amber-800",
   done: "bg-emerald-50 text-emerald-800",
   cancelled: "bg-red-50 text-red-700",
 };

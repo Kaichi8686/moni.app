@@ -1,10 +1,10 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail } from "lucide-react";
+import { FolderKanban, Lightbulb, Mail, Search, UserRound } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
@@ -35,9 +35,9 @@ import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 const COMMUNITY_CTA =
-  "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-3.5 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-3.5 text-[13px] font-bold text-white shadow-sm shadow-[rgba(255,92,53,0.22)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 const COMMUNITY_CTA_PILL =
-  "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-4 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-4 text-[13px] font-bold text-white shadow-sm shadow-[rgba(255,92,53,0.22)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 
 type AppRole = "child" | "parent" | "investor" | "admin";
 type FeaturePage = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
@@ -227,12 +227,14 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
 
 type HomeBottomNavKey = FeaturePage | "idea" | "mail";
 
-const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
-  { key: "projects", icon: "▦" },
-  { key: "mail", icon: "mail" },
-  { key: "idea", icon: "✦" },
-  { key: "chat", icon: "⌕" },
-  { key: "account", icon: "◉" },
+const navIconClass = "app-bottom-nav-svg";
+
+const featureItems: Array<{ key: HomeBottomNavKey; icon: ReactNode }> = [
+  { key: "projects", icon: <FolderKanban className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "mail", icon: <Mail className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "idea", icon: <Lightbulb className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "chat", icon: <Search className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "account", icon: <UserRound className={navIconClass} strokeWidth={1.85} aria-hidden /> },
 ];
 
 const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
@@ -641,9 +643,9 @@ export default function Home() {
   const cardClass =
     "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5";
   const inputClass =
-    "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm";
+    "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[rgba(255,92,53,0.18)] sm:text-sm";
   const primaryButtonClass =
-    "min-h-[44px] rounded-xl border border-zinc-900 bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 hover:border-zinc-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
+    "min-h-[44px] rounded-xl border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-[rgba(255,92,53,0.25)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
   const bottomNavButtonClass = (page: HomeBottomNavKey) =>
@@ -5942,6 +5944,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5957,6 +5960,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5976,13 +5980,14 @@ export default function Home() {
                   title={label}
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
-                    <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
+                    {item.icon}
                     {inboxUnreadCount > 0 ? (
                       <span className="app-bottom-nav-badge">
                         {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
                       </span>
                     ) : null}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5998,6 +6003,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -6018,6 +6024,7 @@ export default function Home() {
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
+                <span className="app-bottom-nav-label">{label}</span>
                 {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );

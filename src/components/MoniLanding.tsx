@@ -23,11 +23,11 @@ type MoniLandingProps = {
 const SIGNUP_HREF_PLACEHOLDER = "/login"; // TODO: 本番の新規登録URLに差し替え
 
 const ctaPrimaryClass =
-  "group inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-md bg-sky-600 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-sky-500 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:px-5 sm:text-sm";
+  "group inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-md bg-[var(--brand,#ff5c35)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,92,53,0.35)] focus-visible:ring-offset-2 sm:px-5 sm:text-sm";
 const ctaSecondaryClass =
   "inline-flex min-h-[40px] touch-manipulation items-center justify-center rounded-md border border-zinc-200 bg-white px-4 text-[13px] font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60 focus-visible:ring-offset-2 sm:text-sm";
 const ctaHeroPrimaryClass =
-  "group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-600 px-6 text-[15px] font-semibold text-white shadow-sm transition hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:w-auto sm:min-w-[200px]";
+  "group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-[var(--brand,#ff5c35)] px-6 text-[15px] font-semibold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,92,53,0.35)] focus-visible:ring-offset-2 sm:w-auto sm:min-w-[200px]";
 
 function SectionHeader({
   eyebrow,
@@ -42,7 +42,7 @@ function SectionHeader({
 }) {
   return (
     <header className="max-w-3xl">
-      <p className="text-[13px] font-medium tracking-[-0.01em] text-sky-700">{eyebrow}</p>
+      <p className="text-[13px] font-medium tracking-[-0.01em] text-[var(--brand-ink,#9a3412)]">{eyebrow}</p>
       <h2
         id={id}
         className="mt-3 text-[1.85rem] font-semibold leading-[1.12] tracking-[-0.035em] text-zinc-950 sm:text-[2.35rem]"
@@ -88,21 +88,21 @@ function AppShot({
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl shadow-zinc-900/8">
       <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
         <span className="moni-wordmark text-lg">moni</span>
-        <span className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+        <span className="rounded-md bg-[var(--brand,#ff5c35)] px-2.5 py-1 text-[11px] font-semibold text-white">
           {labels.action}
         </span>
       </div>
       <div className="flex gap-5 border-b border-zinc-100 px-4 pt-2 text-[12px] font-medium">
         <span className="relative pb-2 text-zinc-900">
           {labels.progress}
-          <span className="absolute inset-x-0 bottom-0 h-0.5 bg-sky-600" />
+          <span className="absolute inset-x-0 bottom-0 h-0.5 bg-[var(--brand,#ff5c35)]" />
         </span>
         <span className="pb-2 text-zinc-400">{labels.qna}</span>
       </div>
       {variant === "projects" ? (
         <div className="space-y-2.5 bg-zinc-50 p-3">
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
               {locale === "ja" ? "ビジネスアイデア" : "Business idea"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
@@ -113,7 +113,7 @@ function AppShot({
             <div className="mt-2 h-14 rounded-md border border-zinc-100 bg-zinc-50" />
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
               {locale === "ja" ? "検証メモ" : "Validation note"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
@@ -131,7 +131,7 @@ function AppShot({
               ? "このアイデア、本当に課題解決になってる？"
               : "Does this idea really solve a problem?"}
           </div>
-          <div className="ml-auto max-w-[82%] rounded-lg bg-sky-600 px-3 py-2 text-[13px] text-white">
+          <div className="ml-auto max-w-[82%] rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-2 text-[13px] text-white">
             {locale === "ja"
               ? "客単価と回転数を分けて見よう。まずは客単価。"
               : "Split by average spend and turnover. Start with avg spend."}
@@ -146,7 +146,7 @@ function AppShot({
       {variant === "qna" ? (
         <div className="bg-zinc-50 p-3">
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
               {locale === "ja" ? "知恵袋メモ" : "Q&A Note"}
             </p>
             <ul className="mt-2 space-y-1.5 text-[12px] text-zinc-600">
@@ -614,7 +614,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                       {`CASE 0${idx + 1}`}
                     </div>
                     <div className="border-t border-zinc-100 bg-zinc-50/80 p-5 sm:border-t-0 sm:p-6">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-sky-700">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--brand-ink,#9a3412)]">
                         With moni
                       </p>
                       <p className="mt-2 text-[14px] font-medium leading-relaxed text-zinc-900">
@@ -650,7 +650,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                   }`}
                 >
                   <div>
-                    <p className="font-[family-name:var(--font-geist-mono)] text-[12px] font-medium tracking-wide text-sky-700">
+                    <p className="font-[family-name:var(--font-geist-mono)] text-[12px] font-medium tracking-wide text-[var(--brand-ink,#9a3412)]">
                       {item.marker}
                     </p>
                     <h3 className="mt-3 text-[1.5rem] font-semibold leading-[1.15] tracking-[-0.03em] text-zinc-950 sm:text-[1.85rem]">
@@ -830,7 +830,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                 <>
                   <button
                     type="button"
-                    className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-500 px-8 text-[15px] font-semibold text-white transition hover:bg-sky-400"
+                    className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-[var(--brand,#ff5c35)] px-8 text-[15px] font-semibold text-white transition hover:bg-[var(--brand-hover,#e04e2a)]"
                     onClick={onStart}
                   >
                     {primary}
