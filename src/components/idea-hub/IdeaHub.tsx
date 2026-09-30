@@ -84,7 +84,7 @@ function IdeaHubInner() {
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                  className="mb-2 text-[13px] font-semibold text-[var(--brand,#ff5c35)] hover:underline"
                 >
                   {tx("← 相談AIに戻る", "← Back to consult AI")}
                 </button>
