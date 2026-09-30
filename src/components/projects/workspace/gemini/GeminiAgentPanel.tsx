@@ -95,6 +95,8 @@ export function GeminiAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const handoffAppliedRef = useRef(false);
+  /** Only persist to the store key that this panel instance last hydrated for (per project). */
+  const persistKeyRef = useRef("");
   /** Capture mount-time value so clearing the parent flag does not re-hydrate old threads */
   const startFreshOnMountRef = useRef(startFresh);
   const onFreshConsumedRef = useRef(onFreshConsumed);
@@ -115,6 +117,7 @@ export function GeminiAgentPanel({
 
   useEffect(() => {
     setHydrated(false);
+    persistKeyRef.current = "";
     handoffAppliedRef.current = false;
     const preferFresh = startFreshOnMountRef.current;
     const storeKey = conversationsKey(projectId, mode);
@@ -164,6 +167,8 @@ export function GeminiAgentPanel({
     setDraft("");
     resetPanels();
     setHistoryOpen(false);
+    // Bind persistence to this project+mode only after hydrate; never write prior project threads here.
+    persistKeyRef.current = storeKey;
     setHydrated(true);
     if (preferFresh) {
       startFreshOnMountRef.current = false;
@@ -192,17 +197,18 @@ export function GeminiAgentPanel({
   }, [hydrated, initialUserMessage, tx]);
 
   useEffect(() => {
-    if (!hydrated || !activeId) return;
+    if (!hydrated || !activeId || !persistKeyRef.current) return;
     setConversations((prev) => upsertActiveConversation(prev, activeId, messages, newTitle));
   }, [messages, activeId, hydrated, newTitle]);
 
   useEffect(() => {
-    if (!hydrated || !activeId) return;
-    saveConversationStore(conversationsKey(projectId, mode), {
+    if (!hydrated || !activeId || !persistKeyRef.current) return;
+    // Use the hydrated project key — do not re-save under a newly changed projectId with stale threads.
+    saveConversationStore(persistKeyRef.current, {
       activeId,
       conversations,
     });
-  }, [activeId, conversations, hydrated, mode, projectId]);
+  }, [activeId, conversations, hydrated]);
 
   useEffect(() => {
     scrollToEnd();

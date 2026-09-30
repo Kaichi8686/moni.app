@@ -14,7 +14,7 @@ import {
 } from "@/lib/idea-interview/types";
 import { emptySession } from "@/lib/idea-interview/session";
 
-/** Personal (not project-scoped) multi-thread history for Ideas excavate AI. */
+/** Multi-thread history for Ideas excavate AI (personal or project-scoped). */
 export const IDEA_INTERVIEW_CONVERSATIONS_KEY = "moni.ideaInterview.conversations.v1";
 
 export type IdeaInterviewThreadMeta = {
@@ -80,7 +80,10 @@ function normalizeMeta(raw: unknown): IdeaInterviewThreadMeta {
   };
 }
 
-function personalStorageKey(ownerKey: string): string {
+function excavateStorageKey(ownerKey: string, projectId?: string): string {
+  if (projectId) {
+    return `${IDEA_INTERVIEW_CONVERSATIONS_KEY}:project:${projectId}:${ownerKey}`;
+  }
   return `${IDEA_INTERVIEW_CONVERSATIONS_KEY}:${ownerKey}`;
 }
 
@@ -166,13 +169,14 @@ export function blankIdeaInterviewConversation(titleFallback: string): IdeaInter
 export function loadIdeaInterviewConversations(
   ownerKey: string,
   titleFallback: string,
+  projectId?: string,
 ): { activeId: string; conversations: IdeaInterviewConversation[] } {
   if (typeof window === "undefined") {
     const blank = blankIdeaInterviewConversation(titleFallback);
     return { activeId: blank.id, conversations: [blank] };
   }
 
-  const key = personalStorageKey(ownerKey);
+  const key = excavateStorageKey(ownerKey, projectId);
   try {
     const raw = window.localStorage.getItem(key);
     if (raw) {
@@ -185,21 +189,24 @@ export function loadIdeaInterviewConversations(
       }
     }
   } catch {
-    /* fall through to legacy */
+    /* fall through to legacy / blank */
   }
 
-  const legacy = loadLegacySession();
-  if (legacy) {
-    const migrated = conversationFromLegacySession(legacy, titleFallback);
-    if (migrated) {
-      const store = { activeId: migrated.id, conversations: [migrated] };
-      saveIdeaInterviewConversations(ownerKey, store.activeId, store.conversations);
-      try {
-        window.localStorage.removeItem(IDEA_INTERVIEW_STORAGE_KEY);
-      } catch {
-        /* ignore */
+  // Legacy single-session migration is personal-only (never bleed into a project store).
+  if (!projectId) {
+    const legacy = loadLegacySession();
+    if (legacy) {
+      const migrated = conversationFromLegacySession(legacy, titleFallback);
+      if (migrated) {
+        const store = { activeId: migrated.id, conversations: [migrated] };
+        saveIdeaInterviewConversations(ownerKey, store.activeId, store.conversations);
+        try {
+          window.localStorage.removeItem(IDEA_INTERVIEW_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return store;
       }
-      return store;
     }
   }
 
@@ -211,11 +218,12 @@ export function saveIdeaInterviewConversations(
   ownerKey: string,
   activeId: string,
   conversations: IdeaInterviewConversation[],
+  projectId?: string,
 ): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(
-      personalStorageKey(ownerKey),
+      excavateStorageKey(ownerKey, projectId),
       JSON.stringify({
         activeId,
         conversations: conversations.slice(0, AI_CHAT_LIMITS.maxConversations),

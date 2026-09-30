@@ -113,6 +113,8 @@ export function IdeaInterviewApp({
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const startFreshOnModeChangeRef = useRef(false);
+  /** Persist only under the owner(+project) scope that was last hydrated. */
+  const persistScopeRef = useRef("");
 
   const isConsult = aiMode === "consult";
   const messages = isConsult ? consultMessages : (session.messages as AiChatMessage[]);
@@ -123,6 +125,7 @@ export function IdeaInterviewApp({
       consultMessages.every((m) => m.role === "assistant")
     : excavateHome;
   const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
+  const projectScopeId = isProject ? projectId : undefined;
 
   useEffect(() => {
     if (!isProject) setAiMode(initialMode);
@@ -152,6 +155,7 @@ export function IdeaInterviewApp({
   const hydrateMode = useCallback(
     (mode: IdeaPersonalAiMode, preferFresh: boolean) => {
       setHydrated(false);
+      persistScopeRef.current = "";
       setDraft("");
       setError("");
       setStreamingId(null);
@@ -176,8 +180,9 @@ export function IdeaInterviewApp({
           setConsultMessages(active.messages);
         }
         setSession(emptySession());
+        persistScopeRef.current = `consult:${ownerKey}`;
       } else {
-        const loaded = loadIdeaInterviewConversations(ownerKey, newTitle);
+        const loaded = loadIdeaInterviewConversations(ownerKey, newTitle, projectScopeId);
         if (preferFresh) {
           const blank = blankIdeaInterviewConversation(newTitle);
           const next = [blank, ...loaded.conversations].slice(0, 30);
@@ -192,10 +197,13 @@ export function IdeaInterviewApp({
           setSession(conversationToSession(active));
         }
         setConsultMessages([]);
+        persistScopeRef.current = projectScopeId
+          ? `excavate:project:${projectScopeId}:${ownerKey}`
+          : `excavate:${ownerKey}`;
       }
       setHydrated(true);
     },
-    [newTitle, ownerKey],
+    [newTitle, ownerKey, projectScopeId],
   );
 
   useEffect(() => {
@@ -203,10 +211,10 @@ export function IdeaInterviewApp({
     const preferFresh = startFreshOnModeChangeRef.current;
     startFreshOnModeChangeRef.current = false;
     hydrateMode(aiMode, preferFresh);
-  }, [ownerReady, ownerKey, aiMode, hydrateMode]);
+  }, [ownerReady, ownerKey, aiMode, projectScopeId, hydrateMode]);
 
   useEffect(() => {
-    if (!hydrated || !activeId || isConsult) return;
+    if (!hydrated || !activeId || isConsult || !persistScopeRef.current) return;
     setExcavateConversations((prev) =>
       upsertIdeaInterviewConversation(
         prev,
@@ -219,16 +227,21 @@ export function IdeaInterviewApp({
   }, [messages, session, activeId, hydrated, newTitle, isConsult]);
 
   useEffect(() => {
-    if (!hydrated || !activeId || !isConsult) return;
+    if (!hydrated || !activeId || !isConsult || !persistScopeRef.current) return;
     setConsultConversations((prev) => upsertActiveConversation(prev, activeId, consultMessages, newTitle));
   }, [consultMessages, activeId, hydrated, newTitle, isConsult]);
 
   useEffect(() => {
-    if (!hydrated || !activeId || !ownerReady) return;
+    if (!hydrated || !activeId || !ownerReady || !persistScopeRef.current) return;
     if (isConsult) {
+      if (persistScopeRef.current !== `consult:${ownerKey}`) return;
       saveConsultConversations(ownerKey, activeId, consultConversations);
     } else {
-      saveIdeaInterviewConversations(ownerKey, activeId, excavateConversations);
+      const expected = projectScopeId
+        ? `excavate:project:${projectScopeId}:${ownerKey}`
+        : `excavate:${ownerKey}`;
+      if (persistScopeRef.current !== expected) return;
+      saveIdeaInterviewConversations(ownerKey, activeId, excavateConversations, projectScopeId);
     }
   }, [
     activeId,
@@ -238,6 +251,7 @@ export function IdeaInterviewApp({
     isConsult,
     ownerKey,
     ownerReady,
+    projectScopeId,
   ]);
 
   useEffect(() => {

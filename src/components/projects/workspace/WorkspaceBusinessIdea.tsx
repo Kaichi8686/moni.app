@@ -17,7 +17,7 @@ export default function WorkspaceBusinessIdea() {
 
   return (
     <div className="-mx-1 overflow-hidden rounded-xl border border-zinc-200 bg-white sm:-mx-0">
-      <IdeaInterviewApp variant="project" projectId={projectId} />
+      <IdeaInterviewApp key={projectId} variant="project" projectId={projectId} />
     </div>
   );
 }
