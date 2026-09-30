@@ -345,12 +345,39 @@ export function ProjectTabGlide({
 
   if (!hasSession) {
     return (
-      <div className="flex min-h-[min(70vh,640px)] flex-col items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 text-center">
-        <p className="text-lg font-bold text-zinc-900">プロジェクトを始めよう</p>
-        <p className="mt-2 max-w-sm text-sm text-zinc-600">ログインすると、プロジェクトの作成・参加ができます。</p>
-        <button type="button" className="mt-4 min-h-[44px] rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white" onClick={() => onNavigate("account")}>
-          ログインする
-        </button>
+      <div className="flex min-h-[min(70vh,640px)] flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-gradient-to-b from-[var(--brand-soft,#fff4f0)] to-white p-6 text-center shadow-sm">
+          <p className="text-[11px] font-semibold tracking-wide text-[var(--brand,#ff5c35)]">
+            Ideas → People → Projects → Reality
+          </p>
+          <p className="mt-3 text-lg font-bold tracking-tight text-zinc-900">プロジェクトを始めよう</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            ログインすると、アイデアをプロジェクトにして仲間を集められます。
+          </p>
+          <ol className="mt-5 space-y-2 text-left text-[13px] text-zinc-700">
+            <li className="flex gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--brand-muted,#ffd9cc)]/70">
+              <span className="font-bold text-[var(--brand,#ff5c35)]" aria-hidden>
+                1
+              </span>
+              <span>アイデアを書く</span>
+            </li>
+            <li className="flex gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--brand-muted,#ffd9cc)]/70">
+              <span className="font-bold text-[var(--brand,#ff5c35)]" aria-hidden>
+                2
+              </span>
+              <span>仲間を見つける</span>
+            </li>
+            <li className="flex gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-[var(--brand-muted,#ffd9cc)]/70">
+              <span className="font-bold text-[var(--brand,#ff5c35)]" aria-hidden>
+                3
+              </span>
+              <span>プロジェクトを進める</span>
+            </li>
+          </ol>
+          <button type="button" className="moni-btn-primary mt-5 w-full" onClick={() => onNavigate("account")}>
+            ログインしてはじめる
+          </button>
+        </div>
       </div>
     );
   }
@@ -439,16 +466,16 @@ export function ProjectTabGlide({
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="group flex flex-col overflow-hidden rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+                className="group flex flex-col overflow-hidden rounded-2xl border-2 border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/80 transition hover:border-[var(--brand,#ff5c35)] hover:bg-[var(--brand-soft,#fff4f0)]"
               >
-                <div className="flex aspect-[4/3] w-full items-center justify-center bg-zinc-100/90">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
+                <div className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-[var(--brand-soft,#fff4f0)] to-white">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] text-2xl font-light text-white shadow-md shadow-[rgba(255,92,53,0.3)] transition group-hover:scale-105">
                     +
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
                   <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
-                  <span className="text-[11px] text-zinc-500">作って仲間を集める</span>
+                  <span className="text-[11px] text-zinc-500">アイデアを形にして仲間を集める</span>
                 </div>
               </button>
 
@@ -484,7 +511,7 @@ export function ProjectTabGlide({
                       <p className="line-clamp-2 w-full text-sm font-semibold leading-snug text-zinc-900">
                         {project.name}
                       </p>
-                      <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
+                      <p className="line-clamp-1 w-full text-[10px] font-semibold text-[var(--brand-ink,#9a3412)]">
                         {projectLineShortLabel(project.business_type)}
                       </p>
                       <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
@@ -503,27 +530,23 @@ export function ProjectTabGlide({
           </div>
 
           {!loading && displayList.length === 0 ? (
-            <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
-              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
+            <div className="mt-2 rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-6 text-center">
+              <p className="text-sm font-semibold text-zinc-900">まだプロジェクトがありません</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
+                まずは1つ作ってみましょう。あとから「検索」で仲間や公開プロジェクトも見つけられます。
               </p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                  onClick={() => setCreateOpen(true)}
-                >
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <button type="button" className="moni-btn-primary px-4" onClick={() => setCreateOpen(true)}>
                   プロジェクトを作る
                 </button>
                 <button
                   type="button"
-                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                  className="moni-btn-secondary px-4"
                   onClick={() => {
                     onNavigate("chat");
                   }}
                 >
-                  探すタブで応募する
+                  検索で探す
                 </button>
               </div>
             </div>
@@ -568,7 +591,7 @@ export function ProjectTabGlide({
                         onClick={() => setForm((f) => ({ ...f, business_type: bt }))}
                         className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                           selected
-                            ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
+                            ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] ring-1 ring-[var(--brand,#ff5c35)]"
                             : "border-zinc-200 bg-white hover:border-zinc-300"
                         }`}
                       >
@@ -638,7 +661,7 @@ export function ProjectTabGlide({
             <button
               type="button"
               disabled={busy || !form.name.trim()}
-              className="mt-4 w-full min-h-[44px] rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:opacity-50"
+              className="moni-btn-primary mt-4 w-full"
               onClick={() => void onCreate()}
             >
               {busy ? "作成中…" : "作成して開く"}
