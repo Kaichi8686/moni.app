@@ -7,9 +7,7 @@ import {
   BookmarkPlus,
   Check,
   History,
-  Lightbulb,
   Loader2,
-  MessageCircle,
   MessageSquarePlus,
   Sparkles,
   Users,
@@ -77,20 +75,16 @@ type Props = {
   projectId?: string;
   /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
   initialMode?: IdeaPersonalAiMode;
-  /** Show 相談 / 発掘 picker (hub & standalone). Project stays excavate-only. */
-  enableModePicker?: boolean;
 };
 
 export function IdeaInterviewApp({
   variant = "standalone",
   projectId,
   initialMode = "excavate",
-  enableModePicker,
 }: Props) {
   const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
   const isHub = variant === "hub";
-  const modePicker = enableModePicker ?? !isProject;
   const exitHref = isProject ? `/projects/${projectId}/overview` : isHub ? "/idea" : "/";
   const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/?tab=mentor&mentor=ai";
   const newTitle = tx("新しいチャット", "New chat");
@@ -249,12 +243,6 @@ export function IdeaInterviewApp({
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending, generating, session.phase, session.seeds, aiMode]);
-
-  const changeMode = (next: IdeaPersonalAiMode) => {
-    if (next === aiMode) return;
-    startFreshOnModeChangeRef.current = true;
-    setAiMode(next);
-  };
 
   const startNewChat = useCallback(() => {
     if (isConsult) {
@@ -706,41 +694,9 @@ export function IdeaInterviewApp({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {showModeHome ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
-              {modePicker ? (
-                <div className="grid w-full max-w-md grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => changeMode("consult")}
-                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
-                      isConsult
-                        ? "border-violet-300 bg-violet-50 text-violet-900"
-                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
-                    }`}
-                  >
-                    <MessageCircle className="h-6 w-6" aria-hidden />
-                    <span className="text-[15px] font-bold">{tx("相談", "Chat")}</span>
-                    <span className="text-[11px] leading-snug opacity-80">
-                      {tx("困りごと・次の一手", "Stuck points & next steps")}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeMode("excavate")}
-                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
-                      !isConsult
-                        ? "border-violet-300 bg-violet-50 text-violet-900"
-                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
-                    }`}
-                  >
-                    <Lightbulb className="h-6 w-6" aria-hidden />
-                    <span className="text-[15px] font-bold">{tx("発掘", "Discover")}</span>
-                    <span className="text-[11px] leading-snug opacity-80">
-                      {tx("日常からアイデアの種を探す", "Find idea seeds in daily life")}
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+                <Sparkles className="h-6 w-6" aria-hidden />
+              </div>
               <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
                 {isConsult
                   ? tx(
@@ -774,19 +730,6 @@ export function IdeaInterviewApp({
                     );
                   })}
                 </div>
-              ) : (
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
-                  <Sparkles className="h-6 w-6" aria-hidden />
-                </div>
-              )}
-
-              {isConsult && isHub ? (
-                <Link
-                  href="/idea?tab=qna&view=board"
-                  className="text-[12px] font-semibold text-violet-700 hover:underline"
-                >
-                  {tx("みんなに質問する（知恵袋）→", "Ask the community (Q&A) →")}
-                </Link>
               ) : null}
             </div>
           ) : null}
