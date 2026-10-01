@@ -31,7 +31,7 @@ export function ExploreFriendCard({ member, avatar, onOpenProfile }: Props) {
         <p className="mt-2 line-clamp-1 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-tight text-zinc-900 sm:text-[15px]">
           {member.name}
         </p>
-        <p className="mt-1 line-clamp-1 w-full break-words [overflow-wrap:anywhere] text-[11px] font-semibold leading-tight text-indigo-700 sm:text-[12px]">
+        <p className="mt-1 line-clamp-1 w-full break-words [overflow-wrap:anywhere] text-[11px] font-semibold leading-tight text-[var(--brand-ink,#9a3412)] sm:text-[12px]">
           {member.strength}
         </p>
         <p className="mt-1.5 line-clamp-2 w-full break-words text-[11px] leading-snug text-zinc-500 sm:text-[12px]">
