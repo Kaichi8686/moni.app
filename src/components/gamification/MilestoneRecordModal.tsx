@@ -80,7 +80,7 @@ export function MilestoneRecordModal({ open, userId, onClose, onCreated }: Props
                   type="button"
                   className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
                     type === o.type
-                      ? "border-violet-500 bg-violet-50 text-violet-800"
+                      ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                   onClick={() => setType(o.type)}
@@ -94,7 +94,7 @@ export function MilestoneRecordModal({ open, userId, onClose, onCreated }: Props
           <label className="block text-xs font-medium text-gray-600">
             {tx("タイトル", "Title")}
             <input
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={tx("例：友人10人への初回販売、売上3,000円", "e.g. First sales to 10 friends, ¥3,000")}
@@ -140,7 +140,7 @@ export function MilestoneRecordModal({ open, userId, onClose, onCreated }: Props
             <button
               type="submit"
               disabled={saving}
-              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+              className="rounded-xl bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
             >
               {saving ? tx("保存中…", "Saving…") : tx("記録する", "Save")}
             </button>
