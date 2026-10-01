@@ -7,8 +7,11 @@ import { supabase } from "@/lib/supabase";
 import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
+
+type ProjectProgress = { total: number; done: number; pct: number };
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
@@ -139,6 +142,7 @@ export function ProjectTabGlide({
     thumbnail_url: "",
   });
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [progressById, setProgressById] = useState<Record<string, ProjectProgress>>({});
   const load = useCallback(async () => {
     if (!supabase) {
       setLoading(false);
@@ -207,8 +211,43 @@ export function ProjectTabGlide({
           .filter((p) => p.owner_id === uid)
           .map((p) => ensureOwnerMembership(p.id, p.owner_id).catch(() => undefined)),
       );
-      setProjects(merged.slice(0, 200));
+      const nextProjects = merged.slice(0, 200);
+      setProjects(nextProjects);
       setJoinedIds(new Set(merged.map((p) => p.id)));
+
+      // 進捗は一覧表示をブロックしない（成長感の視覚化用）
+      const ids = nextProjects.map((p) => p.id);
+      if (ids.length > 0) {
+        void (async () => {
+          try {
+            const batches = chunkIds(ids, 80);
+            const map: Record<string, ProjectProgress> = {};
+            for (const id of ids) map[id] = { total: 0, done: 0, pct: 0 };
+            for (const batch of batches) {
+              const { data, error } = await client
+                .from("project_issues")
+                .select("project_id,status")
+                .in("project_id", batch);
+              if (error || !data) continue;
+              for (const row of data as { project_id: string; status: string }[]) {
+                const cur = map[row.project_id] ?? { total: 0, done: 0, pct: 0 };
+                cur.total += 1;
+                if (row.status === "done") cur.done += 1;
+                map[row.project_id] = cur;
+              }
+            }
+            for (const id of Object.keys(map)) {
+              const cur = map[id];
+              cur.pct = cur.total === 0 ? 0 : Math.round((cur.done / cur.total) * 100);
+            }
+            setProgressById(map);
+          } catch {
+            /* ignore progress fetch errors */
+          }
+        })();
+      } else {
+        setProgressById({});
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました。");
     } finally {
@@ -462,6 +501,22 @@ export function ProjectTabGlide({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-6 sm:p-4">
             {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
+            {!loading && displayList.length > 0 && displayList.length <= 2 ? (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5">
+                <p className="min-w-0 flex-1 text-[12px] leading-snug text-[var(--brand-ink,#9a3412)]">
+                  <span className="font-semibold">次の一手:</span>{" "}
+                  {displayList.length === 1
+                    ? "プロジェクトを開いて、ロードマップで進む道筋を見てみよう"
+                    : "気になるプロジェクトを開いて、今日やることを1つ進めよう"}
+                </p>
+                <Link
+                  href={`/projects/${displayList[0].id}/roadmap`}
+                  className="inline-flex min-h-[36px] shrink-0 items-center rounded-xl bg-[var(--brand,#ff5c35)] px-3 text-[12px] font-semibold text-white"
+                >
+                  {displayList.length === 1 ? "ロードマップを見る" : "開く"}
+                </Link>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               <button
                 type="button"
@@ -483,6 +538,7 @@ export function ProjectTabGlide({
                 const color =
                   PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
                 const thumb = project.thumbnail_url?.trim();
+                const progress = progressById[project.id];
                 return (
                   <Link
                     key={project.id}
@@ -514,11 +570,20 @@ export function ProjectTabGlide({
                       <p className="line-clamp-1 w-full text-[10px] font-semibold text-[var(--brand-ink,#9a3412)]">
                         {projectLineShortLabel(project.business_type)}
                       </p>
-                      <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
-                        {project.visibility === "public" ? "公開" : "非公開"}
-                        {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
-                        {joinedIds.has(project.id) ? " ・ メンバー" : ""}
-                      </p>
+                      {progress && progress.total > 0 ? (
+                        <div className="mt-1 flex items-center gap-2">
+                          <ProgressBar value={progress.pct} className="min-w-0 flex-1" />
+                          <span className="shrink-0 text-[10px] font-semibold tabular-nums text-[var(--brand,#ff5c35)]">
+                            {progress.pct}%
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                          {project.visibility === "public" ? "公開" : "非公開"}
+                          {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
+                          {joinedIds.has(project.id) ? " ・ メンバー" : ""}
+                        </p>
+                      )}
                     </div>
                     <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/45 px-1.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
                       ⋯

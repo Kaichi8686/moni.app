@@ -78,7 +78,7 @@ export function FollowModal({ type, profileId, viewerId, onClose, loadUsers, onT
                         ? "bg-gray-100 text-gray-800"
                         : user.isPending
                           ? "bg-amber-100 text-amber-900"
-                          : "bg-violet-600 text-white"
+                          : "bg-[var(--brand,#ff5c35)] text-white"
                     }`}
                     onClick={() => void onToggleFollow(user.id).then(() => void loadUsers().then(setUsers))}
                   >
