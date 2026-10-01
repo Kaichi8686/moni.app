@@ -709,7 +709,7 @@ export function IdeaInterviewApp({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {showModeHome ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-soft,#fff4f0)] text-[var(--brand,#ff5c35)]">
                 <Sparkles className="h-6 w-6" aria-hidden />
               </div>
               <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
@@ -733,7 +733,7 @@ export function IdeaInterviewApp({
                         key={t.id}
                         type="button"
                         onClick={() => chooseTheme(t.id)}
-                        className="flex min-h-[96px] flex-col items-start justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-3 text-left transition hover:border-violet-200 hover:bg-violet-50/40"
+                        className="flex min-h-[96px] flex-col items-start justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-3 text-left transition hover:border-[var(--brand-muted,#ffd9cc)] hover:bg-[var(--brand-soft,#fff4f0)]/40"
                       >
                         <span className="text-[14px] font-bold leading-snug text-[#1A1A1A]">
                           {tx(starter.prompt, THEME_STARTERS_EN[t.id].prompt)}
@@ -755,7 +755,7 @@ export function IdeaInterviewApp({
                 <div
                   key={m.id ?? `${m.role}-${i}`}
                   className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                    m.role === "user" ? "ml-auto bg-[var(--brand,#ff5c35)] text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
                   }`}
                 >
                   {m.role === "assistant" ? (
@@ -786,7 +786,7 @@ export function IdeaInterviewApp({
                 <div
                   key={m.id ?? `${m.role}-${i}`}
                   className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                    m.role === "user" ? "ml-auto bg-[var(--brand,#ff5c35)] text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
                   }`}
                 >
                   {m.role === "assistant" ? (
@@ -849,7 +849,7 @@ export function IdeaInterviewApp({
                       <button
                         type="button"
                         onClick={() => handoffToCoach(seed)}
-                        className="inline-flex min-h-[36px] items-center rounded-lg bg-violet-600 px-3 text-[12px] font-semibold text-white hover:bg-violet-500"
+                        className="inline-flex min-h-[36px] items-center rounded-lg bg-[var(--brand,#ff5c35)] px-3 text-[12px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
                       >
                         {tx("これを深掘りする", "Go deeper on this")}
                       </button>
@@ -886,7 +886,7 @@ export function IdeaInterviewApp({
                 <button
                   type="button"
                   onClick={() => void generateIdeas(session)}
-                  className="text-sm font-semibold text-violet-700 hover:underline"
+                  className="text-sm font-semibold text-[var(--brand,#ff5c35)] hover:underline"
                 >
                   {tx("もう一度生成する", "Generate again")}
                 </button>
@@ -915,7 +915,7 @@ export function IdeaInterviewApp({
               <button
                 type="button"
                 onClick={() => void generateIdeas({ ...session, readyForIdeas: true })}
-                className="mb-2 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-800 transition hover:bg-violet-100"
+                className="mb-2 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 text-[13px] font-semibold text-[var(--brand-ink,#9a3412)] transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 {tx("この内容でアイデアの種を出す", "Generate idea seeds from this")}
@@ -934,12 +934,12 @@ export function IdeaInterviewApp({
                       ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
                       : placeholder
                 }
-                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2 disabled:opacity-60"
+                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-[var(--brand,#ff5c35)]/35 focus:ring-2 disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={sending || generating || !draft.trim()}
-                className="min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+                className="min-h-[48px] shrink-0 rounded-xl bg-[var(--brand,#ff5c35)] px-4 text-[14px] font-bold text-white disabled:opacity-50"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
