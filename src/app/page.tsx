@@ -628,7 +628,7 @@ function CommunityConnectChips({
       </button>
       <button
         type="button"
-        className="min-h-[36px] rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-100"
+        className="min-h-[36px] rounded-full border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-ink,#9a3412)] shadow-sm transition hover:bg-[var(--brand-muted,#ffd9cc)]/50"
         onClick={onValidation}
       >
         おためし検証
@@ -3887,7 +3887,7 @@ export default function Home() {
                   "Pick interests to get better project and teammate suggestions later (optional).",
                 )}
               </p>
-              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
+              <div className="mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-xs leading-relaxed text-[var(--brand-ink,#9a3412)]">
                 {tx("後で設定したい場合は、まず使い始めることもできます。", "You can skip this and set it later.")}
               </div>
               {authMessage ? (
@@ -4069,7 +4069,7 @@ export default function Home() {
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
               type="button"
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 p-[2.5px]"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] p-[2.5px]"
               onClick={openAvatarPicker}
               title={language === "ja" ? "プロフィール画像を変更" : "Change profile image"}
               aria-label={language === "ja" ? "プロフィール画像を変更" : "Change profile image"}
@@ -4111,7 +4111,7 @@ export default function Home() {
               !session && canUseSupabase ? (
                 <Link
                   href="/login"
-                  className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                  className="moni-btn-primary inline-flex min-h-[44px] shrink-0 touch-manipulation items-center px-4 text-sm"
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
@@ -4309,11 +4309,11 @@ export default function Home() {
                 </ul>
             </div>
             <div className={`${accountSubTab === "settings" ? "" : "hidden"} mt-3 space-y-3`}>
-              <div className="rounded-xl border border-sky-200/80 bg-sky-50/90 p-4">
-                <p className="text-xs font-semibold text-sky-950">
+              <div className="rounded-xl border border-[var(--brand-muted,#ffd9cc)]/80 bg-[var(--brand-soft,#fff4f0)]/90 p-4">
+                <p className="text-xs font-semibold text-[var(--brand-ink,#9a3412)]">
                   {language === "ja" ? "サービスについて" : "About this service"}
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-sky-900/85">
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--brand-ink,#9a3412)]/85">
                   {language === "ja"
                     ? "企画・仲間・実行の説明（トップのランディング）をいつでも開けます。"
                     : "Open the marketing overview (value prop) again."}
@@ -4432,7 +4432,7 @@ export default function Home() {
                           eventDailySummary.map((row) => (
                             <li key={`day-${row.day}`} className="flex items-center gap-2">
                               <span className="w-12 tabular-nums">{row.day}</span>
-                              <span className="h-2 rounded bg-sky-500/20" style={{ width: `${Math.min(120, row.count * 8)}px` }} />
+                              <span className="h-2 rounded bg-[var(--brand,#ff5c35)]/20" style={{ width: `${Math.min(120, row.count * 8)}px` }} />
                               <span className="tabular-nums">{row.count}</span>
                             </li>
                           ))
@@ -4485,7 +4485,7 @@ export default function Home() {
                             {n.kind === "project" && n.projectNotification ? (
                               <button
                                 type="button"
-                                className="text-left text-sky-700 underline-offset-2 hover:underline"
+                                className="text-left text-[var(--brand,#ff5c35)] underline-offset-2 hover:underline"
                                 onClick={() => void openProjectNotification(n.projectNotification!)}
                               >
                                 {n.text}
@@ -4630,7 +4630,7 @@ export default function Home() {
                   <>
                     <button
                       type="button"
-                      className="ml-auto text-xs font-semibold text-sky-600 hover:text-sky-700"
+                      className="ml-auto text-xs font-semibold text-[var(--brand,#ff5c35)] hover:text-[var(--brand-hover,#e04e2a)]"
                       onClick={() => startEditArticle(activeArticle)}
                     >
                       編集
@@ -4653,7 +4653,7 @@ export default function Home() {
                     <input className={inputClass} value={articleEditSummary} onChange={(e) => setArticleEditSummary(e.target.value)} placeholder="概要" />
                     <input className={inputClass} value={articleEditCategory} onChange={(e) => setArticleEditCategory(e.target.value)} placeholder="カテゴリ" />
                     <textarea
-                      className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15"
+                      className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[var(--brand,#ff5c35)]/15"
                       value={articleEditBody}
                       onChange={(e) => setArticleEditBody(e.target.value)}
                       placeholder="本文"
@@ -4853,7 +4853,7 @@ export default function Home() {
               </p>
               <a
                 href="/idea"
-                className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] font-semibold text-sky-900 no-underline transition hover:bg-sky-100"
+                className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5 text-[12px] font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
                 <span>アイデアが浮かばない人はこちら → AI発掘インタビュー</span>
                 <span aria-hidden>→</span>
@@ -4892,7 +4892,7 @@ export default function Home() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <a
                 href="/idea"
-                className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 no-underline transition hover:bg-sky-100"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
                 アイデア発掘
               </a>
@@ -5358,7 +5358,7 @@ export default function Home() {
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6b7280]">グループを作成</p>
                   <div className="mt-2 flex items-center gap-2">
                     <input
-                      className="flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500"
+                      className="flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[var(--brand,#ff5c35)]"
                       placeholder="例: 企画チームA"
                       value={groupRoomDraft}
                       onChange={(e) => setGroupRoomDraft(e.target.value)}
@@ -5421,7 +5421,7 @@ export default function Home() {
                         setChatSubView("room");
                       }}
                     >
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white" aria-hidden>
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] text-lg font-bold text-white" aria-hidden>
                         {initial}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -5569,7 +5569,7 @@ export default function Home() {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white px-2 py-3">
             <div className="px-1">
               <input
-                className="w-full rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:border-sky-500"
+                className="w-full rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:border-[var(--brand,#ff5c35)]"
                 placeholder="このトーク内を検索"
                 value={chatSearch}
                 onChange={(e) => setChatSearch(e.target.value)}
