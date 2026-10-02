@@ -67,7 +67,7 @@ export function ProfileMilestonesSection({ milestones, isOwnProfile, userId, onR
         {isOwnProfile ? (
           <button
             type="button"
-            className="inline-flex min-h-[36px] items-center rounded-lg bg-zinc-900 px-3 text-xs font-bold text-white transition hover:bg-zinc-800 active:scale-[0.98]"
+            className="moni-btn-primary min-h-[36px] rounded-lg px-3 text-xs active:scale-[0.98]"
             onClick={() => setModalOpen(true)}
           >
             {tx("＋ 記録する", "+ Record")}

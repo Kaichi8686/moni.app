@@ -21,7 +21,7 @@ export function QnAVoteControl({ score, myVote, disabled, onVote }: Props) {
         aria-pressed={myVote === 1}
         onClick={() => onVote(1)}
         className={`flex h-7 w-7 items-center justify-center rounded-md transition disabled:opacity-40 ${
-          myVote === 1 ? "bg-zinc-900 text-white" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          myVote === 1 ? "bg-[var(--brand,#ff5c35)] text-white" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
         }`}
       >
         <ChevronUp className="h-4 w-4" strokeWidth={2.25} aria-hidden />

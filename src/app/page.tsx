@@ -5070,7 +5070,7 @@ export default function Home() {
               >
                 {t("searchFriends")}
                 {exploreSegment === "friends" ? (
-                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)] sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
               <button
@@ -5086,7 +5086,7 @@ export default function Home() {
               >
                 {t("searchProjects")}
                 {exploreSegment === "projects" ? (
-                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)] sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
             </div>
@@ -5105,7 +5105,7 @@ export default function Home() {
                       onChange={(e) => setMatchGoal(e.target.value)}
                     />
                     <button
-                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-900 bg-zinc-900 px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] sm:px-4 sm:text-sm"
+                      className="moni-btn-primary px-2 text-[13px] active:scale-[0.98] sm:px-4 sm:text-sm"
                       type="submit"
                       aria-label={tx("絞り込む", "Search")}
                     >
@@ -5882,7 +5882,7 @@ export default function Home() {
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
-                          className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-lg border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white"
                           onClick={() => void approveFollowRequest(req.requestId, req.followerId)}
                         >
                           承認

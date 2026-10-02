@@ -352,7 +352,7 @@ export function BusinessSeedApp() {
             <button
               type="button"
               disabled={interests.trim().length < 2 || loading}
-              className="min-h-[48px] w-full rounded-2xl bg-zinc-900 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-40"
+              className="moni-btn-primary w-full py-3 shadow-sm disabled:opacity-40"
               onClick={() => void bootstrapChat()}
             >
               {loading ? "準備中…" : "壁打ちを始める（約3分）"}
@@ -376,7 +376,7 @@ export function BusinessSeedApp() {
                 <div key={`${i}-${m.role}`} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
                     className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      m.role === "user" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-900"
+                      m.role === "user" ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-zinc-100 text-zinc-900"
                     }`}
                   >
                     <span className="block whitespace-pre-wrap">{m.content}</span>
@@ -401,7 +401,7 @@ export function BusinessSeedApp() {
               <button
                 type="button"
                 disabled={loading || !draft.trim()}
-                className="min-w-[72px] rounded-2xl bg-zinc-900 px-3 text-sm font-semibold text-white disabled:opacity-40"
+                className="moni-btn-primary min-w-[72px] rounded-2xl px-3 disabled:opacity-40"
                 onClick={() => void sendBrainstorm()}
               >
                 送信
@@ -412,7 +412,7 @@ export function BusinessSeedApp() {
 
         {phase === "finalizing" ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" aria-hidden />
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-300 border-t-[var(--brand,#ff5c35)]" aria-hidden />
             <p className="text-sm font-medium text-zinc-700">アイデアをまとめて、7日プランを生成しています…</p>
           </div>
         ) : null}
@@ -448,12 +448,12 @@ export function BusinessSeedApp() {
             </div>
 
             {activeDay <= 7 ? (
-              <div className="rounded-2xl border-2 border-zinc-900 bg-white p-4 shadow-md">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">今日やること</p>
+              <div className="rounded-2xl border-2 border-[var(--brand,#ff5c35)] bg-white p-4 shadow-md">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--brand-ink,#9a3412)]">今日やること</p>
                 <p className="mt-2 text-base font-semibold leading-snug text-zinc-900">{todayTask}</p>
                 <button
                   type="button"
-                  className="mt-4 w-full rounded-xl bg-zinc-900 py-3 text-sm font-semibold text-white hover:bg-zinc-800"
+                  className="moni-btn-primary mt-4 w-full py-3"
                   onClick={completeToday}
                 >
                   完了した（次の日へ）
