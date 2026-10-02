@@ -49,7 +49,7 @@ export function TaskCreateModal({ onClose, onSubmit }: Props) {
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
           />
-          <button type="submit" className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white">
+          <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white">
             {tx("チャットに送る", "Send to chat")}
           </button>
         </form>

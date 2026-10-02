@@ -198,7 +198,7 @@ export function ProjectTemplateModal({
               type="button"
               disabled={busy}
               onClick={() => void handleApply(item.id)}
-              className="rounded-md bg-[#5E6AD2] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+              className="rounded-md bg-[var(--brand,#ff5c35)] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
             >
               適用
             </button>
@@ -398,7 +398,7 @@ export function ProjectTemplateModal({
                   <button
                     type="submit"
                     disabled={busy || phases.length === 0}
-                    className="w-full rounded-md bg-[#5E6AD2] py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    className="w-full rounded-md bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     {busy ? "保存中…" : "型を保存"}
                   </button>

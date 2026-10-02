@@ -9,7 +9,7 @@ const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", fontSize: 11 },
   title: { fontSize: 20, marginBottom: 8, fontWeight: "bold" },
   section: { marginTop: 16 },
-  heading: { fontSize: 13, fontWeight: "bold", marginBottom: 6, color: "#5b21b6" },
+  heading: { fontSize: 13, fontWeight: "bold", marginBottom: 6, color: "#ff5c35" },
   line: { marginBottom: 4 },
 });
 

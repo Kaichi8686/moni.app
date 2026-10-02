@@ -30,7 +30,13 @@ import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
-import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
+import {
+  celebrateTaskComplete,
+  crossesStreakMilestone,
+  crossesWeeklyGoal,
+  maybeCelebrateStreakMilestone,
+  maybeCelebrateWeeklyGoalReached,
+} from "@/lib/ui/activityCelebration";
 
 type Props = { projectId: string };
 type TabKey = "home" | "chat" | "documents" | "roadmap" | "schedule" | "members";
@@ -381,6 +387,10 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       const bump = await recordTeamActivity();
       await load();
 
+      const hitWeekly = crossesWeeklyGoal(prevWeek, prevWeek + 1, goal);
+      const hitStreak = Boolean(bump?.changed && crossesStreakMilestone(bump.prevStreak, bump.newStreak));
+      // 週目標・ストリークの大きい祝福があるときは控えめ完了演出は重ねない
+      if (!hitWeekly && !hitStreak) celebrateTaskComplete();
       maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, goal);
       if (bump?.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
     },

@@ -346,7 +346,7 @@ export function QnAThread({
                     disabled={!answerDraft.trim()}
                     className={`inline-flex min-h-[40px] items-center rounded-lg px-4 text-[13px] font-semibold transition ${
                       answerDraft.trim()
-                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                        ? "bg-[var(--brand,#ff5c35)] text-white hover:bg-[var(--brand-hover,#e04e2a)]"
                         : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
                     }`}
                   >

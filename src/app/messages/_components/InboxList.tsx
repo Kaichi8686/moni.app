@@ -241,7 +241,7 @@ export function InboxList() {
       <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
         {!userId ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-500">
-            <Link href="/" className="font-medium text-violet-600 underline">
+            <Link href="/" className="font-medium text-[var(--brand,#ff5c35)] underline">
               {tx("ログイン", "Log in")}
             </Link>
             {tx("するとメッセージが表示されます", " to see your messages")}
@@ -315,7 +315,7 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
             )}
           </div>
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]">
             {conversation.iconEmoji && conversation.iconEmoji !== "💬" ? (
               <span className="text-2xl">{conversation.iconEmoji}</span>
             ) : (
