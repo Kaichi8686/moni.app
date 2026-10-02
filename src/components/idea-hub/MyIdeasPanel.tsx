@@ -110,10 +110,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
         <p className="mt-2 text-sm leading-relaxed text-zinc-500">
           {tx("マイアイデアを保存・一覧するにはログインしてください。", "Sign in to save and view your ideas.")}
         </p>
-        <Link
-          href="/login"
-          className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 px-5 text-sm font-semibold text-white"
-        >
+        <Link href="/login" className="moni-btn-primary mt-6 px-5">
           {tx("ログインする", "Sign in")}
         </Link>
       </div>
@@ -132,7 +129,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
         <button
           type="button"
           onClick={openComposer}
-          className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3.5 text-[12px] font-semibold text-white"
+          className="moni-btn-primary min-h-[40px] shrink-0 rounded-full px-3.5 text-[12px]"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden />
           {tx("保存", "Save")}
@@ -269,7 +266,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
                 type="button"
                 disabled={!title.trim() || saving}
                 onClick={() => void save()}
-                className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+                className="moni-btn-primary flex-1 disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("保存する", "Save")}
               </button>

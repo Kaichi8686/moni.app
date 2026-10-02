@@ -283,7 +283,7 @@ export function QnAQuestionList({
               <button
                 type="button"
                 onClick={applyFilter}
-                className="min-h-[32px] rounded-md bg-zinc-900 px-3 text-[12px] font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                className="min-h-[32px] rounded-md bg-[var(--brand,#ff5c35)] px-3 text-[12px] font-semibold text-white transition hover:bg-[var(--brand-hover,#e04e2a)]"
               >
                 {tx("適用", "Apply")}
               </button>
