@@ -253,7 +253,7 @@ export default function WorkspaceMembers() {
                         className="inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
                         onClick={() => void openTalk(m.id)}
                       >
-                        <MessageCircle className="h-3.5 w-3.5 text-[#5E6AD2]" aria-hidden />
+                        <MessageCircle className="h-3.5 w-3.5 text-[var(--brand,#ff5c35)]" aria-hidden />
                         {tx("トーク", "Chat")}
                       </button>
                     )}

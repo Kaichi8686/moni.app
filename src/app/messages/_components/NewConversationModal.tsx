@@ -166,7 +166,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
             >
               {m.label}
               {mode === m.key ? (
-                <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)]" aria-hidden />
               ) : null}
             </button>
           ))}
@@ -313,7 +313,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
                 type="button"
                 disabled={loading || selectedIds.size === 0}
                 onClick={() => void createFollowGroup()}
-                className="inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40"
+                className="moni-btn-primary w-full gap-2 disabled:opacity-40"
               >
                 <Users className="h-4 w-4" aria-hidden />
                 {tx(
