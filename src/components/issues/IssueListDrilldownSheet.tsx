@@ -42,7 +42,7 @@ export function IssueListDrilldownSheet({
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-[#1A1A1A]">{title}</h2>
             {description ? <p className="mt-1 text-[13px] text-[#6B7280]">{description}</p> : null}
-            <p className="mt-2 text-[12px] font-medium text-[#5E6AD2]">
+            <p className="mt-2 text-[12px] font-medium text-[var(--brand,#ff5c35)]">
               {tx(`${issues.length} 件 · 行をタップで詳細`, `${issues.length} · tap a row for details`)}
             </p>
           </div>

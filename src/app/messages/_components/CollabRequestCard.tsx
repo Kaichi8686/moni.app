@@ -15,20 +15,20 @@ export function CollabRequestCard({ metadata, isMine, onRespond }: Props) {
   return (
     <div
       className={`min-w-[200px] max-w-[260px] overflow-hidden rounded-xl ${
-        isMine ? "bg-violet-500" : "border border-zinc-200 bg-white"
+        isMine ? "bg-[var(--brand,#ff5c35)]" : "border border-zinc-200 bg-white"
       }`}
     >
-      <div className={`px-3 py-2 ${isMine ? "bg-violet-400" : "bg-violet-50"}`}>
+      <div className={`px-3 py-2 ${isMine ? "bg-[var(--brand-hover,#e04e2a)]" : "bg-[var(--brand-soft,#fff4f0)]"}`}>
         <div className="flex items-center gap-1.5">
-          <UserPlus className={`h-4 w-4 ${isMine ? "text-violet-100" : "text-violet-600"}`} />
-          <span className={`text-xs font-semibold ${isMine ? "text-violet-100" : "text-violet-700"}`}>
+          <UserPlus className={`h-4 w-4 ${isMine ? "text-[var(--brand-soft,#fff4f0)]" : "text-[var(--brand,#ff5c35)]"}`} />
+          <span className={`text-xs font-semibold ${isMine ? "text-[var(--brand-soft,#fff4f0)]" : "text-[var(--brand-ink,#9a3412)]"}`}>
             {tx("コラボ依頼", "Collab request")}
           </span>
         </div>
       </div>
       <div className="space-y-1.5 px-3 py-2.5">
         <p className={`text-sm font-semibold ${isMine ? "text-white" : "text-zinc-900"}`}>{metadata.title}</p>
-        <div className={`space-y-0.5 text-xs ${isMine ? "text-violet-100" : "text-zinc-600"}`}>
+        <div className={`space-y-0.5 text-xs ${isMine ? "text-[var(--brand-soft,#fff4f0)]" : "text-zinc-600"}`}>
           <p>📁 {metadata.project_name}</p>
           <p>🛠 {metadata.skill_needed}</p>
           <p>⏱ {metadata.duration}</p>
@@ -48,7 +48,7 @@ export function CollabRequestCard({ metadata, isMine, onRespond }: Props) {
           <button
             type="button"
             onClick={() => onRespond("accepted")}
-            className="flex-1 py-2.5 text-xs font-semibold text-violet-600 hover:bg-violet-50"
+            className="flex-1 py-2.5 text-xs font-semibold text-[var(--brand,#ff5c35)] hover:bg-[var(--brand-soft,#fff4f0)]"
           >
             {tx("承諾する ✓", "Accept ✓")}
           </button>

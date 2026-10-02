@@ -191,7 +191,7 @@ export function IssueModal({
                 </label>
                 <input
                   id="issue-edit-title"
-                  className="mt-1 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-[15px] text-[#1A1A1A] outline-none ring-[#5E6AD2] focus:ring-2"
+                  className="mt-1 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-[15px] text-[#1A1A1A] outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   autoComplete="off"
@@ -204,7 +204,7 @@ export function IssueModal({
                 </label>
                 <textarea
                   id="issue-edit-body"
-                  className="mt-1 min-h-[10rem] w-full resize-y rounded-md border border-[#E5E7EB] px-3 py-2 text-sm leading-relaxed text-[#1A1A1A] outline-none ring-[#5E6AD2] focus:ring-2"
+                  className="mt-1 min-h-[10rem] w-full resize-y rounded-md border border-[#E5E7EB] px-3 py-2 text-sm leading-relaxed text-[#1A1A1A] outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={tx("内容や受け入れ条件などを書けます", "Details or acceptance criteria")}
@@ -217,7 +217,7 @@ export function IssueModal({
               <button type="button" className="rounded-md border border-[#E5E7EB] px-3 py-2 text-sm" onClick={onClose} disabled={saving}>
                 {tx("閉じる", "Close")}
               </button>
-              <button type="submit" className="rounded-md bg-[#5E6AD2] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={saving}>
+              <button type="submit" className="rounded-md bg-[var(--brand,#ff5c35)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={saving}>
                 {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
               </button>
             </div>
