@@ -109,7 +109,7 @@ export function TagChipPicker({ presets, value, onChange, max = 12, className = 
             <button
               type="button"
               onClick={addCustom}
-              className="inline-flex min-h-[36px] items-center rounded-full bg-zinc-900 px-3 text-[12px] font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+              className="inline-flex min-h-[36px] items-center rounded-full bg-[var(--brand,#ff5c35)] px-3 text-[12px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
             >
               {tx("追加", "Add")}
             </button>

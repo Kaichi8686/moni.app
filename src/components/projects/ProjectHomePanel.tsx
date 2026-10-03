@@ -518,7 +518,7 @@ export function ProjectHomePanel({
                 type="button"
                 disabled={weeklyGoalSaving}
                 onClick={() => void saveWeeklyGoalFromDraft()}
-                className="min-h-[40px] rounded-xl bg-zinc-900 px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+                className="min-h-[40px] rounded-xl bg-[var(--brand,#ff5c35)] px-3 text-[11px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
               >
                 {weeklyGoalSaving ? "保存中…" : "保存"}
               </button>

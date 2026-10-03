@@ -278,8 +278,8 @@ export function AuthModal({ mode: initialMode = "signin", onClose, onAuthenticat
             <p className="auth-modal-lead">
               {step === "start"
                 ? tx(
-                    "プロジェクトを進めたり、仲間とつながるにはアカウントが必要です。",
-                    "Sign in to work on projects and connect with others.",
+                    "アイデアを出して、仲間とつながり、プロジェクトを進めるためにログインしましょう。",
+                    "Log in to share ideas, connect with people, and move projects forward.",
                   )
                 : tx(`${email} で続行します。`, `Continue with ${email}.`)}
             </p>
