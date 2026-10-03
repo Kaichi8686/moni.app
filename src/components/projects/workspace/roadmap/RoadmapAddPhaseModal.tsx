@@ -112,7 +112,7 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/30 p-4 sm:items-center">
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-bold text-gray-900">フェーズを追加</h2>
+          <h2 className="text-sm font-bold text-gray-900">進む段階を追加</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-gray-100" aria-label="閉じる">
             <X className="h-4 w-4" />
           </button>
@@ -122,11 +122,11 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
           <div className="mb-4 flex flex-wrap gap-2">
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-medium text-violet-800 hover:bg-violet-100"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-2.5 py-1.5 text-xs font-medium text-[var(--brand-ink,#9a3412)] hover:bg-[var(--brand-muted,#ffd9cc)]/50"
               onClick={() => setDrafts((rows) => [...rows, newEmptyDraftRow(start)])}
             >
               <Plus className="h-3.5 w-3.5" />
-              フェーズを1つ追加
+              段階を1つ追加
             </button>
             <button
               type="button"
@@ -214,23 +214,23 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
             ))}
           </ul>
 
-          <div className="mt-5 rounded-xl border border-dashed border-violet-200 bg-violet-50/40">
+          <div className="mt-5 rounded-xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/50">
             <button
               type="button"
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
               onClick={() => setAssistOpen((v) => !v)}
             >
-              <span className="text-xs font-semibold text-violet-800">アシスト</span>
-              {assistOpen ? <ChevronUp className="h-4 w-4 text-violet-600" /> : <ChevronDown className="h-4 w-4 text-violet-600" />}
+              <span className="text-xs font-semibold text-[var(--brand-ink,#9a3412)]">ひな形から選ぶ</span>
+              {assistOpen ? <ChevronUp className="h-4 w-4 text-[var(--brand,#ff5c35)]" /> : <ChevronDown className="h-4 w-4 text-[var(--brand,#ff5c35)]" />}
             </button>
             {assistOpen ? (
-              <div className="max-h-[280px] overflow-y-auto border-t border-violet-100 px-3 pb-3 pt-2">
+              <div className="max-h-[280px] overflow-y-auto border-t border-[var(--brand-muted,#ffd9cc)] px-3 pb-3 pt-2">
                 {ASSIST_ARCHETYPES.map((arch) => {
                   const meta = ARCHETYPE_LABELS[arch];
                   const items = BUILTIN_ROADMAP_TEMPLATES.filter((t) => t.archetype === arch);
                   return (
                     <div key={arch} className="mb-3 last:mb-0">
-                      <p className="text-[10px] font-semibold text-violet-900">
+                      <p className="text-[10px] font-semibold text-[var(--brand-ink,#9a3412)]">
                         {meta.emoji} {meta.label}
                       </p>
                       <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
@@ -241,8 +241,8 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
                             onClick={() => applyAssist(t.id)}
                             className={`rounded-lg border px-2.5 py-2 text-left text-[11px] leading-snug transition-colors ${
                               loadedAssistId === t.id
-                                ? "border-violet-400 bg-violet-100 font-medium text-violet-900"
-                                : "border-violet-200 bg-white text-gray-800 hover:border-violet-300 hover:bg-violet-50"
+                                ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] font-medium text-[var(--brand-ink,#9a3412)]"
+                                : "border-[var(--brand-muted,#ffd9cc)] bg-white text-gray-800 hover:border-[var(--brand,#ff5c35)] hover:bg-[var(--brand-soft,#fff4f0)]"
                             }`}
                           >
                             {t.name}
@@ -265,10 +265,10 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
           <button
             type="button"
             disabled={busy || enabledCount === 0}
-            className="flex-1 rounded-lg bg-violet-600 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="flex-1 rounded-lg bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
             onClick={() => void confirmAdd()}
           >
-            {busy ? "追加中..." : enabledCount === 0 ? "フェーズ名を入力してください" : `${enabledCount}件を追加`}
+            {busy ? "追加中..." : enabledCount === 0 ? "段階の名前を入力してください" : `${enabledCount}件を追加`}
           </button>
         </div>
       </div>

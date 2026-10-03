@@ -176,7 +176,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         onSubmit={(event) => event.preventDefault()}
       >
         <input
-          className="min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm"
+          className="min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[rgba(255,92,53,0.15)] sm:text-sm"
           placeholder={tx("キーワードで検索", "Search by keyword")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -184,7 +184,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         />
         <button
           type="submit"
-          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-900 bg-zinc-900 px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] sm:px-4 sm:text-sm"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] active:scale-[0.98] sm:px-4 sm:text-sm"
           aria-label={tx("絞り込む", "Search")}
         >
           <svg className="h-5 w-5 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -214,8 +214,8 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           <p className="py-8 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
         ) : null}
         {!loading && browseList.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-zinc-700">
+          <div className="rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-zinc-800">
               {query.trim()
                 ? tx("条件に合う公開プロジェクトはありません。", "No public projects match your search.")
                 : uid
@@ -386,9 +386,9 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                   ) : (
                     <>
                       <textarea
-                        className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                        className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[rgba(255,92,53,0.12)]"
                         rows={2}
-                        placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
+                        placeholder={tx("一言メッセージ（任意）。例: デザインで手伝えます！", "Optional note. e.g. I can help with design!")}
                         value={joinMsgDraft}
                         onChange={(e) => setJoinMsgDraft(e.target.value)}
                       />
@@ -396,9 +396,9 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                         type="button"
                         disabled={detailBusy}
                         onClick={() => void submitJoin(detail.id)}
-                        className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
+                        className="min-h-[44px] rounded-xl bg-[var(--brand,#ff5c35)] text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
                       >
-                        {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
+                        {detailBusy ? tx("送信中…", "Sending…") : tx("参加したい！と送る", "Ask to join")}
                       </button>
                     </>
                   )

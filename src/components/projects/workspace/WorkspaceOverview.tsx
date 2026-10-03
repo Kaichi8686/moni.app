@@ -45,14 +45,14 @@ function ActionLink({
       href={href}
       className={`flex min-h-[104px] flex-col justify-between rounded-2xl border p-4 transition active:scale-[0.99] ${
         filled
-          ? "border-violet-600 bg-violet-600 text-white shadow-sm hover:bg-violet-700"
-          : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-300 hover:bg-zinc-50"
+          ? "border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] text-white shadow-sm shadow-[rgba(255,92,53,0.22)] hover:bg-[var(--brand-hover,#e04e2a)]"
+          : "border-zinc-200 bg-white text-zinc-900 hover:border-[var(--brand-muted,#ffd9cc)] hover:bg-[var(--brand-soft,#fff4f0)]/50"
       }`}
     >
       <IconComponent className="h-6 w-6" aria-hidden />
       <div className="mt-4">
         <p className="text-[15px] font-semibold">{label}</p>
-        {detail ? <p className={`mt-0.5 text-[12px] ${filled ? "text-violet-100" : "text-zinc-500"}`}>{detail}</p> : null}
+        {detail ? <p className={`mt-0.5 text-[12px] ${filled ? "text-white/85" : "text-zinc-500"}`}>{detail}</p> : null}
       </div>
     </Link>
   );
