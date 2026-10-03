@@ -230,7 +230,7 @@ export function ProjectTemplateModal({
       >
         <div className="flex items-center justify-between border-b border-[#E5E7EB] px-4 py-3">
           <div className="flex items-center gap-2">
-            <BookTemplate className="h-5 w-5 text-[#5E6AD2]" />
+            <BookTemplate className="h-5 w-5 text-[var(--brand,#ff5c35)]" />
             <h2 className="text-base font-semibold text-[#1A1A1A]">プロジェクトの型</h2>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-[#6B7280] hover:bg-[#F7F8F8]" aria-label="閉じる">
@@ -243,7 +243,7 @@ export function ProjectTemplateModal({
             type="button"
             onClick={() => setTab("apply")}
             className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium ${
-              tab === "apply" ? "border-b-2 border-[#5E6AD2] text-[#1A1A1A]" : "text-[#6B7280]"
+              tab === "apply" ? "border-b-2 border-[var(--brand,#ff5c35)] text-[#1A1A1A]" : "text-[#6B7280]"
             }`}
           >
             <Layers className="h-4 w-4" />
@@ -254,7 +254,7 @@ export function ProjectTemplateModal({
               type="button"
               onClick={() => setTab("save")}
               className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[13px] font-medium ${
-                tab === "save" ? "border-b-2 border-[#5E6AD2] text-[#1A1A1A]" : "text-[#6B7280]"
+                tab === "save" ? "border-b-2 border-[var(--brand,#ff5c35)] text-[#1A1A1A]" : "text-[#6B7280]"
               }`}
             >
               <Save className="h-4 w-4" />

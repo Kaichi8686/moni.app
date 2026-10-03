@@ -145,7 +145,10 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
           </span>
           <h3 className="text-[15px] font-semibold text-zinc-900">{tx("まだアイデアがありません", "No ideas yet")}</h3>
           <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-zinc-500">
-            {tx("発掘機能を試すか、思いついたことを直接メモしてみましょう。", "Try excavate, or jot something down yourself.")}
+            {tx(
+              "AIと話しながらアイデアを見つけるか、思いついたことをそのままメモしてみましょう。",
+              "Find ideas with AI, or jot something down yourself.",
+            )}
           </p>
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
             <button
@@ -153,7 +156,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
               onClick={onGoExcavate}
               className="moni-btn-primary px-4"
             >
-              {tx("発掘を試す", "Try excavate")}
+              {tx("アイデアを見つける", "Find ideas")}
             </button>
             <button
               type="button"

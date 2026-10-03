@@ -1760,8 +1760,9 @@ html.moni-landing-active {
 }
 
 .auth-modal-input:focus {
-  border-color: #a1a1aa;
+  border-color: var(--brand);
   background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 92, 53, 0.14);
 }
 
 .auth-modal-continue {
@@ -1776,13 +1777,14 @@ html.moni-landing-active {
 }
 
 .auth-modal-continue.is-ready {
-  background: #18181b;
+  background: var(--brand);
   color: #fff;
   cursor: pointer;
+  box-shadow: 0 6px 16px rgba(255, 92, 53, 0.22);
 }
 
 .auth-modal-continue.is-ready:hover {
-  background: #27272a;
+  background: var(--brand-hover);
 }
 
 .auth-modal-continue:disabled:not(.is-ready) {

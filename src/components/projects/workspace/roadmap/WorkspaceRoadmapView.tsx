@@ -133,9 +133,9 @@ export default function WorkspaceRoadmapView() {
             <button
               type="button"
               onClick={() => setAddOpen(true)}
-              className="rounded-md bg-[#5E6AD2] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#4F5BBD]"
+              className="rounded-md bg-[var(--brand,#ff5c35)] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
             >
-              {tx("+ フェーズを追加", "+ Add phase")}
+              {tx("+ 段階を追加", "+ Add phase")}
             </button>
           ) : null}
         </div>
@@ -180,7 +180,7 @@ export default function WorkspaceRoadmapView() {
           </div>
           <button
             type="button"
-            className="shrink-0 rounded-md bg-[#5E6AD2] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#4F5BBD]"
+            className="shrink-0 rounded-md bg-[var(--brand,#ff5c35)] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
             onClick={() =>
               void wrap(async () => {
                 const taskTitlesByPhase = new Map<string, string[]>();
@@ -231,25 +231,30 @@ export default function WorkspaceRoadmapView() {
       ) : null}
 
       {mergedPhases.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-[#fafaf8] px-6 py-12 text-center">
-          <p className="text-5xl">📋</p>
-          <h3 className="mt-3 text-lg font-semibold text-gray-900">{tx("またはテンプレートから始める", "Or start from a template")}</h3>
+        <div className="rounded-xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/60 px-6 py-12 text-center">
+          <p className="text-[11px] font-semibold tracking-wide text-[var(--brand,#ff5c35)]">
+            {tx("次の一手", "Next step")}
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-gray-900">{tx("進む道筋をつくろう", "Build your path forward")}</h3>
           <p className="mx-auto mt-2 max-w-xs text-sm text-gray-500">
-            {tx("テンプレートを使えばすぐ始められます。自分で0から作ることもできます。", "Start from a template, or build from scratch.")}
+            {tx(
+              "ひな形を使うか、AIに相談するか、自分で段階を追加できます。どれからでもOKです。",
+              "Start from a template, ask AI, or add phases yourself — any path works.",
+            )}
           </p>
           {canEdit ? (
             <div className="mt-6 flex flex-wrap justify-center gap-2">
               <Link
                 href={`${templatesHref}?tab=ai`}
-                className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+                className="rounded-xl bg-[var(--brand,#ff5c35)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
               >
                 {tx("AIでプランを作る", "Plan with AI")}
               </Link>
               <Link
                 href={templatesHref}
-                className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--brand-ink,#9a3412)] hover:bg-[var(--brand-soft,#fff4f0)]"
               >
-                {tx("テンプレートを選ぶ", "Choose a template")}
+                {tx("ひな形を選ぶ", "Choose a template")}
               </Link>
               <button
                 type="button"
