@@ -331,7 +331,7 @@ export function ConversationView({ conversationId }: Props) {
       <div className="flex min-h-0 flex-1 flex-col bg-[#fafaf8]">
         <ConversationHeader title={headerTitle} />
         <p className="flex flex-1 items-center justify-center px-4 text-center text-sm text-zinc-500">
-          <a href="/login" className="font-medium text-violet-600 underline">
+          <a href="/login" className="font-medium text-[var(--brand,#ff5c35)] underline">
             {tx("ログイン", "Log in")}
           </a>
           {tx("するとチャットが使えます", " to use chat")}
@@ -353,7 +353,7 @@ export function ConversationView({ conversationId }: Props) {
       />
 
       {toast ? (
-        <div className="bg-violet-600 px-3 py-2 text-center text-xs text-white">{toast}</div>
+        <div className="bg-[var(--brand,#ff5c35)] px-3 py-2 text-center text-xs text-white">{toast}</div>
       ) : null}
 
       <PinnedMessages messages={pinnedMessages} onJump={jumpToMessage} />

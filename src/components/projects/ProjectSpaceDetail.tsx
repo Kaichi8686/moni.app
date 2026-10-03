@@ -30,7 +30,13 @@ import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
-import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
+import {
+  celebrateTaskComplete,
+  crossesStreakMilestone,
+  crossesWeeklyGoal,
+  maybeCelebrateStreakMilestone,
+  maybeCelebrateWeeklyGoalReached,
+} from "@/lib/ui/activityCelebration";
 
 type Props = { projectId: string };
 type TabKey = "home" | "chat" | "documents" | "roadmap" | "schedule" | "members";
@@ -381,6 +387,10 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       const bump = await recordTeamActivity();
       await load();
 
+      const hitWeekly = crossesWeeklyGoal(prevWeek, prevWeek + 1, goal);
+      const hitStreak = Boolean(bump?.changed && crossesStreakMilestone(bump.prevStreak, bump.newStreak));
+      // 週目標・ストリークの大きい祝福があるときは控えめ完了演出は重ねない
+      if (!hitWeekly && !hitStreak) celebrateTaskComplete();
       maybeCelebrateWeeklyGoalReached(prevWeek, prevWeek + 1, goal);
       if (bump?.changed) maybeCelebrateStreakMilestone(bump.prevStreak, bump.newStreak);
     },
@@ -922,7 +932,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       <main className="mx-auto max-w-lg space-y-4 p-4">
         <p className="text-sm leading-relaxed text-rose-700">{syncBanner || "プロジェクトが見つかりません。"}</p>
         <div className="flex flex-wrap gap-2">
-          <Link href="/" className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/" className="rounded-xl bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white">
             ホームへ戻る
           </Link>
           <Link href="/projects" className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700">
@@ -991,7 +1001,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                     type="button"
                     disabled={joinBusy}
                     onClick={() => void submitJoinRequest()}
-                    className="min-h-[44px] rounded-xl bg-zinc-900 px-5 text-sm font-semibold text-white disabled:opacity-60"
+                    className="min-h-[44px] rounded-xl bg-[var(--brand,#ff5c35)] px-5 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     {joinBusy ? "送信中…" : "参加申請を送る"}
                   </button>
@@ -1001,7 +1011,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               <div className="mt-4">
                 <Link
                   href="/"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--brand,#ff5c35)] px-6 text-sm font-semibold text-white"
                 >
                   ログインして参加申請へ
                 </Link>
@@ -1040,7 +1050,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               ←
             </Link>
             <div className="flex min-w-0 flex-1 items-start gap-2.5">
-              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 shadow-inner ring-1 ring-indigo-100">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-[var(--brand-soft,#fff4f0)] shadow-inner ring-1 ring-[var(--brand-muted,#ffd9cc)]">
                 {selectedProject.thumbnail_url?.trim() ? (
                   // eslint-disable-next-line @next/next/no-img-element -- ユーザー指定の任意URL
                   <img
@@ -1074,7 +1084,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                     <button
                       type="button"
                       className={`flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm transition ${
-                        headerMenuOpen ? "border-indigo-300 bg-indigo-50 text-indigo-900" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
+                        headerMenuOpen ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
                       }`}
                       title="メニュー"
                       aria-expanded={headerMenuOpen}
@@ -1221,7 +1231,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  chatMode === "group" ? "bg-indigo-700 text-white shadow-sm" : "bg-zinc-100 text-zinc-700"
+                  chatMode === "group" ? "bg-[var(--brand,#ff5c35)] text-white shadow-sm" : "bg-zinc-100 text-zinc-700"
                 }`}
                 onClick={() => setChatMode("group")}
               >
@@ -1230,7 +1240,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               <button
                 type="button"
                 className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  chatMode === "dm" ? "bg-indigo-700 text-white shadow-sm" : "bg-zinc-100 text-zinc-700"
+                  chatMode === "dm" ? "bg-[var(--brand,#ff5c35)] text-white shadow-sm" : "bg-zinc-100 text-zinc-700"
                 }`}
                 onClick={() => setChatMode("dm")}
               >
@@ -1247,7 +1257,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                       onClick={() => setSelectedPeerId(m.user_id)}
                       className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition ${
                         selectedPeerId === m.user_id
-                          ? "border-indigo-700 bg-indigo-700 text-white"
+                          ? "border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] text-white"
                           : "border-zinc-200 bg-white text-zinc-700"
                       }`}
                     >
@@ -1268,7 +1278,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                     <div
                       className={`max-w-[85%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-snug shadow-sm ${
                         mine
-                          ? "rounded-tr-md bg-indigo-700 text-white"
+                          ? "rounded-tr-md bg-[var(--brand,#ff5c35)] text-white"
                           : "rounded-tl-md bg-zinc-200/90 text-zinc-900"
                       }`}
                     >
@@ -1287,7 +1297,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                       {m.body && m.body !== "（画像）" ? (
                         <p className="whitespace-pre-wrap break-words">{m.body}</p>
                       ) : null}
-                      <p className={`mt-1.5 text-[10px] ${mine ? "text-indigo-100" : "text-zinc-500"}`}>
+                      <p className={`mt-1.5 text-[10px] ${mine ? "text-white/80" : "text-zinc-500"}`}>
                         {new Date(m.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
@@ -1324,7 +1334,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 </div>
               ) : null}
               {chatImageUploading ? (
-                <p className="mb-2 text-center text-xs font-medium text-indigo-700">画像をアップロード中…</p>
+                <p className="mb-2 text-center text-xs font-medium text-[var(--brand,#ff5c35)]">画像をアップロード中…</p>
               ) : null}
               <form
                 className="flex items-end gap-2"
@@ -1354,7 +1364,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 </button>
                 <div className="relative min-w-0 flex-1">
                   <input
-                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 py-3 pl-4 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none ring-indigo-300/0 transition focus:border-indigo-400 focus:bg-white focus:ring-2"
+                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 py-3 pl-4 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none ring-[var(--brand,#ff5c35)]/0 transition focus:border-[var(--brand,#ff5c35)] focus:bg-white focus:ring-2"
                     value={chatDraft}
                     onChange={(e) => setChatDraft(e.target.value)}
                     placeholder="メッセージを送る…"
@@ -1363,7 +1373,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                   />
                   <button
                     type="submit"
-                    className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-indigo-700 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:opacity-40"
+                    className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-[var(--brand,#ff5c35)] text-sm font-bold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-40"
                     disabled={chatImageUploading || (!chatDraft.trim() && !chatImageFile)}
                     aria-label="送信"
                   >
@@ -1530,13 +1540,13 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       {activeTab === "members" ? (
         <section className="grid gap-3 md:grid-cols-2">
           {uid && !isMember && selectedProject.visibility === "public" ? (
-            <div className="md:col-span-2 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm">
+            <div className="md:col-span-2 rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/80 p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-zinc-900">このプロジェクトに参加する</h3>
               <p className="mt-1 text-xs text-zinc-600">
                 公開プロジェクトのため参加申請できます。オーナー／管理者が承認するとメンバーになります（データ上の人数上限はありません）。
               </p>
               {myJoinPending ? (
-                <p className="mt-3 text-sm font-medium text-sky-900">申請済みです。承認をお待ちください。</p>
+                <p className="mt-3 text-sm font-medium text-[var(--brand-ink,#9a3412)]">申請済みです。承認をお待ちください。</p>
               ) : (
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
                   <input
@@ -1549,7 +1559,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                     type="button"
                     disabled={joinBusy}
                     onClick={() => void submitJoinRequest()}
-                    className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className="rounded-xl bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     {joinBusy ? "送信中…" : "参加申請を送る"}
                   </button>
@@ -1607,7 +1617,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                       type="button"
                       disabled={inviteBusyId === c.id}
                       onClick={() => void inviteMemberById(c.id, c.name)}
-                      className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      className="shrink-0 rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                     >
                       {inviteBusyId === c.id ? "招待中…" : "招待する"}
                     </button>
@@ -1628,7 +1638,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                     <p className="text-xs text-zinc-500">{memberNames[r.requester_id] ?? r.requester_id.slice(0, 8)}</p>
                     <p className="text-sm text-zinc-800">{r.message}</p>
                     <div className="mt-2 flex gap-2">
-                      <button type="button" onClick={() => void reviewJoinRequest(r.id, "accept")} className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white">
+                      <button type="button" onClick={() => void reviewJoinRequest(r.id, "accept")} className="rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white">
                         承認
                       </button>
                       <button type="button" onClick={() => void reviewJoinRequest(r.id, "reject")} className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700">
@@ -1694,7 +1704,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             <p className="mt-1 text-xs text-zinc-500">名前・写真・説明・系統・募集内容を編集できます。</p>
             <label className="mt-4 block text-xs font-semibold text-zinc-700">プロジェクト名</label>
             <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editNameDraft}
               onChange={(e) => setEditNameDraft(e.target.value)}
             />
@@ -1746,7 +1756,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 <details className="text-[11px] text-zinc-500">
                   <summary className="cursor-pointer font-semibold text-zinc-600">URLで指定（任意）</summary>
                   <input
-                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                     placeholder="https://..."
                     value={editThumbDraft}
                     onChange={(e) => setEditThumbDraft(e.target.value)}
@@ -1756,19 +1766,19 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             </div>
             <label className="mt-3 block text-xs font-semibold text-zinc-700">説明</label>
             <textarea
-              className="mt-1 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editDescriptionDraft}
               onChange={(e) => setEditDescriptionDraft(e.target.value)}
             />
             <label className="mt-3 block text-xs font-semibold text-zinc-700">カテゴリ</label>
             <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editCategoryDraft}
               onChange={(e) => setEditCategoryDraft(e.target.value)}
             />
             <label className="mt-3 block text-xs font-semibold text-zinc-700">何系のプロジェクトか</label>
             <select
-              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editBusinessTypeDraft}
               onChange={(e) => setEditBusinessTypeDraft(e.target.value as "maker" | "software" | "social")}
             >
@@ -1778,13 +1788,13 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             </select>
             <label className="mt-3 block text-xs font-semibold text-zinc-700">欲しい仲間・姿勢</label>
             <textarea
-              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editRecruitmentTargetDraft}
               onChange={(e) => setEditRecruitmentTargetDraft(e.target.value)}
             />
             <label className="mt-3 block text-xs font-semibold text-zinc-700">理念・ビジョン</label>
             <textarea
-              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={editRecruitmentMessageDraft}
               onChange={(e) => setEditRecruitmentMessageDraft(e.target.value)}
             />
@@ -1800,7 +1810,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
               <button
                 type="button"
                 disabled={projectSaving || thumbUploading}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded-xl bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => void saveProjectProfile()}
               >
                 {projectSaving ? "保存中…" : "保存"}
@@ -1854,7 +1864,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             </p>
             <label className="mt-4 block text-xs font-semibold text-zinc-700">新しいオーナー</label>
             <select
-              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               value={transferTargetId}
               onChange={(e) => setTransferTargetId(e.target.value)}
             >

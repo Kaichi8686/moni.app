@@ -203,7 +203,7 @@ export function QnAQuestionList({
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             {tx("フィルタ", "Filter")}
             {activeFilterCount > 0 ? (
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-zinc-900 px-1 text-[10px] font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] px-1 text-[10px] font-bold text-white">
                 {activeFilterCount}
               </span>
             ) : null}
@@ -283,7 +283,7 @@ export function QnAQuestionList({
               <button
                 type="button"
                 onClick={applyFilter}
-                className="min-h-[32px] rounded-md bg-zinc-900 px-3 text-[12px] font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                className="min-h-[32px] rounded-md bg-[var(--brand,#ff5c35)] px-3 text-[12px] font-semibold text-white transition hover:bg-[var(--brand-hover,#e04e2a)]"
               >
                 {tx("適用", "Apply")}
               </button>
@@ -417,15 +417,15 @@ export function QnAQuestionList({
       {loading ? (
         <p className={`${PANEL} px-4 py-8 text-center text-sm text-zinc-500`}>{tx("読み込み中…", "Loading…")}</p>
       ) : filtered.length === 0 ? (
-        <div className={`${PANEL} border-dashed px-4 py-12 text-center dark:border-zinc-600`}>
-          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+        <div className={`${PANEL} border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/50 px-4 py-12 text-center dark:border-[var(--brand-muted,#ffd9cc)]`}>
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[var(--brand-soft,#fff4f0)] text-[var(--brand,#ff5c35)] dark:bg-[var(--brand-soft,#fff4f0)] dark:text-[var(--brand,#ff5c35)]">
             <SearchX className="h-5 w-5" aria-hidden />
           </div>
-          <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-            {tx("該当する質問がありません。", "No matching questions.")}
+          <p className="mt-3 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            {tx("まだ該当する質問がありません。", "No matching questions yet.")}
           </p>
           <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-            {tx("フィルタを変えるか、新しい質問を投稿してみよう。", "Try a different filter, or post a new question.")}
+            {tx("条件を変えるか、困っていることを上から質問してみよう。", "Change the filters, or ask your question above.")}
           </p>
           {hasActiveFilter ? (
             <button
@@ -434,7 +434,7 @@ export function QnAQuestionList({
                 onFilterChange(DEFAULT_FILTER);
                 resetPage();
               }}
-              className="mt-4 inline-flex min-h-[36px] items-center rounded-lg border border-zinc-200 bg-white px-3.5 text-[12px] font-semibold text-zinc-800 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              className="moni-btn-secondary mt-4 min-h-[36px] px-3.5 text-[12px]"
             >
               {tx("すべて表示に戻る", "Show all")}
             </button>

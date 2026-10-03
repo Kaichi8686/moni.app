@@ -130,7 +130,7 @@ export default function DiscoverPage() {
               key={id}
               type="button"
               className={`min-h-[44px] touch-manipulation rounded-lg px-1 py-2 text-sm font-semibold leading-snug ${
-                tab === id ? "bg-violet-600 text-white shadow-sm" : "text-gray-700"
+                tab === id ? "bg-[var(--brand,#ff5c35)] text-white shadow-sm" : "text-gray-700"
               }`}
               onClick={() => setTab(id)}
             >
@@ -142,7 +142,7 @@ export default function DiscoverPage() {
 
       {/* TODO: wire idea-interview theme interest into real peer matching when ranking exists */}
       {fromIdeaInterview ? (
-        <div className="mx-4 mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-relaxed text-sky-900">
+        <div className="mx-4 mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5 text-sm leading-relaxed text-[var(--brand-ink,#9a3412)]">
           アイデア発掘インタビューからの流入です
           {interviewTheme ? `（テーマ: ${interviewTheme}）` : ""}。
           関心が近い機会・スキル募集・メンターを探してみましょう。
@@ -150,7 +150,7 @@ export default function DiscoverPage() {
       ) : null}
 
       <main className="mobile-content-inset mx-auto w-full max-w-none space-y-4 py-4 sm:max-w-lg">
-        {msg ? <p className="text-sm text-violet-700">{msg}</p> : null}
+        {msg ? <p className="text-sm text-[var(--brand-ink,#9a3412)]">{msg}</p> : null}
         {err ? <p className="text-sm text-rose-600">{err}</p> : null}
 
         {tab === "opportunities" ? (
@@ -159,7 +159,7 @@ export default function DiscoverPage() {
               {opportunities.map((o) => (
                 <li key={o.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-[11px] font-medium text-violet-600">
+                    <span className="text-[11px] font-medium text-[var(--brand,#ff5c35)]">
                       {opportunityTypeLabel(o.type)}
                       {o.isVerified ? " · 認定" : ""}
                     </span>
@@ -173,7 +173,7 @@ export default function DiscoverPage() {
                   {o.organizer ? <p className="text-xs text-gray-500">{o.organizer}</p> : null}
                   {o.description ? <p className="mt-2 text-sm text-gray-600">{o.description}</p> : null}
                   {o.url ? (
-                    <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm text-violet-600">
+                    <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm text-[var(--brand,#ff5c35)]">
                       詳細を見る →
                     </a>
                   ) : null}
@@ -193,7 +193,7 @@ export default function DiscoverPage() {
                 <input name="organizer" placeholder="主催" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
                 <textarea name="description" placeholder="説明" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
                 <input name="url" placeholder="URL" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <button type="submit" className="w-full rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white">
+                <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white">
                   投稿
                 </button>
               </form>
@@ -206,7 +206,7 @@ export default function DiscoverPage() {
             <ul className="space-y-3">
               {skills.map((s) => (
                 <li key={s.id} className="rounded-2xl border border-gray-100 bg-white p-4">
-                  <p className="text-xs text-violet-600">{s.skillName}</p>
+                  <p className="text-xs text-[var(--brand,#ff5c35)]">{s.skillName}</p>
                   <p className="font-semibold">{s.requesterName}</p>
                   {s.description ? <p className="mt-1 text-sm text-gray-600">{s.description}</p> : null}
                   <p className="mt-2 text-[11px] text-gray-400">
@@ -237,7 +237,7 @@ export default function DiscoverPage() {
                   <option>成果報酬</option>
                   <option>相談</option>
                 </select>
-                <button type="submit" className="w-full rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white">
+                <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white">
                   依頼を出す
                 </button>
               </form>
@@ -260,7 +260,7 @@ export default function DiscoverPage() {
                   {uid && uid !== m.userId ? (
                     <button
                       type="button"
-                      className="mt-2 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
+                      className="mt-2 rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white"
                       onClick={() =>
                         void requestMentorSession(supabase!, uid, m.id).then(() => setMsg("セッションをリクエストしました"))
                       }
@@ -274,7 +274,7 @@ export default function DiscoverPage() {
             {uid ? (
               <button
                 type="button"
-                className="w-full rounded-xl border border-violet-200 py-2 text-sm font-semibold text-violet-700"
+                className="w-full rounded-xl border border-[var(--brand-muted,#ffd9cc)] py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)]"
                 onClick={() =>
                   void registerAsMentor(supabase!, uid, {
                     expertise: ["ビジネス", "マーケ"],

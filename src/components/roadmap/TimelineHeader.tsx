@@ -37,7 +37,7 @@ export function TimelineHeader({ anchor, totalDays, zoom, onZoomChange, onPrev, 
         <select
           value={zoom}
           onChange={(e) => onZoomChange(e.target.value as TimelineZoom)}
-          className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-[12px] font-medium text-[#1A1A1A] outline-none ring-[#5E6AD2] focus:ring-2"
+          className="rounded-md border border-[#E5E7EB] bg-white px-2 py-1 text-[12px] font-medium text-[#1A1A1A] outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
         >
           <option value="month">月表示</option>
           <option value="week">週表示</option>

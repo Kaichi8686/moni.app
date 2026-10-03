@@ -211,7 +211,7 @@ export function MessageInput({
 
       <div className="flex items-end gap-2">
         <button type="button" onClick={() => setShowExtras((v) => !v)} className="flex h-9 w-9 shrink-0 items-center justify-center" aria-label={tx("添付", "Attach")}>
-          <PlusCircle className={`h-7 w-7 transition-transform ${showExtras ? "rotate-45 text-violet-600" : "text-zinc-500"}`} />
+          <PlusCircle className={`h-7 w-7 transition-transform ${showExtras ? "rotate-45 text-[var(--brand,#ff5c35)]" : "text-zinc-500"}`} />
         </button>
         <div className="max-h-[120px] min-h-[40px] flex-1 overflow-y-auto rounded-2xl bg-zinc-100 px-4 py-2.5">
           <textarea
@@ -235,7 +235,7 @@ export function MessageInput({
           />
         </div>
         {text.trim() ? (
-          <button type="button" onClick={() => void handleSend()} disabled={sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-600 disabled:opacity-50" aria-label={tx("送信", "Send")}>
+          <button type="button" onClick={() => void handleSend()} disabled={sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] disabled:opacity-50" aria-label={tx("送信", "Send")}>
             <Send className="h-4 w-4 text-white" />
           </button>
         ) : (

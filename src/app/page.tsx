@@ -1,10 +1,10 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail } from "lucide-react";
+import { FolderKanban, Lightbulb, Mail, Search, UserRound } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
@@ -34,9 +34,9 @@ import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
 const COMMUNITY_CTA =
-  "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-3.5 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[40px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-3.5 text-[13px] font-bold text-white shadow-sm shadow-[rgba(255,92,53,0.22)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 const COMMUNITY_CTA_PILL =
-  "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-zinc-900 bg-zinc-900 px-4 text-[13px] font-bold text-white transition hover:bg-zinc-800 active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[38px] shrink-0 touch-manipulation items-center justify-center rounded-sm border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-4 text-[13px] font-bold text-white shadow-sm shadow-[rgba(255,92,53,0.22)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 
 type AppRole = "child" | "parent" | "investor" | "admin";
 type FeaturePage = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
@@ -226,12 +226,14 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
 
 type HomeBottomNavKey = FeaturePage | "idea" | "mail";
 
-const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
-  { key: "projects", icon: "▦" },
-  { key: "mail", icon: "mail" },
-  { key: "idea", icon: "✦" },
-  { key: "chat", icon: "⌕" },
-  { key: "account", icon: "◉" },
+const navIconClass = "app-bottom-nav-svg";
+
+const featureItems: Array<{ key: HomeBottomNavKey; icon: ReactNode }> = [
+  { key: "projects", icon: <FolderKanban className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "mail", icon: <Mail className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "idea", icon: <Lightbulb className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "chat", icon: <Search className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "account", icon: <UserRound className={navIconClass} strokeWidth={1.85} aria-hidden /> },
 ];
 
 const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
@@ -626,7 +628,7 @@ function CommunityConnectChips({
       </button>
       <button
         type="button"
-        className="min-h-[36px] rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-900 shadow-sm transition hover:bg-indigo-100"
+        className="min-h-[36px] rounded-full border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-ink,#9a3412)] shadow-sm transition hover:bg-[var(--brand-muted,#ffd9cc)]/50"
         onClick={onValidation}
       >
         おためし検証
@@ -640,9 +642,9 @@ export default function Home() {
   const cardClass =
     "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5";
   const inputClass =
-    "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm";
+    "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[rgba(255,92,53,0.18)] sm:text-sm";
   const primaryButtonClass =
-    "min-h-[44px] rounded-xl border border-zinc-900 bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 hover:border-zinc-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
+    "min-h-[44px] rounded-xl border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-[rgba(255,92,53,0.25)] transition hover:bg-[var(--brand-hover,#e04e2a)] hover:border-[var(--brand-hover,#e04e2a)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
   const bottomNavButtonClass = (page: HomeBottomNavKey) =>
@@ -3885,7 +3887,7 @@ export default function Home() {
                   "Pick interests to get better project and teammate suggestions later (optional).",
                 )}
               </p>
-              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-900">
+              <div className="mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-xs leading-relaxed text-[var(--brand-ink,#9a3412)]">
                 {tx("後で設定したい場合は、まず使い始めることもできます。", "You can skip this and set it later.")}
               </div>
               {authMessage ? (
@@ -4067,7 +4069,7 @@ export default function Home() {
           <div className="flex items-center gap-3 border-b border-zinc-100 p-4">
             <button
               type="button"
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 p-[2.5px]"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] p-[2.5px]"
               onClick={openAvatarPicker}
               title={language === "ja" ? "プロフィール画像を変更" : "Change profile image"}
               aria-label={language === "ja" ? "プロフィール画像を変更" : "Change profile image"}
@@ -4109,7 +4111,7 @@ export default function Home() {
               !session && canUseSupabase ? (
                 <Link
                   href="/login"
-                  className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                  className="moni-btn-primary inline-flex min-h-[44px] shrink-0 touch-manipulation items-center px-4 text-sm"
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
@@ -4307,11 +4309,11 @@ export default function Home() {
                 </ul>
             </div>
             <div className={`${accountSubTab === "settings" ? "" : "hidden"} mt-3 space-y-3`}>
-              <div className="rounded-xl border border-sky-200/80 bg-sky-50/90 p-4">
-                <p className="text-xs font-semibold text-sky-950">
+              <div className="rounded-xl border border-[var(--brand-muted,#ffd9cc)]/80 bg-[var(--brand-soft,#fff4f0)]/90 p-4">
+                <p className="text-xs font-semibold text-[var(--brand-ink,#9a3412)]">
                   {language === "ja" ? "サービスについて" : "About this service"}
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-sky-900/85">
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--brand-ink,#9a3412)]/85">
                   {language === "ja"
                     ? "企画・仲間・実行の説明（トップのランディング）をいつでも開けます。"
                     : "Open the marketing overview (value prop) again."}
@@ -4430,7 +4432,7 @@ export default function Home() {
                           eventDailySummary.map((row) => (
                             <li key={`day-${row.day}`} className="flex items-center gap-2">
                               <span className="w-12 tabular-nums">{row.day}</span>
-                              <span className="h-2 rounded bg-sky-500/20" style={{ width: `${Math.min(120, row.count * 8)}px` }} />
+                              <span className="h-2 rounded bg-[var(--brand,#ff5c35)]/20" style={{ width: `${Math.min(120, row.count * 8)}px` }} />
                               <span className="tabular-nums">{row.count}</span>
                             </li>
                           ))
@@ -4483,7 +4485,7 @@ export default function Home() {
                             {n.kind === "project" && n.projectNotification ? (
                               <button
                                 type="button"
-                                className="text-left text-sky-700 underline-offset-2 hover:underline"
+                                className="text-left text-[var(--brand,#ff5c35)] underline-offset-2 hover:underline"
                                 onClick={() => void openProjectNotification(n.projectNotification!)}
                               >
                                 {n.text}
@@ -4628,7 +4630,7 @@ export default function Home() {
                   <>
                     <button
                       type="button"
-                      className="ml-auto text-xs font-semibold text-sky-600 hover:text-sky-700"
+                      className="ml-auto text-xs font-semibold text-[var(--brand,#ff5c35)] hover:text-[var(--brand-hover,#e04e2a)]"
                       onClick={() => startEditArticle(activeArticle)}
                     >
                       編集
@@ -4651,7 +4653,7 @@ export default function Home() {
                     <input className={inputClass} value={articleEditSummary} onChange={(e) => setArticleEditSummary(e.target.value)} placeholder="概要" />
                     <input className={inputClass} value={articleEditCategory} onChange={(e) => setArticleEditCategory(e.target.value)} placeholder="カテゴリ" />
                     <textarea
-                      className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15"
+                      className="min-h-28 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[var(--brand,#ff5c35)]/15"
                       value={articleEditBody}
                       onChange={(e) => setArticleEditBody(e.target.value)}
                       placeholder="本文"
@@ -4851,7 +4853,7 @@ export default function Home() {
               </p>
               <a
                 href="/idea"
-                className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] font-semibold text-sky-900 no-underline transition hover:bg-sky-100"
+                className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5 text-[12px] font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
                 <span>アイデアが浮かばない人はこちら → AI発掘インタビュー</span>
                 <span aria-hidden>→</span>
@@ -4890,7 +4892,7 @@ export default function Home() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <a
                 href="/idea"
-                className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 no-underline transition hover:bg-sky-100"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
                 アイデア発掘
               </a>
@@ -5062,7 +5064,7 @@ export default function Home() {
               >
                 {t("searchFriends")}
                 {exploreSegment === "friends" ? (
-                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)] sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
               <button
@@ -5078,7 +5080,7 @@ export default function Home() {
               >
                 {t("searchProjects")}
                 {exploreSegment === "projects" ? (
-                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)] sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
             </div>
@@ -5097,7 +5099,7 @@ export default function Home() {
                       onChange={(e) => setMatchGoal(e.target.value)}
                     />
                     <button
-                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-900 bg-zinc-900 px-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-zinc-800 active:scale-[0.98] sm:px-4 sm:text-sm"
+                      className="moni-btn-primary px-2 text-[13px] active:scale-[0.98] sm:px-4 sm:text-sm"
                       type="submit"
                       aria-label={tx("絞り込む", "Search")}
                     >
@@ -5356,7 +5358,7 @@ export default function Home() {
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6b7280]">グループを作成</p>
                   <div className="mt-2 flex items-center gap-2">
                     <input
-                      className="flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500"
+                      className="flex-1 rounded-full border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-[var(--brand,#ff5c35)]"
                       placeholder="例: 企画チームA"
                       value={groupRoomDraft}
                       onChange={(e) => setGroupRoomDraft(e.target.value)}
@@ -5419,7 +5421,7 @@ export default function Home() {
                         setChatSubView("room");
                       }}
                     >
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500 text-lg font-bold text-white" aria-hidden>
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] text-lg font-bold text-white" aria-hidden>
                         {initial}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -5567,7 +5569,7 @@ export default function Home() {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white px-2 py-3">
             <div className="px-1">
               <input
-                className="w-full rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:border-sky-500"
+                className="w-full rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:border-[var(--brand,#ff5c35)]"
                 placeholder="このトーク内を検索"
                 value={chatSearch}
                 onChange={(e) => setChatSearch(e.target.value)}
@@ -5874,7 +5876,7 @@ export default function Home() {
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
-                          className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
+                          className="rounded-lg border border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white"
                           onClick={() => void approveFollowRequest(req.requestId, req.followerId)}
                         >
                           承認
@@ -5936,6 +5938,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5951,6 +5954,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5970,13 +5974,14 @@ export default function Home() {
                   title={label}
                 >
                   <span className="app-bottom-nav-item-icon" aria-hidden>
-                    <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
+                    {item.icon}
                     {inboxUnreadCount > 0 ? (
                       <span className="app-bottom-nav-badge">
                         {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
                       </span>
                     ) : null}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -5992,6 +5997,7 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
+                  <span className="app-bottom-nav-label">{label}</span>
                 </Link>
               );
             }
@@ -6012,6 +6018,7 @@ export default function Home() {
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
+                <span className="app-bottom-nav-label">{label}</span>
                 {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );

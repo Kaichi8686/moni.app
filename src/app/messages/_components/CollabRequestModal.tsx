@@ -85,7 +85,7 @@ export function CollabRequestModal({ onClose, onSubmit }: Props) {
           <input className="w-full rounded-xl border px-3 py-2 text-sm" value={skill} onChange={(e) => setSkill(e.target.value)} placeholder={tx("必要なスキル", "Skills needed")} />
           <input className="w-full rounded-xl border px-3 py-2 text-sm" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder={tx("期間", "Duration")} />
           <input className="w-full rounded-xl border px-3 py-2 text-sm" value={compensation} onChange={(e) => setCompensation(e.target.value)} placeholder={tx("報酬", "Compensation")} />
-          <button type="submit" className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white">
+          <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white">
             {tx("送信", "Send")}
           </button>
         </form>

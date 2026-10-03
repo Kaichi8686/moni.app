@@ -332,7 +332,7 @@ export function QnABoard({
           <p className="text-sm text-zinc-600">{tx("質問するにはログインが必要です。", "Sign in to ask a question.")}</p>
           <Link
             href="/login"
-            className="mt-3 inline-flex min-h-[40px] items-center rounded-lg bg-zinc-900 px-4 text-[13px] font-semibold text-white no-underline hover:bg-zinc-800"
+            className="moni-btn-primary mt-3 min-h-[40px] px-4 text-[13px] no-underline"
           >
             {tx("ログインして質問する", "Sign in to ask")}
           </Link>
