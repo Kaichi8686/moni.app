@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EarnedBadge } from "@/lib/gamification/badges";
 import { parseProfileBadges } from "@/lib/gamification/syncBadges";
-import { parseActivityLog } from "@/lib/gamification/userActivityStreak";
+import { parseActivityLog, streakFromActivityLog } from "@/lib/gamification/userActivityStreak";
 
 export type ProfileGamification = {
   activityStreak: number;
@@ -25,11 +25,16 @@ export async function loadProfileGamification(
     if (!res.error && res.data) {
       const row = res.data as unknown as Record<string, unknown>;
       const ready = "activity_log" in row;
+      const activityLog = ready ? parseActivityLog(row.activity_log) : {};
+      const stored =
+        ready && typeof row.activity_streak === "number" ? Math.max(0, Math.floor(row.activity_streak)) : 0;
+      // activity_log を正として表示（古いカウンタや last_date 欠損でも連続日を反映）
+      const fromLog = ready ? streakFromActivityLog(activityLog) : 0;
+      const hasLogDays = Object.keys(activityLog).length > 0;
       return {
         gamificationReady: ready,
-        activityStreak:
-          ready && typeof row.activity_streak === "number" ? Math.max(0, Math.floor(row.activity_streak)) : 0,
-        activityLog: ready ? parseActivityLog(row.activity_log) : {},
+        activityStreak: hasLogDays ? fromLog : stored,
+        activityLog,
         badges: ready ? parseProfileBadges(row.badges) : [],
       };
     }

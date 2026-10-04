@@ -86,10 +86,11 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
     typeof o.teamActivityStreak === "number" && Number.isFinite(o.teamActivityStreak) && o.teamActivityStreak >= 0
       ? Math.floor(o.teamActivityStreak)
       : undefined;
-  const teamActivityLastDate =
-    typeof o.teamActivityLastDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.teamActivityLastDate)
-      ? o.teamActivityLastDate
-      : undefined;
+  const teamActivityLastDateRaw =
+    typeof o.teamActivityLastDate === "string" ? o.teamActivityLastDate.trim().slice(0, 10) : "";
+  const teamActivityLastDate = /^\d{4}-\d{2}-\d{2}$/.test(teamActivityLastDateRaw)
+    ? teamActivityLastDateRaw
+    : undefined;
 
   let weeklyCompletionGoal: number | undefined;
   if (typeof o.weeklyCompletionGoal === "number" && Number.isFinite(o.weeklyCompletionGoal)) {
