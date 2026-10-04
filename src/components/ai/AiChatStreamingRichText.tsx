@@ -46,23 +46,21 @@ function charsPerFrame(total: number): number {
   return 1;
 }
 
-/**
- * AI chat text with optional ChatGPT-like reveal:
- * glyphs appear progressively and fade from faint to solid.
- */
-export function AiChatStreamingRichText({
+function AiChatAnimatedReveal({
   text,
+  units,
   className,
-  animate = false,
   onTick,
   onComplete,
-}: Props) {
-  const units = useMemo(() => parseAiDisplayUnits(text), [text]);
-  const reduceMotion = prefersReducedMotion();
-  const shouldAnimate = animate && !reduceMotion && units.length > 0;
-
-  const [visibleCount, setVisibleCount] = useState(shouldAnimate ? 0 : units.length);
-  const [finished, setFinished] = useState(!shouldAnimate);
+}: {
+  text: string;
+  units: DisplayUnit[];
+  className?: string;
+  onTick?: () => void;
+  onComplete?: () => void;
+}) {
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [finished, setFinished] = useState(false);
   const onTickRef = useRef(onTick);
   const onCompleteRef = useRef(onComplete);
   const tickAccumRef = useRef(0);
@@ -73,14 +71,6 @@ export function AiChatStreamingRichText({
   }, [onTick, onComplete]);
 
   useEffect(() => {
-    if (!shouldAnimate) {
-      setVisibleCount(units.length);
-      setFinished(true);
-      return;
-    }
-
-    setVisibleCount(0);
-    setFinished(false);
     tickAccumRef.current = 0;
     let count = 0;
     let raf = 0;
@@ -110,28 +100,56 @@ export function AiChatStreamingRichText({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [shouldAnimate, text, units.length]);
+  }, [text, units.length]);
 
-  if (finished || !shouldAnimate) {
+  if (finished) {
     return <AiChatRichText text={text} className={className} />;
   }
 
   const visible = units.slice(0, visibleCount);
 
   return (
-    <div className={className} aria-busy="true">
+    <div className={`select-text ${className ?? ""}`.trim()} aria-busy="true">
       {visible.map((unit, index) =>
         unit.text === "\n" ? (
           <br key={index} />
         ) : (
-          <span
-            key={index}
-            className={`ai-chat-glyph${unit.bold ? " font-semibold" : ""}`}
-          >
+          <span key={index} className={`ai-chat-glyph${unit.bold ? " font-semibold" : ""}`}>
             {unit.text}
           </span>
         ),
       )}
     </div>
+  );
+}
+
+/**
+ * AI chat text with optional ChatGPT-like reveal:
+ * glyphs appear progressively and fade from faint to solid.
+ */
+export function AiChatStreamingRichText({
+  text,
+  className,
+  animate = false,
+  onTick,
+  onComplete,
+}: Props) {
+  const units = useMemo(() => parseAiDisplayUnits(text), [text]);
+  const reduceMotion = prefersReducedMotion();
+  const shouldAnimate = animate && !reduceMotion && units.length > 0;
+
+  if (!shouldAnimate) {
+    return <AiChatRichText text={text} className={className} />;
+  }
+
+  return (
+    <AiChatAnimatedReveal
+      key={text}
+      text={text}
+      units={units}
+      className={className}
+      onTick={onTick}
+      onComplete={onComplete}
+    />
   );
 }

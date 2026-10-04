@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
+import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
@@ -4965,16 +4966,21 @@ export default function Home() {
               <div className="space-y-3">
                 {mentorMessages.map((m) => (
                   <div key={m.id} className="rounded-2xl border border-[#e5e7eb] bg-white px-3 py-3 sm:px-4">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <div
-                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                          m.role === "user" ? "bg-[#dbeafe] text-[#1d4ed8]" : "bg-[#dcfce7] text-[#166534]"
-                        }`}
-                        aria-hidden
-                      >
-                        {m.role === "user" ? "You" : "AI"}
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
+                            m.role === "user" ? "bg-[#dbeafe] text-[#1d4ed8]" : "bg-[#dcfce7] text-[#166534]"
+                          }`}
+                          aria-hidden
+                        >
+                          {m.role === "user" ? "You" : "AI"}
+                        </div>
+                        <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
                       </div>
-                      <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
+                      {m.content.trim() && m.id !== mentorStreamingId ? (
+                        <AiChatCopyButton text={m.content} className="text-[#6b7280]" />
+                      ) : null}
                     </div>
                     <AiChatStreamingRichText
                       text={m.content}
