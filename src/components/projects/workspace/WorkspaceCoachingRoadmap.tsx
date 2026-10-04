@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ProjectRoadmapPanel, type RoadmapStepFull } from "@/components/projects/ProjectRoadmapPanel";
 import type { TaskPanelRow } from "@/components/projects/ProjectTasksPanel";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { mergeCoachingContext, parseCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
+import type { CoachingContext } from "@/lib/projects/coachingContext";
+import { saveCoachingContextPatch } from "@/lib/projects/saveCoachingContextPatch";
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
 import { bumpTeamActivityStreak } from "@/lib/projects/teamActivityStreak";
 import { supabase } from "@/lib/supabase";
@@ -102,13 +103,7 @@ export default function WorkspaceCoachingRoadmap() {
   const saveCoaching = useCallback(
     async (patch: Partial<CoachingContext>) => {
       if (!supabase || !project) return;
-      const prev = parseCoachingContext(project.coaching_context);
-      const next = mergeCoachingContext(prev, patch);
-      const { error: err } = await supabase
-        .from("projects")
-        .update({ coaching_context: next, updated_at: new Date().toISOString() })
-        .eq("id", projectId);
-      if (err) throw new Error(err.message);
+      const next = await saveCoachingContextPatch(supabase, projectId, patch);
       setProject((p) => (p ? { ...p, coaching_context: next } : p));
     },
     [project, projectId],
@@ -116,7 +111,11 @@ export default function WorkspaceCoachingRoadmap() {
 
   const recordTeamActivity = useCallback(async () => {
     if (!supabase || !project) return null;
-    return bumpTeamActivityStreak(supabase, projectId);
+    const bump = await bumpTeamActivityStreak(supabase, projectId);
+    if (bump) {
+      setProject((p) => (p ? { ...p, coaching_context: bump.coachingContext } : p));
+    }
+    return bump;
   }, [project, projectId]);
 
   if (workspaceLoading || loading) {
