@@ -144,7 +144,7 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
                 className={`rounded-xl border p-3 ${row.enabled ? "border-gray-200 bg-white shadow-sm" : "border-gray-100 bg-gray-50 opacity-60"}`}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="text-[11px] font-medium text-gray-400">フェーズ {index + 1}</span>
+                  <span className="text-[11px] font-medium text-gray-400">段階 {index + 1}</span>
                   <input
                     type="checkbox"
                     checked={row.enabled}
@@ -170,23 +170,23 @@ export function RoadmapAddPhaseModal({ open, onClose, projectStart, onBulkAddPha
                   value={row.title}
                   disabled={!row.enabled}
                   onChange={(e) => updateDraft(row.id, { title: e.target.value })}
-                  className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm font-medium outline-none ring-violet-500 focus:ring-2 disabled:bg-gray-100"
-                  placeholder="フェーズ名（例：ヒアリング）"
+                  className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm font-medium outline-none ring-[var(--brand,#ff5c35)] focus:ring-2 disabled:bg-gray-100"
+                  placeholder="段階の名前（例：ヒアリング）"
                 />
                 <input
                   value={row.goal}
                   disabled={!row.enabled}
                   onChange={(e) => updateDraft(row.id, { goal: e.target.value })}
-                  className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-violet-500 focus:ring-2 disabled:bg-gray-100"
-                  placeholder="このフェーズのゴール（例：10人に話を聞く）"
+                  className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2 disabled:bg-gray-100"
+                  placeholder="この段階のゴール（例：10人に話を聞く）"
                 />
                 <textarea
                   value={row.description}
                   disabled={!row.enabled}
                   onChange={(e) => updateDraft(row.id, { description: e.target.value })}
                   rows={2}
-                  className="mb-2 w-full resize-none rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-violet-500 focus:ring-2 disabled:bg-gray-100"
-                  placeholder="概要（このフェーズでやること）"
+                  className="mb-2 w-full resize-none rounded-lg border border-gray-200 px-2 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2 disabled:bg-gray-100"
+                  placeholder="概要（この段階でやること）"
                 />
                 <div className="flex gap-2">
                   <div className="flex-1">

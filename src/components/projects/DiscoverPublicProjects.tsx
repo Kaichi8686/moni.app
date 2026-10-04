@@ -265,7 +265,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                       <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
                         {p.name}
                       </span>
-                      <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                      <span className="line-clamp-1 w-full text-[10px] font-semibold text-[var(--brand-ink,#9a3412)] sm:text-[11px]">
                         {lineLabel(p.business_type)}
                       </span>
                       <span
@@ -309,7 +309,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
 
             <div className="p-4">
               <div className="flex gap-3">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-[var(--brand-soft,#fff4f0)] ring-1 ring-[var(--brand-muted,#ffd9cc)]">
                   {detail.thumbnail_url?.trim() ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
