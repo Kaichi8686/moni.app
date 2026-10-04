@@ -934,7 +934,7 @@ export function IdeaInterviewApp({
                       ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
                       : placeholder
                 }
-                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2 disabled:opacity-60"
+                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-base outline-none ring-violet-300 focus:ring-2 disabled:opacity-60 sm:text-[15px]"
               />
               <button
                 type="submit"
