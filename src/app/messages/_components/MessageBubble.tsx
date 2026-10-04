@@ -123,7 +123,7 @@ export function MessageBubble({
         {message.replyTo ? (
           <div
             className={`mb-1 max-w-full truncate rounded-xl px-3 py-1.5 text-xs ${
-              isMine ? "bg-violet-100 text-violet-700" : "bg-zinc-200 text-zinc-600"
+              isMine ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]" : "bg-zinc-200 text-zinc-600"
             }`}
           >
             <p className="font-medium">{message.replyTo.sender?.displayName}</p>
@@ -135,7 +135,7 @@ export function MessageBubble({
           {...longPress}
           className={`relative cursor-pointer select-none rounded-2xl px-4 py-2.5 ${
             isMine
-              ? "rounded-br-md bg-violet-600 text-white"
+              ? "rounded-br-md bg-[var(--brand,#ff5c35)] text-white"
               : "rounded-bl-md border border-zinc-100 bg-white text-zinc-900 shadow-sm"
           }`}
         >
@@ -159,7 +159,7 @@ export function MessageBubble({
               href={message.metadata.url as string}
               target="_blank"
               rel="noreferrer"
-              className={`text-sm underline ${isMine ? "text-violet-100" : "text-violet-600"}`}
+              className={`text-sm underline ${isMine ? "text-[var(--brand-soft,#fff4f0)]" : "text-[var(--brand,#ff5c35)]"}`}
             >
               📎 {(message.metadata.filename as string) || tx("ファイル", "File")}
             </a>
@@ -178,7 +178,7 @@ export function MessageBubble({
             <p className="text-sm">🏆 {(message.metadata.title as string) || tx("実績をシェア", "Share a milestone")}</p>
           ) : null}
           {message.isEdited ? (
-            <span className={`text-xs ${isMine ? "text-violet-200" : "text-zinc-400"}`}> {tx("編集済み", "Edited")}</span>
+            <span className={`text-xs ${isMine ? "text-[var(--brand-muted,#ffd9cc)]" : "text-zinc-400"}`}> {tx("編集済み", "Edited")}</span>
           ) : null}
         </div>
 

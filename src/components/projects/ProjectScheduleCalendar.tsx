@@ -26,7 +26,7 @@ type DayItem =
   | { kind: "schedule"; schedule: CalendarSchedule }
   | { kind: "issue"; issue: CalendarIssueEntry };
 
-const ISSUE_BAR_CLASS = "bg-[#5E6AD2]/90";
+const ISSUE_BAR_CLASS = "bg-[var(--brand,#ff5c35)]/90";
 const BUSY_BAR_CLASS = "bg-zinc-500/90";
 
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
@@ -35,7 +35,7 @@ const EVENT_BAR_CLASS = [
   "bg-amber-400/90",
   "bg-emerald-400/90",
   "bg-sky-400/90",
-  "bg-violet-400/90",
+  "bg-[var(--brand-muted,#ffd9cc)]",
   "bg-orange-400/90",
 ] as const;
 
@@ -425,7 +425,7 @@ export function ProjectScheduleCalendar({
                     </div>
                   </li>
                 ) : (
-                  <li key={`i-${item.issue.id}`} className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2 shadow-sm">
+                  <li key={`i-${item.issue.id}`} className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/50 px-3 py-2 shadow-sm">
                     <button
                       type="button"
                       className="flex w-full items-start gap-2 text-left"
@@ -434,12 +434,12 @@ export function ProjectScheduleCalendar({
                     >
                       <span className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${ISSUE_BAR_CLASS}`} aria-hidden />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#5E6AD2]">課題（期限）</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--brand,#ff5c35)]">課題（期限）</p>
                         <p className="font-semibold text-zinc-900">{item.issue.title}</p>
                         {item.issue.status ? (
                           <p className="text-[11px] text-zinc-500">{issueStatusLabel[item.issue.status] ?? item.issue.status}</p>
                         ) : null}
-                        {onIssueClick ? <p className="mt-1 text-[11px] font-medium text-[#5E6AD2]">タップして詳細</p> : null}
+                        {onIssueClick ? <p className="mt-1 text-[11px] font-medium text-[var(--brand,#ff5c35)]">タップして詳細</p> : null}
                       </div>
                     </button>
                   </li>

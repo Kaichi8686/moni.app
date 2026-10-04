@@ -367,7 +367,7 @@ export default function WorkspaceIssues() {
             <p className="text-xs text-zinc-500">{tx(`${doneCount}/${rows.length}件完了`, `${doneCount}/${rows.length} done`)}</p>
           </div>
           {canEdit ? (
-            <button type="button" onClick={() => setCreating(true)} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white" aria-label={tx("課題を追加", "Add task")}>
+            <button type="button" onClick={() => setCreating(true)} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] text-white shadow-sm shadow-[rgba(255,92,53,0.25)]" aria-label={tx("課題を追加", "Add task")}>
               <Plus className="h-5 w-5" />
             </button>
           ) : null}
@@ -394,7 +394,7 @@ export default function WorkspaceIssues() {
                 <input type="date" value={draftDue} onChange={(event) => setDraftDue(event.target.value)} className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm" />
               </label>
             </div>
-            <button type="submit" className="min-h-[44px] w-full rounded-xl bg-zinc-900 text-sm font-semibold text-white">{tx("追加する", "Add")}</button>
+            <button type="submit" className="min-h-[44px] w-full rounded-xl bg-[var(--brand,#ff5c35)] text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]">{tx("追加する", "Add")}</button>
           </form>
         ) : null}
         <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
@@ -480,7 +480,7 @@ export default function WorkspaceIssues() {
             <button
               type="submit"
               disabled={savingGenre || !draftGenreLabel.trim()}
-              className="min-h-[44px] flex-[2] rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:opacity-40"
+              className="min-h-[44px] flex-[2] rounded-xl bg-[var(--brand,#ff5c35)] text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-40"
             >
               {savingGenre ? tx("追加中…", "Adding…") : tx("追加する", "Add")}
             </button>

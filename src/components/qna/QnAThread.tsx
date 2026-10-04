@@ -190,8 +190,8 @@ export function QnAThread({
                 return (
                   <li
                     key={a.id}
-                    className={`py-4 pl-4 pr-4 ${isBest ? "bg-emerald-50/40 dark:bg-emerald-950/20" : highlightMine ? "bg-sky-50/30 dark:bg-sky-950/20" : ""} ${
-                      isNested ? "ml-3 border-l-2 border-zinc-200 pl-4 sm:ml-5 dark:border-zinc-700" : "border-l-2 border-indigo-200 pl-4 dark:border-indigo-800"
+                    className={`py-4 pl-4 pr-4 ${isBest ? "bg-emerald-50/40 dark:bg-emerald-950/20" : highlightMine ? "bg-[var(--brand-soft,#fff4f0)]/50 dark:bg-[var(--brand-soft,#fff4f0)]/30" : ""} ${
+                      isNested ? "ml-3 border-l-2 border-zinc-200 pl-4 sm:ml-5 dark:border-zinc-700" : "border-l-2 border-[var(--brand-muted,#ffd9cc)] pl-4 dark:border-[var(--brand-muted,#ffd9cc)]"
                     }`}
                   >
                     {isNested && parent ? (
@@ -292,7 +292,7 @@ export function QnAThread({
               <button
                 type="button"
                 onClick={() => setVisibleAnswerCount(ordered.length)}
-                className="text-[12px] font-semibold text-indigo-700 transition hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200"
+                className="text-[12px] font-semibold text-[var(--brand,#ff5c35)] transition hover:text-[var(--brand-hover,#e04e2a)] dark:text-[var(--brand,#ff5c35)] dark:hover:text-[var(--brand-hover,#e04e2a)]"
               >
                 {tx(`残り ${hiddenAnswerCount} 件の回答を見る`, `See ${hiddenAnswerCount} more answers`)}
               </button>
@@ -346,7 +346,7 @@ export function QnAThread({
                     disabled={!answerDraft.trim()}
                     className={`inline-flex min-h-[40px] items-center rounded-lg px-4 text-[13px] font-semibold transition ${
                       answerDraft.trim()
-                        ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                        ? "bg-[var(--brand,#ff5c35)] text-white hover:bg-[var(--brand-hover,#e04e2a)]"
                         : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
                     }`}
                   >

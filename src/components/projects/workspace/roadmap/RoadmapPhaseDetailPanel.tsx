@@ -218,7 +218,7 @@ export function RoadmapPhaseDetailPanel({
           </div>
           <input
             readOnly={!canEdit}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
             placeholder="例：ターゲットと直接10人話す"
             value={goalDraft}
             onChange={(e) => setGoalDraft(e.target.value)}
@@ -233,7 +233,7 @@ export function RoadmapPhaseDetailPanel({
           <textarea
             readOnly={!canEdit}
             rows={3}
-            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
             placeholder="このフェーズでやることや背景"
             value={descriptionDraft}
             onChange={(e) => setDescriptionDraft(e.target.value)}
