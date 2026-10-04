@@ -197,6 +197,13 @@ html.moni-landing-active .moni-hero-rise {
   animation: ai-chat-glyph-in 0.42s ease-out both;
 }
 
+/* AI返答の大事な箇所（**太字**）を一段大きく */
+.ai-chat-emphasis {
+  font-size: 1.18em;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ai-chat-glyph {
     animation: none;

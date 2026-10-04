@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { AI_CHAT_EMPHASIS_CLASS, AiChatRichText } from "@/components/ai/AiChatRichText";
 import { prefersReducedMotion } from "@/lib/ui/activityCelebration";
 
 type DisplayUnit = { text: string; bold: boolean };
@@ -114,7 +114,7 @@ function AiChatAnimatedReveal({
         unit.text === "\n" ? (
           <br key={index} />
         ) : (
-          <span key={index} className={`ai-chat-glyph${unit.bold ? " font-semibold" : ""}`}>
+          <span key={index} className={`ai-chat-glyph${unit.bold ? ` ${AI_CHAT_EMPHASIS_CLASS}` : ""}`}>
             {unit.text}
           </span>
         ),
