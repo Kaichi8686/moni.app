@@ -35,6 +35,30 @@ def _cache_path(ticker: str) -> Path:
     return ensure_dir(CACHE_DIR) / f"{safe_name}.csv"
 
 
+def _drop_spike_outliers(df: pd.DataFrame, max_deviation: float = 0.5) -> pd.DataFrame:
+    """
+    周囲の水準から大きく外れた誤データ行を除外する。
+
+    例: 1306.T で本来 ~380 円のところに ~37 円が混ざるケース。
+    単純な日次リターン閾値だと「誤行の翌日（正しい価格への復帰）」まで
+    消してしまうので、前後数日の中央値からの乖離で判定する。
+    """
+    if df is None or df.empty or "Close" not in df.columns:
+        return df
+
+    out = df.copy()
+    close = out["Close"].astype(float)
+    # 前後を含むローカル中央値（自分自身の影響を抑えるため広めの窓）
+    local_median = close.rolling(window=11, center=True, min_periods=5).median()
+    rel = (close - local_median).abs() / local_median.replace(0, pd.NA)
+    bad = rel > max_deviation
+    if bool(bad.fillna(False).any()):
+        dropped = int(bad.fillna(False).sum())
+        logger.warning("周囲水準から外れた価格行を %d 件除外しました", dropped)
+        out = out.loc[~bad.fillna(False)]
+    return out
+
+
 def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     yfinance の戻り値を、このアプリで使いやすい形に整える。
@@ -42,6 +66,7 @@ def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     - 列名を Open/High/Low/Close/Volume にそろえる
     - 日付インデックス名を Date にする
     - 欠損行を落とす
+    - 明らかなスパイク（誤データ）を除外する
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
@@ -64,6 +89,7 @@ def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     out = out.apply(pd.to_numeric, errors="coerce")
     out = out.dropna(subset=["Open", "High", "Low", "Close"])
     out = out.sort_index()
+    out = _drop_spike_outliers(out)
     return out
 
 
