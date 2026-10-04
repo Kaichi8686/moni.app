@@ -39,7 +39,7 @@ type BoardElementRow = {
 
 const card = "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm";
 const input = "w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500";
-const button = "rounded-xl bg-zinc-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60";
+const button = "rounded-xl bg-[var(--brand,#ff5c35)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-60";
 const subButton = "rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700";
 
 export function ProjectsWorkspace({ projectId }: Props) {

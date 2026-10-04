@@ -425,7 +425,7 @@ export function ProjectScheduleCalendar({
                     </div>
                   </li>
                 ) : (
-                  <li key={`i-${item.issue.id}`} className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2 shadow-sm">
+                  <li key={`i-${item.issue.id}`} className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/50 px-3 py-2 shadow-sm">
                     <button
                       type="button"
                       className="flex w-full items-start gap-2 text-left"

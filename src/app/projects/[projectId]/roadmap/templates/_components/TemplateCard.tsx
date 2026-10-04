@@ -15,9 +15,9 @@ function badgeLabel(template: GalleryTemplateView): string | null {
 }
 
 function badgeClass(template: GalleryTemplateView): string {
-  if (template.source === "system") return "bg-violet-100 text-violet-700";
+  if (template.source === "system") return "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]";
   if (template.source === "community") return "bg-sky-100 text-sky-700";
-  if (template.isOfficial) return "bg-indigo-100 text-indigo-700";
+  if (template.isOfficial) return "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]";
   return "bg-gray-100 text-gray-600";
 }
 
@@ -29,7 +29,7 @@ export function TemplateCard({ template, onClick }: Props) {
     <button
       type="button"
       onClick={onClick}
-      className="group w-full rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-violet-300 hover:shadow-md"
+      className="group w-full rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-[var(--brand-muted,#ffd9cc)] hover:shadow-md"
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <span className="text-3xl leading-none">{template.thumbnailEmoji}</span>
@@ -42,7 +42,7 @@ export function TemplateCard({ template, onClick }: Props) {
       <h3 className="mb-1 line-clamp-2 text-sm font-semibold text-gray-900">{template.title}</h3>
       <p className="mb-3 line-clamp-2 text-xs text-gray-500">{template.description}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-gray-400">{phaseCount}フェーズ</span>
+        <span className="text-xs text-gray-400">{phaseCount}段階</span>
         {template.tags.slice(0, 2).map((tag) => (
           <span key={tag} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
             {tag}
@@ -52,7 +52,7 @@ export function TemplateCard({ template, onClick }: Props) {
       {template.source === "community" && (template.useCount ?? 0) > 0 ? (
         <p className="mt-2 text-xs text-gray-400">{template.useCount}件が使用</p>
       ) : null}
-      <p className="mt-3 text-xs font-medium text-violet-600 opacity-0 transition group-hover:opacity-100">
+      <p className="mt-3 text-xs font-medium text-[var(--brand,#ff5c35)] opacity-0 transition group-hover:opacity-100">
         プレビューを見る →
       </p>
     </button>

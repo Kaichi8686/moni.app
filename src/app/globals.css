@@ -778,7 +778,7 @@ html.moni-landing-active {
 }
 
 .project-sidebar-group-btn.has-active {
-  color: #5e6ad2;
+  color: var(--brand, #ff5c35);
 }
 
 .project-sidebar-group-collapsed {
@@ -843,8 +843,8 @@ html.moni-landing-active {
 }
 
 .project-mobile-sheet-item.is-active {
-  background: #eef2ff;
-  color: #312e81;
+  background: var(--brand-soft, #fff4f0);
+  color: var(--brand-ink, #9a3412);
 }
 
 .project-mobile-sheet-icon {
@@ -856,7 +856,7 @@ html.moni-landing-active {
   justify-content: center;
   border-radius: 0.75rem;
   background: #f7f8f8;
-  color: #5e6ad2;
+  color: var(--brand, #ff5c35);
 }
 
 .project-mobile-sheet-item.is-active .project-mobile-sheet-icon {

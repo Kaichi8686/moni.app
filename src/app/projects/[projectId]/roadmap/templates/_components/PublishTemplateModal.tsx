@@ -129,7 +129,7 @@ export function PublishTemplateModal({ open, publishing, onClose, onPublish }: P
           <button
             type="submit"
             disabled={publishing || !title.trim()}
-            className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="flex-1 rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {publishing ? "公開中…" : "公開する"}
           </button>
