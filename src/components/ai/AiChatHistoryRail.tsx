@@ -53,7 +53,7 @@ export function AiChatHistoryRail({
                 <div
                   className={`group flex items-stretch gap-1 rounded-xl border ${
                     active
-                      ? "border-violet-200 bg-violet-50"
+                      ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]"
                       : "border-transparent bg-transparent hover:border-[#e5e7eb] hover:bg-white"
                   }`}
                 >

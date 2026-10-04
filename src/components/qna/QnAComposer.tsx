@@ -57,7 +57,7 @@ export function QnAComposer({
                 onClick={() => onCategoryChange(c.id)}
                 className={`min-h-[32px] rounded-full border px-3 text-[12px] font-semibold transition ${
                   active
-                    ? "border-indigo-600 bg-indigo-600 text-white shadow-sm dark:border-indigo-500 dark:bg-indigo-500"
+                    ? "border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] text-white shadow-sm dark:border-[var(--brand,#ff5c35)] dark:bg-[var(--brand,#ff5c35)]"
                     : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
                 }`}
               >
@@ -70,7 +70,7 @@ export function QnAComposer({
 
       <div className="flex items-start gap-3 px-4 py-4">
         <div
-          className="mt-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-900/60 dark:bg-indigo-950/50 dark:text-indigo-300"
+          className="mt-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand,#ff5c35)] dark:border-[var(--brand-muted,#ffd9cc)] dark:bg-[var(--brand-soft,#fff4f0)] dark:text-[var(--brand,#ff5c35)]"
           aria-hidden
         >
           <CategoryIcon className="h-4 w-4" strokeWidth={2} />
@@ -102,7 +102,7 @@ export function QnAComposer({
               disabled={!canSubmit}
               className={`inline-flex min-h-[40px] items-center rounded-lg px-4 text-[13px] font-semibold transition ${
                 canSubmit
-                  ? "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                  ? "bg-[var(--brand,#ff5c35)] text-white hover:bg-[var(--brand-hover,#e04e2a)] dark:bg-[var(--brand,#ff5c35)] dark:text-white dark:hover:bg-[var(--brand-hover,#e04e2a)]"
                   : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
               }`}
             >
