@@ -13,6 +13,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import {
@@ -766,8 +767,16 @@ export function IdeaInterviewApp({
                       onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
                     />
                   ) : (
-                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
                   )}
+                  {m.content.trim() && !(m.id && m.id === streamingId) ? (
+                    <div className={`mt-1.5 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <AiChatCopyButton
+                        text={m.content}
+                        className={m.role === "user" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-zinc-500"}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))
             : null}
@@ -789,8 +798,16 @@ export function IdeaInterviewApp({
                       onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
                     />
                   ) : (
-                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
                   )}
+                  {m.content.trim() && !(m.id && m.id === streamingId) ? (
+                    <div className={`mt-1.5 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <AiChatCopyButton
+                        text={m.content}
+                        className={m.role === "user" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-zinc-500"}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))
             : null}

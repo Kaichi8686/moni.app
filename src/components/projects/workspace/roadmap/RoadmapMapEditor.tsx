@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Map, Plus, Sparkles, Trash2 } from "lucide-react";
 import { addDays } from "date-fns";
+import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseDetailExpand } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailExpand";
@@ -262,18 +263,19 @@ export function RoadmapMapEditor() {
             ) : (
               aiMessages.map((message) =>
                 message.role === "assistant" ? (
-                  <AiChatRichText
-                    key={message.id}
-                    text={message.content}
-                    className="rounded-xl bg-orange-100/80 px-3 py-2 text-sm leading-relaxed text-zinc-800"
-                  />
+                  <div key={message.id} className="rounded-xl bg-orange-100/80 px-3 py-2 text-sm leading-relaxed text-zinc-800">
+                    <AiChatRichText text={message.content} />
+                    <div className="mt-1.5">
+                      <AiChatCopyButton text={message.content} className="text-zinc-600" />
+                    </div>
+                  </div>
                 ) : (
-                  <p
-                    key={message.id}
-                    className="whitespace-pre-wrap rounded-xl bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800"
-                  >
-                    {message.content}
-                  </p>
+                  <div key={message.id} className="rounded-xl bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800">
+                    <p className="select-text whitespace-pre-wrap">{message.content}</p>
+                    <div className="mt-1.5">
+                      <AiChatCopyButton text={message.content} className="text-zinc-600" />
+                    </div>
+                  </div>
                 ),
               )
             )}

@@ -11,7 +11,7 @@ type Props = {
 export function AiChatRichText({ text, className }: Props) {
   const lines = text.split("\n");
   return (
-    <div className={className}>
+    <div className={`select-text ${className ?? ""}`.trim()}>
       {lines.map((line, lineIndex) => (
         <Fragment key={lineIndex}>
           {lineIndex > 0 ? <br /> : null}
