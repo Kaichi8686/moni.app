@@ -1,7 +1,6 @@
 /**
- * 日次株価の取得。
- * まず Yahoo Finance Chart API を試し、失敗したら合成データにフォールバック。
- * （実発注はしない。シミュレーター専用）
+ * 日次株価取得（シミュレーター専用・発注なし）
+ * 直近の実相場を取り、日々の解説に使う。
  */
 
 export type PriceBar = {
@@ -29,13 +28,13 @@ function hashTicker(ticker: string): number {
   return h || 1;
 }
 
-/** 営業日っぽい日付列（土日スキップ） */
-function businessDaysBack(years: number): string[] {
+function businessDaysAroundToday(lookback: number, forwardPad = 0): string[] {
   const dates: string[] = [];
   const end = new Date();
   end.setHours(12, 0, 0, 0);
+  if (forwardPad) end.setDate(end.getDate() + forwardPad);
   const start = new Date(end);
-  start.setFullYear(start.getFullYear() - years);
+  start.setDate(start.getDate() - lookback);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const day = d.getDay();
     if (day === 0 || day === 6) continue;
@@ -44,23 +43,22 @@ function businessDaysBack(years: number): string[] {
   return dates;
 }
 
-export function synthesizeSeries(tickers: string[], years: number): PriceSeries {
-  const dates = businessDaysBack(years);
+export function synthesizeRecent(tickers: string[], lookbackDays = 120): PriceSeries {
+  const dates = businessDaysAroundToday(lookbackDays);
   const out: PriceSeries = {};
   for (const ticker of tickers) {
-    const rnd = mulberry32(hashTicker(ticker) ^ (years * 997));
-    // 銘柄ごとの初期価格・ドリフト・ボラ
+    const rnd = mulberry32(hashTicker(ticker) ^ 20261004);
     let price = 800 + (hashTicker(ticker) % 4000);
-    if (ticker.endsWith(".T") && hashTicker(ticker) % 7 === 0) price = 120 + (hashTicker(ticker) % 200);
-    const drift = 0.00015 + (hashTicker(ticker) % 100) / 1_000_000;
-    const vol = 0.012 + (hashTicker(ticker) % 50) / 10_000;
+    if (hashTicker(ticker) % 7 === 0) price = 120 + (hashTicker(ticker) % 200);
+    const drift = 0.0002 + (hashTicker(ticker) % 80) / 1_000_000;
+    const vol = 0.011 + (hashTicker(ticker) % 40) / 10_000;
     const bars: PriceBar[] = [];
     for (const date of dates) {
       const shock = (rnd() - 0.48) * vol;
       const open = price;
       const close = Math.max(1, price * (1 + drift + shock));
-      const high = Math.max(open, close) * (1 + rnd() * 0.008);
-      const low = Math.min(open, close) * (1 - rnd() * 0.008);
+      const high = Math.max(open, close) * (1 + rnd() * 0.006);
+      const low = Math.min(open, close) * (1 - rnd() * 0.006);
       bars.push({ date, open, high, low, close });
       price = close;
     }
@@ -69,19 +67,17 @@ export function synthesizeSeries(tickers: string[], years: number): PriceSeries 
   return out;
 }
 
-async function fetchYahooChart(ticker: string, years: number): Promise<PriceBar[] | null> {
-  const range = years <= 1 ? "1y" : years <= 2 ? "2y" : "5y";
+async function fetchYahooChart(ticker: string, range: string): Promise<PriceBar[] | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     ticker,
   )}?interval=1d&range=${range}`;
-
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; moni-invest-sim/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; moni-invest-sim/2.0)",
         Accept: "application/json",
       },
-      next: { revalidate: 3600 },
+      next: { revalidate: 1800 },
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {
@@ -112,16 +108,20 @@ async function fetchYahooChart(ticker: string, years: number): Promise<PriceBar[
       const low = q.low?.[i] ?? close;
       if (close == null || open == null || high == null || low == null) continue;
       if (close <= 0 || open <= 0) continue;
-      const date = new Date(ts[i] * 1000).toISOString().slice(0, 10);
-      bars.push({ date, open, high, low, close });
+      bars.push({
+        date: new Date(ts[i] * 1000).toISOString().slice(0, 10),
+        open,
+        high,
+        low,
+        close,
+      });
     }
-    return bars.length > 40 ? bars : null;
+    return bars.length > 5 ? cleanBars(bars) : null;
   } catch {
     return null;
   }
 }
 
-/** 明らかなスパイク（誤データ）を落とす */
 function cleanBars(bars: PriceBar[]): PriceBar[] {
   if (bars.length < 5) return bars;
   const closes = bars.map((b) => b.close);
@@ -134,50 +134,94 @@ function cleanBars(bars: PriceBar[]): PriceBar[] {
   });
 }
 
-export async function loadPriceSeries(
+/** 解説・売買判断用に直近〜1年分を取得 */
+export async function loadLiveSeries(
   tickers: string[],
-  years: number,
-): Promise<{ series: PriceSeries; source: "yahoo" | "synthetic" }> {
+): Promise<{ series: PriceSeries; source: "yahoo" | "synthetic" | "mixed" }> {
   const series: PriceSeries = {};
-  let yahooHits = 0;
-
+  let hits = 0;
   await Promise.all(
     tickers.map(async (ticker) => {
-      const raw = await fetchYahooChart(ticker, years);
+      const raw = await fetchYahooChart(ticker, "1y");
       if (raw) {
-        series[ticker] = cleanBars(raw);
-        yahooHits += 1;
+        series[ticker] = raw;
+        hits += 1;
       }
     }),
   );
 
-  // 半分以上取れたら Yahoo、足りない銘柄だけ合成で埋める
-  if (yahooHits >= Math.ceil(tickers.length * 0.5)) {
-    const missing = tickers.filter((t) => !series[t]?.length);
-    if (missing.length) {
-      const synth = synthesizeSeries(missing, years);
-      for (const t of missing) series[t] = synth[t];
-    }
-    return { series, source: "yahoo" };
+  const missing = tickers.filter((t) => !series[t]?.length);
+  if (missing.length) {
+    const synth = synthesizeRecent(missing, 260);
+    for (const t of missing) series[t] = synth[t];
   }
 
-  return { series: synthesizeSeries(tickers, years), source: "synthetic" };
+  if (hits === 0) return { series, source: "synthetic" };
+  if (hits < tickers.length) return { series, source: "mixed" };
+  return { series, source: "yahoo" };
 }
 
-/** 全銘柄の共通営業日 */
-export function commonDates(series: PriceSeries): string[] {
-  const keys = Object.keys(series);
-  if (!keys.length) return [];
-  let set = new Set(series[keys[0]].map((b) => b.date));
-  for (const k of keys.slice(1)) {
-    const next = new Set(series[k].map((b) => b.date));
-    set = new Set([...set].filter((d) => next.has(d)));
+function intersectDates(series: PriceSeries, tickers: string[]): string[] {
+  let common: string[] | null = null;
+  for (const t of tickers) {
+    const dates = (series[t] ?? []).map((b) => b.date);
+    if (!dates.length) continue;
+    const set = new Set(dates);
+    common = common ? common.filter((d) => set.has(d)) : [...set];
   }
-  return [...set].sort();
+  return common ? [...new Set(common)].sort() : [];
+}
+
+export function latestCommonDate(series: PriceSeries, tickers: string[]): string | null {
+  const dates = intersectDates(series, tickers);
+  return dates.at(-1) ?? null;
 }
 
 export function barOn(series: PriceSeries, ticker: string, date: string): PriceBar | null {
+  return series[ticker]?.find((b) => b.date === date) ?? null;
+}
+
+export function prevBar(series: PriceSeries, ticker: string, date: string): PriceBar | null {
   const bars = series[ticker];
-  if (!bars) return null;
-  return bars.find((b) => b.date === date) ?? null;
+  if (!bars?.length) return null;
+  const idx = bars.findIndex((b) => b.date === date);
+  if (idx <= 0) return null;
+  return bars[idx - 1];
+}
+
+export function tradingDatesBetween(
+  series: PriceSeries,
+  tickers: string[],
+  afterDate: string | null,
+  untilDate: string,
+): string[] {
+  return intersectDates(series, tickers).filter(
+    (d) => (!afterDate || d > afterDate) && d <= untilDate,
+  );
+}
+
+export function todayYmd(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+export function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  const da = new Date(ay, am - 1, ad).getTime();
+  const db = new Date(by, bm - 1, bd).getTime();
+  return Math.round((db - da) / 86400000);
 }

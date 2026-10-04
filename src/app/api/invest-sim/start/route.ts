@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { runInvestAiSimulation } from "@/lib/invest-sim/aiEngine";
-import type { InvestSimRequest, RiskLevel } from "@/lib/invest-sim/types";
+import { startExperiment } from "@/lib/invest-sim/liveEngine";
+import type { ExperimentDurationDays, ExperimentSetup, RiskLevel } from "@/lib/invest-sim/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,15 +10,15 @@ function asRisk(v: unknown): RiskLevel {
   return "balanced";
 }
 
-function asYears(v: unknown): 1 | 2 | 3 {
+function asDuration(v: unknown): ExperimentDurationDays {
   const n = Number(v);
-  if (n === 1 || n === 2 || n === 3) return n;
-  return 3;
+  if (n === 30 || n === 90 || n === 180 || n === 365) return n;
+  return 90;
 }
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as Partial<InvestSimRequest>;
+    const body = (await req.json()) as Partial<ExperimentSetup>;
     const initialCapital = Number(body.initialCapital);
     const goalAmount = Number(body.goalAmount);
 
@@ -35,20 +35,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const input: InvestSimRequest = {
+    const setup: ExperimentSetup = {
       initialCapital: Math.floor(initialCapital),
       goalAmount: Math.floor(goalAmount),
       risk: asRisk(body.risk),
-      years: asYears(body.years),
+      durationDays: asDuration(body.durationDays),
       goalLabel: typeof body.goalLabel === "string" ? body.goalLabel.slice(0, 40) : undefined,
     };
 
-    const result = await runInvestAiSimulation(input);
-    return NextResponse.json({ result });
+    const result = await startExperiment(setup);
+    return NextResponse.json(result);
   } catch (e) {
-    console.error("[invest-sim/run]", e);
+    console.error("[invest-sim/start]", e);
     return NextResponse.json(
-      { error: "シミュレーションに失敗しました。しばらくして再試行してください。" },
+      { error: "実験を開始できませんでした。しばらくして再試行してください。" },
       { status: 500 },
     );
   }
