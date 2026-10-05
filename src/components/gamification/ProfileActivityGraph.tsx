@@ -66,7 +66,7 @@ export function ProfileActivityGraph({ activityLog }: Props) {
         })}
       </div>
       <p className="mt-2 text-right text-[11px] text-gray-400">
-        {tx("紫の日 = 活動した日", "Purple = active")}
+        {tx("色がついた日 = 活動した日", "Colored = active")}
       </p>
 
       {summary.recent.length > 0 ? (

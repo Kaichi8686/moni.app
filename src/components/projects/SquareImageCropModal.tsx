@@ -207,7 +207,7 @@ export function SquareImageCropModal({ sourceUrl, open, onCancel, onConfirm }: P
           </button>
           <button
             type="button"
-            className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="moni-btn-primary rounded-xl px-4 py-2 text-sm disabled:opacity-50"
             onClick={() => void confirm()}
             disabled={busy || !natural}
           >

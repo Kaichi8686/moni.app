@@ -711,9 +711,9 @@ export function ProjectRoadmapPanel({
             <button
               type="button"
               onClick={() => void addBlankStep()}
-              className="min-h-[44px] rounded-2xl border border-transparent bg-zinc-900 px-4 text-xs font-bold text-white shadow-sm transition duration-200 ease-out hover:bg-zinc-800"
+              className="moni-btn-primary min-h-[44px] rounded-2xl px-4 text-xs font-bold shadow-sm"
             >
-              空白から1フェーズ追加
+              空白から1段階追加
             </button>
           </div>
           <p className="mt-4 text-left text-[11px] leading-relaxed text-zinc-500">
@@ -1083,13 +1083,13 @@ export function ProjectRoadmapPanel({
           <form onSubmit={onAddStepSubmit} className="flex gap-2 rounded-2xl border border-zinc-200 bg-white p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             <input
               className={inputClass}
-              placeholder="＋ フェーズを追加（自由入力）"
+              placeholder="＋ 段階を追加（自由入力）"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
             />
             <button
               type="submit"
-              className="min-h-[44px] shrink-0 rounded-2xl bg-zinc-900 px-4 py-2 text-xs font-bold text-white transition duration-200 ease-out hover:bg-zinc-800 disabled:opacity-50"
+              className="moni-btn-primary min-h-[44px] shrink-0 rounded-2xl px-4 py-2 text-xs font-bold disabled:opacity-50"
               disabled={!newTitle.trim()}
             >
               追加
