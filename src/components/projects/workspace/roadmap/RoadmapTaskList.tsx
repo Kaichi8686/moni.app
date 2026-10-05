@@ -34,7 +34,7 @@ export function RoadmapTaskList({ phaseId, tasks, canEdit, onToggleDone, onToggl
           タスク ({done}/{tasks.length})
         </span>
         {canEdit ? (
-          <button type="button" onClick={() => setAdding(true)} className="text-xs text-violet-600 hover:underline">
+          <button type="button" onClick={() => setAdding(true)} className="text-xs font-semibold text-[var(--brand,#ff5c35)] hover:underline">
             + 追加
           </button>
         ) : null}
@@ -46,10 +46,10 @@ export function RoadmapTaskList({ phaseId, tasks, canEdit, onToggleDone, onToggl
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="タスク名"
-            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2"
+            placeholder="やること（例: ポスター案を3つ出す）"
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
           />
-          <button type="submit" className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
+          <button type="submit" className="rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]">
             追加
           </button>
         </form>
@@ -58,8 +58,8 @@ export function RoadmapTaskList({ phaseId, tasks, canEdit, onToggleDone, onToggl
       {tasks.length === 0 && !adding ? (
         <p className="text-sm text-gray-500">
           {canEdit ? (
-            <button type="button" onClick={() => setAdding(true)} className="text-violet-600 hover:underline">
-              + タスクを追加
+            <button type="button" onClick={() => setAdding(true)} className="font-semibold text-[var(--brand,#ff5c35)] hover:underline">
+              + 最初のタスクを追加
             </button>
           ) : (
             "タスクはまだありません"
@@ -95,14 +95,14 @@ export function RoadmapTaskList({ phaseId, tasks, canEdit, onToggleDone, onToggl
                 onClick={() => void onToggleToday(task.id, !task.isToday)}
                 className={`rounded-full px-2 py-0.5 text-xs transition-opacity ${
                   task.isToday
-                    ? "bg-violet-100 text-violet-700 opacity-100"
+                    ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)] opacity-100"
                     : "border border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100"
                 }`}
               >
                 {task.isToday ? "今日" : "今日に設定"}
               </button>
             ) : task.isToday ? (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">今日</span>
+              <span className="rounded-full bg-[var(--brand-soft,#fff4f0)] px-2 py-0.5 text-xs text-[var(--brand-ink,#9a3412)]">今日</span>
             ) : null}
           </li>
         ))}

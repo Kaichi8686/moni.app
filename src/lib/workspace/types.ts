@@ -91,7 +91,7 @@ export type TimelineZoom = "month" | "week" | "quarter";
 export const PHASE_COLOR_PRESETS = [
   { key: "gray", className: "bg-zinc-400" },
   { key: "blue", className: "bg-sky-500" },
-  { key: "purple", className: "bg-[#5E6AD2]" },
+  { key: "purple", className: "bg-[var(--brand,#ff5c35)]" },
   { key: "green", className: "bg-emerald-500" },
   { key: "amber", className: "bg-amber-400" },
 ] as const;

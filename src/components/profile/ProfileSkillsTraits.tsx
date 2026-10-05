@@ -45,7 +45,7 @@ export function ProfileSkillsTraits({ skills, traits, className = "" }: Props) {
             {traits.map((tag) => (
               <span
                 key={`trait-${tag}`}
-                className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[12px] font-medium text-violet-800 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
+                className="inline-flex items-center rounded-full border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-2.5 py-1 text-[12px] font-medium text-[var(--brand-ink,#9a3412)] dark:border-[var(--brand-muted,#ffd9cc)] dark:bg-[var(--brand-soft,#fff4f0)] dark:text-[var(--brand-ink,#9a3412)]"
               >
                 {displayTagLabel(tag, TRAIT_PRESETS, locale)}
               </span>

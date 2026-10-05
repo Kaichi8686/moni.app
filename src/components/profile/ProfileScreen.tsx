@@ -233,11 +233,8 @@ export function ProfileScreen({ userId: propUserId }: Props) {
       ) : !viewerId && !propUserId ? (
         <div className="px-4 py-12 text-center">
           <p className="text-sm text-zinc-600">{tx("プロフィールを見るにはログインが必要です。", "Log in to view profiles.")}</p>
-          <Link
-            href="/login"
-            className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-zinc-900 px-5 text-sm font-bold text-white transition hover:bg-zinc-800"
-          >
-            {tx("ログイン", "Log in")}
+          <Link href="/login" className="moni-btn-primary mt-4 px-5 text-sm font-bold">
+            {tx("ログインしてプロフィールを見る", "Log in to view your profile")}
           </Link>
         </div>
       ) : profile ? (

@@ -146,7 +146,7 @@ export function ProjectInviteComposeModal({
                   type="button"
                   disabled={inviteBusyId === c.id}
                   onClick={() => void inviteUser(c.id, c.name)}
-                  className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  className="moni-btn-primary shrink-0 rounded-lg px-3 py-1.5 text-xs disabled:opacity-60"
                 >
                   {inviteBusyId === c.id ? "招待中…" : "招待する"}
                 </button>
@@ -163,7 +163,7 @@ export function ProjectInviteComposeModal({
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
+                className="moni-btn-primary rounded-lg px-3 py-1.5 text-xs"
                 onClick={() =>
                   void (async () => {
                     const ok = await copyProjectInviteUrl(projectId);
