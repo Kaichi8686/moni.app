@@ -781,6 +781,26 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
 
       {error ? <p className="text-[13px] text-red-600">{error}</p> : null}
 
+      {canEdit && elements.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-3 sm:px-4">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-[var(--brand-ink,#9a3412)]">
+              次の一手：アイデアを書き出してみよう
+            </p>
+            <p className="mt-0.5 text-[12px] leading-snug text-zinc-600">
+              ペンで自由に描くか、テンプレから始められます。迷ったら「テンプレ」を押してください。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTemplateOpen(true)}
+            className="moni-btn-primary shrink-0 !rounded-lg !px-3 !py-2 !text-[12px]"
+          >
+            テンプレを見る
+          </button>
+        </div>
+      ) : null}
+
       <div className="relative">
         <div
           ref={rootRef}
@@ -927,8 +947,8 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
                   y={selBounds.y - 6}
                   width={selBounds.w + 12}
                   height={selBounds.h + 12}
-                  fill="rgba(94,106,210,0.06)"
-                  stroke="#5E6AD2"
+                  fill="rgba(255,92,53,0.08)"
+                  stroke="#FF5C35"
                   strokeWidth={1.5 / viewport.zoom}
                   strokeDasharray={`${6 / viewport.zoom} ${4 / viewport.zoom}`}
                   rx={6}
@@ -989,7 +1009,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
                       key={el.id}
                       autoFocus
                       defaultValue={t.text}
-                      className="absolute rounded border border-violet-400 bg-white/90 px-1 font-semibold outline-none"
+                      className="absolute rounded border border-[var(--brand,#ff5c35)] bg-white/90 px-1 font-semibold outline-none"
                       style={{ left: t.x, top: t.y, fontSize: t.fontSize, color: t.color, minWidth: 80 }}
                       onPointerDown={(e) => e.stopPropagation()}
                       onFocus={(e) => {
@@ -1038,7 +1058,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
               <input
                 ref={textInputRef}
                 autoFocus
-                className="absolute z-20 rounded border border-violet-400 bg-white/95 px-1 font-semibold outline-none"
+                className="absolute z-20 rounded border border-[var(--brand,#ff5c35)] bg-white/95 px-1 font-semibold outline-none"
                 style={{
                   left: textDraft.x * viewport.zoom + viewport.panX,
                   top: textDraft.y * viewport.zoom + viewport.panY,
@@ -1097,7 +1117,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
                   return <circle key={el.id} cx={b.x + b.w / 2} cy={b.y + b.h / 2} r={50} fill="#94A3B8" opacity={0.5} />;
                 }
                 return (
-                  <rect key={el.id} x={b.x} y={b.y} width={b.w || 80} height={b.h || 60} fill="#5E6AD2" opacity={0.35} />
+                  <rect key={el.id} x={b.x} y={b.y} width={b.w || 80} height={b.h || 60} fill="#FF5C35" opacity={0.35} />
                 );
               })}
               {(() => {
@@ -1107,7 +1127,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
                 const wy = -viewport.panY / viewport.zoom;
                 const ww = rect.width / viewport.zoom;
                 const wh = rect.height / viewport.zoom;
-                return <rect x={wx} y={wy} width={ww} height={wh} fill="none" stroke="#5E6AD2" strokeWidth={80} />;
+                return <rect x={wx} y={wy} width={ww} height={wh} fill="none" stroke="#FF5C35" strokeWidth={80} />;
               })()}
             </svg>
           </div>
@@ -1117,8 +1137,11 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
       {templateOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-bold text-[#1A1A1A]">テンプレート</h3>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-[#1A1A1A]">テンプレート</h3>
+                <p className="mt-0.5 text-[12px] text-[#6B7280]">枠を置いて、すぐ書き始められます</p>
+              </div>
               <button type="button" onClick={() => setTemplateOpen(false)} className="rounded-full p-2 hover:bg-[#F3F4F6]">
                 <X className="h-5 w-5" />
               </button>
@@ -1129,7 +1152,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
                   <button
                     type="button"
                     onClick={() => void applyTemplate(t.id)}
-                    className="w-full rounded-xl border border-[#E5E7EB] px-3 py-3 text-left hover:border-violet-300 hover:bg-violet-50"
+                    className="w-full rounded-xl border border-[#E5E7EB] px-3 py-3 text-left hover:border-[var(--brand-muted,#ffd9cc)] hover:bg-[var(--brand-soft,#fff4f0)]"
                   >
                     <p className="font-semibold text-[#1A1A1A]">{t.label}</p>
                     <p className="text-[12px] text-[#6B7280]">{t.description}</p>

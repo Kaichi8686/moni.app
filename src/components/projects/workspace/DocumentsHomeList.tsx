@@ -119,10 +119,11 @@ export function DocumentsHomeList({
               type="button"
               disabled={docCreating}
               onClick={onCreate}
-              aria-label="新規作成"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1a73e8] shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition hover:bg-[#f8f9fa] disabled:opacity-50"
+              aria-label={fabLabel}
+              className="moni-btn-primary inline-flex h-11 shrink-0 items-center gap-1.5 !rounded-xl !px-3.5 !text-[13px] disabled:opacity-50"
             >
-              <Plus className="h-6 w-6" aria-hidden />
+              <Plus className="h-5 w-5" aria-hidden />
+              <span>{docCreating ? "作成中…" : fabLabel}</span>
             </button>
           ) : canEdit && onDelete ? (
             <button
@@ -178,8 +179,25 @@ export function DocumentsHomeList({
 
       <ul className={`min-h-0 flex-1 overflow-y-auto pb-24 ${variant === "library" ? "mt-6 space-y-1" : "divide-y divide-[#e8eaed]"}`}>
         {filtered.length === 0 ? (
-          <li className="px-4 py-16 text-center text-[14px] text-[#5f6368]">
-            {query.trim() ? `該当する${noun}がありません` : emptyLabel}
+          <li className="px-4 py-16 text-center">
+            {query.trim() ? (
+              <p className="text-[14px] text-[#5f6368]">{`該当する${noun}がありません`}</p>
+            ) : (
+              <div className="mx-auto max-w-sm">
+                <p className="text-[14px] leading-relaxed text-[#5f6368]">{emptyLabel}</p>
+                {canEdit && variant === "library" ? (
+                  <button
+                    type="button"
+                    disabled={docCreating}
+                    onClick={onCreate}
+                    className="moni-btn-primary mt-4 inline-flex items-center gap-1.5 !rounded-xl !px-4 !py-2.5 !text-[13px]"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    {docCreating ? "作成中…" : fabLabel}
+                  </button>
+                ) : null}
+              </div>
+            )}
           </li>
         ) : (
           filtered.map((d) => {
