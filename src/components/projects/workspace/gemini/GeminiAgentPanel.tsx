@@ -459,8 +459,8 @@ export function GeminiAgentPanel({
                     }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "general"
-                        ? "border-violet-300 bg-violet-50 text-violet-900"
-                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                        ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[var(--brand-muted,#ffd9cc)]"
                     }`}
                   >
                     <MessageCircle className="h-6 w-6" aria-hidden />
@@ -477,8 +477,8 @@ export function GeminiAgentPanel({
                     }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "ideas"
-                        ? "border-violet-300 bg-violet-50 text-violet-900"
-                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                        ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[var(--brand-muted,#ffd9cc)]"
                     }`}
                   >
                     <Lightbulb className="h-6 w-6" aria-hidden />
@@ -513,7 +513,7 @@ export function GeminiAgentPanel({
             <div
               key={m.id ?? `${m.role}-${i}`}
               className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-                m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
+                m.role === "user" ? "ml-auto bg-[var(--brand,#ff5c35)] text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
               }`}
             >
               {m.role === "assistant" ? (
@@ -688,12 +688,12 @@ export function GeminiAgentPanel({
                     ? "e.g. The team can’t agree"
                     : "e.g. 10 feature ideas users would love",
               )}
-              className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
+              className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-[rgba(255,92,53,0.35)] focus:ring-2"
             />
             <button
               type="submit"
               disabled={loading || !draft.trim()}
-              className="min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+              className="min-h-[48px] shrink-0 rounded-xl bg-[var(--brand,#ff5c35)] px-4 text-[14px] font-bold text-white disabled:opacity-50"
             >
               {tx("送信", "Send")}
             </button>

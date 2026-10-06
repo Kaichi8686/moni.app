@@ -21,13 +21,13 @@ function StepVisual({ step, active }: { step: FlowStep; active: boolean }) {
   return (
     <div
       className={`relative overflow-hidden rounded-xl border px-4 py-5 transition-colors duration-500 ${
-        active ? "border-sky-200 bg-sky-50/70" : "border-zinc-200 bg-zinc-50/80"
+        active ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/80" : "border-zinc-200 bg-zinc-50/80"
       }`}
     >
       <div className="flex items-center gap-3">
         <span
           className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-500 ${
-            active ? "bg-sky-600 text-white" : "bg-white text-zinc-500 ring-1 ring-zinc-200"
+            active ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-white text-zinc-500 ring-1 ring-zinc-200"
           }`}
         >
           <Icon className="h-5 w-5" aria-hidden />
@@ -38,9 +38,9 @@ function StepVisual({ step, active }: { step: FlowStep; active: boolean }) {
         </div>
       </div>
       <div className="mt-4 space-y-1.5" aria-hidden>
-        <div className={`h-2 rounded-full ${active ? "bg-sky-200/80" : "bg-zinc-200/90"}`} />
-        <div className={`h-2 w-[80%] rounded-full ${active ? "bg-sky-100" : "bg-zinc-100"}`} />
-        <div className={`h-2 w-[65%] rounded-full ${active ? "bg-sky-100/80" : "bg-zinc-100"}`} />
+        <div className={`h-2 rounded-full ${active ? "bg-[var(--brand-muted,#ffd9cc)]" : "bg-zinc-200/90"}`} />
+        <div className={`h-2 w-[80%] rounded-full ${active ? "bg-[var(--brand-muted,#ffd9cc)]" : "bg-zinc-100"}`} />
+        <div className={`h-2 w-[65%] rounded-full ${active ? "bg-[var(--brand-muted,#ffd9cc)]/70" : "bg-zinc-100"}`} />
       </div>
     </div>
   );
@@ -102,7 +102,7 @@ export function LandingFlowTimeline({ steps, locale }: Props) {
             {!isLast ? (
               <span
                 className={`absolute left-[1.15rem] top-10 bottom-0 w-px transition-colors duration-300 sm:left-[1.25rem] ${
-                  index < activeIndex ? "bg-sky-500" : "bg-zinc-200"
+                  index < activeIndex ? "bg-[var(--brand,#ff5c35)]" : "bg-zinc-200"
                 }`}
                 aria-hidden
               />
@@ -112,9 +112,9 @@ export function LandingFlowTimeline({ steps, locale }: Props) {
               <span
                 className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums transition-colors duration-300 ${
                   current
-                    ? "bg-sky-600 text-white shadow-sm shadow-sky-600/25"
+                    ? "bg-[var(--brand,#ff5c35)] text-white shadow-sm shadow-[rgba(255,92,53,0.28)]"
                     : active
-                      ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
+                      ? "bg-[var(--brand-muted,#ffd9cc)] text-[var(--brand-ink,#9a3412)] ring-1 ring-[var(--brand-muted,#ffd9cc)]"
                       : "bg-white text-zinc-400 ring-1 ring-zinc-200"
                 }`}
               >

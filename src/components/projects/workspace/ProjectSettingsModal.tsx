@@ -244,7 +244,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("プロジェクト名", "Project name")}
               <input
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
               />
@@ -254,7 +254,7 @@ export function ProjectSettingsModal({
               <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx("公開設定", "Visibility")}
                 <select
-                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                   value={editVisibility}
                   onChange={(e) => setEditVisibility(e.target.value as ProjectVisibility)}
                 >
@@ -317,7 +317,7 @@ export function ProjectSettingsModal({
               </div>
               {showUrlField ? (
                 <input
-                  className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                   placeholder="https://..."
                   value={editThumb}
                   onChange={(e) => {
@@ -332,7 +332,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("説明", "Description")}
               <textarea
-                className="mt-1 min-h-[4.5rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 min-h-[4.5rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
               />
@@ -340,7 +340,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("カテゴリ", "Category")}
               <input
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editCategory}
                 onChange={(e) => setEditCategory(e.target.value)}
               />
@@ -348,7 +348,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("何系のプロジェクトか", "What kind of project")}
               <select
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editBusinessType}
                 onChange={(e) => setEditBusinessType(e.target.value as "maker" | "software" | "social")}
               >
@@ -360,7 +360,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("欲しい仲間・姿勢", "Who you’re looking for")}
               <textarea
-                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editRecruitmentTarget}
                 onChange={(e) => setEditRecruitmentTarget(e.target.value)}
               />
@@ -368,7 +368,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("理念・ビジョン", "Mission / vision")}
               <textarea
-                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                 value={editRecruitmentMessage}
                 onChange={(e) => setEditRecruitmentMessage(e.target.value)}
               />
@@ -402,7 +402,7 @@ export function ProjectSettingsModal({
           {canEdit ? (
             <button
               type="button"
-              className="rounded-lg bg-[#5E6AD2] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
               disabled={busy}
               onClick={() => void save()}
             >

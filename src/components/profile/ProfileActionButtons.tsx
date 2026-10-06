@@ -18,7 +18,7 @@ type Props = {
 
 const btnBase =
   "inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold transition active:scale-[0.98]";
-const btnPrimary = `${btnBase} bg-zinc-900 text-white hover:bg-zinc-800`;
+const btnPrimary = `${btnBase} bg-[var(--brand,#ff5c35)] text-white hover:bg-[var(--brand-hover,#e04e2a)]`;
 const btnSecondary = `${btnBase} border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50`;
 const iconBtn =
   "flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98]";

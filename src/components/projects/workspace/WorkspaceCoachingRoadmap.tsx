@@ -133,7 +133,7 @@ export default function WorkspaceCoachingRoadmap() {
     <div className="space-y-3">
       <p className="text-[12px] text-[#6B7280]">
         探究の段階とマイルストーンを進めます。日々の課題・予定は
-        <a href={`/projects/${projectId}/issues`} className="mx-1 font-medium text-[#5E6AD2] hover:underline">
+        <a href={`/projects/${projectId}/issues`} className="mx-1 font-medium text-[var(--brand,#ff5c35)] hover:underline">
           課題タブ
         </a>
         で管理できます。

@@ -536,14 +536,14 @@ export function ProjectTasksPanel({
 
   function renderTodayCard(label: string, hint: string, task: TaskLikeForPick | null, slot: "important" | "quick" | "consult") {
     return (
-      <div className="rounded-xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/60 p-3 shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">{label}</p>
-        <p className="mt-0.5 text-[11px] text-indigo-900/80">{hint}</p>
+      <div className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-gradient-to-br from-white to-[var(--brand-soft,#fff4f0)]/60 p-3 shadow-sm">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--brand-ink,#9a3412)]">{label}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--brand-ink,#9a3412)]/80">{hint}</p>
         {task ? (
           <div className="mt-2 space-y-1">
             <p className="text-sm font-semibold leading-snug text-zinc-900">{task.title}</p>
             {task.roadmap_step_id && roadmapStepTitles[task.roadmap_step_id] ? (
-              <p className="text-[10px] font-medium text-indigo-800">ロードマップの段階: {roadmapStepTitles[task.roadmap_step_id]}</p>
+              <p className="text-[10px] font-medium text-[var(--brand-ink,#9a3412)]">ロードマップの段階: {roadmapStepTitles[task.roadmap_step_id]}</p>
             ) : null}
           </div>
         ) : (
@@ -552,7 +552,7 @@ export function ProjectTasksPanel({
         {task && canEdit ? (
           <button
             type="button"
-            className="mt-2 text-[11px] font-semibold text-indigo-800 hover:underline"
+            className="mt-2 text-[11px] font-semibold text-[var(--brand-ink,#9a3412)] hover:underline"
             onClick={() => {
               const row = tasks.find((x) => x.id === task.id);
               if (row) void saveTaskCoachFields(row, { todaySlot: slot });
@@ -594,14 +594,14 @@ export function ProjectTasksPanel({
               type="button"
               disabled={!allowSubmit || busy || workSt === "blocked"}
               onClick={() => void completeSimple(task)}
-              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-[11px] font-bold text-zinc-500 transition hover:border-indigo-500 hover:text-indigo-700 disabled:opacity-40"
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-[11px] font-bold text-zinc-500 transition hover:border-[var(--brand,#ff5c35)] hover:text-[var(--brand-ink,#9a3412)] disabled:opacity-40"
               aria-label={`${task.title}を完了にする`}
             >
               {busy ? "…" : ""}
             </button>
           ) : (
             <span
-              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-800"
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft,#fff4f0)] text-[10px] font-bold text-[var(--brand-ink,#9a3412)]"
               aria-hidden
             >
               ?
@@ -631,7 +631,7 @@ export function ProjectTasksPanel({
                 <span className="rounded-md bg-zinc-100 px-1.5 py-0.5">期限 {task.due_date.slice(0, 10).replace(/-/g, "/")}</span>
               ) : null}
               {roadmapLabel ? (
-                <span className="max-w-full truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-indigo-900">
+                <span className="max-w-full truncate rounded-md bg-[var(--brand-soft,#fff4f0)] px-1.5 py-0.5 text-[var(--brand-ink,#9a3412)]">
                   ロードマップの段階: {roadmapLabel}
                 </span>
               ) : (
@@ -743,7 +743,7 @@ export function ProjectTasksPanel({
           {meta.fallback?.trim() && !task.description.includes("困ったとき") ? (
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">困ったとき: {meta.fallback}</p>
           ) : null}
-          {visibilityLabel && mode !== "simple" ? <p className="text-[10px] font-medium text-violet-800">{visibilityLabel}</p> : null}
+          {visibilityLabel && mode !== "simple" ? <p className="text-[10px] font-medium text-[var(--brand-ink,#9a3412)]">{visibilityLabel}</p> : null}
           {pastDue ? (
             <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
               期限を過ぎたため、回答・完了はできません。
@@ -834,7 +834,7 @@ export function ProjectTasksPanel({
                       onClick={() => setChoiceLocal((prev) => ({ ...prev, [task.id]: opt }))}
                       className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                         on
-                          ? "border-violet-600 bg-violet-50 text-violet-950 ring-1 ring-violet-200"
+                          ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)] ring-1 ring-[var(--brand-muted,#ffd9cc)]"
                           : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300"
                       }`}
                     >
@@ -857,7 +857,7 @@ export function ProjectTasksPanel({
           {mode === "text" ? (
             <div>
               <textarea
-                className="min-h-[88px] w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:bg-white"
+                className="min-h-[88px] w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none focus:border-[var(--brand,#ff5c35)] focus:bg-white"
                 placeholder={meta.placeholder?.trim() || "ここに入力…"}
                 disabled={!allowSubmit || busy}
                 value={textVal}
@@ -879,7 +879,7 @@ export function ProjectTasksPanel({
               type="button"
               disabled={!allowSubmit || busy || workSt === "blocked"}
               onClick={() => void completeSimple(task)}
-              className="w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+              className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-40"
             >
               {busy ? "保存中…" : "完了にする"}
             </button>
@@ -930,17 +930,17 @@ export function ProjectTasksPanel({
         このタブでは<strong className="font-semibold text-zinc-900">タスク</strong>と<strong className="font-semibold text-zinc-900">スケジュール</strong>
         をまとめます。ロードマップの各段階にタスクを紐づけられます。
       </p>
-      <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/40 p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">プロジェクト概要</p>
+      <div className="rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-gradient-to-br from-[var(--brand-soft,#fff4f0)]/90 via-white to-[var(--brand-soft,#fff4f0)]/40 p-4 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-ink,#9a3412)]">プロジェクト概要</p>
         <h2 className="mt-1 text-lg font-bold leading-tight text-zinc-900">{dreamHeadline}</h2>
         {dreamWhy ? <p className="mt-2 text-[13px] leading-relaxed text-zinc-700">{dreamWhy}</p> : null}
         <div className="mt-3 flex flex-col gap-2 text-sm font-semibold sm:flex-row sm:flex-wrap">
-          <span className="rounded-lg bg-white px-3 py-2 text-indigo-950 ring-1 ring-indigo-100">
+          <span className="rounded-lg bg-white px-3 py-2 text-[var(--brand-ink,#9a3412)] ring-1 ring-[var(--brand-muted,#ffd9cc)]">
             ロードマップの進捗{" "}
             {milestoneTotal > 0 ? `完了 ${milestoneDoneCount} / 全 ${milestoneTotal} 段階` : "（ロードマップがまだありません）"}
           </span>
           {nextMilestoneTitle ? (
-            <span className="rounded-lg bg-indigo-600 px-3 py-2 text-white">次に進める段階: {nextMilestoneTitle}</span>
+            <span className="rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-2 text-white">次に進める段階: {nextMilestoneTitle}</span>
           ) : null}
           {taskStats.blocked > 0 ? (
             <span className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900 ring-1 ring-amber-100">
@@ -954,21 +954,21 @@ export function ProjectTasksPanel({
         <p className="mt-3 text-sm leading-relaxed text-zinc-600">
           <span className="font-semibold text-zinc-800">今週（月曜・東京）</span>
           のタスク完了{" "}
-          <span className="startup-font-mono font-semibold text-indigo-950">{weekDoneCount}</span>
+          <span className="startup-font-mono font-semibold text-[var(--brand-ink,#9a3412)]">{weekDoneCount}</span>
           {weeklyGoal != null ? (
             <>
               {" "}
-              / 目標 <span className="startup-font-mono font-semibold text-indigo-950">{weeklyGoal}</span>
+              / 目標 <span className="startup-font-mono font-semibold text-[var(--brand-ink,#9a3412)]">{weeklyGoal}</span>
               {weekDoneCount >= weeklyGoal ? (
                 <span className="ml-1 font-semibold text-emerald-700">（達成）</span>
               ) : null}
             </>
           ) : null}
           <span className="text-zinc-400"> · </span>
-          連続活動 <span className="startup-font-mono font-semibold text-indigo-950">{streakDays}</span> 日
+          連続活動 <span className="startup-font-mono font-semibold text-[var(--brand-ink,#9a3412)]">{streakDays}</span> 日
         </p>
         {canEdit ? (
-          <div className="mt-2 rounded-xl border border-indigo-100/80 bg-white/70 px-3 py-2.5">
+          <div className="mt-2 rounded-xl border border-[var(--brand-muted,#ffd9cc)]/80 bg-white/70 px-3 py-2.5">
             <p className="text-xs font-semibold text-zinc-500">週の完了目標（ホームと共通）</p>
             <div className="mt-2 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
               {[3, 5, 8, 10, 15].map((n) => (
@@ -977,7 +977,7 @@ export function ProjectTasksPanel({
                   type="button"
                   onClick={() => void onSaveCoaching({ weeklyCompletionGoal: n })}
                   className={`min-h-[40px] rounded-lg px-2.5 text-sm font-semibold transition ${
-                    weeklyGoal === n ? "bg-indigo-600 text-white" : "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
+                    weeklyGoal === n ? "bg-[var(--brand,#ff5c35)] text-white" : "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
                   }`}
                 >
                   {n}件
@@ -994,12 +994,12 @@ export function ProjectTasksPanel({
           </div>
         ) : null}
         {showOnboardingCue ? (
-          <div className="mt-3 rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5">
+          <div className="mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-white/90 px-3 py-2.5">
             <p className="text-[12px] font-semibold text-zinc-900">最初に目標などを入力できます（任意・あとから変更可）</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-bold text-white"
+                className="rounded-lg bg-[var(--brand-hover,#e04e2a)] px-3 py-2 text-xs font-bold text-white"
                 onClick={() => openOnboarding()}
               >
                 入力する
@@ -1040,7 +1040,7 @@ export function ProjectTasksPanel({
           <label className="block">
             <span className="text-[11px] font-semibold text-zinc-600">今週やったこと</span>
             <textarea
-              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               defaultValue={weeklyBase.done ?? ""}
               placeholder="簡単で大丈夫です"
               onBlur={(e) => {
@@ -1059,7 +1059,7 @@ export function ProjectTasksPanel({
           <label className="block">
             <span className="text-[11px] font-semibold text-zinc-600">学んだこと</span>
             <textarea
-              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               defaultValue={weeklyBase.learned ?? ""}
               placeholder="気づきや反省など"
               onBlur={(e) => {
@@ -1078,7 +1078,7 @@ export function ProjectTasksPanel({
           <label className="block">
             <span className="text-[11px] font-semibold text-zinc-600">来週やること</span>
             <textarea
-              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="mt-1 min-h-[64px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               defaultValue={weeklyBase.next ?? ""}
               placeholder="来週の予定（簡単でOK）"
               onBlur={(e) => {
@@ -1135,7 +1135,7 @@ export function ProjectTasksPanel({
             type="button"
             onClick={() => setTaskFilter(c.key)}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-              taskFilter === c.key ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+              taskFilter === c.key ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
             }`}
           >
             {c.label}
@@ -1152,7 +1152,7 @@ export function ProjectTasksPanel({
           <p className="mt-0.5 text-[11px] text-zinc-500">内容は短く書くと進めやすくなります。</p>
           <div className="mt-2 flex flex-col gap-2">
             <input
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
+              className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
               placeholder="やることをひとことで"
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
@@ -1160,7 +1160,7 @@ export function ProjectTasksPanel({
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 type="date"
-                className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                 value={draftDue}
                 onChange={(e) => setDraftDue(e.target.value)}
                 aria-label="期限"
@@ -1168,7 +1168,7 @@ export function ProjectTasksPanel({
               <button
                 type="submit"
                 disabled={!draftTitle.trim()}
-                className="shrink-0 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                className="shrink-0 rounded-xl bg-[var(--brand,#ff5c35)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
               >
                 追加
               </button>
@@ -1269,7 +1269,7 @@ export function ProjectTasksPanel({
               <label className="block">
                 <span className="text-xs font-semibold text-zinc-700">達成したいこと</span>
                 <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                   value={onboardDream}
                   onChange={(e) => setOnboardDream(e.target.value)}
                   placeholder={projectTitle}
@@ -1278,7 +1278,7 @@ export function ProjectTasksPanel({
               <label className="block">
                 <span className="text-xs font-semibold text-zinc-700">困っていること（任意）</span>
                 <textarea
-                  className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                   value={onboardStuck}
                   onChange={(e) => setOnboardStuck(e.target.value)}
                   placeholder="思いつく範囲でかまいません"
@@ -1287,21 +1287,21 @@ export function ProjectTasksPanel({
               <label className="block">
                 <span className="text-xs font-semibold text-zinc-700">いつ頃までに達成したいか（ざっくり）</span>
                 <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                   value={onboardDeadline}
                   onChange={(e) => setOnboardDeadline(e.target.value)}
                   placeholder="例: 夏まで / 3か月以内"
                 />
               </label>
-              <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-3">
-                <p className="text-[11px] font-semibold text-indigo-900">タスクの例（コピーして使っても大丈夫です）</p>
-                <ul className="mt-2 list-inside list-disc space-y-1 text-[12px] leading-relaxed text-indigo-950">
+              <div className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/60 px-3 py-3">
+                <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">タスクの例（コピーして使っても大丈夫です）</p>
+                <ul className="mt-2 list-inside list-disc space-y-1 text-[12px] leading-relaxed text-[var(--brand-ink,#9a3412)]">
                   {onboardingIdeas.map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
               </div>
-              <button type="submit" className="w-full rounded-xl bg-indigo-700 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-800">
+              <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[var(--brand-hover,#e04e2a)]">
                 保存して閉じる
               </button>
               <button type="button" className="w-full rounded-xl border border-zinc-200 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50" onClick={() => void skipOnboarding()}>
@@ -1327,7 +1327,7 @@ export function ProjectTasksPanel({
               <label className="mt-4 block">
                 <span className="text-xs font-semibold text-zinc-600">メモ（任意）</span>
                 <textarea
-                  className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  className="mt-1 min-h-[72px] w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                   value={celebrateReflection}
                   onChange={(e) => setCelebrateReflection(e.target.value)}
                   placeholder="気づいたことを書いても大丈夫です"
@@ -1343,7 +1343,7 @@ export function ProjectTasksPanel({
                     {canEdit ? (
                       <button
                         type="button"
-                        className="shrink-0 rounded-lg bg-indigo-700 px-3 py-1.5 text-[11px] font-bold text-white"
+                        className="shrink-0 rounded-lg bg-[var(--brand-hover,#e04e2a)] px-3 py-1.5 text-[11px] font-bold text-white"
                         onClick={() => void createTaskFromTitle(sug, focusRoadmapStepId)}
                       >
                         この内容でタスクを追加
@@ -1355,7 +1355,7 @@ export function ProjectTasksPanel({
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
-                  className="flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white"
+                  className="flex-1 rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-bold text-white"
                   onClick={() => void closeCelebration(true)}
                 >
                   メモを保存して閉じる

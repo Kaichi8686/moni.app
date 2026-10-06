@@ -40,7 +40,7 @@ export function AIAssistSheet({ draft, context, onClose, onApply }: Props) {
       <div className="w-full max-w-lg rounded-t-2xl bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-600" />
+            <Sparkles className="h-5 w-5 text-[var(--brand,#ff5c35)]" />
             <h2 className="font-semibold">{tx("AI文章補助", "AI writing help")}</h2>
           </div>
           <button type="button" onClick={onClose}>
@@ -59,7 +59,7 @@ export function AIAssistSheet({ draft, context, onClose, onApply }: Props) {
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`rounded-full px-3 py-1 text-xs ${mode === m ? "bg-violet-600 text-white" : "bg-zinc-100"}`}
+              className={`rounded-full px-3 py-1 text-xs ${mode === m ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-zinc-100"}`}
             >
               {label}
             </button>
@@ -69,7 +69,7 @@ export function AIAssistSheet({ draft, context, onClose, onApply }: Props) {
           type="button"
           disabled={loading}
           onClick={() => void run()}
-          className="mb-3 w-full rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="mb-3 w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {loading ? tx("生成中...", "Generating…") : tx("生成する", "Generate")}
         </button>
@@ -81,7 +81,7 @@ export function AIAssistSheet({ draft, context, onClose, onApply }: Props) {
             onApply(result);
             onClose();
           }}
-          className="w-full rounded-xl border border-violet-600 py-2 text-sm font-semibold text-violet-600 disabled:opacity-40"
+          className="w-full rounded-xl border border-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-[var(--brand,#ff5c35)] disabled:opacity-40"
         >
           {tx("入力欄に反映", "Apply to input")}
         </button>

@@ -232,7 +232,9 @@ export function RoadmapMapEditor() {
           type="button"
           onClick={() => setMode("manual")}
           className={`min-h-[52px] rounded-2xl border px-3 text-sm font-semibold transition ${
-            mode === "manual" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-700"
+            mode === "manual"
+              ? "border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] text-white"
+              : "border-zinc-200 bg-white text-zinc-700"
           }`}
         >
           {tx("手動で作る", "Build manually")}
@@ -242,14 +244,18 @@ export function RoadmapMapEditor() {
           onClick={() => setMode("ai")}
           className={`inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
             mode === "ai"
-              ? "border-violet-600 bg-violet-600 text-white"
-              : "border-violet-200 bg-violet-50 text-violet-800"
+              ? "border-[var(--brand,#ff5c35)] bg-[var(--brand,#ff5c35)] text-white"
+              : "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
           }`}
         >
-          <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"}`}>
+          <span
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+              mode === "ai" ? "bg-white/20" : "bg-[var(--brand,#ff5c35)] text-white"
+            }`}
+          >
             <Sparkles className="h-4 w-4" aria-hidden />
           </span>
-          {tx("AI診断", "AI draft")}
+          {tx("AIと一緒に作る", "Build with AI")}
         </button>
       </div>
 
@@ -291,7 +297,7 @@ export function RoadmapMapEditor() {
             <button
               type="submit"
               disabled={aiLoading || !aiInput.trim()}
-              className="min-h-[44px] rounded-xl bg-zinc-900 px-3 text-sm font-semibold text-white disabled:opacity-40"
+              className="min-h-[44px] rounded-xl bg-[var(--brand,#ff5c35)] px-3 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-40"
             >
               {tx("送る", "Send")}
             </button>
@@ -464,7 +470,7 @@ export function RoadmapMapEditor() {
               <button
                 type="submit"
                 disabled={busy || !draftTitle.trim()}
-                className="min-h-[44px] flex-1 rounded-2xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40"
+                className="min-h-[44px] flex-1 rounded-2xl bg-[var(--brand,#ff5c35)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-40"
               >
                 {tx("追加", "Add")}
               </button>

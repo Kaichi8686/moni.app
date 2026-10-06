@@ -3,7 +3,7 @@ export const PROJECT_ICON_BG = [
   "bg-sky-500",
   "bg-emerald-500",
   "bg-amber-500",
-  "bg-violet-500",
+  "bg-[var(--brand,#ff5c35)]",
   "bg-rose-500",
   "bg-cyan-500",
 ];

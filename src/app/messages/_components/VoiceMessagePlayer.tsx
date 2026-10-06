@@ -40,7 +40,7 @@ export function VoiceMessagePlayer({ url, duration, waveform, isMine }: Props) {
         type="button"
         onClick={togglePlay}
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-          isMine ? "bg-violet-400" : "bg-violet-600"
+          isMine ? "bg-[var(--brand-hover,#e04e2a)]" : "bg-[var(--brand,#ff5c35)]"
         }`}
       >
         {isPlaying ? (
@@ -57,16 +57,16 @@ export function VoiceMessagePlayer({ url, duration, waveform, isMine }: Props) {
               i / bars.length <= progress
                 ? isMine
                   ? "bg-white"
-                  : "bg-violet-600"
+                  : "bg-[var(--brand,#ff5c35)]"
                 : isMine
-                  ? "bg-violet-300"
+                  ? "bg-[var(--brand-muted,#ffd9cc)]"
                   : "bg-zinc-200"
             }`}
             style={{ height: `${Math.max(15, amp * 100)}%` }}
           />
         ))}
       </div>
-      <span className={`shrink-0 text-xs ${isMine ? "text-violet-100" : "text-zinc-400"}`}>
+      <span className={`shrink-0 text-xs ${isMine ? "text-[var(--brand-soft,#fff4f0)]" : "text-zinc-400"}`}>
         {isPlaying ? formatDuration(Math.floor(progress * duration)) : formatDuration(duration)}
       </span>
       <audio

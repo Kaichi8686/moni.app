@@ -173,7 +173,7 @@ export function TemplateGallery({ projectId }: Props) {
   const handleApply = async () => {
     if (!selected || !roadmap.canEdit) return;
     if (applyMode === "replace" && roadmap.phases.length > 0) {
-      const ok = window.confirm("既存のフェーズとタスクをすべて削除して、このテンプレートで置き換えます。よろしいですか？");
+      const ok = window.confirm("既存の段階とやることをすべて削除して、この型で置き換えます。よろしいですか？");
       if (!ok) return;
     }
 
@@ -227,7 +227,7 @@ export function TemplateGallery({ projectId }: Props) {
       return;
     }
     if (roadmap.phases.length === 0) {
-      setMessage("公開するフェーズがありません");
+      setMessage("公開する段階がありません");
       return;
     }
     setPublishing(true);
@@ -311,19 +311,19 @@ export function TemplateGallery({ projectId }: Props) {
     <div className="mx-auto max-w-4xl px-4 py-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href={`/projects/${projectId}/roadmap`} className="text-xs font-medium text-violet-600 hover:underline">
+          <Link href={`/projects/${projectId}/roadmap`} className="text-xs font-medium text-[var(--brand,#ff5c35)] hover:underline">
             ← ロードマップに戻る
           </Link>
-          <h1 className="mt-2 text-xl font-bold text-gray-900">テンプレート</h1>
+          <h1 className="mt-2 text-xl font-bold text-gray-900">進め方の型を選ぶ</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            AIでオリジナルプランを作るか、ビジネス・書籍の型・保存した型から選んで適用できます
+            AIで作るか、用意された型から選ぶか。選んだ型がロードマップの段階になります
           </p>
         </div>
         {roadmap.canEdit && roadmap.phases.length > 0 ? (
           <button
             type="button"
             onClick={() => setPublishOpen(true)}
-            className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+            className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-4 py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)] hover:bg-[var(--brand-soft,#fff4f0)]"
           >
             ギャラリーに公開
           </button>
@@ -331,7 +331,7 @@ export function TemplateGallery({ projectId }: Props) {
       </div>
 
       {message ? (
-        <p className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">{message}</p>
+        <p className="mb-4 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-sm text-[var(--brand-ink,#9a3412)]">{message}</p>
       ) : null}
 
       {previewLoading ? (
@@ -340,7 +340,7 @@ export function TemplateGallery({ projectId }: Props) {
 
       {roadmap.canEdit && roadmap.phases.length > 0 ? (
         <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50/60 px-4 py-3">
-          <p className="text-xs font-medium text-rose-900">いまのロードマップ（{roadmap.phases.length} フェーズ）</p>
+          <p className="text-xs font-medium text-rose-900">いまのロードマップ（{roadmap.phases.length} 段階）</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <fieldset className="flex flex-wrap gap-3 text-xs text-gray-700">
               <label className="flex items-center gap-1.5">
@@ -367,7 +367,7 @@ export function TemplateGallery({ projectId }: Props) {
               onClick={() => setClearConfirmOpen(true)}
               className="rounded-md border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-50"
             >
-              フェーズをすべて削除
+              段階をすべて削除
             </button>
           </div>
         </div>
@@ -380,7 +380,7 @@ export function TemplateGallery({ projectId }: Props) {
             type="button"
             onClick={() => setMainTab(tab.id)}
             className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
-              mainTab === tab.id ? "bg-white text-violet-700 shadow-sm" : "text-gray-600 hover:text-gray-900"
+              mainTab === tab.id ? "bg-white text-[var(--brand-ink,#9a3412)] shadow-sm" : "text-gray-600 hover:text-gray-900"
             }`}
           >
             {tab.icon} {tab.label}
@@ -396,7 +396,7 @@ export function TemplateGallery({ projectId }: Props) {
               type="button"
               onClick={() => setActiveCategory(cat.id)}
               className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition ${
-                activeCategory === cat.id ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                activeCategory === cat.id ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
               {cat.icon} {cat.label}
@@ -462,7 +462,7 @@ export function TemplateGallery({ projectId }: Props) {
             <section className="rounded-xl border border-gray-200 bg-gray-50 p-4">
               <h2 className="text-sm font-semibold text-gray-900">いまのロードマップを型として保存</h2>
               <p className="mt-1 text-xs text-gray-500">
-                別プロジェクトや次の挑戦で再利用できます（{roadmap.phases.length} フェーズ）。
+                別プロジェクトや次の挑戦で再利用できます（{roadmap.phases.length} 段階）。
               </p>
               {projectSchemaMissing ? (
                 <p className="mt-2 text-xs text-amber-800">
@@ -470,7 +470,7 @@ export function TemplateGallery({ projectId }: Props) {
                 </p>
               ) : null}
               {roadmap.phases.length === 0 ? (
-                <p className="mt-3 text-sm text-gray-500">フェーズを追加してから保存できます。</p>
+                <p className="mt-3 text-sm text-gray-500">段階を追加してから保存できます。</p>
               ) : (
                 <form className="mt-4 space-y-3" onSubmit={(e) => void handleSaveProjectTemplate(e)}>
                   <input
@@ -494,7 +494,7 @@ export function TemplateGallery({ projectId }: Props) {
                   <button
                     type="submit"
                     disabled={saving || !saveName.trim()}
-                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    className="rounded-lg bg-[var(--brand,#ff5c35)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     {saving ? "保存中…" : "型を保存"}
                   </button>

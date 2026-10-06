@@ -47,8 +47,12 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="relative min-h-[100dvh] bg-[#f7f6f3]">
-      <p className="pointer-events-none absolute inset-x-0 top-[18%] text-center font-[family-name:var(--font-geist-sans)] text-3xl font-medium tracking-[-0.06em] text-zinc-900/15">
+    <main className="relative min-h-[100dvh] overflow-hidden bg-[#fafaf8]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-10%,rgba(255,92,53,0.14),transparent_55%),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(255,180,120,0.12),transparent_50%)]"
+      />
+      <p className="pointer-events-none absolute inset-x-0 top-[16%] text-center font-[family-name:var(--font-moni-script),cursive] text-5xl tracking-[0.01em] text-[var(--brand,#ff5c35)]/20">
         moni
       </p>
       <AuthModal mode={mode} onClose={goHome} onAuthenticated={goApp} />

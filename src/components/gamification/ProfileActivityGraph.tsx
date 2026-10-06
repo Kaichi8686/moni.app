@@ -54,9 +54,9 @@ export function ProfileActivityGraph({ activityLog }: Props) {
               title={active ? times(cell.count) : undefined}
               className={`flex h-9 items-center justify-center rounded-lg text-[13px] font-semibold ${
                 active
-                  ? "bg-violet-600 text-white"
+                  ? "bg-[var(--brand,#ff5c35)] text-white"
                   : cell.isToday
-                    ? "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
+                    ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)] ring-1 ring-[var(--brand-muted,#ffd9cc)]"
                     : "text-gray-500"
               }`}
             >
@@ -66,7 +66,7 @@ export function ProfileActivityGraph({ activityLog }: Props) {
         })}
       </div>
       <p className="mt-2 text-right text-[11px] text-gray-400">
-        {tx("紫の日 = 活動した日", "Purple = active")}
+        {tx("色がついた日 = 活動した日", "Colored = active")}
       </p>
 
       {summary.recent.length > 0 ? (
@@ -76,7 +76,7 @@ export function ProfileActivityGraph({ activityLog }: Props) {
             {summary.recent.map((day) => (
               <li key={day.date} className="flex items-center justify-between text-[13px]">
                 <span className="text-gray-700">{formatActivityDate(day.date, locale)}</span>
-                <span className="font-semibold text-violet-700">{times(day.count)}</span>
+                <span className="font-semibold text-[var(--brand,#ff5c35)]">{times(day.count)}</span>
               </li>
             ))}
           </ul>

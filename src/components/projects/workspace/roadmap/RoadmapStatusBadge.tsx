@@ -10,8 +10,8 @@ const LABELS: Record<PhaseStatus, string> = {
 };
 
 const STYLES: Record<PhaseStatus, string> = {
-  planned: "bg-sky-100 text-sky-800",
-  in_progress: "bg-violet-100 text-violet-800",
+  planned: "bg-zinc-100 text-zinc-700",
+  in_progress: "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]",
   paused: "bg-amber-100 text-amber-800",
   completed: "bg-emerald-100 text-emerald-800",
 };

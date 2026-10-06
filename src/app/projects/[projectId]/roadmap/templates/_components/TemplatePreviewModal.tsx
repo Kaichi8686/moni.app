@@ -41,7 +41,7 @@ export function TemplatePreviewModal({ template, applying, onClose, onApply }: P
           </button>
         </div>
 
-        <div className="border-b border-violet-100 bg-violet-50 px-5 py-4">
+        <div className="border-b border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-5 py-4">
           <p className="text-sm leading-relaxed text-gray-700">
             {template.usageGuide?.trim() || template.description}
           </p>
@@ -54,7 +54,7 @@ export function TemplatePreviewModal({ template, applying, onClose, onApply }: P
           {template.phases.map((phase, i) => (
             <div key={`${phase.title}-${i}`} className="flex gap-4 rounded-xl bg-gray-50 p-4">
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${COLOR_DOT[phase.color] ?? "bg-violet-500"}`}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${COLOR_DOT[phase.color] ?? "bg-[var(--brand-soft,#fff4f0)]0"}`}
               >
                 {i + 1}
               </div>
@@ -73,7 +73,7 @@ export function TemplatePreviewModal({ template, applying, onClose, onApply }: P
                     <ul className="space-y-1">
                       {phase.milestones.map((m) => (
                         <li key={m} className="flex items-start gap-1.5 text-xs text-gray-600">
-                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-violet-400" />
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--brand-muted,#ffd9cc)]" />
                           {m}
                         </li>
                       ))}
@@ -109,7 +109,7 @@ export function TemplatePreviewModal({ template, applying, onClose, onApply }: P
             type="button"
             disabled={applying}
             onClick={onApply}
-            className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            className="flex-1 rounded-xl bg-[var(--brand,#ff5c35)] py-3 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
           >
             {applying ? "適用中…" : "このテンプレートを使う"}
           </button>

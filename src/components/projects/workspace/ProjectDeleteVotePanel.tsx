@@ -132,7 +132,7 @@ export function ProjectDeleteVotePanel({
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
                 <div
-                  className={`h-full transition-all ${state.thresholdMet ? "bg-rose-500" : "bg-[#5E6AD2]"}`}
+                  className={`h-full transition-all ${state.thresholdMet ? "bg-rose-500" : "bg-[var(--brand,#ff5c35)]"}`}
                   style={{ width: `${Math.min(100, (state.approveCount / Math.max(1, threshold)) * 100)}%` }}
                 />
               </div>
