@@ -49,7 +49,7 @@ export function TemplatePreviewPanel({ item, onBack, onApply, canEdit, busy }: P
                   <span className="ml-2 font-normal text-[#9CA3AF]">約{phase.durationDays}日</span>
                 </p>
                 {phase.goal ? (
-                  <p className="mt-1 text-[11px] font-medium text-[#5E6AD2]">ゴール: {phase.goal}</p>
+                  <p className="mt-1 text-[11px] font-medium text-[var(--brand,#ff5c35)]">ゴール: {phase.goal}</p>
                 ) : null}
                 {phase.guide ? (
                   <p className="mt-2 text-[11px] leading-relaxed text-[#374151] whitespace-pre-wrap">{phase.guide}</p>
@@ -76,7 +76,7 @@ export function TemplatePreviewPanel({ item, onBack, onApply, canEdit, busy }: P
             type="button"
             disabled={busy || !def}
             onClick={onApply}
-            className="flex-1 rounded-md bg-[#5E6AD2] py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+            className="flex-1 rounded-md bg-[var(--brand,#ff5c35)] py-2 text-[12px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
           >
             この型を適用
           </button>

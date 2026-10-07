@@ -7,24 +7,22 @@ import type { ProjectDocumentRow } from "@/lib/projects/documents";
 function DocIcon() {
   return (
     <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden className="shrink-0">
-      <path fill="#4285F4" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-      <path fill="#A1C2FA" d="M13 3.5L18.5 9H14c-.55 0-1-.45-1-1V3.5z" />
+      <path fill="var(--brand,#ff5c35)" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+      <path fill="var(--brand-muted,#ffd9cc)" d="M13 3.5L18.5 9H14c-.55 0-1-.45-1-1V3.5z" />
     </svg>
   );
 }
 
-function GoogleFab({ disabled, creating, onClick, label }: { disabled?: boolean; creating?: boolean; onClick: () => void; label: string }) {
+function CreateDocFab({ disabled, creating, onClick, label }: { disabled?: boolean; creating?: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       disabled={disabled || creating}
       onClick={onClick}
-      className="fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.22)] disabled:opacity-50 md:bottom-8"
+      className="moni-btn-primary fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex h-14 w-14 items-center justify-center !rounded-2xl !p-0 text-[28px] font-light leading-none shadow-[0_4px_14px_rgba(255,92,53,0.28)] disabled:opacity-50 md:bottom-8"
       aria-label={label}
     >
-      <span className="text-[28px] font-light leading-none" aria-hidden>
-        <span className="bg-gradient-to-br from-[#ea4335] via-[#fbbc04] to-[#34a853] bg-clip-text text-transparent">+</span>
-      </span>
+      <span aria-hidden>+</span>
     </button>
   );
 }
@@ -119,10 +117,11 @@ export function DocumentsHomeList({
               type="button"
               disabled={docCreating}
               onClick={onCreate}
-              aria-label="新規作成"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1a73e8] shadow-[0_2px_8px_rgba(0,0,0,0.16)] transition hover:bg-[#f8f9fa] disabled:opacity-50"
+              aria-label={fabLabel}
+              className="moni-btn-primary inline-flex h-11 shrink-0 items-center gap-1.5 !rounded-xl !px-3.5 !text-[13px] disabled:opacity-50"
             >
-              <Plus className="h-6 w-6" aria-hidden />
+              <Plus className="h-5 w-5" aria-hidden />
+              <span>{docCreating ? "作成中…" : fabLabel}</span>
             </button>
           ) : canEdit && onDelete ? (
             <button
@@ -153,7 +152,7 @@ export function DocumentsHomeList({
             className="min-w-0 flex-1 bg-transparent text-[15px] text-[#202124] outline-none placeholder:text-[#5f6368]"
             aria-label="ドキュメントを検索"
           />
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a73e8] text-xs font-bold text-white">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand,#ff5c35)] text-xs font-bold text-white">
             {userInitial}
           </span>
         </div>
@@ -167,19 +166,37 @@ export function DocumentsHomeList({
       </div>
 
       {variant === "library" ? null : selectedDocId ? (
-        <p className="border-b border-[#e8f0fe] bg-[#e8f0fe] px-4 py-2 text-[13px] text-[#174ea6]">
+        <p className="border-b border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-4 py-2 text-[13px] text-[var(--brand-ink,#9a3412)]">
           選択中 — 右上の「削除」で確認画面が開きます
         </p>
       ) : (
-        <p className="border-b border-[#f1f3f4] bg-[#f8f9fa] px-4 py-2 text-[12px] text-[#5f6368]">
+        <p className="border-b border-[#f1f3f4] bg-[#fafaf8] px-4 py-2 text-[12px] text-[#5f6368]">
           行をタップで選択 · 「開く」で編集
         </p>
       )}
 
       <ul className={`min-h-0 flex-1 overflow-y-auto pb-24 ${variant === "library" ? "mt-6 space-y-1" : "divide-y divide-[#e8eaed]"}`}>
         {filtered.length === 0 ? (
-          <li className="px-4 py-16 text-center text-[14px] text-[#5f6368]">
-            {query.trim() ? `該当する${noun}がありません` : emptyLabel}
+          <li className="px-4 py-16 text-center">
+            {query.trim() ? (
+              <p className="text-[14px] text-[#5f6368]">{`該当する${noun}がありません`}</p>
+            ) : (
+              <div className="mx-auto max-w-sm">
+                <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
+                <p className="mt-1 text-[14px] leading-relaxed text-[#5f6368]">{emptyLabel}</p>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    disabled={docCreating}
+                    onClick={onCreate}
+                    className="moni-btn-primary mt-4 inline-flex items-center gap-1.5 !rounded-xl !px-4 !py-2.5 !text-[13px]"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    {docCreating ? "作成中…" : fabLabel}
+                  </button>
+                ) : null}
+              </div>
+            )}
           </li>
         ) : (
           filtered.map((d) => {
@@ -190,12 +207,20 @@ export function DocumentsHomeList({
                   type="button"
                   onClick={() => (variant === "library" ? onOpen(d.id) : onSelectDoc(selected ? null : d.id))}
                   className={`flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition sm:px-4 ${
-                    selected && variant === "docs" ? "bg-[#e8f0fe]" : "hover:bg-[#f8f9fa] active:bg-[#f1f3f4]"
+                    selected && variant === "docs"
+                      ? "bg-[var(--brand-soft,#fff4f0)]"
+                      : "hover:bg-[#f8f9fa] active:bg-[#f1f3f4]"
                   }`}
                 >
                   <Icon />
                   <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-[15px] ${selected && variant === "docs" ? "font-medium text-[#174ea6]" : "font-normal text-[#202124]"}`}>
+                    <span
+                      className={`block truncate text-[15px] ${
+                        selected && variant === "docs"
+                          ? "font-medium text-[var(--brand-ink,#9a3412)]"
+                          : "font-normal text-[#202124]"
+                      }`}
+                    >
                       {d.title?.trim() || untitledLabel}
                     </span>
                     <span className="mt-0.5 block text-[13px] text-[#5f6368]">{formatDocDate(d.updated_at)}</span>
@@ -205,7 +230,7 @@ export function DocumentsHomeList({
                   <button
                     type="button"
                     onClick={() => onOpen(d.id)}
-                    className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe]"
+                    className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium text-[var(--brand,#ff5c35)] hover:bg-[var(--brand-soft,#fff4f0)]"
                   >
                     開く
                   </button>
@@ -269,7 +294,9 @@ export function DocumentsHomeList({
         )}
       </ul>
 
-      {canEdit && variant === "docs" ? <GoogleFab disabled={!canEdit} creating={docCreating} onClick={onCreate} label={fabLabel} /> : null}
+      {canEdit && variant === "docs" ? (
+        <CreateDocFab disabled={!canEdit} creating={docCreating} onClick={onCreate} label={fabLabel} />
+      ) : null}
 
       {confirmDeleteId && confirmTarget ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
