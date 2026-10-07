@@ -1408,15 +1408,15 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                   type="button"
                   disabled={docCreating}
                   onClick={() => void createDocument()}
-                  className="rounded-full px-3 py-1.5 text-[13px] font-medium text-white shadow-sm disabled:opacity-60"
-                  style={{ background: "#1a73e8" }}
+                  className="moni-btn-primary !rounded-full !px-3 !py-1.5 !text-[13px] disabled:opacity-60"
                 >
                   {docCreating ? "作成中…" : "+ 新規"}
                 </button>
               </div>
               {documents.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[#dadce0] bg-[#f8f9fa] px-3 py-8 text-center">
-                  <p className="text-sm font-medium text-[#202124]">ドキュメントがありません</p>
+                <div className="rounded-xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-8 text-center">
+                  <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
+                  <p className="mt-1 text-sm font-medium text-[#202124]">ドキュメントがありません</p>
                   <p className="mt-1 text-[11px] leading-relaxed text-[#5f6368]">「+ 新規」で議事録や企画メモを作成できます。</p>
                 </div>
               ) : (
@@ -1428,17 +1428,23 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                         onClick={() => setActiveDocId(d.id)}
                         className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2.5 text-left transition ${
                           activeDocId === d.id
-                            ? "border-[#1a73e8] bg-[#e8f0fe] shadow-sm"
+                            ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] shadow-sm"
                             : "border-transparent hover:bg-[#f1f3f4]"
                         }`}
                       >
                         <span className="mt-0.5 shrink-0 text-[#5f6368]" aria-hidden>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#4285f4">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--brand,#ff5c35)">
                             <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
                           </svg>
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className={`block truncate text-[13px] ${activeDocId === d.id ? "font-semibold text-[#174ea6]" : "text-[#202124]"}`}>
+                          <span
+                            className={`block truncate text-[13px] ${
+                              activeDocId === d.id
+                                ? "font-semibold text-[var(--brand-ink,#9a3412)]"
+                                : "text-[#202124]"
+                            }`}
+                          >
                             {d.title || "無題のドキュメント"}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] text-[#5f6368]">

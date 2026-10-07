@@ -360,7 +360,7 @@ html.moni-landing-active {
 }
 
 .gdocs-editor-body a {
-  color: #1a73e8;
+  color: var(--brand, #ff5c35);
   text-decoration: underline;
 }
 
