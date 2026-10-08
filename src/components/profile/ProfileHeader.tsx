@@ -102,7 +102,7 @@ export function ProfileHeader({
                 type="button"
                 disabled={avatarUploading}
                 onClick={() => avatarInputRef.current?.click()}
-                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
+                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand,#ff5c35)] text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
                 aria-label={tx("プロフィール写真を変更", "Change profile photo")}
                 title={tx("プロフィール写真を変更", "Change profile photo")}
               >

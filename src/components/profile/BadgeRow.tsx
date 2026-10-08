@@ -69,13 +69,15 @@ export function BadgeRow({ badges }: Props) {
                 onClick={() => setActiveId(def.id)}
                 className={`flex min-h-[48px] items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition ${
                   earned
-                    ? "border-zinc-300 bg-white hover:border-zinc-400"
+                    ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] hover:border-[var(--brand,#ff5c35)]"
                     : "border-zinc-100 bg-zinc-50/80 opacity-55 hover:opacity-80"
                 }`}
               >
                 <span
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${
-                    earned ? "border-zinc-200 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-400"
+                    earned
+                      ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand,#ff5c35)] text-white"
+                      : "border-zinc-200 bg-white text-zinc-400"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -109,7 +111,9 @@ export function BadgeRow({ badges }: Props) {
             <div className="flex items-start gap-3">
               <span
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
-                  activeEarnedAt ? "border-zinc-200 bg-zinc-900 text-white" : "border-zinc-200 bg-zinc-50 text-zinc-400"
+                  activeEarnedAt
+                    ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand,#ff5c35)] text-white"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-400"
                 }`}
               >
                 <ActiveIcon className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -130,7 +134,7 @@ export function BadgeRow({ badges }: Props) {
             </div>
             <button
               type="button"
-              className="mt-5 w-full rounded-lg bg-zinc-900 py-2.5 text-[13px] font-semibold text-white transition hover:bg-zinc-800"
+              className="moni-btn-primary mt-5 w-full rounded-lg py-2.5 text-[13px]"
               onClick={() => setActiveId(null)}
             >
               {tx("閉じる", "Close")}

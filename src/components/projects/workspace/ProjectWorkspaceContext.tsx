@@ -997,7 +997,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       whiteboard: ["ボード", "Board"],
       documents: ["資料", "Documents"],
       members: ["メンバー", "Members"],
-      chat: ["メール", "Mail"],
+      chat: ["メッセージ", "Messages"],
       schedule: ["予定", "Schedule"],
       activity: ["活動", "Activity"],
     };
@@ -1052,7 +1052,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   disabled={!project}
                   className={`inline-flex h-10 w-10 items-center justify-center rounded-md border transition disabled:opacity-50 ${
                     actionMenuOpen
-                      ? "border-[#5E6AD2] bg-[#EEF0FF] text-[#5E6AD2]"
+                      ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand,#ff5c35)]"
                       : "border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F7F8F8]"
                   }`}
                   aria-label={tx("その他のメニュー", "More")}
@@ -1161,7 +1161,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             </div>
           </div>
           {headerNotice ? (
-            <p className="mx-auto mt-2 max-w-6xl text-center text-[12px] font-medium text-[#5E6AD2]" role="status">
+            <p className="mx-auto mt-2 max-w-6xl text-center text-[12px] font-medium text-[var(--brand,#ff5c35)]" role="status">
               {headerNotice}
             </p>
           ) : null}

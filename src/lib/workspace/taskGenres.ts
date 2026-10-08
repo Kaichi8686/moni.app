@@ -24,8 +24,8 @@ const BUILTIN_GENRE_META: Record<BuiltinTaskGenre, GenreDisplayMeta> = {
     hintJa: "企画書・台本・リサーチなど",
     hintEn: "Plans, scripts, research",
     icon: PenLine,
-    chip: "bg-indigo-50 text-indigo-700",
-    iconBg: "bg-indigo-500",
+    chip: "bg-amber-50 text-amber-800",
+    iconBg: "bg-amber-500",
   },
   make: {
     ja: "つくる",
@@ -60,8 +60,8 @@ const BUILTIN_GENRE_META: Record<BuiltinTaskGenre, GenreDisplayMeta> = {
     hintJa: "予算・スケジュール・役割分担",
     hintEn: "Budget, schedule, roles",
     icon: ClipboardList,
-    chip: "bg-violet-50 text-violet-700",
-    iconBg: "bg-violet-500",
+    chip: "bg-stone-100 text-stone-700",
+    iconBg: "bg-stone-500",
   },
 };
 

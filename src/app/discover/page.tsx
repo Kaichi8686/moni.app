@@ -98,7 +98,7 @@ export default function DiscoverPage() {
         url: String(fd.get("url") ?? ""),
         tags: [],
       });
-      setMsg("機会を投稿しました（運営が確認します）");
+      setMsg("投稿しました（運営が確認してから表示されます）");
       await reload();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "失敗しました");
@@ -130,7 +130,7 @@ export default function DiscoverPage() {
               key={id}
               type="button"
               className={`min-h-[44px] touch-manipulation rounded-lg px-1 py-2 text-sm font-semibold leading-snug ${
-                tab === id ? "bg-violet-600 text-white shadow-sm" : "text-gray-700"
+                tab === id ? "bg-[var(--brand,#ff5c35)] text-white shadow-sm" : "text-gray-700"
               }`}
               onClick={() => setTab(id)}
             >
@@ -142,59 +142,74 @@ export default function DiscoverPage() {
 
       {/* TODO: wire idea-interview theme interest into real peer matching when ranking exists */}
       {fromIdeaInterview ? (
-        <div className="mx-4 mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-relaxed text-sky-900">
-          アイデア発掘インタビューからの流入です
+        <div className="mx-4 mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5 text-sm leading-relaxed text-[var(--brand-ink,#9a3412)]">
+          アイデアの話からの続きです
           {interviewTheme ? `（テーマ: ${interviewTheme}）` : ""}。
-          関心が近い機会・スキル募集・メンターを探してみましょう。
+          近い興味の機会・手伝ってほしい人・相談できる人を探してみましょう。
         </div>
       ) : null}
 
       <main className="mobile-content-inset mx-auto w-full max-w-none space-y-4 py-4 sm:max-w-lg">
-        {msg ? <p className="text-sm text-violet-700">{msg}</p> : null}
+        {msg ? <p className="text-sm text-[var(--brand-ink,#9a3412)]">{msg}</p> : null}
         {err ? <p className="text-sm text-rose-600">{err}</p> : null}
 
         {tab === "opportunities" ? (
           <>
-            <ul className="space-y-3">
-              {opportunities.map((o) => (
-                <li key={o.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-[11px] font-medium text-violet-600">
-                      {opportunityTypeLabel(o.type)}
-                      {o.isVerified ? " · 認定" : ""}
-                    </span>
-                    {o.deadline ? (
-                      <span className="text-[11px] text-gray-400">
-                        {new Date(o.deadline).toLocaleDateString("ja-JP")}
+            {opportunities.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-8 text-center">
+                <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
+                <p className="mt-1 text-sm font-medium text-gray-900">まだ機会がありません</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
+                  {uid
+                    ? "下のフォームからコンテストやイベントを教えてあげましょう。"
+                    : "ログインすると挑戦できる場を投稿できます。"}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {opportunities.map((o) => (
+                  <li key={o.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[11px] font-medium text-[var(--brand,#ff5c35)]">
+                        {opportunityTypeLabel(o.type)}
+                        {o.isVerified ? " · 認定" : ""}
                       </span>
+                      {o.deadline ? (
+                        <span className="text-[11px] text-gray-400">
+                          {new Date(o.deadline).toLocaleDateString("ja-JP")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 font-semibold text-gray-900">{o.title}</p>
+                    {o.organizer ? <p className="text-xs text-gray-500">{o.organizer}</p> : null}
+                    {o.description ? <p className="mt-2 text-sm text-gray-600">{o.description}</p> : null}
+                    {o.url ? (
+                      <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm text-[var(--brand,#ff5c35)]">
+                        詳細を見る →
+                      </a>
                     ) : null}
-                  </div>
-                  <p className="mt-1 font-semibold text-gray-900">{o.title}</p>
-                  {o.organizer ? <p className="text-xs text-gray-500">{o.organizer}</p> : null}
-                  {o.description ? <p className="mt-2 text-sm text-gray-600">{o.description}</p> : null}
-                  {o.url ? (
-                    <a href={o.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm text-violet-600">
-                      詳細を見る →
-                    </a>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
             {uid ? (
               <form className="rounded-2xl border border-dashed border-gray-200 bg-white p-4" onSubmit={(e) => void onOppSubmit(e)}>
-                <p className="mb-2 text-sm font-semibold">機会を投稿</p>
-                <select name="type" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
-                  <option value="contest">ビジコン</option>
-                  <option value="grant">補助金</option>
+                <p className="mb-2 text-sm font-semibold">挑戦できる場を教える</p>
+                <p className="mb-2 text-[12px] leading-relaxed text-gray-500">
+                  コンテスト・イベントなど、みんなに知らせたい場を投稿できます。
+                </p>
+                <select name="type" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="種類">
+                  <option value="contest">コンテスト</option>
+                  <option value="grant">支援・助成</option>
                   <option value="internship">インターン</option>
                   <option value="event">イベント</option>
                 </select>
-                <input name="title" required placeholder="タイトル" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <input name="organizer" placeholder="主催" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <textarea name="description" placeholder="説明" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <input name="url" placeholder="URL" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <button type="submit" className="w-full rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white">
-                  投稿
+                <input name="title" required placeholder="タイトル（例: ○○コンテスト）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <input name="organizer" placeholder="主催（例: ○○協会）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <textarea name="description" placeholder="どんな内容？誰向け？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <input name="url" placeholder="くわしいページのURL（任意）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <button type="submit" className="moni-btn-primary w-full">
+                  投稿する
                 </button>
               </form>
             ) : null}
@@ -203,42 +218,55 @@ export default function DiscoverPage() {
 
         {tab === "skills" ? (
           <>
-            <ul className="space-y-3">
-              {skills.map((s) => (
-                <li key={s.id} className="rounded-2xl border border-gray-100 bg-white p-4">
-                  <p className="text-xs text-violet-600">{s.skillName}</p>
-                  <p className="font-semibold">{s.requesterName}</p>
-                  {s.description ? <p className="mt-1 text-sm text-gray-600">{s.description}</p> : null}
-                  <p className="mt-2 text-[11px] text-gray-400">
-                    {s.duration} · {s.compensation}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            {skills.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-8 text-center">
+                <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
+                <p className="mt-1 text-sm font-medium text-gray-900">まだ仲間募集がありません</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
+                  {uid ? "手伝ってほしいことを下から出してみましょう。" : "ログインすると仲間を募集できます。"}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {skills.map((s) => (
+                  <li key={s.id} className="rounded-2xl border border-gray-100 bg-white p-4">
+                    <p className="text-xs text-[var(--brand,#ff5c35)]">{s.skillName}</p>
+                    <p className="font-semibold">{s.requesterName}</p>
+                    {s.description ? <p className="mt-1 text-sm text-gray-600">{s.description}</p> : null}
+                    <p className="mt-2 text-[11px] text-gray-400">
+                      {s.duration} · {s.compensation}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
             {uid ? (
               <form className="rounded-2xl border border-dashed border-gray-200 bg-white p-4" onSubmit={(e) => void onSkillSubmit(e)}>
-                <p className="mb-2 text-sm font-semibold">仲間を募集</p>
-                <select name="skill" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <p className="mb-2 text-sm font-semibold">一緒にやる人を募集</p>
+                <p className="mb-2 text-[12px] leading-relaxed text-gray-500">
+                  手伝ってほしいことを書いて、興味がある人に見つけてもらいましょう。
+                </p>
+                <select name="skill" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="手伝ってほしいこと">
                   {SKILL_OPTIONS.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
                 </select>
-                <textarea name="description" placeholder="どんなプロジェクト？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <select name="duration" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <textarea name="description" placeholder="どんなアイデア／プロジェクト？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <select name="duration" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="期間">
                   <option>1日以内</option>
                   <option>1週間</option>
                   <option>1ヶ月</option>
                   <option>長期</option>
                 </select>
-                <select name="compensation" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <select name="compensation" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="お礼">
                   <option>なし（経験・実績として）</option>
-                  <option>成果報酬</option>
-                  <option>相談</option>
+                  <option>成果に応じてお礼</option>
+                  <option>あとで相談</option>
                 </select>
-                <button type="submit" className="w-full rounded-xl bg-violet-600 py-2 text-sm font-semibold text-white">
-                  依頼を出す
+                <button type="submit" className="moni-btn-primary w-full">
+                  募集を出す
                 </button>
               </form>
             ) : null}
@@ -247,34 +275,46 @@ export default function DiscoverPage() {
 
         {tab === "mentors" ? (
           <>
-            <ul className="space-y-3">
-              {mentors.map((m) => (
-                <li key={m.id} className="rounded-2xl border border-gray-100 bg-white p-4">
-                  <p className="font-semibold">{m.displayName}</p>
-                  <p className="text-xs text-gray-500">{m.expertise.join(" · ") || "ビジネス全般"}</p>
-                  {m.bio ? <p className="mt-2 text-sm text-gray-600">{m.bio}</p> : null}
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    {m.sessionType === "free" ? "無料" : m.pricePer30min ? `${m.pricePer30min}円/30分` : "要相談"} · ★
-                    {m.rating.toFixed(1)} · {m.sessionCount}セッション
-                  </p>
-                  {uid && uid !== m.userId ? (
-                    <button
-                      type="button"
-                      className="mt-2 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white"
-                      onClick={() =>
-                        void requestMentorSession(supabase!, uid, m.id).then(() => setMsg("セッションをリクエストしました"))
-                      }
-                    >
-                      相談をリクエスト
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            {mentors.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-8 text-center">
+                <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
+                <p className="mt-1 text-sm font-medium text-gray-900">まだ相談できる人がいません</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
+                  {uid
+                    ? "経験を教えられる人は、下から「相談できる人」として登録できます。"
+                    : "ログインすると相談を頼めます。"}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {mentors.map((m) => (
+                  <li key={m.id} className="rounded-2xl border border-gray-100 bg-white p-4">
+                    <p className="font-semibold">{m.displayName}</p>
+                    <p className="text-xs text-gray-500">{m.expertise.join(" · ") || "いろいろ相談OK"}</p>
+                    {m.bio ? <p className="mt-2 text-sm text-gray-600">{m.bio}</p> : null}
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {m.sessionType === "free" ? "無料" : m.pricePer30min ? `${m.pricePer30min}円/30分` : "要相談"} · ★
+                      {m.rating.toFixed(1)} · {m.sessionCount}セッション
+                    </p>
+                    {uid && uid !== m.userId ? (
+                      <button
+                        type="button"
+                        className="mt-2 rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white"
+                        onClick={() =>
+                          void requestMentorSession(supabase!, uid, m.id).then(() => setMsg("セッションをリクエストしました"))
+                        }
+                      >
+                        相談をリクエスト
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
             {uid ? (
               <button
                 type="button"
-                className="w-full rounded-xl border border-violet-200 py-2 text-sm font-semibold text-violet-700"
+                className="w-full rounded-xl border border-[var(--brand-muted,#ffd9cc)] py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)]"
                 onClick={() =>
                   void registerAsMentor(supabase!, uid, {
                     expertise: ["ビジネス", "マーケ"],
@@ -287,7 +327,7 @@ export default function DiscoverPage() {
                   })
                 }
               >
-                メンターとして登録する
+                相談できる人として登録する
               </button>
             ) : null}
           </>

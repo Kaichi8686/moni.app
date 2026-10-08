@@ -9,7 +9,7 @@ const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", fontSize: 11 },
   title: { fontSize: 20, marginBottom: 8, fontWeight: "bold" },
   section: { marginTop: 16 },
-  heading: { fontSize: 13, fontWeight: "bold", marginBottom: 6, color: "#5b21b6" },
+  heading: { fontSize: 13, fontWeight: "bold", marginBottom: 6, color: "#ff5c35" },
   line: { marginBottom: 4 },
 });
 
@@ -80,7 +80,7 @@ export function PortfolioPdfDownload({ data, className = "" }: Props) {
     <button
       type="button"
       disabled={loading}
-      className={className || "flex-1 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white disabled:opacity-50"}
+      className={className || "flex-1 rounded-xl bg-[var(--brand,#ff5c35)] py-3 text-sm font-semibold text-white disabled:opacity-50"}
       onClick={() => void download()}
     >
       {loading ? "PDF作成中…" : "PDFダウンロード"}
