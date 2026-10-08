@@ -142,7 +142,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
       <div className="max-h-[85dvh] w-full max-w-lg overflow-hidden rounded-t-2xl bg-white sm:rounded-2xl">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-semibold text-zinc-900">{tx("新しいメール", "New mail")}</h2>
+          <h2 className="font-semibold text-zinc-900">{tx("新しいメッセージ", "New message")}</h2>
           <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-zinc-100">
             <X className="h-5 w-5" />
           </button>

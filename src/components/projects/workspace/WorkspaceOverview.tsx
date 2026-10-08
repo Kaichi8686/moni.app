@@ -384,7 +384,7 @@ export default function WorkspaceOverview() {
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
         <div className="grid grid-cols-2 gap-3">
           <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
-          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("メール", "Mail")} />
+          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("メッセージ", "Messages")} />
         </div>
       </section>
     </div>

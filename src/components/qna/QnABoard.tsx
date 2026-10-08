@@ -103,7 +103,7 @@ export function QnABoard({
     setLoading(true);
     const { questions: list, error, uxReady: ready } = await loadQnaQuestions(supabase);
     setUxReady(ready);
-    if (error) onAuthMessage(tx(`知恵袋の読み込みに失敗: ${error}`, `Failed to load Q&A: ${error}`));
+    if (error) onAuthMessage(tx(`相談ボードの読み込みに失敗: ${error}`, `Failed to load Q&A: ${error}`));
     setQuestions(list);
     setLoading(false);
   }, [onAuthMessage, tx]);

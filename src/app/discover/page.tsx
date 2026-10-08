@@ -98,7 +98,7 @@ export default function DiscoverPage() {
         url: String(fd.get("url") ?? ""),
         tags: [],
       });
-      setMsg("機会を投稿しました（運営が確認します）");
+      setMsg("投稿しました（運営が確認してから表示されます）");
       await reload();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "失敗しました");
@@ -160,7 +160,9 @@ export default function DiscoverPage() {
                 <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
                 <p className="mt-1 text-sm font-medium text-gray-900">まだ機会がありません</p>
                 <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
-                  {uid ? "下のフォームからコンテストやイベントを教えてあげましょう。" : "ログインすると機会を投稿できます。"}
+                  {uid
+                    ? "下のフォームからコンテストやイベントを教えてあげましょう。"
+                    : "ログインすると挑戦できる場を投稿できます。"}
                 </p>
               </div>
             ) : (
@@ -192,19 +194,22 @@ export default function DiscoverPage() {
             )}
             {uid ? (
               <form className="rounded-2xl border border-dashed border-gray-200 bg-white p-4" onSubmit={(e) => void onOppSubmit(e)}>
-                <p className="mb-2 text-sm font-semibold">機会を投稿</p>
-                <select name="type" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
-                  <option value="contest">ビジコン</option>
-                  <option value="grant">補助金</option>
+                <p className="mb-2 text-sm font-semibold">挑戦できる場を教える</p>
+                <p className="mb-2 text-[12px] leading-relaxed text-gray-500">
+                  コンテスト・イベントなど、みんなに知らせたい場を投稿できます。
+                </p>
+                <select name="type" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="種類">
+                  <option value="contest">コンテスト</option>
+                  <option value="grant">支援・助成</option>
                   <option value="internship">インターン</option>
                   <option value="event">イベント</option>
                 </select>
-                <input name="title" required placeholder="タイトル" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <input name="organizer" placeholder="主催" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <textarea name="description" placeholder="説明" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <input name="url" placeholder="URL" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white">
-                  投稿
+                <input name="title" required placeholder="タイトル（例: ○○コンテスト）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <input name="organizer" placeholder="主催（例: ○○協会）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <textarea name="description" placeholder="どんな内容？誰向け？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <input name="url" placeholder="くわしいページのURL（任意）" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <button type="submit" className="moni-btn-primary w-full">
+                  投稿する
                 </button>
               </form>
             ) : null}
@@ -237,28 +242,31 @@ export default function DiscoverPage() {
             )}
             {uid ? (
               <form className="rounded-2xl border border-dashed border-gray-200 bg-white p-4" onSubmit={(e) => void onSkillSubmit(e)}>
-                <p className="mb-2 text-sm font-semibold">仲間を募集</p>
-                <select name="skill" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <p className="mb-2 text-sm font-semibold">一緒にやる人を募集</p>
+                <p className="mb-2 text-[12px] leading-relaxed text-gray-500">
+                  手伝ってほしいことを書いて、興味がある人に見つけてもらいましょう。
+                </p>
+                <select name="skill" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="手伝ってほしいこと">
                   {SKILL_OPTIONS.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
                 </select>
-                <textarea name="description" placeholder="どんなプロジェクト？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
-                <select name="duration" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <textarea name="description" placeholder="どんなアイデア／プロジェクト？" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                <select name="duration" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="期間">
                   <option>1日以内</option>
                   <option>1週間</option>
                   <option>1ヶ月</option>
                   <option>長期</option>
                 </select>
-                <select name="compensation" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm">
+                <select name="compensation" className="mb-2 w-full rounded-lg border px-3 py-2 text-sm" aria-label="お礼">
                   <option>なし（経験・実績として）</option>
-                  <option>成果報酬</option>
-                  <option>相談</option>
+                  <option>成果に応じてお礼</option>
+                  <option>あとで相談</option>
                 </select>
-                <button type="submit" className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2 text-sm font-semibold text-white">
-                  依頼を出す
+                <button type="submit" className="moni-btn-primary w-full">
+                  募集を出す
                 </button>
               </form>
             ) : null}
@@ -272,7 +280,9 @@ export default function DiscoverPage() {
                 <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">次の一手</p>
                 <p className="mt-1 text-sm font-medium text-gray-900">まだ相談できる人がいません</p>
                 <p className="mt-1 text-[13px] leading-relaxed text-gray-500">
-                  {uid ? "経験をシェアできる人は、下からメンター登録できます。" : "ログインすると相談リクエストができます。"}
+                  {uid
+                    ? "経験を教えられる人は、下から「相談できる人」として登録できます。"
+                    : "ログインすると相談を頼めます。"}
                 </p>
               </div>
             ) : (
@@ -317,7 +327,7 @@ export default function DiscoverPage() {
                   })
                 }
               >
-                メンターとして登録する
+                相談できる人として登録する
               </button>
             ) : null}
           </>

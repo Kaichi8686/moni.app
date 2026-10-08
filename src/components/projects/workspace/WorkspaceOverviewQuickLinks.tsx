@@ -21,7 +21,7 @@ const LINKS = [
   { id: "schedule", label: "予定", labelEn: "Schedule", desc: "カレンダー", descEn: "Calendar", icon: Calendar },
   { id: "whiteboard", label: "ホワイトボード", labelEn: "Whiteboard", desc: "無限キャンバスで描く", descEn: "Infinite canvas", icon: PenSquare },
   { id: "ideas", label: "投票", labelEn: "Vote", desc: "テーマごとに選択肢へ投票する", descEn: "Vote on options", icon: Lightbulb },
-  { id: "chat", label: "メール", labelEn: "Mail", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
+  { id: "chat", label: "メッセージ", labelEn: "Messages", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
   { id: "members", label: "メンバー", labelEn: "Members", desc: "参加メンバー", descEn: "People in this project", icon: Users },
   { id: "activity", label: "活動", labelEn: "Activity", desc: "最近の更新", descEn: "Recent updates", icon: Radio },
 ] as const;

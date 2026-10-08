@@ -997,7 +997,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       whiteboard: ["ボード", "Board"],
       documents: ["資料", "Documents"],
       members: ["メンバー", "Members"],
-      chat: ["メール", "Mail"],
+      chat: ["メッセージ", "Messages"],
       schedule: ["予定", "Schedule"],
       activity: ["活動", "Activity"],
     };

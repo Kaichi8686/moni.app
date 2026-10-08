@@ -17,8 +17,8 @@ export type Opportunity = {
 };
 
 const TYPE_LABEL: Record<OpportunityType, string> = {
-  contest: "ビジコン",
-  grant: "補助金・助成",
+  contest: "コンテスト",
+  grant: "支援・助成",
   internship: "インターン",
   event: "イベント",
 };
