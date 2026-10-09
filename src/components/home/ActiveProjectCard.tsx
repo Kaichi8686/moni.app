@@ -35,11 +35,11 @@ export function ActiveProjectCard({ userId }: Props) {
   return (
     <Link
       href={`/projects/${projectId}/overview`}
-      className="block rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition hover:border-violet-200"
+      className="block rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-white p-4 shadow-sm transition hover:border-[var(--brand,#ff5c35)] hover:shadow-md"
     >
-      <p className="text-[11px] font-medium text-violet-600">{t("activeProject")}</p>
-      <p className="mt-0.5 truncate text-base font-semibold text-gray-900">{name}</p>
-      <p className="mt-1 text-xs text-gray-500">
+      <p className="text-[11px] font-semibold tracking-wide text-[var(--brand,#ff5c35)]">{t("activeProject")}</p>
+      <p className="mt-0.5 truncate text-base font-semibold text-zinc-900">{name}</p>
+      <p className="mt-1 text-xs text-zinc-500">
         {t("openIssues")} {openCount}
       </p>
     </Link>
