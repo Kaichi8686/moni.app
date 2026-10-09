@@ -45,7 +45,7 @@ export function TagChipPicker({ presets, value, onChange, max = 12, className = 
 
   const chipBase =
     "inline-flex min-h-[36px] touch-manipulation items-center rounded-full border px-3 py-1.5 text-[13px] font-medium transition active:scale-[0.97]";
-  const chipOn = `${chipBase} border-transparent bg-[var(--color-accent,#5b21b6)] text-white shadow-sm`;
+  const chipOn = `${chipBase} border-transparent bg-[var(--color-accent,var(--brand,#ff5c35))] text-white shadow-sm`;
   const chipOff = `${chipBase} border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-500`;
 
   return (
@@ -90,7 +90,7 @@ export function TagChipPicker({ presets, value, onChange, max = 12, className = 
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <input
               autoFocus
-              className="min-h-[36px] min-w-[10rem] flex-1 rounded-full border border-zinc-300 bg-white px-3 text-[13px] outline-none ring-[var(--color-accent,#5b21b6)] focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              className="min-h-[36px] min-w-[10rem] flex-1 rounded-full border border-zinc-300 bg-white px-3 text-[13px] outline-none ring-[var(--color-accent,var(--brand,#ff5c35))] focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               placeholder={tx("タグを入力", "Enter a tag")}
               value={customDraft}
               maxLength={32}

@@ -80,7 +80,7 @@ export function PortfolioPdfDownload({ data, className = "" }: Props) {
     <button
       type="button"
       disabled={loading}
-      className={className || "flex-1 rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white disabled:opacity-50"}
+      className={className || "flex-1 rounded-xl bg-[var(--brand,#ff5c35)] py-3 text-sm font-semibold text-white disabled:opacity-50"}
       onClick={() => void download()}
     >
       {loading ? "PDF作成中…" : "PDFダウンロード"}

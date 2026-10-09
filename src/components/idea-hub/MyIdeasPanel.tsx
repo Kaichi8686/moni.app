@@ -142,8 +142,8 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
       {ideas.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 px-5 py-10 text-center">
-          <span className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
+        <div className="rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-5 py-10 text-center">
+          <span className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]">
             <Sparkles className="h-5 w-5" aria-hidden />
           </span>
           <h3 className="text-[15px] font-semibold text-zinc-900">{tx("まだアイデアがありません", "No ideas yet")}</h3>
@@ -154,7 +154,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
             <button
               type="button"
               onClick={onGoExcavate}
-              className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
+              className="moni-btn-primary px-4"
             >
               {tx("発掘を試す", "Try excavate")}
             </button>
@@ -180,7 +180,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         idea.source === "interview"
-                          ? "bg-sky-50 text-sky-700"
+                          ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
                           : "bg-zinc-100 text-zinc-600"
                       }`}
                     >
