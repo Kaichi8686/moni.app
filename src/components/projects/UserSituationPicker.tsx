@@ -15,7 +15,7 @@ export function UserSituationPicker({ value, onChange, disabled, compact }: Prop
   const enLabel: Record<UserSituation, string> = {
     festival: "School festival, club, or school events",
     study: "Classes, inquiry, or reports",
-    startup: "Startup, pitch contests, or apps",
+    startup: "Startup, contests, or apps",
     community: "Local activity or volunteering",
     unclear: "Not sure yet — I just want to start",
   };

@@ -74,7 +74,7 @@ type Props = {
   /** standalone = full page; hub = ideas tab; project = workspace */
   variant?: "standalone" | "hub" | "project";
   projectId?: string;
-  /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
+  /** Hub default mode (相談 tab → consult, 見つける tab → excavate) */
   initialMode?: IdeaPersonalAiMode;
 };
 
@@ -639,7 +639,7 @@ export function IdeaInterviewApp({
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
-  const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
+  const modeLabel = isConsult ? tx("相談", "Chat") : tx("見つける", "Find ideas");
 
   return (
     <div className={shellClass}>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { FolderKanban, Lightbulb, Mail, Search, UserRound } from "lucide-react";
+import { FolderKanban, Lightbulb, MessageCircle, Search, UserRound } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
@@ -30,7 +30,7 @@ const NAV: NavItem[] = [
   {
     href: "/messages",
     labelKey: "navMail",
-    icon: <Mail {...iconProps} />,
+    icon: <MessageCircle {...iconProps} />,
     match: (p) => p === "/messages" || p.startsWith("/messages/"),
     badgeKey: "mail",
   },

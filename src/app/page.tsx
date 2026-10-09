@@ -4,7 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderKanban, Lightbulb, Mail, Search, UserRound } from "lucide-react";
+import { FolderKanban, Lightbulb, MessageCircle, Search, UserRound } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
@@ -231,7 +231,7 @@ const navIconClass = "app-bottom-nav-svg";
 
 const featureItems: Array<{ key: HomeBottomNavKey; icon: ReactNode }> = [
   { key: "projects", icon: <FolderKanban className={navIconClass} strokeWidth={1.85} aria-hidden /> },
-  { key: "mail", icon: <Mail className={navIconClass} strokeWidth={1.85} aria-hidden /> },
+  { key: "mail", icon: <MessageCircle className={navIconClass} strokeWidth={1.85} aria-hidden /> },
   { key: "idea", icon: <Lightbulb className={navIconClass} strokeWidth={1.85} aria-hidden /> },
   { key: "chat", icon: <Search className={navIconClass} strokeWidth={1.85} aria-hidden /> },
   { key: "account", icon: <UserRound className={navIconClass} strokeWidth={1.85} aria-hidden /> },
@@ -1118,7 +1118,7 @@ export default function Home() {
       };
       if (!handoff.seedTitle) return;
       const contextBlock = [
-        `アイデア発掘インタビューからの引き継ぎです。`,
+        `アイデア探しの会話からの引き継ぎです。`,
         `選んだ種: ${handoff.seedTitle}`,
         `概要: ${handoff.seedSummary ?? ""}`,
         handoff.theme ? `テーマ: ${handoff.theme}` : "",
@@ -4856,7 +4856,7 @@ export default function Home() {
                 href="/idea"
                 className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5 text-[12px] font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
-                <span>アイデアが浮かばない人はこちら → AI発掘インタビュー</span>
+                <span>アイデアが浮かばない人はこちら → AIと一緒に見つける</span>
                 <span aria-hidden>→</span>
               </a>
             </div>
@@ -4895,7 +4895,7 @@ export default function Home() {
                 href="/idea"
                 className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-sm font-semibold text-[var(--brand-ink,#9a3412)] no-underline transition hover:bg-[var(--brand-muted,#ffd9cc)]/40"
               >
-                アイデア発掘
+                アイデアを見つける
               </a>
               <div className="grid grid-cols-3 gap-2 sm:flex">
                 <button

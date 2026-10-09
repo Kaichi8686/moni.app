@@ -132,7 +132,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
           className="moni-btn-primary min-h-[40px] shrink-0 rounded-full px-3.5 text-[12px]"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden />
-          {tx("保存", "Save")}
+          {tx("メモする", "Add note")}
         </button>
       </div>
 
@@ -184,7 +184,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
                           : "bg-zinc-100 text-zinc-600"
                       }`}
                     >
-                      {idea.source === "interview" ? tx("発掘から", "From excavate") : tx("手動メモ", "Manual note")}
+                      {idea.source === "interview" ? tx("AIから", "From AI") : tx("自分でメモ", "My note")}
                     </span>
                     <time className="text-[11px] text-zinc-400" dateTime={idea.created_at}>
                       {formatSavedAt(idea.created_at, locale)}
