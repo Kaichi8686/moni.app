@@ -28,7 +28,7 @@ export function ScheduleSendModal({ onClose, onSchedule }: Props) {
           <input type="time" className="w-full rounded-xl border px-3 py-2 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
           <button
             type="button"
-            className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white"
+            className="w-full rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white"
             onClick={() => {
               if (!date) return;
               const iso = new Date(`${date}T${time}`).toISOString();

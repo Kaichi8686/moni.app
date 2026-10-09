@@ -54,7 +54,7 @@ export function ProjectsHomeView() {
             !hasSession ? (
               <Link
                 href="/login"
-                className="inline-flex min-h-[40px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
+                className="moni-btn-primary !min-h-[40px] shrink-0 px-4 text-sm"
               >
                 {tx("ログイン", "Log in")}
               </Link>
