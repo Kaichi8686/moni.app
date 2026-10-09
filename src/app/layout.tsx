@@ -65,7 +65,7 @@ export const metadata: Metadata = {
     template: "%s | moni",
   },
   description:
-    "Turn student ideas into action and records. AI coaching, timeline, search, Q&A, and pitch — in one place. / 学生の企画を実行と記録に。AI・タイムライン・検索・知恵袋・ピッチがひとつに。",
+    "Turn student ideas into action and records. AI coaching, timeline, search, Q&A, and pitch — in one place. / 学生の企画を実行と記録に。AI・タイムライン・探す・相談・ピッチがひとつに。",
   openGraph: siteUrl
     ? {
         type: "website",

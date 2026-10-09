@@ -165,23 +165,39 @@ export function InboxList() {
     return list;
   }, [conversations, filter, searchQuery, locale]);
 
-  const emptyHint = (() => {
+  const emptyCopy = (() => {
     if (filter === "projects") {
-      return tx(
-        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。右上から手動でも開始できます。",
-        "No project group chats yet. Joined projects appear here automatically, or start one from the pencil button.",
-      );
+      return {
+        title: tx("プロジェクトのグループはまだない", "No project groups yet"),
+        body: tx(
+          "参加中のプロジェクトがあればここに自動で出ます。すぐ始めたいときは下のボタンから。",
+          "Joined projects show up here automatically. Or start one below.",
+        ),
+        cta: true,
+      };
     }
     if (filter === "unread") {
-      return tx("未読のトークはありません。", "No unread chats.");
+      return {
+        title: tx("未読はなし", "No unread chats"),
+        body: tx("全部よんだね。新しいメッセージが来たらここに出ます。", "You're all caught up."),
+        cta: false,
+      };
     }
     if (filter === "groups") {
-      return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
+      return {
+        title: tx("グループはまだない", "No groups yet"),
+        body: tx("フォロー中の人とグループを作って、みんなで話しましょう。", "Make a group with people you follow."),
+        cta: true,
+      };
     }
-    return tx(
-      "まだトークがありません。右上からフォロー中の人やプロジェクトのグループラインを始めましょう。",
-      "No chats yet. Start one with people you follow or a project group line.",
-    );
+    return {
+      title: tx("まだメッセージがない", "No messages yet"),
+      body: tx(
+        "フォロー中の人やプロジェクトのメンバーに、最初のひとことを送ってみよう。",
+        "Send a first note to someone you follow or a project teammate.",
+      ),
+      cta: true,
+    };
   })();
 
   return (
@@ -201,7 +217,7 @@ export function InboxList() {
                 setShowNew(true);
               }}
               className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
-              aria-label={tx("新しいメール", "New mail")}
+              aria-label={tx("新しいメッセージ", "New message")}
             >
               <Pencil className="h-5 w-5" />
             </button>
@@ -241,7 +257,7 @@ export function InboxList() {
       <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
         {!userId ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-500">
-            <Link href="/" className="font-medium text-violet-600 underline">
+            <Link href="/" className="font-medium text-[var(--brand,#ff5c35)] underline">
               {tx("ログイン", "Log in")}
             </Link>
             {tx("するとメッセージが表示されます", " to see your messages")}
@@ -257,7 +273,28 @@ export function InboxList() {
         ) : loading ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
         ) : filtered.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
+          <div className="mx-4 my-6 rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-8 text-center">
+            <p className="text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)]">
+              {tx("次の一手", "Next step")}
+            </p>
+            <p className="mt-1 text-sm font-medium text-zinc-900">{emptyCopy.title}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">{emptyCopy.body}</p>
+            {emptyCopy.cta ? (
+              <button
+                type="button"
+                className="moni-btn-primary mx-auto mt-4 px-5"
+                onClick={() => {
+                  if (!userId) {
+                    router.push("/login?next=/messages");
+                    return;
+                  }
+                  setShowNew(true);
+                }}
+              >
+                {tx("メッセージを始める", "Start a message")}
+              </button>
+            ) : null}
+          </div>
         ) : (
           filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
         )}
@@ -315,7 +352,7 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
             )}
           </div>
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sky-50 text-sky-700">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]">
             {conversation.iconEmoji && conversation.iconEmoji !== "💬" ? (
               <span className="text-2xl">{conversation.iconEmoji}</span>
             ) : (

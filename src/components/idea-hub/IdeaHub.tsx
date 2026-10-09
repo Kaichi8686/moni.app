@@ -57,7 +57,7 @@ function IdeaHubInner() {
                   onClick={() => setTab(item.id)}
                   className={`min-h-[44px] rounded-lg px-1 py-2 text-[12px] font-semibold leading-snug transition sm:px-1.5 sm:text-[13px] ${
                     active
-                      ? "bg-white text-zinc-900 shadow-sm"
+                      ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)] shadow-sm ring-1 ring-[var(--brand-muted,#ffd9cc)]"
                       : "text-zinc-500 hover:text-zinc-800"
                   }`}
                 >
@@ -84,7 +84,7 @@ function IdeaHubInner() {
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                  className="mb-2 text-[13px] font-semibold text-[var(--brand,#ff5c35)] hover:underline"
                 >
                   {tx("← 相談AIに戻る", "← Back to consult AI")}
                 </button>

@@ -109,7 +109,7 @@ export function ProjectCompletionDateCard({
             type="date"
             value={startYmd}
             onChange={(e) => setStartYmd(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-2.5 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#5E6AD2] focus:bg-white focus:ring-2 focus:ring-[#5E6AD2]/20"
+            className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-2.5 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[var(--brand,#ff5c35)] focus:bg-white focus:ring-2 focus:ring-[rgba(255,92,53,0.2)]"
           />
         </label>
         <label className="block min-w-0 flex-1 text-[11px] font-medium text-[#6B7280]">
@@ -118,14 +118,14 @@ export function ProjectCompletionDateCard({
             type="date"
             value={targetYmd}
             onChange={(e) => setTargetYmd(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-2.5 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#5E6AD2] focus:bg-white focus:ring-2 focus:ring-[#5E6AD2]/20"
+            className="mt-1 w-full rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-2.5 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[var(--brand,#ff5c35)] focus:bg-white focus:ring-2 focus:ring-[rgba(255,92,53,0.2)]"
           />
         </label>
         <button
           type="button"
           disabled={saving || !targetYmd.trim()}
           onClick={() => void handleApply()}
-          className="inline-flex h-[38px] shrink-0 items-center justify-center rounded-md bg-[#5E6AD2] px-4 text-[13px] font-semibold text-white hover:bg-[#4F5BBD] disabled:opacity-50"
+          className="inline-flex h-[38px] shrink-0 items-center justify-center rounded-md bg-[var(--brand,#ff5c35)] px-4 text-[13px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
         >
           {saving ? "反映中…" : "期限を配分"}
         </button>

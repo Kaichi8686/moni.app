@@ -34,7 +34,7 @@ export function MemberAvatarBubble({ userId, name, avatarUrl, size = "md", class
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 via-rose-300 to-indigo-400 font-bold uppercase text-white shadow-sm ring-2 ring-white ${dim} ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 via-[var(--brand-muted,#ffd9cc)] to-[var(--brand,#ff5c35)] font-bold uppercase text-white shadow-sm ring-2 ring-white ${dim} ${className}`}
       aria-hidden
     >
       {initial}

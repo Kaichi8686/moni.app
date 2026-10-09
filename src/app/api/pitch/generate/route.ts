@@ -13,7 +13,7 @@ type Body = {
 
 const TYPE_HINT: Record<PitchType, string> = {
   investor: "投資家向け。市場規模・収益性・スケールを簡潔に。",
-  contest: "ビジコン向け。社会課題・革新性・チームを強調。",
+  contest: "コンテスト向け。社会課題・新しさ・チームを強調。中学生にも分かる言葉で。",
   teacher: "先生・保護者向け。学習効果・安全・プロセスを強調。",
 };
 

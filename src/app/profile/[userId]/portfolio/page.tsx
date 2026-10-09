@@ -67,7 +67,7 @@ export default function PortfolioPage() {
       <main className="mx-auto max-w-2xl space-y-6 px-4 py-6">
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-2xl">{tier.icon}</p>
-          <p className="mt-1 text-sm font-medium text-violet-600">{tier.label}</p>
+          <p className="mt-1 text-sm font-medium text-[var(--brand,#ff5c35)]">{tier.label}</p>
           <p className="mt-0.5 text-xs text-gray-500">{tierDesc}</p>
           <p className="mt-2 text-sm text-gray-700">{data.profile.bio || "—"}</p>
           <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600">
@@ -90,7 +90,10 @@ export default function PortfolioPage() {
                 const def = getBadgeDefinition(b.id);
                 const label = def ? badgeLabel(def, locale) : b.label;
                 return (
-                  <span key={b.id} className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-800">
+                  <span
+                    key={b.id}
+                    className="rounded-full bg-[var(--brand-soft,#fff4f0)] px-3 py-1 text-xs font-medium text-[var(--brand-ink,#9a3412)]"
+                  >
                     {b.icon} {label}
                   </span>
                 );
@@ -111,7 +114,7 @@ export default function PortfolioPage() {
                     <p className="font-semibold">{p.name}</p>
                     {p.description ? <p className="mt-1 text-xs text-gray-500 line-clamp-2">{p.description}</p> : null}
                     <p className="mt-2 text-[11px] text-gray-400">
-                      {tx("マイルストーン", "Milestones")} {p.milestoneCount} · {tx("未完了課題", "Open issues")}{" "}
+                      {tx("マイルストーン", "Milestones")} {p.milestoneCount} · {tx("残りのやること", "Open tasks")}{" "}
                       {p.openIssueCount}
                     </p>
                   </Link>

@@ -49,9 +49,9 @@ const STACK_ORDER: IssueStatus[] = ["in_progress", "in_review", "todo", "backlog
 
 const STACK_COLORS: Record<IssueStatus, string> = {
   backlog: "bg-zinc-300",
-  todo: "bg-sky-400",
-  in_progress: "bg-[#5E6AD2]",
-  in_review: "bg-violet-400",
+  todo: "bg-amber-300",
+  in_progress: "bg-[var(--brand,#ff5c35)]",
+  in_review: "bg-[var(--brand-muted,#ffd9cc)]",
   done: "bg-emerald-500",
   cancelled: "bg-zinc-200",
 };

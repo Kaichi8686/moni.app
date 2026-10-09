@@ -23,11 +23,11 @@ type MoniLandingProps = {
 const SIGNUP_HREF_PLACEHOLDER = "/login"; // TODO: 本番の新規登録URLに差し替え
 
 const ctaPrimaryClass =
-  "group inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-md bg-sky-600 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-sky-500 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:px-5 sm:text-sm";
+  "group inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-md bg-[var(--brand,#ff5c35)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,92,53,0.35)] focus-visible:ring-offset-2 sm:px-5 sm:text-sm";
 const ctaSecondaryClass =
   "inline-flex min-h-[40px] touch-manipulation items-center justify-center rounded-md border border-zinc-200 bg-white px-4 text-[13px] font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60 focus-visible:ring-offset-2 sm:text-sm";
 const ctaHeroPrimaryClass =
-  "group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-600 px-6 text-[15px] font-semibold text-white shadow-sm transition hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:w-auto sm:min-w-[200px]";
+  "group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-[var(--brand,#ff5c35)] px-6 text-[15px] font-semibold text-white shadow-sm transition hover:bg-[var(--brand-hover,#e04e2a)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,92,53,0.35)] focus-visible:ring-offset-2 sm:w-auto sm:min-w-[200px]";
 
 function SectionHeader({
   eyebrow,
@@ -42,7 +42,7 @@ function SectionHeader({
 }) {
   return (
     <header className="max-w-3xl">
-      <p className="text-[13px] font-medium tracking-[-0.01em] text-sky-700">{eyebrow}</p>
+      <p className="text-[13px] font-medium tracking-[-0.01em] text-[var(--brand-ink,#9a3412)]">{eyebrow}</p>
       <h2
         id={id}
         className="mt-3 text-[1.85rem] font-semibold leading-[1.12] tracking-[-0.035em] text-zinc-950 sm:text-[2.35rem]"
@@ -69,7 +69,7 @@ function AppShot({
           action: "開く",
           idea: "アイデア",
           projects: "プロジェクト",
-          search: "検索",
+          search: "探す",
           profile: "プロフィール",
           progress: "ロードマップ",
           qna: "質問・相談",
@@ -78,7 +78,7 @@ function AppShot({
           action: "Open",
           idea: "Ideas",
           projects: "Projects",
-          search: "Search",
+          search: "Explore",
           profile: "Profile",
           progress: "Roadmap",
           qna: "Q&A",
@@ -88,21 +88,21 @@ function AppShot({
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl shadow-zinc-900/8">
       <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
         <span className="moni-wordmark text-lg">moni</span>
-        <span className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+        <span className="rounded-md bg-[var(--brand,#ff5c35)] px-2.5 py-1 text-[11px] font-semibold text-white">
           {labels.action}
         </span>
       </div>
       <div className="flex gap-5 border-b border-zinc-100 px-4 pt-2 text-[12px] font-medium">
         <span className="relative pb-2 text-zinc-900">
           {labels.progress}
-          <span className="absolute inset-x-0 bottom-0 h-0.5 bg-sky-600" />
+          <span className="absolute inset-x-0 bottom-0 h-0.5 bg-[var(--brand,#ff5c35)]" />
         </span>
         <span className="pb-2 text-zinc-400">{labels.qna}</span>
       </div>
       {variant === "projects" ? (
         <div className="space-y-2.5 bg-zinc-50 p-3">
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
               {locale === "ja" ? "ビジネスアイデア" : "Business idea"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
@@ -113,7 +113,7 @@ function AppShot({
             <div className="mt-2 h-14 rounded-md border border-zinc-100 bg-zinc-50" />
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
               {locale === "ja" ? "検証メモ" : "Validation note"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
@@ -131,7 +131,7 @@ function AppShot({
               ? "このアイデア、本当に課題解決になってる？"
               : "Does this idea really solve a problem?"}
           </div>
-          <div className="ml-auto max-w-[82%] rounded-lg bg-sky-600 px-3 py-2 text-[13px] text-white">
+          <div className="ml-auto max-w-[82%] rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-2 text-[13px] text-white">
             {locale === "ja"
               ? "客単価と回転数を分けて見よう。まずは客単価。"
               : "Split by average spend and turnover. Start with avg spend."}
@@ -146,20 +146,27 @@ function AppShot({
       {variant === "qna" ? (
         <div className="bg-zinc-50 p-3">
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold text-sky-700">
-              {locale === "ja" ? "知恵袋メモ" : "Q&A Note"}
+            <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
+              {locale === "ja" ? "相談メモ" : "Q&A Note"}
             </p>
             <ul className="mt-2 space-y-1.5 text-[12px] text-zinc-600">
-              <li>{locale === "ja" ? "1) 質問文を1行で具体化" : "1) Make your question concrete"}</li>
-              <li>{locale === "ja" ? "2) ベストアンサーを採用" : "2) Pick a best answer"}</li>
-              <li>{locale === "ja" ? "3) 次の検証タスクに変換" : "3) Turn it into next tasks"}</li>
+              <li>{locale === "ja" ? "1) 聞きたいことを1行で書く" : "1) Make your question concrete"}</li>
+              <li>{locale === "ja" ? "2) いい答えを選ぶ" : "2) Pick a best answer"}</li>
+              <li>{locale === "ja" ? "3) 次のやることにする" : "3) Turn it into next tasks"}</li>
             </ul>
           </div>
         </div>
       ) : null}
-      <div className="flex justify-around border-t border-zinc-100 bg-white px-2 py-2.5 text-[10px] font-medium text-zinc-400">
+      <div className="flex justify-around border-t border-zinc-100 bg-white px-2 py-2 text-[10px] font-medium text-zinc-400">
         {[labels.projects, labels.idea, labels.search, labels.profile].map((x, i) => (
-          <span key={x} className={i === 0 ? "font-semibold text-zinc-800" : ""}>
+          <span
+            key={x}
+            className={
+              i === 0
+                ? "font-semibold text-[var(--brand,#ff5c35)]"
+                : ""
+            }
+          >
             {x}
           </span>
         ))}
@@ -195,51 +202,53 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
 
   const ja = locale === "ja";
   const heroAudience = ja
-    ? "高校生・大学生のビジネスアイデア実現チーム向け"
-    : "For student teams turning business ideas into reality";
+    ? "アイデアを持っている人と、一緒に実現できる人をつなぐ場所"
+    : "Where idea holders meet people who can help make them real";
   const heroHook = ja ? "アイデアに舞台を" : "Give ideas a stage";
   const primary = ja ? "無料で始める" : "Start free";
   const secondary = ja ? "中身を先に見る" : "Preview the app";
 
-  const stats = ja
+  const journey = ja
     ? [
-        { value: "—", label: "利用中の学校", note: "TODO: 実データ" },
-        { value: "—", label: "登録ユーザー", note: "TODO: 実データ" },
-        { value: "—", label: "進行中の企画", note: "TODO: 実データ" },
+        { step: "01", label: "アイデア", hint: "思いつきを言葉にする" },
+        { step: "02", label: "人とつながる", hint: "仲間・協力者を見つける" },
+        { step: "03", label: "プロジェクト", hint: "計画とやることが見える" },
+        { step: "04", label: "現実にする", hint: "一歩ずつ形にする" },
       ]
     : [
-        { value: "—", label: "Schools", note: "TODO: live data" },
-        { value: "—", label: "Users", note: "TODO: live data" },
-        { value: "—", label: "Active projects", note: "TODO: live data" },
+        { step: "01", label: "Ideas", hint: "Put the spark into words" },
+        { step: "02", label: "People", hint: "Find collaborators" },
+        { step: "03", label: "Projects", hint: "See the plan and tasks" },
+        { step: "04", label: "Reality", hint: "Ship it step by step" },
       ];
 
   const pains = ja
     ? [
         {
-          before: "ビジネスアイデアはあるのに、誰が何をやるか曖昧で前に進まない。",
-          after: "moniの課題で「誰が・いつまでに・何をやるか」を固定し、流れを止めない。",
+          before: "アイデアはあるのに、誰が何をやるか曖昧で前に進まない。",
+          after: "やることリストで「誰が・いつまでに・何をするか」をはっきりさせて、止まらない。",
         },
         {
-          before: "思いついた案を説明するとき、価値と優先順位が散らかって伝わらない。",
-          after: "知恵袋で他校の視点を集め、論点を3つに絞って先生向け説明にまとめられる。",
+          before: "思いついた案を説明するとき、大事な点が散らかって伝わらない。",
+          after: "相談コーナーでほかの人の視点を集め、伝えたいことを3つに絞れる。",
         },
         {
-          before: "『次に何を検証するの？』と聞かれても具体的な一手が出ない。",
-          after: "知恵袋で質問し、ベストアンサーを採用して次の検証計画に直結させる。",
+          before: "『次に何をするの？』と聞かれても、具体的な一手が出ない。",
+          after: "質問して答えをもらい、その場で次の一歩にできる。",
         },
       ]
     : [
         {
-          before: "You have a business idea, but roles are vague and execution stalls.",
-          after: "Use moni tasks to lock who does what by when.",
+          before: "You have an idea, but roles are vague and progress stalls.",
+          after: "Use tasks to lock who does what by when.",
         },
         {
-          before: "You can explain the idea, but priorities and value proposition are still messy.",
-          after: "Gather perspectives in Q&A and narrow it down to three clear points for teachers.",
+          before: "You can explain the idea, but the key points still feel scattered.",
+          after: "Gather perspectives in Q&A and narrow it to three clear points.",
         },
         {
-          before: "When asked what to validate next, you cannot answer concretely.",
-          after: "Ask in Q&A, pick a best answer, and convert it to a next test.",
+          before: "When asked what's next, you cannot answer concretely.",
+          after: "Ask in Q&A, pick a best answer, and turn it into the next step.",
         },
       ];
 
@@ -247,23 +256,23 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
     ? [
         {
           marker: "01",
-          title: "アイデア知恵袋",
-          subtitle: "悩みを投げると、実行に使える答えが返ってくる",
-          body: "アイデア段階の悩みを具体的な質問にして、ベストアンサーを次のタスクに変換する。",
+          title: "相談してアイデアを磨く",
+          subtitle: "悩みを投げると、次に使える答えが返ってくる",
+          body: "モヤモヤを具体的な質問にして、いい答えを次のやることにつなげる。",
           shot: "qna" as const,
         },
         {
           marker: "02",
-          title: "プロジェクト管理",
-          subtitle: "ロードマップと課題で、次の一手が見える",
+          title: "プロジェクトを進める",
+          subtitle: "計画とやることで、次の一手が見える",
           body: "進捗・担当・期限をひとつにまとめ、チーム全員が迷わず動ける。",
           shot: "projects" as const,
         },
         {
           marker: "03",
-          title: "検索・チャット",
-          subtitle: "同じ熱量の仲間と、学校の外でもつながれる",
-          body: "キーワードや関心で探して、そのままDM。企画の相談が日常の会話になる。",
+          title: "仲間を見つけて話す",
+          subtitle: "同じ熱量の人と、すぐつながれる",
+          body: "興味で探して、そのままメッセージ。相談が日常の会話になる。",
           shot: "chat" as const,
         },
       ]
@@ -296,44 +305,44 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
         {
           n: 1,
           title: "アイデアを見つける",
-          body: "モヤモヤから、ビジネスの種を掘り起こす。AI発掘インタビューが伴走します。",
+          body: "モヤモヤを言葉にする。AIとの対話が、アイデアを一緒に引き出します。",
           icon: Lightbulb,
-          visualLabel: "アイデア · 発掘",
+          visualLabel: "アイデア",
         },
         {
           n: 2,
           title: "プロジェクトにする",
-          body: "種を深めて計画に落とし込む。ロードマップとタスクで形にします。",
+          body: "思いつきを計画に落とし込む。道筋とやることで形にします。",
           icon: FolderKanban,
           visualLabel: "プロジェクト",
         },
         {
           n: 3,
           title: "仲間と組む",
-          body: "得意分野を持つ仲間とマッチングしてつながる。探すタブから見つけられます。",
+          body: "得意なことが違う人とつながる。探すタブから見つけられます。",
           icon: Users,
-          visualLabel: "探す · マッチング",
+          visualLabel: "探す",
         },
         {
           n: 4,
           title: "実行する",
-          body: "プロジェクト内の機能で、実現に向けて一歩ずつ進める。",
+          body: "プロジェクトの中で、実現に向けて一歩ずつ進める。",
           icon: Rocket,
-          visualLabel: "実行サポート",
+          visualLabel: "進める",
         },
         {
           n: 5,
           title: "相談する",
-          body: "迷ったらコミュニティで質問・相談。知恵袋が次の一手をくれます。",
+          body: "迷ったらコミュニティで質問・相談。次の一手が見えてくる。",
           icon: MessageCircleQuestion,
-          visualLabel: "ホーム · 質問相談",
+          visualLabel: "相談",
         },
         {
           n: 6,
           title: "発表する",
           body: "望めば、アイデアを発表する場も用意。積み上げた記録がそのまま材料に。",
           icon: Mic2,
-          visualLabel: "発表の場",
+          visualLabel: "発表",
         },
       ]
     : [
@@ -389,8 +398,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           note: "TODO: 実名許諾後に差し替え",
         },
         {
-          quote: "課題と知恵袋を使うと、次にやることが毎回具体化できる。",
-          who: "高校3年・ビジネス探究",
+          quote: "やることリストと相談を使うと、次にやることが毎回はっきりする。",
+          who: "高校3年・探究",
           note: "TODO: 実名許諾後に差し替え",
         },
         {
@@ -506,13 +515,13 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
         {/* Hero */}
         <section className="relative overflow-hidden px-4 pb-16 pt-[6.25rem] sm:px-6 sm:pb-24 sm:pt-32">
           <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(14,165,233,0.08),transparent_55%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_55%_at_50%_-12%,rgba(255,92,53,0.12),transparent_58%),radial-gradient(ellipse_50%_40%_at_100%_0%,rgba(255,217,204,0.35),transparent_50%)]"
             aria-hidden
           />
           <div className="relative mx-auto grid max-w-6xl gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:gap-16">
             <div className="text-left">
               <p className="moni-wordmark mb-5 text-[1.35rem] sm:text-[1.5rem]">{t("landingBrand")}</p>
-              <p className="text-[14px] font-medium leading-snug tracking-[-0.01em] text-zinc-500 sm:text-[15px]">
+              <p className="text-[14px] font-medium leading-snug tracking-[-0.01em] text-[var(--brand-ink,#9a3412)] sm:text-[15px]">
                 {heroAudience}
               </p>
               <h1 className="mt-4 max-w-full text-balance font-[family-name:var(--font-instrument-serif)] text-[clamp(2rem,9vw,2.4rem)] font-normal leading-[1.08] tracking-[-0.03em] text-zinc-950 sm:whitespace-nowrap sm:text-[4.25rem] sm:leading-[1.02]">
@@ -553,30 +562,42 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           </div>
         </section>
 
-        {/* Trust / stats */}
+        {/* Journey: Ideas → People → Projects → Reality */}
         <section
-          className="border-y border-zinc-100 bg-zinc-50/80 px-4 py-10 sm:px-6 sm:py-12"
-          aria-label={ja ? "利用状況" : "Traction"}
+          className="border-y border-[var(--brand-muted,#ffd9cc)]/60 bg-[var(--brand-soft,#fff4f0)]/55 px-4 py-10 sm:px-6 sm:py-12"
+          aria-label={ja ? "moniでできること" : "What you can do on moni"}
         >
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-            {stats.map((s) => (
-              <article
-                key={s.label}
-                className="rounded-xl border border-zinc-200 bg-white px-5 py-5 shadow-sm shadow-zinc-900/[0.03] sm:px-6 sm:py-6"
-                title={s.note}
-              >
-                <p className="font-[family-name:var(--font-geist-mono)] text-3xl font-medium tracking-[-0.04em] text-zinc-950 sm:text-4xl">
-                  {s.value}
-                </p>
-                <p className="mt-2 text-[13px] font-medium text-zinc-500">{s.label}</p>
-              </article>
-            ))}
+          <div className="mx-auto max-w-5xl">
+            <p className="text-center text-[12px] font-semibold tracking-[-0.01em] text-[var(--brand-ink,#9a3412)]">
+              {ja
+                ? "アイデア → 人とつながる → プロジェクト → 現実にする"
+                : "Ideas → People → Projects → Reality"}
+            </p>
+            <ol className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+              {journey.map((item, idx) => (
+                <li
+                  key={item.step}
+                  className="relative rounded-xl border border-white/80 bg-white/90 px-4 py-4 shadow-sm shadow-[rgba(255,92,53,0.06)]"
+                >
+                  <p className="font-[family-name:var(--font-geist-mono)] text-[11px] font-semibold tabular-nums text-[var(--brand,#ff5c35)]">
+                    {item.step}
+                  </p>
+                  <p className="mt-1.5 text-[14px] font-semibold tracking-[-0.02em] text-zinc-900">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-zinc-500">{item.hint}</p>
+                  {idx < journey.length - 1 ? (
+                    <span
+                      className="pointer-events-none absolute -right-2 top-1/2 hidden -translate-y-1/2 text-[var(--brand-muted,#ffd9cc)] sm:block"
+                      aria-hidden
+                    >
+                      →
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
           </div>
-          <p className="mx-auto mt-4 max-w-5xl text-[11px] leading-relaxed text-zinc-400">
-            {ja
-              ? "※ 数値はプレースホルダーです。公開可能な実データ取得後に差し替えてください。"
-              : "※ Metrics are placeholders. Replace with approved live data."}
-          </p>
         </section>
 
         {/* Pain */}
@@ -584,16 +605,16 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           <div className="mx-auto max-w-6xl">
             <SectionHeader
               id="pain-title"
-              eyebrow={ja ? "現場で起きること" : "What actually happens"}
+              eyebrow={ja ? "よくあるつまずき" : "What usually gets stuck"}
               title={
                 ja
-                  ? "モヤモヤは、ビジネスアイデア実現の現場で起きている。"
-                  : "The friction happens while turning ideas into real execution."
+                  ? "アイデアはあっても、次の一歩で止まりやすい。"
+                  : "Ideas stall when the next step is unclear."
               }
               body={
                 ja
-                  ? "抽象的な課題ではなく、学校生活の具体シーンで起きる詰まりを解く。"
-                  : "Not abstract productivity tips. Concrete situations in student life."
+                  ? "難しい専門用語ではなく、日常で起きる「詰まり」をほどく。"
+                  : "Not jargon — concrete friction that shows up in real life."
               }
             />
 
@@ -601,7 +622,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
               {pains.map((row, idx) => (
                 <li
                   key={row.before}
-                  className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm shadow-zinc-900/[0.02]"
+                  className="overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-sm shadow-[rgba(255,92,53,0.04)]"
                 >
                   <div className="grid sm:grid-cols-[1fr_auto_1fr]">
                     <div className="p-5 sm:p-6">
@@ -610,11 +631,11 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                       </p>
                       <p className="mt-2 text-[14px] leading-relaxed text-zinc-600">{row.before}</p>
                     </div>
-                    <div className="flex items-center justify-center border-y border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] font-semibold tracking-wide text-zinc-500 sm:border-x sm:border-y-0">
-                      {`CASE 0${idx + 1}`}
+                    <div className="flex items-center justify-center border-y border-[var(--brand-muted,#ffd9cc)]/50 bg-[var(--brand-soft,#fff4f0)] px-4 py-2 text-[11px] font-semibold tracking-wide text-[var(--brand-ink,#9a3412)] sm:border-x sm:border-y-0">
+                      {`0${idx + 1}`}
                     </div>
-                    <div className="border-t border-zinc-100 bg-zinc-50/80 p-5 sm:border-t-0 sm:p-6">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-sky-700">
+                    <div className="border-t border-[var(--brand-muted,#ffd9cc)]/40 bg-[var(--brand-soft,#fff4f0)]/70 p-5 sm:border-t-0 sm:p-6">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--brand-ink,#9a3412)]">
                         With moni
                       </p>
                       <p className="mt-2 text-[14px] font-medium leading-relaxed text-zinc-900">
@@ -629,14 +650,17 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
         </section>
 
         {/* Features */}
-        <section id="features" className="border-y border-zinc-100 bg-zinc-50/60 px-4 py-20 sm:px-6 sm:py-28">
+        <section
+          id="features"
+          className="border-y border-[var(--brand-muted,#ffd9cc)]/50 bg-[var(--brand-soft,#fff4f0)]/40 px-4 py-20 sm:px-6 sm:py-28"
+        >
           <div className="mx-auto max-w-6xl">
             <SectionHeader
               eyebrow={ja ? "できること" : "Features"}
               title={ja ? "機能は、単体ではなく連携して効く。" : "Features work best as a connected flow."}
               body={
                 ja
-                  ? "知恵袋→課題→検索→チャットの往復で、アイデアが実行に変わる。"
+                  ? "相談 → やること → 仲間探し → チャットの往復で、アイデアが形になる。"
                   : "Q&A, tasks, search, and chat reinforce each other."
               }
             />
@@ -645,12 +669,12 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
               {features.map((item, idx) => (
                 <article
                   key={item.title}
-                  className={`grid items-center gap-8 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm shadow-zinc-900/[0.03] sm:p-8 lg:grid-cols-2 lg:gap-12 ${
+                  className={`grid items-center gap-8 rounded-2xl border border-white/90 bg-white p-5 shadow-sm shadow-[rgba(255,92,53,0.05)] sm:p-8 lg:grid-cols-2 lg:gap-12 ${
                     idx % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""
                   }`}
                 >
                   <div>
-                    <p className="font-[family-name:var(--font-geist-mono)] text-[12px] font-medium tracking-wide text-sky-700">
+                    <p className="font-[family-name:var(--font-geist-mono)] text-[12px] font-medium tracking-wide text-[var(--brand-ink,#9a3412)]">
                       {item.marker}
                     </p>
                     <h3 className="mt-3 text-[1.5rem] font-semibold leading-[1.15] tracking-[-0.03em] text-zinc-950 sm:text-[1.85rem]">
@@ -756,7 +780,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                     },
                     {
                       q: "プロジェクトの活動は誰に見えますか？",
-                      a: "プロジェクト内の活動はメンバーに共有されます。内容に応じてDMや知恵袋も使い分けてください。",
+                      a: "プロジェクト内の活動はメンバーに共有されます。内容に応じてメッセージや相談コーナーも使い分けてください。",
                     },
                   ]
                 : [
@@ -830,7 +854,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                 <>
                   <button
                     type="button"
-                    className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-500 px-8 text-[15px] font-semibold text-white transition hover:bg-sky-400"
+                    className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-[var(--brand,#ff5c35)] px-8 text-[15px] font-semibold text-white transition hover:bg-[var(--brand-hover,#e04e2a)]"
                     onClick={onStart}
                   >
                     {primary}

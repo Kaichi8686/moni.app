@@ -16,7 +16,7 @@ function Col({ id, title, children }: { id: string; title: string; children: Rea
     <div
       ref={setNodeRef}
       className={`min-w-[200px] flex-1 rounded-md border bg-[#F7F8F8] p-2 ${
-        isOver ? "border-[#5E6AD2] ring-2 ring-[#5E6AD2]/20" : "border-[#E5E7EB]"
+        isOver ? "border-[var(--brand,#ff5c35)] ring-2 ring-[rgba(255,92,53,0.2)]" : "border-[#E5E7EB]"
       }`}
     >
       <p className="mb-2 px-1 text-xs font-semibold text-[#6B7280]">{title}</p>

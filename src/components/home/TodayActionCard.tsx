@@ -74,24 +74,24 @@ export function TodayActionCard({ userId }: Props) {
   if (!userId) return null;
 
   return (
-    <section className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 shadow-sm">
+    <section className="moni-soft-card p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-violet-900">{t("todayAction")}</h2>
+        <h2 className="text-sm font-semibold text-[var(--brand-ink,#9a3412)]">{t("todayAction")}</h2>
         <button
           type="button"
           disabled={loading}
-          className="text-xs font-semibold text-violet-600 hover:underline disabled:opacity-50"
+          className="text-xs font-semibold text-[var(--brand,#ff5c35)] hover:underline disabled:opacity-50"
           onClick={() => void generate()}
         >
           {loading ? "…" : action ? t("todayActionUpdate") : t("todayActionGenerate")}
         </button>
       </div>
       {action ? (
-        <p className="text-sm leading-relaxed text-gray-800">{action}</p>
+        <p className="text-sm leading-relaxed text-zinc-800">{action}</p>
       ) : (
-        <p className="text-sm text-gray-500">{t("todayActionHint")}</p>
+        <p className="text-sm text-zinc-500">{t("todayActionHint")}</p>
       )}
-      {date ? <p className="mt-1 text-[11px] text-gray-400">{date}</p> : null}
+      {date ? <p className="mt-1 text-[11px] text-zinc-400">{date}</p> : null}
     </section>
   );
 }

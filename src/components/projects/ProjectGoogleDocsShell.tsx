@@ -272,7 +272,7 @@ export function ProjectGoogleDocsShell({
             type="button"
             onClick={() => void handleSave()}
             disabled={saving || activeDocId === null}
-            className="ml-auto rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+            className="moni-btn-primary ml-auto !rounded-md px-3 py-1.5 !text-[12px] disabled:opacity-50"
           >
             {saving ? "保存中…" : "保存"}
           </button>

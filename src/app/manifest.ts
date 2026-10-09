@@ -5,12 +5,12 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "moni",
     short_name: "moni",
-    description: "起業・探究に本気の学生向け。企画の壁打ちから仲間・実行・記録まで。",
+    description: "アイデアを持っている人と、一緒に実現できる人をつなぎ、プロジェクトとして進める場所。",
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#f4f6ff",
-    theme_color: "#6366f1",
+    background_color: "#fafaf8",
+    theme_color: "#ff5c35",
     categories: ["education", "social"],
     icons: [
       {

@@ -50,7 +50,7 @@ export default function WorkspaceGeminiHub() {
       router.replace(`/projects/${projectId}/coach?mode=ideas`, { scroll: false });
       setHandoffPrompt(
         [
-          `ビジネスアイデア発掘インタビューからの引き継ぎです。`,
+          `アイデア探しの会話からの引き継ぎです。`,
           `選んだ種: ${handoff.seedTitle}`,
           `概要: ${handoff.seedSummary}`,
           handoff.theme ? `テーマ: ${handoff.theme}` : "",
