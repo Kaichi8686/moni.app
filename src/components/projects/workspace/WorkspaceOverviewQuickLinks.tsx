@@ -21,7 +21,7 @@ const LINKS = [
   { id: "schedule", label: "予定", labelEn: "Schedule", desc: "カレンダー", descEn: "Calendar", icon: Calendar },
   { id: "whiteboard", label: "ホワイトボード", labelEn: "Whiteboard", desc: "無限キャンバスで描く", descEn: "Infinite canvas", icon: PenSquare },
   { id: "ideas", label: "投票", labelEn: "Vote", desc: "テーマごとに選択肢へ投票する", descEn: "Vote on options", icon: Lightbulb },
-  { id: "chat", label: "メール", labelEn: "Mail", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
+  { id: "chat", label: "メッセージ", labelEn: "Messages", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
   { id: "members", label: "メンバー", labelEn: "Members", desc: "参加メンバー", descEn: "People in this project", icon: Users },
   { id: "activity", label: "活動", labelEn: "Activity", desc: "最近の更新", descEn: "Recent updates", icon: Radio },
 ] as const;
@@ -41,13 +41,15 @@ export function WorkspaceOverviewQuickLinks({ projectId }: { projectId: string }
             href={href}
             className={`flex items-start gap-3 rounded-lg border px-3 py-3 transition ${
               "featured" in item && item.featured
-                ? "border-violet-200 bg-violet-50/70 hover:border-violet-300 hover:bg-violet-50"
-                : "border-[#E5E7EB] bg-white hover:border-violet-200 hover:bg-violet-50/40"
+                ? "border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/80 hover:border-[var(--brand,#ff5c35)] hover:bg-[var(--brand-soft,#fff4f0)]"
+                : "border-[#E5E7EB] bg-white hover:border-[var(--brand-muted,#ffd9cc)] hover:bg-[var(--brand-soft,#fff4f0)]/40"
             }`}
           >
             <span
               className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                "featured" in item && item.featured ? "bg-violet-100 text-violet-700" : "bg-[#F7F8F8] text-[#5E6AD2]"
+                "featured" in item && item.featured
+                  ? "bg-[var(--brand-muted,#ffd9cc)] text-[var(--brand-ink,#9a3412)]"
+                  : "bg-[#F7F8F8] text-[var(--brand,#ff5c35)]"
               }`}
             >
               <Icon className="h-4 w-4" aria-hidden />

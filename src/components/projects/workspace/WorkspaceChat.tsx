@@ -94,7 +94,7 @@ function Avatar({ userId, name, url, size = 40 }: { userId?: string; name: strin
   return (
     <div
       style={{ width: size, height: size }}
-      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 via-rose-300 to-indigo-400 text-sm font-bold uppercase text-white"
+      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-200 via-[var(--brand-muted,#ffd9cc)] to-[var(--brand,#ff5c35)] text-sm font-bold uppercase text-white"
       aria-hidden
     >
       {initial}

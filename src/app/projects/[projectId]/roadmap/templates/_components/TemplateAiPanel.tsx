@@ -34,9 +34,9 @@ export function TemplateAiPanel({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-4 py-4">
+      <div className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-gradient-to-br from-[var(--brand-soft,#fff4f0)] to-white px-4 py-4">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand,#ff5c35)] text-white">
             <Sparkles className="h-5 w-5" aria-hidden />
           </span>
           <div>

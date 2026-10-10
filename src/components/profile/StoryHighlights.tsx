@@ -22,7 +22,7 @@ export function StoryHighlights({ projects, isOwnProfile }: Props) {
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-500">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[var(--brand,#ff5c35)]">
           <FolderKanban className="h-5 w-5" aria-hidden />
         </div>
         <p className="text-[15px] font-semibold tracking-tight text-zinc-900">
@@ -30,15 +30,15 @@ export function StoryHighlights({ projects, isOwnProfile }: Props) {
         </p>
         <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-zinc-500">
           {isOwnProfile
-            ? tx("企画を始めると、ここに進捗と役割が表示されます。", "Start a project and your progress and role will show up here.")
+            ? tx(
+                "仲間と一緒に進める場所です。まずはプロジェクトを作るか、参加してみよう。",
+                "This is where you build with others. Create a project or join one to get started.",
+              )
             : tx("このユーザーの参加プロジェクトはまだありません。", "This user hasn’t joined any projects yet.")}
         </p>
         {isOwnProfile ? (
-          <Link
-            href="/projects"
-            className="mt-5 inline-flex min-h-[40px] items-center rounded-lg bg-zinc-900 px-4 text-[13px] font-semibold text-white transition hover:bg-zinc-800"
-          >
-            {tx("プロジェクトを探す / 作る", "Find or create a project")}
+          <Link href="/projects" className="moni-btn-primary mt-5 min-h-[40px] rounded-lg px-4 text-[13px]">
+            {tx("次の一手：プロジェクトを始める", "Next: start a project")}
           </Link>
         ) : null}
       </div>
@@ -60,7 +60,7 @@ export function StoryHighlights({ projects, isOwnProfile }: Props) {
             href={`/projects/${project.id}`}
             className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3.5 py-3 transition hover:border-zinc-300"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-[13px] font-bold text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] text-[13px] font-bold text-[var(--brand-ink,#9a3412)]">
               {(project.name.trim().charAt(0) || "?").toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">

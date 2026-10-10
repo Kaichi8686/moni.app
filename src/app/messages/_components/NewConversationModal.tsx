@@ -142,7 +142,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
       <div className="max-h-[85dvh] w-full max-w-lg overflow-hidden rounded-t-2xl bg-white sm:rounded-2xl">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-semibold text-zinc-900">{tx("新しいメール", "New mail")}</h2>
+          <h2 className="font-semibold text-zinc-900">{tx("新しいメッセージ", "New message")}</h2>
           <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-zinc-100">
             <X className="h-5 w-5" />
           </button>
@@ -166,7 +166,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
             >
               {m.label}
               {mode === m.key ? (
-                <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900" aria-hidden />
+                <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--brand,#ff5c35)]" aria-hidden />
               ) : null}
             </button>
           ))}
@@ -313,7 +313,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
                 type="button"
                 disabled={loading || selectedIds.size === 0}
                 onClick={() => void createFollowGroup()}
-                className="inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40"
+                className="moni-btn-primary w-full gap-2 disabled:opacity-40"
               >
                 <Users className="h-4 w-4" aria-hidden />
                 {tx(

@@ -15,11 +15,11 @@ export function ProfileMoniTier({ tier, userId }: Props) {
   const description = locale === "en" ? meta.descriptionEn : meta.description;
   return (
     <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-800" title={description}>
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--brand-ink,#9a3412)]" title={description}>
         <span aria-hidden>{meta.icon}</span>
         {meta.label}
       </span>
-      <Link href={`/profile/${userId}/portfolio`} className="text-xs font-medium text-violet-600 hover:underline">
+      <Link href={`/profile/${userId}/portfolio`} className="text-xs font-medium text-[var(--brand,#ff5c35)] hover:underline">
         {tx("ポートフォリオ →", "Portfolio →")}
       </Link>
     </div>

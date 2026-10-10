@@ -1,13 +1,13 @@
 /** Deterministic avatar background from a display name (styling only). */
 
 const AVATAR_TONES = [
-  "#4F46E5", // indigo
+  "#ff5c35", // brand orange
   "#0D9488", // teal
   "#DB2777", // pink
   "#D97706", // amber
-  "#2563EB", // blue
+  "#ea580c", // deep orange
   "#059669", // emerald
-  "#7C3AED", // violet
+  "#c2410c", // burnt orange
   "#DC2626", // red
   "#0891B2", // cyan
   "#CA8A04", // yellow-ish

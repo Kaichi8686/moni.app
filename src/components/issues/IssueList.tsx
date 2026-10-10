@@ -85,7 +85,7 @@ export function IssueList({
                       {i.title}
                     </span>
                     {guided ? (
-                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-100">
+                      <span className="rounded-full bg-[var(--brand-soft,#fff4f0)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand-ink,#9a3412)] ring-1 ring-[var(--brand-muted,#ffd9cc)]">
                         {tx("ガイドあり", "Has guide")}
                       </span>
                     ) : null}

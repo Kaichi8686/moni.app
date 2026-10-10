@@ -252,7 +252,7 @@ export function ProjectsLinearHome() {
             </select>
             <button
               type="button"
-              className="rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#4F5BBD]"
+              className="rounded-md bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
               onClick={() => setModal(true)}
             >
               ＋ 新規プロジェクト
@@ -261,11 +261,11 @@ export function ProjectsLinearHome() {
         </header>
         {err ? <div className="mx-4 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{err}</div> : null}
         {lastProject ? (
-          <div className="mx-4 mt-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
-            <p className="text-[12px] font-medium text-violet-900">前回のプロジェクト</p>
+          <div className="mx-4 mt-3 rounded-lg border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-4 py-3">
+            <p className="text-[12px] font-medium text-[var(--brand-ink,#9a3412)]">前回のプロジェクト</p>
             <Link
               href={`/projects/${lastProject.id}/roadmap`}
-              className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-violet-700 hover:underline"
+              className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand,#ff5c35)] hover:underline"
             >
               {lastProject.name} のロードマップを続ける →
             </Link>
@@ -341,7 +341,7 @@ export function ProjectsLinearHome() {
               <button type="button" className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-sm" onClick={() => setModal(false)} disabled={creating}>
                 キャンセル
               </button>
-              <button type="submit" className="rounded-md bg-[#5E6AD2] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50" disabled={creating}>
+              <button type="submit" className="rounded-md bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50" disabled={creating}>
                 作成
               </button>
             </div>

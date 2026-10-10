@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { Mail } from "lucide-react";
+import { FolderKanban, Lightbulb, MessageCircle, Search, UserRound } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
@@ -18,36 +18,38 @@ type NavItem = {
   badgeKey?: "mail";
 };
 
+const iconProps = { className: "app-bottom-nav-svg", strokeWidth: 1.85, "aria-hidden": true as const };
+
 const NAV: NavItem[] = [
   {
     href: HOME_PROJECTS_HREF,
     labelKey: "navProjects",
-    icon: "▦",
+    icon: <FolderKanban {...iconProps} />,
     match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
   },
   {
     href: "/messages",
     labelKey: "navMail",
-    icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    icon: <MessageCircle {...iconProps} />,
     match: (p) => p === "/messages" || p.startsWith("/messages/"),
     badgeKey: "mail",
   },
   {
     href: "/idea",
     labelKey: "navIdea",
-    icon: "✦",
+    icon: <Lightbulb {...iconProps} />,
     match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
   },
   {
     href: "/?tab=chat",
     labelKey: "navSearch",
-    icon: "⌕",
+    icon: <Search {...iconProps} />,
     match: (p, tab) => (p === "/" && tab === "chat") || p === "/discover" || p.startsWith("/discover/"),
   },
   {
     href: "/profile",
     labelKey: "navProfile",
-    icon: "◉",
+    icon: <UserRound {...iconProps} />,
     match: (p) => p.startsWith("/profile"),
   },
 ];
@@ -148,6 +150,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
                   </span>
                 ) : null}
               </span>
+              <span className="app-bottom-nav-label">{label}</span>
               {active ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
             </Link>
           );

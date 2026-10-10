@@ -16,8 +16,8 @@ import {
 function BoardIcon() {
   return (
     <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden className="shrink-0">
-      <rect x="3" y="4" width="18" height="16" rx="2" fill="#EDE9FE" stroke="#7C3AED" strokeWidth="1.4" />
-      <path d="M7 15c1.2-2.2 2.2-3.2 3.4-3.2 1.4 0 1.6 2 3 2 1.1 0 2-1.2 3.2-3.2" fill="none" stroke="#7C3AED" strokeWidth="1.4" strokeLinecap="round" />
+      <rect x="3" y="4" width="18" height="16" rx="2" fill="#FFF4F0" stroke="#FF5C35" strokeWidth="1.4" />
+      <path d="M7 15c1.2-2.2 2.2-3.2 3.4-3.2 1.4 0 1.6 2 3 2 1.1 0 2-1.2 3.2-3.2" fill="none" stroke="#FF5C35" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -205,7 +205,7 @@ export default function WorkspaceWhiteboard() {
           onDelete={(id) => void removeBoard(id)}
           heading="ホワイトボード"
           searchPlaceholder="ボードを検索"
-          emptyLabel="ボードがありません"
+          emptyLabel="まだボードがありません。右上の「新しいボード」から、アイデアを書き出す場所を作れます。"
           untitledLabel="無題のボード"
           noun="ボード"
           fabLabel="新しいボード"

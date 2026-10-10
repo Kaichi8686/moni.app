@@ -320,7 +320,7 @@ export function BusinessSeedApp() {
     <div className="min-h-[100dvh] bg-gradient-to-b from-zinc-50 to-zinc-100 pb-24 text-zinc-900">
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 px-4 py-3 backdrop-blur-md">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-          <Link href="/" className="text-sm font-semibold text-sky-700 hover:underline">
+          <Link href="/" className="text-sm font-semibold text-[var(--brand-ink,#9a3412)] hover:underline">
             ← moni へ
           </Link>
           <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">7日チャレンジ</span>
@@ -344,7 +344,7 @@ export function BusinessSeedApp() {
               まずはあなたの興味・関心を書いてください（例：地域のカフェ / 中学生のバイト / アプリ開発）。
             </p>
             <textarea
-              className="min-h-[120px] w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-base outline-none ring-zinc-900/5 focus:border-sky-500 focus:ring-2"
+              className="min-h-[120px] w-full rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-base outline-none ring-zinc-900/5 focus:border-[var(--brand,#ff5c35)] focus:ring-2"
               placeholder="気になることを自由に…"
               value={interests}
               onChange={(e) => setInterests(e.target.value)}
@@ -352,7 +352,7 @@ export function BusinessSeedApp() {
             <button
               type="button"
               disabled={interests.trim().length < 2 || loading}
-              className="min-h-[48px] w-full rounded-2xl bg-zinc-900 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-40"
+              className="moni-btn-primary w-full py-3 shadow-sm disabled:opacity-40"
               onClick={() => void bootstrapChat()}
             >
               {loading ? "準備中…" : "壁打ちを始める（約3分）"}
@@ -363,10 +363,10 @@ export function BusinessSeedApp() {
         {phase === "brainstorm" ? (
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-sky-700">{progressLabel}</span>
+              <span className="text-xs font-bold text-[var(--brand-ink,#9a3412)]">{progressLabel}</span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-200">
                 <div
-                  className="h-full rounded-full bg-sky-600 transition-all"
+                  className="h-full rounded-full bg-[var(--brand,#ff5c35)] transition-all"
                   style={{ width: `${(stepIndex / 5) * 100}%` }}
                 />
               </div>
@@ -376,7 +376,7 @@ export function BusinessSeedApp() {
                 <div key={`${i}-${m.role}`} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
                     className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      m.role === "user" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-900"
+                      m.role === "user" ? "bg-[var(--brand,#ff5c35)] text-white" : "bg-zinc-100 text-zinc-900"
                     }`}
                   >
                     <span className="block whitespace-pre-wrap">{m.content}</span>
@@ -386,7 +386,7 @@ export function BusinessSeedApp() {
             </div>
             <div className="flex gap-2">
               <textarea
-                className="min-h-[52px] flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                className="min-h-[52px] flex-1 resize-none rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)] focus:ring-2 focus:ring-[rgba(255,92,53,0.2)]"
                 placeholder="回答を入力…"
                 rows={2}
                 value={draft}
@@ -401,7 +401,7 @@ export function BusinessSeedApp() {
               <button
                 type="button"
                 disabled={loading || !draft.trim()}
-                className="min-w-[72px] rounded-2xl bg-zinc-900 px-3 text-sm font-semibold text-white disabled:opacity-40"
+                className="moni-btn-primary min-w-[72px] rounded-2xl px-3 disabled:opacity-40"
                 onClick={() => void sendBrainstorm()}
               >
                 送信
@@ -412,7 +412,7 @@ export function BusinessSeedApp() {
 
         {phase === "finalizing" ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" aria-hidden />
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-300 border-t-[var(--brand,#ff5c35)]" aria-hidden />
             <p className="text-sm font-medium text-zinc-700">アイデアをまとめて、7日プランを生成しています…</p>
           </div>
         ) : null}
@@ -432,7 +432,7 @@ export function BusinessSeedApp() {
                     key={d.day}
                     className={`rounded-xl border px-3 py-2 text-sm ${
                       d.day === activeDay
-                        ? "border-sky-400 bg-sky-50"
+                        ? "border-[var(--brand,#ff5c35)] bg-[var(--brand-soft,#fff4f0)]"
                         : d.day < activeDay
                           ? "border-zinc-100 bg-zinc-50 opacity-70"
                           : "border-zinc-200 bg-white"
@@ -448,19 +448,19 @@ export function BusinessSeedApp() {
             </div>
 
             {activeDay <= 7 ? (
-              <div className="rounded-2xl border-2 border-zinc-900 bg-white p-4 shadow-md">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">今日やること</p>
+              <div className="rounded-2xl border-2 border-[var(--brand,#ff5c35)] bg-white p-4 shadow-md">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--brand-ink,#9a3412)]">今日やること</p>
                 <p className="mt-2 text-base font-semibold leading-snug text-zinc-900">{todayTask}</p>
                 <button
                   type="button"
-                  className="mt-4 w-full rounded-xl bg-zinc-900 py-3 text-sm font-semibold text-white hover:bg-zinc-800"
+                  className="moni-btn-primary mt-4 w-full py-3"
                   onClick={completeToday}
                 >
                   完了した（次の日へ）
                 </button>
               </div>
             ) : (
-              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-center text-sm font-medium text-sky-950">
+              <div className="rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] p-4 text-center text-sm font-medium text-[var(--brand-ink,#9a3412)]">
                 7日間おつかれさま！振り返りログを残して、次の挑戦へつなげよう。
               </div>
             )}
@@ -469,13 +469,13 @@ export function BusinessSeedApp() {
               <h3 className="text-sm font-bold text-zinc-900">行動ログ</h3>
               <p className="mt-1 text-xs text-zinc-500">やったこと・気づきを短く残す（後から一覧で見られる）</p>
               <input
-                className="mt-3 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                className="mt-3 w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                 placeholder="やったこと"
                 value={logDid}
                 onChange={(e) => setLogDid(e.target.value)}
               />
               <textarea
-                className="mt-2 min-h-[72px] w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                className="mt-2 min-h-[72px] w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-[var(--brand,#ff5c35)]"
                 placeholder="気づき・次の一手"
                 value={logInsight}
                 onChange={(e) => setLogInsight(e.target.value)}

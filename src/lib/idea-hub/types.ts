@@ -32,7 +32,7 @@ export type InterviewArticle = {
 };
 
 export const IDEA_HUB_TABS: Array<{ id: IdeaHubTab; label: string; labelEn: string; shortLabel: string; shortLabelEn: string }> = [
-  { id: "excavate", label: "発掘", labelEn: "Discover", shortLabel: "発掘", shortLabelEn: "Find" },
+  { id: "excavate", label: "見つける", labelEn: "Find ideas", shortLabel: "見つける", shortLabelEn: "Find" },
   { id: "qna", label: "相談", labelEn: "Chat", shortLabel: "相談", shortLabelEn: "Chat" },
   { id: "mine", label: "マイアイデア", labelEn: "My ideas", shortLabel: "マイ", shortLabelEn: "Mine" },
   { id: "interviews", label: "インタビュー", labelEn: "Interviews", shortLabel: "取材", shortLabelEn: "Stories" },

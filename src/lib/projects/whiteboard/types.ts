@@ -61,9 +61,9 @@ export type WhiteboardViewport = {
   zoom: number;
 };
 
-export const NOTE_COLORS = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#E9D5FF"] as const;
+export const NOTE_COLORS = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#FFD9CC"] as const;
 
-export const PEN_COLORS = ["#1A1A1A", "#DC2626", "#2563EB", "#16A34A", "#9333EA"] as const;
+export const PEN_COLORS = ["#1A1A1A", "#DC2626", "#2563EB", "#16A34A", "#FF5C35"] as const;
 
 export const HIGHLIGHTER_COLORS = ["#FACC15", "#FBCFE8", "#93C5FD", "#BBF7D0", "#FDE68A"] as const;
 
@@ -140,7 +140,7 @@ export const WHITEBOARD_TEMPLATES: WhiteboardTemplate[] = [
     elements: [
       {
         type: "shape",
-        payload: { shape: "circle", x: 360, y: 260, w: 160, h: 160, color: "#5E6AD2", fill: "#EEF2FF" },
+        payload: { shape: "circle", x: 360, y: 260, w: 160, h: 160, color: "#FF5C35", fill: "#FFF4F0" },
       },
       {
         type: "text",

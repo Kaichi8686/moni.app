@@ -9,7 +9,7 @@ export const USER_SITUATION_OPTIONS: Array<{
 }> = [
   { key: "festival", emoji: "🎪", label: "文化祭・部活・学校イベントのこと", shortLabel: "学校イベント" },
   { key: "study", emoji: "📚", label: "授業・探究・レポートのこと", shortLabel: "授業・探究" },
-  { key: "startup", emoji: "🚀", label: "起業・ビジコン・アプリ開発のこと", shortLabel: "起業・開発" },
+  { key: "startup", emoji: "🚀", label: "起業・コンテスト・アプリ開発のこと", shortLabel: "起業・開発" },
   { key: "community", emoji: "🌱", label: "地域活動・ボランティアのこと", shortLabel: "地域・ボラ" },
   { key: "unclear", emoji: "🤔", label: "まだよくわからない・なんとなく始めたい", shortLabel: "まだわからない" },
 ];

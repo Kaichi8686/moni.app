@@ -7,12 +7,12 @@ import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/vali
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
-/** プロジェクト内チャット → メールタブのプロジェクトグループラインへ誘導 */
+/** プロジェクト内チャット → メッセージタブのプロジェクトグループラインへ誘導 */
 export default function ProjectChatRedirectPage() {
   const params = useParams();
   const router = useRouter();
   const { tx } = useI18n();
-  const [message, setMessage] = useState(tx("メールを開いています…", "Opening mail…"));
+  const [message, setMessage] = useState(tx("メッセージを開いています…", "Opening messages…"));
 
   useEffect(() => {
     let cancelled = false;
@@ -36,8 +36,8 @@ export default function ProjectChatRedirectPage() {
       }
       setMessage(
         tx(
-          "グループラインを開けませんでした。メールタブからもう一度試してください。",
-          "Could not open the group line. Try again from the Mail tab.",
+          "グループラインを開けませんでした。メッセージタブからもう一度試してください。",
+          "Could not open the group line. Try again from the Messages tab.",
         ),
       );
       window.setTimeout(() => {

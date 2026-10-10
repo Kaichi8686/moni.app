@@ -188,7 +188,7 @@ export function ProjectInviteBellPanel({
                           <button
                             type="button"
                             disabled={busyId === inv.id}
-                            className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                            className="rounded-lg bg-[var(--brand,#ff5c35)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)] disabled:opacity-50"
                             onClick={() => void onRespond(inv.id, "accept")}
                           >
                             承認する

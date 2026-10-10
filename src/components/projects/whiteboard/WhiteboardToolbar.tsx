@@ -91,7 +91,9 @@ export function WhiteboardToolbar({
             disabled={!canEdit && id !== "pan" && id !== "select"}
             onClick={() => onToolChange(id)}
             className={`flex h-10 min-w-[2.5rem] items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-semibold transition ${
-              tool === id ? "bg-violet-100 text-violet-800" : "text-[#6B7280] hover:bg-[#F3F4F6]"
+              tool === id
+                ? "bg-[var(--brand-soft,#fff4f0)] text-[var(--brand-ink,#9a3412)]"
+                : "text-[#6B7280] hover:bg-[#F3F4F6]"
             } disabled:opacity-40`}
           >
             <Icon className="h-4 w-4" aria-hidden />
@@ -108,7 +110,7 @@ export function WhiteboardToolbar({
               type="button"
               aria-label={`色 ${c}`}
               onClick={() => onColorChange(c)}
-              className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-violet-500" : "border-white shadow"}`}
+              className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-[var(--brand,#ff5c35)]" : "border-white shadow"}`}
               style={{ backgroundColor: c, opacity: tool === "highlighter" ? 0.85 : 1 }}
             />
           ))}
@@ -134,7 +136,7 @@ export function WhiteboardToolbar({
               key={c}
               type="button"
               onClick={() => onColorChange(c)}
-              className={`h-7 w-7 rounded-md border-2 ${color === c ? "border-violet-500" : "border-transparent"}`}
+              className={`h-7 w-7 rounded-md border-2 ${color === c ? "border-[var(--brand,#ff5c35)]" : "border-transparent"}`}
               style={{ backgroundColor: c }}
             />
           ))}

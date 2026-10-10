@@ -176,7 +176,7 @@ export function IssueDetailSheet({
                     onBlur={() => void commitMemo()}
                     rows={5}
                     placeholder={tx("やったこと・メモ（任意）", "What you did / notes (optional)")}
-                    className="mt-3 min-h-[7.5rem] w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-[15px] leading-relaxed outline-none ring-violet-500 focus:ring-2"
+                    className="mt-3 min-h-[7.5rem] w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-[15px] leading-relaxed outline-none ring-[var(--brand,#ff5c35)] focus:ring-2"
                   />
                 ) : memo.trim() ? (
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{memo}</p>
@@ -186,8 +186,8 @@ export function IssueDetailSheet({
                 {savingMemo ? <p className="mt-1 text-[11px] text-gray-400">{tx("保存中…", "Saving…")}</p> : null}
               </section>
 
-              <section className="rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-800">{tx("基本情報", "Basics")}</p>
+              <section className="rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/80 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--brand-ink,#9a3412)]">{tx("基本情報", "Basics")}</p>
                 <dl className="mt-2 space-y-2 text-sm">
                   {phaseTitle ? (
                     <div className="flex gap-2">
@@ -247,7 +247,7 @@ export function IssueDetailSheet({
             <button
               type="button"
               onClick={onEdit}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand,#ff5c35)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-hover,#e04e2a)]"
             >
               <Pencil className="h-4 w-4" />
               {tx("編集", "Edit")}

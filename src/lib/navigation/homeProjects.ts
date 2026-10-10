@@ -4,7 +4,7 @@ export const HOME_PROJECTS_HREF = "/projects";
 /** ソーシャルホーム（検索タブなど。エントリはプロジェクト） */
 export const APP_HOME_HREF = "/";
 
-/** コミュニティ知恵袋（アイデアタブ内・掲示板ビュー） */
+/** コミュニティ相談ボード（アイデアタブ内・掲示板ビュー） */
 export const IDEA_QNA_HREF = "/idea?tab=qna&view=board";
 
 export function projectOverviewHref(projectId: string) {
