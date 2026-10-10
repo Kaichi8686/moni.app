@@ -17,6 +17,8 @@ type Props = {
   isOwner: boolean;
   deleting: boolean;
   onClose: () => void;
+  /** 削除提案が作成された直後（ロードマップ上部バナーへ誘導する用） */
+  onProposed?: () => void;
   onFinalizeDelete: () => Promise<void>;
 };
 
@@ -28,6 +30,7 @@ export function ProjectDeleteVotePanel({
   isOwner,
   deleting,
   onClose,
+  onProposed,
   onFinalizeDelete,
 }: Props) {
   const [state, setState] = useState<DeletionState | null>(null);
@@ -61,6 +64,7 @@ export function ProjectDeleteVotePanel({
     try {
       await proposeDeletion(projectId, uid);
       await reload();
+      onProposed?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "提案に失敗しました");
     } finally {
@@ -100,7 +104,7 @@ export function ProjectDeleteVotePanel({
         <h3 className="text-base font-semibold text-[#1A1A1A]">プロジェクト削除の手続き</h3>
         <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
           「{projectName}」の削除には、メンバーの<strong className="text-[#374151]">2/3以上の賛成</strong>
-          が必要です。その後、オーナーが最終削除できます。
+          が必要です。提案後はロードマップ上部で賛否を選べます。基準到達後、オーナーが最終削除できます。
         </p>
 
         {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{error}</p> : null}
