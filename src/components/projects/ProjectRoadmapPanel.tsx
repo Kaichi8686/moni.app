@@ -1393,7 +1393,7 @@ export function ProjectRoadmapPanel({
       <div className="rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-50 to-orange-50/30 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">つながる</p>
         <p className="mt-1 text-sm font-semibold text-zinc-900">コミュニティ・仲間探し</p>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-600">進捗を共有したり、質問したり、仮説を検証したりできます。</p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-600">進捗を共有したり、質問したり、まわりの反応を聞いたりできます。</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
             href="/idea"
@@ -1415,9 +1415,9 @@ export function ProjectRoadmapPanel({
           </Link>
           <Link
             href="/?tab=mentor&mentor=validation"
-            className="min-h-[40px] rounded-2xl border border-orange-200 bg-[#FFF3D6] px-3 py-2 text-xs font-semibold text-orange-950 shadow-sm transition duration-200 ease-out hover:bg-orange-100"
+            className="min-h-[40px] rounded-2xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2 text-xs font-semibold text-[var(--brand-ink,#9a3412)] shadow-sm transition duration-200 ease-out hover:bg-[var(--brand-muted,#ffd9cc)]/50"
           >
-            おためし検証
+            反応を聞いてみる
           </Link>
         </div>
       </div>

@@ -19,7 +19,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "手順を調べる、またはタスクをもっと小さく分けると進めやすくなります。",
         links: [
           { label: "コミュニティで質問", href: IDEA_QNA_HREF },
-          { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
+          { label: "反応を聞いてみる", href: "/?tab=mentor&mentor=validation" },
         ],
       };
     case "need_help":
@@ -27,7 +27,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "プロジェクト内チャットで、やってほしいことを一文で伝えると動きやすくなります。",
         links: [
           { label: "仲間・プロジェクトを探す", href: "/?tab=chat" },
-          { label: "アイデアを掘る", href: "/idea" },
+          { label: "アイデアを見つける", href: "/idea" },
         ],
       };
     case "missing_info":
@@ -45,7 +45,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "下書きでも共有すると、フィードバックをもらいやすくなります。",
         links: [
           { label: "質問・相談する", href: IDEA_QNA_HREF },
-          { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
+          { label: "反応を聞いてみる", href: "/?tab=mentor&mentor=validation" },
         ],
       };
     default:

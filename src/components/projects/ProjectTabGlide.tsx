@@ -597,13 +597,16 @@ export function ProjectTabGlide({
           {!loading && displayList.length === 0 ? (
             <div className="mt-2 rounded-2xl border border-dashed border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)]/70 px-4 py-6 text-center">
               <p className="text-[11px] font-semibold tracking-wide text-[var(--brand,#ff5c35)]">
-                Ideas → People → Projects
+                Ideas → People → Projects → Reality
               </p>
               <p className="mt-1.5 text-sm font-semibold text-zinc-900">まだプロジェクトがありません</p>
               <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
                 アイデアに名前をつけて始めましょう。進みながら仲間を集め、現実に近づけていけます。
               </p>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <p className="mt-3 text-[12px] font-semibold text-[var(--brand-ink,#9a3412)]">
+                次の一手：下のボタンから最初のプロジェクトをつくろう
+              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button type="button" className="moni-btn-primary px-4" onClick={() => setCreateOpen(true)}>
                   プロジェクトを始める
                 </button>
@@ -632,6 +635,14 @@ export function ProjectTabGlide({
             <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
               アイデアに名前をつけて、進める場所をつくります。あとから仲間も呼べます。
             </p>
+            <div className="mt-3 rounded-xl border border-[var(--brand-muted,#ffd9cc)] bg-[var(--brand-soft,#fff4f0)] px-3 py-2.5">
+              <p className="text-[11px] font-semibold tracking-wide text-[var(--brand,#ff5c35)]">
+                Ideas → People → Projects
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-[var(--brand-ink,#9a3412)]">
+                <span className="font-semibold">次の一手:</span> まずは名前をつけて「はじめる」を押そう
+              </p>
+            </div>
             <div className="mt-3 space-y-2">
               <label className="block">
                 <span className="mb-1 block text-[11px] font-semibold text-zinc-600">プロジェクト名（必須）</span>

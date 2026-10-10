@@ -114,12 +114,12 @@ function AppShot({
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
             <p className="text-[11px] font-semibold text-[var(--brand-ink,#9a3412)]">
-              {locale === "ja" ? "検証メモ" : "Validation note"}
+              {locale === "ja" ? "反応メモ" : "Feedback note"}
             </p>
             <p className="mt-1 text-[13px] leading-relaxed text-zinc-600">
               {locale === "ja"
-                ? "インタビュー10件、仮説2つに絞る。"
-                : "10 interviews, narrowed to 2 hypotheses."}
+                ? "友だち10人に聞いて、案を2つに絞った。"
+                : "Asked 10 friends, narrowed to 2 ideas."}
             </p>
           </div>
         </div>
@@ -393,8 +393,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
   const voices = ja
     ? [
         {
-          quote: "思いつきで終わっていた案が、1週間で検証タスクまで進んだ。",
-          who: "高校2年・起業チーム",
+          quote: "思いつきで終わっていた案が、1週間で「次にやること」まで進んだ。",
+          who: "高校2年・チーム活動",
           note: "TODO: 実名許諾後に差し替え",
         },
         {
@@ -403,8 +403,8 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
           note: "TODO: 実名許諾後に差し替え",
         },
         {
-          quote: "大学のアイデア検証で、初対面メンバーとも役割分担が早く決まった。",
-          who: "大学1年・起業サークル",
+          quote: "アイデアを進めているうちに、初対面のメンバーとも役割が早く決まった。",
+          who: "大学1年・サークル",
           note: "TODO: 実名許諾後に差し替え",
         },
       ]
@@ -776,7 +776,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                     },
                     {
                       q: "学校課題にそのまま使えますか？",
-                      a: "探究ノートの代替ではなく、仲間探し・検証・発信の場です。提出形式は学校指定に合わせて転記してください。",
+                      a: "探究ノートの代わりというより、仲間探し・反応チェック・発信の場です。提出形式は学校指定に合わせて転記してください。",
                     },
                     {
                       q: "プロジェクトの活動は誰に見えますか？",
