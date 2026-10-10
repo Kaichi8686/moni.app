@@ -6,7 +6,6 @@ import {
   Check,
   FileText,
   ListChecks,
-  LockKeyhole,
   MessageCircle,
   PenLine,
   PenTool,
@@ -23,7 +22,7 @@ import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
-/** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
+/** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
@@ -97,20 +96,17 @@ export default function WorkspaceOverview() {
    * 「すべて見る」地図ページと同じ project_phases を使う。
    * 地図側で削除した直後でも概要に戻ったときに連動するよう、
    * roadmap hook を優先し、初回ロード中のみ workspace のキャッシュを出す。
+   * reload 中も roadmap.phases を保持し、達成直後に古い workspace へ戻らないようにする。
    */
   const sortedPhases = useMemo(() => {
-    const source = !roadmap.loading ? roadmap.phases : workspacePhases;
+    const source = roadmap.phases.length > 0 ? roadmap.phases : workspacePhases;
     return [...source].sort((a, b) => a.order - b.order);
-  }, [roadmap.loading, roadmap.phases, workspacePhases]);
+  }, [roadmap.phases, workspacePhases]);
   const selectedPhaseLive = selectedPhaseId
     ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
     : null;
-  /** 未完了を先頭にし、完了済みはその後ろ */
-  const displayPhases = useMemo(() => {
-    const active = sortedPhases.filter((phase) => phase.status !== "completed");
-    const done = sortedPhases.filter((phase) => phase.status === "completed");
-    return [...active, ...done];
-  }, [sortedPhases]);
+  /** order 順のまま表示（完了を末尾に回すと「いまここ」が先頭に残り、進んだように見えない） */
+  const displayPhases = sortedPhases;
   const visiblePhases = useMemo(
     () => (roadmapExpanded ? displayPhases : displayPhases.slice(0, ROADMAP_VISIBLE_LIMIT)),
     [displayPhases, roadmapExpanded],
@@ -233,39 +229,40 @@ export default function WorkspaceOverview() {
                 const index = sortedPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
                 const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-                const locked = !complete && !current && index > currentIndex;
-                const card = (
-                  <div
-                    className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
-                      locked
-                        ? "border-zinc-200 bg-zinc-50 text-zinc-400"
-                        : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
-                    }`}
-                  >
-                    <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
-                    {current ? <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" /> : null}
-                    {locked ? <LockKeyhole className="absolute right-2 top-2.5 h-3.5 w-3.5 sm:right-3 sm:top-3 sm:h-4 sm:w-4" aria-hidden /> : null}
-                    <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
-                    <p className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${locked ? "text-zinc-400" : "text-zinc-800"}`}>
-                      {phase.title}
-                    </p>
-                    {complete ? (
-                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
-                        <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
-                      </span>
-                    ) : null}
-                  </div>
-                );
-                return locked ? (
-                  <div key={phase.id} aria-disabled="true">{card}</div>
-                ) : (
+                /** 先のマスは色だけ控えめ（鍵アイコンは出さず、中身は開ける） */
+                const upcoming = !complete && !current && index > currentIndex;
+                return (
                   <button
                     key={phase.id}
                     type="button"
                     className="text-left"
                     onClick={() => setSelectedPhaseId(phase.id)}
                   >
-                    {card}
+                    <div
+                      className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
+                        upcoming
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-300"
+                          : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
+                      }`}
+                    >
+                      <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
+                      {current ? (
+                        <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" />
+                      ) : null}
+                      <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
+                      <p
+                        className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${
+                          upcoming ? "text-zinc-400" : "text-zinc-800"
+                        }`}
+                      >
+                        {phase.title}
+                      </p>
+                      {complete ? (
+                        <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
+                          <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
+                        </span>
+                      ) : null}
+                    </div>
                   </button>
                 );
               })}
@@ -320,15 +317,21 @@ export default function WorkspaceOverview() {
         }
         onClose={() => setSelectedPhaseId(null)}
         canEdit={false}
-        canAchieve={roadmap.canEdit && selectedPhaseLive?.status !== "completed"}
+        canAchieve={Boolean(
+          roadmap.canEdit &&
+            selectedPhaseLive &&
+            selectedPhaseLive.status !== "completed" &&
+            (selectedPhaseLive.status === "in_progress" ||
+              sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex),
+        )}
         onAchieve={async () => {
           if (!selectedPhaseLive) return;
           if (!roadmap.canEdit) {
             throw new Error(tx("編集権限がありません", "You don’t have permission to edit"));
           }
-          await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
           const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
           const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
+          await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
           if (next && next.status !== "completed") {
             await roadmap.updatePhase(next.id, { status: "in_progress" });
           }
