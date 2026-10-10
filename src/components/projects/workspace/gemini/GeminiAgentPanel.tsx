@@ -688,7 +688,7 @@ export function GeminiAgentPanel({
                     ? "e.g. The team can’t agree"
                     : "e.g. 10 feature ideas users would love",
               )}
-              className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
+              className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-base outline-none ring-violet-300 focus:ring-2 sm:text-[15px]"
             />
             <button
               type="submit"
