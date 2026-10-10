@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
+import { hasProjectBriefContent, resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const PROJECT_SELECT =
+  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,coaching_context,created_at,updated_at";
+const PROJECT_SELECT_FALLBACK =
   "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at";
 
 type Props = {
@@ -55,12 +58,32 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         .order("updated_at", { ascending: false })
         .limit(80);
 
+      let rows: ProjectRow[] = [];
       if (pubRes.error) {
-        setProjects([]);
-        return;
+        const msg = pubRes.error.message ?? "";
+        const schemaMismatch =
+          pubRes.error.code === "42703" ||
+          pubRes.error.code === "PGRST204" ||
+          msg.includes("does not exist") ||
+          msg.includes("schema cache");
+        if (!schemaMismatch) {
+          setProjects([]);
+          return;
+        }
+        const fallback = await supabase
+          .from("projects")
+          .select(PROJECT_SELECT_FALLBACK)
+          .eq("visibility", "public")
+          .order("updated_at", { ascending: false })
+          .limit(80);
+        if (fallback.error) {
+          setProjects([]);
+          return;
+        }
+        rows = (fallback.data ?? []) as ProjectRow[];
+      } else {
+        rows = (pubRes.data ?? []) as ProjectRow[];
       }
-
-      const rows = (pubRes.data ?? []) as ProjectRow[];
       const ownerIds = [...new Set(rows.map((p) => p.owner_id))];
       const nameMap: Record<string, string> = {};
       if (ownerIds.length > 0) {
@@ -333,14 +356,57 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
               </div>
 
               <dl className="mt-4 space-y-3 text-sm">
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("説明", "Description")}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                    {detail.description?.trim() || tx("未設定", "Not set")}
-                  </dd>
-                </div>
+                {(() => {
+                  const brief = resolveProjectBrief({
+                    coachingContext: detail.coaching_context,
+                    description: detail.description,
+                  });
+                  if (hasProjectBriefContent(brief)) {
+                    return (
+                      <>
+                        {brief.problemMotivation ? (
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                              {tx(
+                                "どのようなことを解決したくて思いついたか",
+                                "What problem sparked this project",
+                              )}
+                            </dt>
+                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                              {brief.problemMotivation}
+                            </dd>
+                          </div>
+                        ) : null}
+                        {brief.projectGoal ? (
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                              {tx("このプロジェクトのゴール", "Project goal")}
+                            </dt>
+                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{brief.projectGoal}</dd>
+                          </div>
+                        ) : null}
+                        {brief.whatToDo ? (
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                              {tx("何をするのか", "What we’ll do")}
+                            </dt>
+                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{brief.whatToDo}</dd>
+                          </div>
+                        ) : null}
+                      </>
+                    );
+                  }
+                  return (
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("説明", "Description")}
+                      </dt>
+                      <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                        {detail.description?.trim() || tx("未設定", "Not set")}
+                      </dd>
+                    </div>
+                  );
+                })()}
                 <div>
                   <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
                     {tx("発足", "Launched")}

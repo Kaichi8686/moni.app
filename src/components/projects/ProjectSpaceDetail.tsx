@@ -24,6 +24,14 @@ import {
   type OnboardingProgressStage,
   type OnboardingTeamSize,
 } from "@/lib/projects/coachingContext";
+import {
+  applyBriefToCoachingContext,
+  composeProjectDescription,
+  emptyProjectBrief,
+  hasProjectBriefContent,
+  resolveProjectBrief,
+  type ProjectBrief,
+} from "@/lib/projects/projectBrief";
 import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboardingWizard";
 import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
@@ -154,7 +162,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const [editThumbDraft, setEditThumbDraft] = useState("");
   const [thumbCropSource, setThumbCropSource] = useState<string | null>(null);
   const [thumbUploading, setThumbUploading] = useState(false);
-  const [editDescriptionDraft, setEditDescriptionDraft] = useState("");
+  const [editBriefDraft, setEditBriefDraft] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [editCategoryDraft, setEditCategoryDraft] = useState("");
   const [editBusinessTypeDraft, setEditBusinessTypeDraft] = useState<"maker" | "software" | "social">("software");
   const [editRecruitmentTargetDraft, setEditRecruitmentTargetDraft] = useState("");
@@ -819,7 +827,12 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     if (!selectedProject) return;
     setEditNameDraft(selectedProject.name);
     setEditThumbDraft(selectedProject.thumbnail_url?.trim() ?? "");
-    setEditDescriptionDraft(selectedProject.description ?? "");
+    setEditBriefDraft(
+      resolveProjectBrief({
+        coachingContext: selectedProject.coaching_context,
+        description: selectedProject.description,
+      }),
+    );
     setEditCategoryDraft(selectedProject.category ?? "");
     setEditBusinessTypeDraft(
       selectedProject.business_type === "maker" || selectedProject.business_type === "social"
@@ -842,19 +855,36 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     setActionErr("");
     try {
       const thumbnail_url = editThumbDraft.trim() || null;
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          name,
-          thumbnail_url,
-          description: editDescriptionDraft.trim(),
-          category: editCategoryDraft.trim() || "探究",
-          business_type: editBusinessTypeDraft,
-          recruitment_target: editRecruitmentTargetDraft.trim(),
-          recruitment_message: editRecruitmentMessageDraft.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", selectedProject.id);
+      const description = composeProjectDescription(editBriefDraft);
+      const coaching_context = applyBriefToCoachingContext(
+        parseCoachingContext(selectedProject.coaching_context),
+        editBriefDraft,
+      );
+      const payload: Record<string, unknown> = {
+        name,
+        thumbnail_url,
+        description,
+        coaching_context,
+        category: editCategoryDraft.trim() || "探究",
+        business_type: editBusinessTypeDraft,
+        recruitment_target: editRecruitmentTargetDraft.trim(),
+        recruitment_message: editRecruitmentMessageDraft.trim(),
+        updated_at: new Date().toISOString(),
+      };
+      let { error } = await supabase.from("projects").update(payload).eq("id", selectedProject.id);
+      if (error) {
+        const schemaMismatch =
+          error.code === "42703" ||
+          error.code === "PGRST204" ||
+          error.message.includes("does not exist") ||
+          error.message.includes("schema cache");
+        if (schemaMismatch) {
+          const { coaching_context: _drop, ...withoutCoaching } = payload;
+          void _drop;
+          const retry = await supabase.from("projects").update(withoutCoaching).eq("id", selectedProject.id);
+          error = retry.error;
+        }
+      }
       if (error) setActionErr(error.message);
       else {
         setGroupProfileOpen(false);
@@ -949,10 +979,55 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900">{selectedProject.name}</h1>
         </header>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの説明</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{selectedProject.description?.trim() || "—"}</p>
-        </section>
+        {(() => {
+          const brief = resolveProjectBrief({
+            coachingContext: selectedProject.coaching_context,
+            description: selectedProject.description,
+          });
+          if (!hasProjectBriefContent(brief) && !selectedProject.description?.trim()) {
+            return (
+              <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの詳細</h2>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-800">—</p>
+              </section>
+            );
+          }
+          if (!hasProjectBriefContent(brief)) {
+            return (
+              <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの説明</h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
+                  {selectedProject.description?.trim() || "—"}
+                </p>
+              </section>
+            );
+          }
+          return (
+            <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの詳細</h2>
+              {brief.problemMotivation ? (
+                <div>
+                  <h3 className="text-[11px] font-semibold text-zinc-500">
+                    どのようなことを解決したくてこのプロジェクトを思いついたか
+                  </h3>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.problemMotivation}</p>
+                </div>
+              ) : null}
+              {brief.projectGoal ? (
+                <div>
+                  <h3 className="text-[11px] font-semibold text-zinc-500">このプロジェクトのゴール</h3>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.projectGoal}</p>
+                </div>
+              ) : null}
+              {brief.whatToDo ? (
+                <div>
+                  <h3 className="text-[11px] font-semibold text-zinc-500">何をするのか</h3>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.whatToDo}</p>
+                </div>
+              ) : null}
+            </section>
+          );
+        })()}
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">オーナー</h2>
@@ -1691,7 +1766,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-zinc-900">グループプロフィール</h3>
-            <p className="mt-1 text-xs text-zinc-500">名前・写真・説明・系統・募集内容を編集できます。</p>
+            <p className="mt-1 text-xs text-zinc-500">名前・写真・詳細・系統・募集内容を編集できます。</p>
             <label className="mt-4 block text-xs font-semibold text-zinc-700">プロジェクト名</label>
             <input
               className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
@@ -1754,12 +1829,33 @@ export function ProjectSpaceDetail({ projectId }: Props) {
                 </details>
               </div>
             </div>
-            <label className="mt-3 block text-xs font-semibold text-zinc-700">説明</label>
-            <textarea
-              className="mt-1 min-h-[4.5rem] w-full resize-y rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={editDescriptionDraft}
-              onChange={(e) => setEditDescriptionDraft(e.target.value)}
-            />
+            <div className="mt-3 space-y-2 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+              <p className="text-xs font-semibold text-zinc-700">プロジェクトの詳細</p>
+              <label className="block text-[11px] font-semibold text-zinc-600">
+                どのようなことを解決したくてこのプロジェクトを思いついたか
+                <textarea
+                  className="mt-1 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  value={editBriefDraft.problemMotivation}
+                  onChange={(e) => setEditBriefDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[11px] font-semibold text-zinc-600">
+                このプロジェクトのゴール
+                <textarea
+                  className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  value={editBriefDraft.projectGoal}
+                  onChange={(e) => setEditBriefDraft((b) => ({ ...b, projectGoal: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[11px] font-semibold text-zinc-600">
+                何をするのか
+                <textarea
+                  className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  value={editBriefDraft.whatToDo}
+                  onChange={(e) => setEditBriefDraft((b) => ({ ...b, whatToDo: e.target.value }))}
+                />
+              </label>
+            </div>
             <label className="mt-3 block text-xs font-semibold text-zinc-700">カテゴリ</label>
             <input
               className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"

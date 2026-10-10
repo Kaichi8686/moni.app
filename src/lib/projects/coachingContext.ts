@@ -16,8 +16,12 @@ export type OnboardingTeamSize = "solo" | "small" | "large";
 const CATEGORY_KEYS = new Set<string>(["food", "retail", "app", "event", "education", "custom"]);
 
 export type CoachingContext = {
-  /** 達成したいこと（短文・任意） */
+  /** 達成したいこと / プロジェクトのゴール（短文・任意） */
   dreamStatement?: string;
+  /** どのようなことを解決したくてこのプロジェクトを思いついたか（任意） */
+  problemMotivation?: string;
+  /** 何をするのか（任意） */
+  whatToDo?: string;
   /** ユーザーの今の状況（AI提案の文脈） */
   userSituation?: UserSituation;
   /** 困っていること（任意） */
@@ -68,6 +72,8 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return {};
   const o = raw as Record<string, unknown>;
   const dreamStatement = typeof o.dreamStatement === "string" ? o.dreamStatement : undefined;
+  const problemMotivation = typeof o.problemMotivation === "string" ? o.problemMotivation : undefined;
+  const whatToDo = typeof o.whatToDo === "string" ? o.whatToDo : undefined;
   const stuckNow = typeof o.stuckNow === "string" ? o.stuckNow : undefined;
   const roughDeadline = typeof o.roughDeadline === "string" ? o.roughDeadline : undefined;
   const onboardingDoneAt = typeof o.onboardingDoneAt === "string" ? o.onboardingDoneAt : undefined;
@@ -108,6 +114,8 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
 
   return {
     dreamStatement,
+    problemMotivation,
+    whatToDo,
     userSituation,
     stuckNow,
     roughDeadline,

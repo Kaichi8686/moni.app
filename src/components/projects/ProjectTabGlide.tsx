@@ -9,6 +9,12 @@ import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
+import {
+  applyBriefToCoachingContext,
+  composeProjectDescription,
+  emptyProjectBrief,
+  type ProjectBrief,
+} from "@/lib/projects/projectBrief";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
@@ -129,7 +135,6 @@ export function ProjectTabGlide({
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    description: "",
     business_type: "software" as "maker" | "software" | "social",
     visibility: "public" as "public" | "private",
     category: "探究",
@@ -138,6 +143,7 @@ export function ProjectTabGlide({
     recruitment_message: "",
     thumbnail_url: "",
   });
+  const [brief, setBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const load = useCallback(async () => {
     if (!supabase) {
@@ -254,10 +260,13 @@ export function ProjectTabGlide({
       setBusy(false);
       return;
     }
+    const description = composeProjectDescription(brief);
+    const coaching_context = applyBriefToCoachingContext({}, brief);
     const fullPayload = {
       owner_id: uid,
       name: form.name.trim(),
-      description: form.description.trim(),
+      description,
+      coaching_context,
       business_type: form.business_type,
       category: form.category.trim() || "探究",
       tags: form.tags.split(/[,、]/).map((x) => x.trim()).filter(Boolean),
@@ -268,6 +277,16 @@ export function ProjectTabGlide({
     };
     const payloadCandidates: Array<Record<string, unknown>> = [
       fullPayload,
+      {
+        owner_id: uid,
+        name: fullPayload.name,
+        description: fullPayload.description,
+        coaching_context: fullPayload.coaching_context,
+        business_type: fullPayload.business_type,
+        category: fullPayload.category,
+        tags: fullPayload.tags,
+        visibility: fullPayload.visibility,
+      },
       {
         owner_id: uid,
         name: fullPayload.name,
@@ -328,7 +347,6 @@ export function ProjectTabGlide({
     setCreateOpen(false);
     setForm({
       name: "",
-      description: "",
       business_type: "software",
       category: "探究",
       tags: "",
@@ -337,6 +355,7 @@ export function ProjectTabGlide({
       recruitment_message: "",
       thumbnail_url: "",
     });
+    setBrief(emptyProjectBrief());
     setShowAdvancedFields(false);
     setBusy(false);
     void load();
@@ -545,13 +564,44 @@ export function ProjectTabGlide({
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
-              <textarea
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                rows={2}
-                placeholder="一言説明"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              />
+              <div className="space-y-2 rounded-xl border border-zinc-100 bg-zinc-50/80 p-3">
+                <p className="text-xs font-semibold text-zinc-700">プロジェクトの詳細</p>
+                <p className="text-[11px] leading-relaxed text-zinc-500">
+                  あとから設定で編集できます。思いつきの背景を残しておくと、仲間にも伝わりやすくなります。
+                </p>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-zinc-600">
+                    どのようなことを解決したくてこのプロジェクトを思いついたか
+                  </span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    rows={3}
+                    placeholder="例: 学校の行事告知がバラバラで、みんな見逃しがちだった"
+                    value={brief.problemMotivation}
+                    onChange={(e) => setBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-zinc-600">このプロジェクトのゴール</span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    rows={2}
+                    placeholder="例: 文化祭までに、クラス全員が見られる告知アプリを公開する"
+                    value={brief.projectGoal}
+                    onChange={(e) => setBrief((b) => ({ ...b, projectGoal: e.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-zinc-600">何をするのか</span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    rows={2}
+                    placeholder="例: 告知投稿・リマインド・役割分担をまとめたWebアプリを作る"
+                    value={brief.whatToDo}
+                    onChange={(e) => setBrief((b) => ({ ...b, whatToDo: e.target.value }))}
+                  />
+                </label>
+              </div>
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-zinc-700">プロジェクトの系統</p>
                 <p className="text-[11px] leading-relaxed text-zinc-500">

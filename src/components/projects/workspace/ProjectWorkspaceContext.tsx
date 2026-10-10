@@ -1188,6 +1188,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           isOwner={isOwner}
           name={project?.name ?? ""}
           description={project?.description}
+          coachingContext={coachingContext}
           meta={projectMeta}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => void reload()}
