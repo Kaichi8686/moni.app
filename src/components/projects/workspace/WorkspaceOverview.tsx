@@ -14,6 +14,7 @@ import {
   Sparkles,
   Vote,
 } from "lucide-react";
+import { ProjectTalentPanel } from "@/components/projects/ProjectTalentPanel";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -80,6 +81,7 @@ export default function WorkspaceOverview() {
     phases: workspacePhases,
     loading,
     uid,
+    canEdit,
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
@@ -88,6 +90,7 @@ export default function WorkspaceOverview() {
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [talentNotice, setTalentNotice] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
 
   /**
@@ -190,6 +193,30 @@ export default function WorkspaceOverview() {
           />
         </div>
       </section>
+
+      {talentNotice ? (
+        <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
+          {talentNotice}
+        </p>
+      ) : null}
+
+      <ProjectTalentPanel
+        projectId={projectId}
+        projectName={project.name}
+        userId={uid}
+        canEdit={canEdit}
+        memberIds={project.members.map((m) => m.id)}
+        recruitmentTarget={projectMeta?.recruitment_target ?? ""}
+        recruitmentMessage={projectMeta?.recruitment_message ?? ""}
+        visibility={projectMeta?.visibility === "private" ? "private" : "public"}
+        onRecruitmentSaved={() => {
+          void wsReload();
+        }}
+        onNotice={(message) => {
+          setTalentNotice(message);
+          window.setTimeout(() => setTalentNotice(""), 4200);
+        }}
+      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">

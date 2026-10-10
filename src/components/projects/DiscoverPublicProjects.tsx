@@ -32,6 +32,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [recruitingOnly, setRecruitingOnly] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
@@ -102,11 +103,13 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
     const q = query.trim().toLowerCase();
     return projects.filter((p) => {
       if (memberIds.has(p.id)) return false;
+      const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
+      if (recruitingOnly && !recruiting) return false;
       if (!q) return true;
-      const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""}`;
+      const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""} ${p.recruitment_message ?? ""}`;
       return hay.toLowerCase().includes(q);
     });
-  }, [projects, memberIds, query]);
+  }, [projects, memberIds, query, recruitingOnly]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
@@ -164,8 +167,8 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           <h4 className="text-sm font-semibold text-zinc-900">{tx("プロジェクトを探す", "Discover projects")}</h4>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
             {tx(
-              "参加していない公開プロジェクトだけ表示。カードをタップして詳細を見られます。",
-              "Shows public projects you haven’t joined. Tap a card for details.",
+              "欲しい人材を募集中の公開プロジェクトもここから見つかります。カードをタップして詳細を見られます。",
+              "Find public projects recruiting talent here. Tap a card for details.",
             )}
           </p>
         </div>
@@ -177,7 +180,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
       >
         <input
           className="min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm"
-          placeholder={tx("キーワードで検索", "Search by keyword")}
+          placeholder={tx("欲しい人材・キーワードで検索", "Search by talent or keyword")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label={tx("公開プロジェクトを検索", "Search public projects")}
@@ -194,6 +197,21 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           <span className="hidden sm:inline">{tx("絞り込む", "Search")}</span>
         </button>
       </form>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={`min-h-[32px] rounded-lg px-3 text-[12px] font-semibold transition ${
+            recruitingOnly
+              ? "bg-emerald-600 text-white"
+              : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+          }`}
+          onClick={() => setRecruitingOnly((v) => !v)}
+          aria-pressed={recruitingOnly}
+        >
+          {tx("仲間募集のみ", "Recruiting only")}
+        </button>
+      </div>
 
       {toast ? (
         <p className={`mt-2 text-xs font-medium ${toastOk ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
@@ -271,7 +289,9 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                       <span
                         className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
                       >
-                        {recruiting ? tx("仲間募集", "Recruiting") : tx("公開中", "Public")}
+                        {recruiting
+                          ? p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")
+                          : tx("公開中", "Public")}
                       </span>
                     </span>
                   </button>
