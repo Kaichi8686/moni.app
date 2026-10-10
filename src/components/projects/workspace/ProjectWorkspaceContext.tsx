@@ -8,11 +8,11 @@ import { addDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
 import {
-  mergeCoachingContext,
   parseCoachingContext,
   type CoachingContext,
 } from "@/lib/projects/coachingContext";
 import { buildSituationWorkspacePhaseRows } from "@/lib/projects/situationWorkspacePhases";
+import { saveCoachingContextPatch } from "@/lib/projects/saveCoachingContextPatch";
 import type { UserSituation } from "@/lib/projects/userSituation";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { logProjectActivity } from "@/lib/projects/projectActivity";
@@ -431,15 +431,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     async (patch: Partial<CoachingContext>) => {
       if (!supabase) throw new Error(tx("保存できません", "Can’t save right now"));
       if (!canEdit) throw new Error(tx("編集権限がありません", "You don’t have edit access"));
-      const next = mergeCoachingContext(coachingContext, patch);
-      const { error: err } = await supabase
-        .from("projects")
-        .update({ coaching_context: next, updated_at: new Date().toISOString() })
-        .eq("id", projectId);
-      if (err) throw new Error(err.message);
+      const next = await saveCoachingContextPatch(supabase, projectId, patch);
       setCoachingContext(next);
     },
-    [canEdit, coachingContext, projectId, tx],
+    [canEdit, projectId, tx],
   );
 
   const seedPhasesFromSituation = useCallback(

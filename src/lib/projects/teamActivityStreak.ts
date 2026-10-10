@@ -6,8 +6,25 @@ export function todayKeyJapan(d = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(d);
 }
 
+/** "YYYY-MM-DD" または先頭10文字が日付の文字列を正規化 */
+export function normalizeYmdKey(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const key = raw.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+/** 東京暦 YYYY-MM-DD に日数を加算 */
+export function addDaysYmdJapan(ymd: string, days: number): string {
+  const key = normalizeYmdKey(ymd);
+  if (!key) return todayKeyJapan();
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
 }
 
 /** この瞬間を含む暦週の月曜 00:00（Asia/Tokyo）を epoch ms で返す */
@@ -38,15 +55,15 @@ export function diffCalendarDaysFromTodayJapan(dueDateStr: string | null | undef
 }
 
 /** タスク完了などチーム活動があった日に 1 日 1 回だけ適用するパッチ */
-export function computeTeamStreakPatch(prev: CoachingContext): Partial<CoachingContext> {
-  const today = todayKeyJapan();
-  const lastRaw = prev.teamActivityLastDate?.trim();
+export function computeTeamStreakPatch(prev: CoachingContext, now = new Date()): Partial<CoachingContext> {
+  const today = todayKeyJapan(now);
+  const lastRaw = normalizeYmdKey(prev.teamActivityLastDate);
   const cur =
     typeof prev.teamActivityStreak === "number" && Number.isFinite(prev.teamActivityStreak) && prev.teamActivityStreak >= 0
       ? Math.floor(prev.teamActivityStreak)
       : 0;
 
-  if (!lastRaw || !/^\d{4}-\d{2}-\d{2}$/.test(lastRaw)) {
+  if (!lastRaw) {
     return { teamActivityLastDate: today, teamActivityStreak: 1 };
   }
   if (lastRaw === today) return {};
@@ -65,6 +82,7 @@ export type BumpTeamActivityStreakResult = {
   changed: boolean;
   prevStreak: number;
   newStreak: number;
+  coachingContext: CoachingContext;
 };
 
 export async function bumpTeamActivityStreak(
@@ -80,13 +98,17 @@ export async function bumpTeamActivityStreak(
       : 0;
   const delta = computeTeamStreakPatch(prev);
   if (Object.keys(delta).length === 0) {
-    return { changed: false, prevStreak, newStreak: prevStreak };
+    return { changed: false, prevStreak, newStreak: prevStreak, coachingContext: prev };
   }
   const next = mergeCoachingContext(prev, delta);
   const newStreak =
     typeof next.teamActivityStreak === "number" && Number.isFinite(next.teamActivityStreak) && next.teamActivityStreak >= 0
       ? Math.floor(next.teamActivityStreak)
       : prevStreak;
-  await client.from("projects").update({ coaching_context: next, updated_at: new Date().toISOString() }).eq("id", projectId);
-  return { changed: true, prevStreak, newStreak };
+  const { error: updateError } = await client
+    .from("projects")
+    .update({ coaching_context: next, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
+  if (updateError) return null;
+  return { changed: true, prevStreak, newStreak, coachingContext: next };
 }

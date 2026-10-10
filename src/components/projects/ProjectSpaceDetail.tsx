@@ -19,7 +19,6 @@ import {
 } from "@/lib/workspace/busyScheduleDays";
 import {
   parseCoachingContext,
-  mergeCoachingContext,
   type CoachingContext,
   type OnboardingProgressStage,
   type OnboardingTeamSize,
@@ -34,6 +33,7 @@ import {
 } from "@/lib/projects/projectBrief";
 import { ProjectOnboardingWizard } from "@/components/projects/ProjectOnboardingWizard";
 import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal";
+import { saveCoachingContextPatch } from "@/lib/projects/saveCoachingContextPatch";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
@@ -343,14 +343,11 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     async (patch: Partial<CoachingContext>) => {
       if (!supabase || !selectedProject) return;
       setActionErr("");
-      const prev = parseCoachingContext(selectedProject.coaching_context);
-      const next = mergeCoachingContext(prev, patch);
-      const { error } = await supabase
-        .from("projects")
-        .update({ coaching_context: next, updated_at: new Date().toISOString() })
-        .eq("id", selectedProject.id);
-      if (error) {
-        setActionErr(error.message);
+      try {
+        const next = await saveCoachingContextPatch(supabase, selectedProject.id, patch);
+        setSelectedProject((p) => (p ? { ...p, coaching_context: next } : p));
+      } catch (e) {
+        setActionErr(e instanceof Error ? e.message : "保存に失敗しました。");
         return;
       }
       await load();
@@ -361,7 +358,11 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   const recordTeamActivity = useCallback(async (): Promise<BumpTeamActivityStreakResult | null> => {
     if (!supabase || !selectedProject) return null;
     try {
-      return await bumpTeamActivityStreak(supabase, selectedProject.id);
+      const bump = await bumpTeamActivityStreak(supabase, selectedProject.id);
+      if (bump) {
+        setSelectedProject((p) => (p ? { ...p, coaching_context: bump.coachingContext } : p));
+      }
+      return bump;
     } catch {
       return null;
     }
@@ -410,7 +411,6 @@ export function ProjectSpaceDetail({ projectId }: Props) {
       setOnboardingSubmitting(true);
       setActionErr("");
       try {
-        const prev = parseCoachingContext(selectedProject.coaching_context);
         const dreamTrim = data.dreamText.trim();
         const legacyCategoryMap = {
           festival: "event",
@@ -419,20 +419,18 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           community: "custom",
           unclear: "custom",
         } as const;
-        const next = mergeCoachingContext(prev, {
-          onboardingDoneAt: new Date().toISOString(),
-          dreamStatement: dreamTrim || prev.dreamStatement,
-          userSituation: data.userSituation,
-          onboardingBusinessCategory: legacyCategoryMap[data.userSituation],
-          onboardingProgressStage: data.progressStage,
-          onboardingTeamSize: data.teamSize,
-        });
-        const { error: uErr } = await supabase
-          .from("projects")
-          .update({ coaching_context: next, updated_at: new Date().toISOString() })
-          .eq("id", selectedProject.id);
-        if (uErr) {
-          setActionErr(uErr.message);
+        const prev = parseCoachingContext(selectedProject.coaching_context);
+        try {
+          await saveCoachingContextPatch(supabase, selectedProject.id, {
+            onboardingDoneAt: new Date().toISOString(),
+            dreamStatement: dreamTrim || prev.dreamStatement,
+            userSituation: data.userSituation,
+            onboardingBusinessCategory: legacyCategoryMap[data.userSituation],
+            onboardingProgressStage: data.progressStage,
+            onboardingTeamSize: data.teamSize,
+          });
+        } catch (e) {
+          setActionErr(e instanceof Error ? e.message : "保存に失敗しました。");
           return;
         }
         const { buildSituationRoadmapTemplateRowsWithProgress } = await import("@/lib/projects/situationRoadmapTemplates");
