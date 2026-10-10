@@ -21,7 +21,7 @@ import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
-/** 概要のロードマップカードは未完了から最大この件数まで常時表示 */
+/** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
