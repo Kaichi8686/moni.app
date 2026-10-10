@@ -1007,10 +1007,19 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const isOverview = pathname === `/projects/${projectId}/overview`;
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
   const headerBackHref = isOverview ? HOME_PROJECTS_HREF : `/projects/${projectId}/overview`;
+  /** 課題・投票・ボード・資料・メールではプロジェクト名ヘッダーを隠し、戻るだけ残す */
+  const hideProjectIdentityHeader = useMemo(() => {
+    const segment = pathname?.split("/").filter(Boolean)[2] ?? "";
+    return segment === "issues" || segment === "ideas" || segment === "whiteboard" || segment === "documents" || segment === "chat";
+  }, [pathname]);
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
   }, [project?.id, project?.name]);
+
+  useEffect(() => {
+    if (hideProjectIdentityHeader) setActionMenuOpen(false);
+  }, [hideProjectIdentityHeader]);
 
   const onShareProject = useCallback(() => {
     if (!project || !uid) return;
@@ -1023,9 +1032,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         {isCoachChat ? null : (
         <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-4 py-2.5 backdrop-blur sm:py-3">
           <div className="mx-auto max-w-3xl">
-            <p className="mb-1 truncate text-[11px] font-medium text-[#8A8F98]">
-              {tx("プロジェクト", "Projects")} / {sectionLabel}
-            </p>
+            {hideProjectIdentityHeader ? null : (
+              <p className="mb-1 truncate text-[11px] font-medium text-[#8A8F98]">
+                {tx("プロジェクト", "Projects")} / {sectionLabel}
+              </p>
+            )}
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <Link
@@ -1039,13 +1050,16 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 >
                   <ArrowLeft className="h-5 w-5" aria-hidden />
                 </Link>
-                <div className="min-w-0">
-                  <h1 className="truncate text-base font-semibold tracking-tight text-[#1A1A1A] sm:text-lg">
-                    {project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))}
-                  </h1>
-                  {project ? <p className="truncate text-[11px] text-[#8A8F98]">{subtitle}</p> : null}
-                </div>
+                {hideProjectIdentityHeader ? null : (
+                  <div className="min-w-0">
+                    <h1 className="truncate text-base font-semibold tracking-tight text-[#1A1A1A] sm:text-lg">
+                      {project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))}
+                    </h1>
+                    {project ? <p className="truncate text-[11px] text-[#8A8F98]">{subtitle}</p> : null}
+                  </div>
+                )}
               </div>
+              {hideProjectIdentityHeader ? null : (
               <div className="pointer-events-auto relative z-[110] shrink-0" ref={actionMenuRef}>
                 <button
                   type="button"
@@ -1158,6 +1172,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   </div>
                 ) : null}
               </div>
+              )}
             </div>
           </div>
           {headerNotice ? (
