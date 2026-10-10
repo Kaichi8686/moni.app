@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
+import { ProjectTalentPanel } from "@/components/projects/ProjectTalentPanel";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import {
@@ -145,6 +146,8 @@ export function ProjectTabGlide({
   });
   const [brief, setBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [talentProjectId, setTalentProjectId] = useState<string>("");
+  const [talentNotice, setTalentNotice] = useState("");
   const load = useCallback(async () => {
     if (!supabase) {
       setLoading(false);
@@ -248,6 +251,26 @@ export function ProjectTabGlide({
     }
     return list;
   }, [projects, query, sort]);
+
+  const ownedProjects = useMemo(
+    () => (currentUserId ? projects.filter((p) => p.owner_id === currentUserId) : []),
+    [projects, currentUserId],
+  );
+
+  const talentProject = useMemo(
+    () => ownedProjects.find((p) => p.id === talentProjectId) ?? ownedProjects[0] ?? null,
+    [ownedProjects, talentProjectId],
+  );
+
+  useEffect(() => {
+    if (!ownedProjects.length) {
+      setTalentProjectId("");
+      return;
+    }
+    if (!talentProjectId || !ownedProjects.some((p) => p.id === talentProjectId)) {
+      setTalentProjectId(ownedProjects[0]!.id);
+    }
+  }, [ownedProjects, talentProjectId]);
 
   async function onCreate() {
     if (!supabase || !form.name.trim()) return;
@@ -522,34 +545,85 @@ export function ProjectTabGlide({
                 );
               })}
             </div>
-          </div>
 
-          {!loading && displayList.length === 0 ? (
-            <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
-              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
-              </p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  プロジェクトを作る
-                </button>
-                <button
-                  type="button"
-                  className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
-                  onClick={() => {
-                    onNavigate("chat");
-                  }}
-                >
-                  探すタブで応募する
-                </button>
+            {!loading && displayList.length === 0 ? (
+              <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
+                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
+                </p>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
+                    onClick={() => setCreateOpen(true)}
+                  >
+                    プロジェクトを作る
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                    onClick={() => {
+                      onNavigate("chat");
+                    }}
+                  >
+                    探すタブで応募する
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+
+            {!loading && ownedProjects.length > 0 && talentProject ? (
+              <div id="project-talent" className="mt-6 scroll-mt-24 space-y-3 pb-4">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">欲しい人材</p>
+                    <p className="mt-0.5 text-[11px] text-zinc-500">
+                      下で探して招待、または募集を出すと探すタブに載ります
+                    </p>
+                  </div>
+                  {ownedProjects.length > 1 ? (
+                    <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-[11px] font-medium text-zinc-500 sm:flex-none">
+                      対象プロジェクト
+                      <select
+                        className="min-h-[40px] rounded-xl border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
+                        value={talentProject.id}
+                        onChange={(e) => setTalentProjectId(e.target.value)}
+                      >
+                        {ownedProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+                {talentNotice ? (
+                  <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
+                    {talentNotice}
+                  </p>
+                ) : null}
+                <ProjectTalentPanel
+                  projectId={talentProject.id}
+                  projectName={talentProject.name}
+                  userId={currentUserId}
+                  canEdit
+                  memberIds={[]}
+                  recruitmentTarget={talentProject.recruitment_target ?? ""}
+                  recruitmentMessage={talentProject.recruitment_message ?? ""}
+                  visibility={talentProject.visibility === "private" ? "private" : "public"}
+                  onRecruitmentSaved={() => {
+                    void load();
+                  }}
+                  onNotice={(message) => {
+                    setTalentNotice(message);
+                    window.setTimeout(() => setTalentNotice(""), 4200);
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
