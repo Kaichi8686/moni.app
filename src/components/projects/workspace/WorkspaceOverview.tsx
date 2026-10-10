@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   Check,
   FileText,
@@ -91,6 +91,15 @@ export default function WorkspaceOverview() {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [talentNotice, setTalentNotice] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || loading) return;
+    if (window.location.hash !== "#project-talent") return;
+    const handle = window.setTimeout(() => {
+      document.getElementById("project-talent")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(handle);
+  }, [loading, projectId]);
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -189,30 +198,6 @@ export default function WorkspaceOverview() {
           />
         </div>
       </section>
-
-      {talentNotice ? (
-        <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
-          {talentNotice}
-        </p>
-      ) : null}
-
-      <ProjectTalentPanel
-        projectId={projectId}
-        projectName={project.name}
-        userId={uid}
-        canEdit={canEdit}
-        memberIds={project.members.map((m) => m.id)}
-        recruitmentTarget={projectMeta?.recruitment_target ?? ""}
-        recruitmentMessage={projectMeta?.recruitment_message ?? ""}
-        visibility={projectMeta?.visibility === "private" ? "private" : "public"}
-        onRecruitmentSaved={() => {
-          void wsReload();
-        }}
-        onNotice={(message) => {
-          setTalentNotice(message);
-          window.setTimeout(() => setTalentNotice(""), 4200);
-        }}
-      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -417,6 +402,35 @@ export default function WorkspaceOverview() {
           <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("メール", "Mail")} />
         </div>
       </section>
+
+      {talentNotice ? (
+        <p
+          id="project-talent-notice"
+          className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800"
+        >
+          {talentNotice}
+        </p>
+      ) : null}
+
+      <div id="project-talent" className="scroll-mt-24">
+        <ProjectTalentPanel
+          projectId={projectId}
+          projectName={project.name}
+          userId={uid}
+          canEdit={canEdit}
+          memberIds={project.members.map((m) => m.id)}
+          recruitmentTarget={projectMeta?.recruitment_target ?? ""}
+          recruitmentMessage={projectMeta?.recruitment_message ?? ""}
+          visibility={projectMeta?.visibility === "private" ? "private" : "public"}
+          onRecruitmentSaved={() => {
+            void wsReload();
+          }}
+          onNotice={(message) => {
+            setTalentNotice(message);
+            window.setTimeout(() => setTalentNotice(""), 4200);
+          }}
+        />
+      </div>
     </div>
   );
 }
