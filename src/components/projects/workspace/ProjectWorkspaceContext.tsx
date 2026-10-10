@@ -48,6 +48,7 @@ import {
 import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
+import { ProjectSoloDeleteConfirmDialog } from "@/components/projects/workspace/ProjectSoloDeleteConfirmDialog";
 import {
   busyDateKeysFromSchedules,
   encodeScheduleDescription,
@@ -193,6 +194,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
+  const [soloDeleteConfirmOpen, setSoloDeleteConfirmOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
   const [projectMeta, setProjectMeta] = useState<ProjectSettingsMeta | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -784,6 +786,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     try {
       await deleteProject();
       setDeleteProjectConfirmOpen(false);
+      setSoloDeleteConfirmOpen(false);
     } catch (e) {
       setHeaderNotice(e instanceof Error ? e.message : "プロジェクトの削除に失敗しました");
       window.setTimeout(() => setHeaderNotice(""), 4000);
@@ -791,6 +794,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       setDeletingProject(false);
     }
   }, [deleteProject]);
+
+  const isSoloProject = (project?.members.length ?? 1) <= 1;
 
   const saveIssueWork = useCallback(
     async (issueId: string, patch: Partial<IssueWork>) => {
@@ -1137,7 +1142,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       <Share2 className="h-4 w-4 text-[#6B7280]" aria-hidden />
                       {tx("通知を見る", "View notifications")}
                     </button>
-                    {project ? (
+                    {project && (!isSoloProject || isOwner) ? (
                       <>
                         <div className="my-1 border-t border-[#F1F3F5]" aria-hidden />
                         <button
@@ -1147,7 +1152,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                           className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                           onClick={() => {
                             setActionMenuOpen(false);
-                            setDeleteProjectConfirmOpen(true);
+                            if (isSoloProject) {
+                              setSoloDeleteConfirmOpen(true);
+                            } else {
+                              setDeleteProjectConfirmOpen(true);
+                            }
                           }}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden />
@@ -1199,14 +1208,32 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           }}
         />
 
+        <ProjectSoloDeleteConfirmDialog
+          open={soloDeleteConfirmOpen && Boolean(project) && isSoloProject}
+          projectName={project?.name ?? ""}
+          busy={deletingProject}
+          onCancel={() => setSoloDeleteConfirmOpen(false)}
+          onConfirm={confirmDeleteProject}
+        />
+
         <ProjectDeleteVotePanel
-          open={deleteProjectConfirmOpen && Boolean(project)}
+          open={deleteProjectConfirmOpen && Boolean(project) && !isSoloProject}
           projectId={projectId}
           projectName={project?.name ?? ""}
           uid={uid}
           isOwner={isOwner}
           deleting={deletingProject}
           onClose={() => setDeleteProjectConfirmOpen(false)}
+          onProposed={() => {
+            setDeleteProjectConfirmOpen(false);
+            setHeaderNotice(
+              tx(
+                "削除が提案されました。ロードマップ上部で賛否を確認できます。",
+                "Deletion proposed. Review yes/no at the top of the roadmap.",
+              ),
+            );
+            window.setTimeout(() => setHeaderNotice(""), 5000);
+          }}
           onFinalizeDelete={async () => {
             await confirmDeleteProject();
           }}
