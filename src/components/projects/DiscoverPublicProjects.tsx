@@ -347,19 +347,35 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
                       ) : null}
                     </div>
                     <span className="flex w-full min-w-0 flex-col gap-0.5 px-2.5 py-2.5">
-                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
-                        {p.name}
-                      </span>
-                      <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
-                        {lineLabel(p.business_type)}
-                      </span>
-                      <span
-                        className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
-                      >
-                        {recruiting
-                          ? p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")
-                          : tx("公開中", "Public")}
-                      </span>
+                      {recruitBoard ? (
+                        <>
+                          <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
+                            {p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[11px] font-medium text-zinc-500">
+                            {p.name}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                            {lineLabel(p.business_type)}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
+                            {p.name}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                            {lineLabel(p.business_type)}
+                          </span>
+                          <span
+                            className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
+                          >
+                            {recruiting
+                              ? p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")
+                              : tx("公開中", "Public")}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </button>
                 </li>
