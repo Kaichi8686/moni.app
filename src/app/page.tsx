@@ -11,6 +11,7 @@ import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
+import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
@@ -5774,113 +5775,19 @@ export default function Home() {
       </main>
       {profilePortalReady && activeProfileMember
         ? createPortal(
-            <div
-              className="fixed inset-0 z-[100] flex flex-col bg-white pt-[env(safe-area-inset-top,0px)]"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="peer-profile-title"
-            >
-          <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2.5">
-            <button
-              type="button"
-              className="rounded-full p-2.5 text-lg leading-none text-zinc-700 transition hover:bg-zinc-100"
-              onClick={() => setActiveProfileMember(null)}
-              aria-label="閉じる"
-            >
-              ←
-            </button>
-            <span className="text-sm font-semibold text-zinc-900">プロフィール</span>
-            <span className="w-11 shrink-0" aria-hidden />
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 space-y-4 border-b border-zinc-100 px-5 pb-6 pt-2">
-              <div className="flex items-start gap-4">
-                <MemberAvatarBubble
-                  userId={activeProfileMember.id}
-                  name={activeProfileMember.name}
-                  avatarUrl={activeProfileMember.avatarUrl}
-                  size="lg"
-                  className="ring-4 ring-white shadow-md"
-                />
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h2 id="peer-profile-title" className="truncate text-[22px] font-bold leading-tight tracking-tight text-zinc-900">
-                        {activeProfileMember.name}
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className={`shrink-0 rounded-lg border px-3 py-2 text-center text-xs font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
-                        activeProfileMember.id && followingIds.includes(activeProfileMember.id)
-                          ? "border-zinc-300 bg-zinc-50 text-zinc-700"
-                          : activeProfileMember.id && outgoingRequestIds.includes(activeProfileMember.id)
-                            ? "border-zinc-300 bg-zinc-50 text-zinc-600"
-                            : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
-                      }`}
-                      disabled={!activeProfileMember.id}
-                      onClick={() => {
-                        if (!activeProfileMember.id) return;
-                        void toggleFollow(activeProfileMember.id);
-                      }}
-                    >
-                      {!activeProfileMember.id ? "フォローできません" : followingIds.includes(activeProfileMember.id)
-                          ? "フォロー中"
-                          : outgoingRequestIds.includes(activeProfileMember.id)
-                            ? "リクエスト中"
-                            : "フォロー"}
-                    </button>
-                  </div>
-                  <p className="mt-1.5 line-clamp-3 text-sm leading-snug text-zinc-500">{activeProfileMember.goal}</p>
-                </div>
-              </div>
-              {!activeProfileMember.id ? (
-                <p className="text-center text-xs text-zinc-400">このユーザーはデモ表示のみです。</p>
-              ) : null}
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col bg-zinc-50">
-              <div className="shrink-0 border-b border-zinc-200/80 bg-zinc-50 px-5 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">参加中のプロジェクト</h3>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-4">
-                {peerProfileProjectsLoading ? (
-                  <p className="text-center text-sm text-zinc-500">読み込み中…</p>
-                ) : peerProfileProjects.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-sm leading-relaxed text-zinc-500">
-                    {activeProfileMember.id
-                      ? "公開プロジェクトへの参加があればここに表示されます（非公開のみの参加は相手からは見えません）。"
-                      : "デモユーザーのためプロジェクトは表示されません。"}
-                  </p>
-                ) : (
-                  <ul className="space-y-3">
-                    {peerProfileProjects.map((p) => (
-                      <li key={`peer-proj-${p.id}`}>
-                        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 flex-1 font-semibold text-zinc-900">{p.name}</p>
-                            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
-                              {p.visibility === "public" ? "公開" : "非公開"}
-                            </span>
-                          </div>
-                          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-600">
-                            {(p.description ?? "").trim() || "説明はまだありません。"}
-                          </p>
-                          <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
-                            {language === "ja"
-                              ? "探す画面からは説明のみ表示されます。中身を見るにはプロジェクトへの参加が必要です。"
-                              : "Discover shows description only. Join the project to open its contents."}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>,
+            <ExploreFriendProfilePreview
+              key={activeProfileMember.id ?? activeProfileMember.name}
+              member={activeProfileMember}
+              projects={peerProfileProjects}
+              projectsLoading={peerProfileProjectsLoading}
+              isFollowing={Boolean(activeProfileMember.id && followingIds.includes(activeProfileMember.id))}
+              isPending={Boolean(activeProfileMember.id && outgoingRequestIds.includes(activeProfileMember.id))}
+              onClose={() => setActiveProfileMember(null)}
+              onToggleFollow={() => {
+                if (!activeProfileMember.id) return;
+                void toggleFollow(activeProfileMember.id);
+              }}
+            />,
             document.body,
           )
         : null}
