@@ -99,7 +99,7 @@ export default function ShiftCreatePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
         >
-          シフト<span>合わせ</span>
+          シフト<span>メイキング</span>
         </motion.h1>
         <motion.p
           className="shift-brand-sub"

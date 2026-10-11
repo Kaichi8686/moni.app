@@ -9,13 +9,29 @@ const zenMaru = Zen_Maru_Gothic({
   display: "swap",
 });
 
+const title = "シフトメイキング";
+const description =
+  "文化祭のシフトを、みんなの希望（○△×）から自動で割り振るツール。グループLINEにリンクを送って集められます。";
+
 export const metadata: Metadata = {
   title: {
-    default: "シフト合わせ",
-    template: "%s | シフト合わせ",
+    default: title,
+    template: `%s | ${title}`,
   },
-  description:
-    "文化祭のシフトを、みんなの希望（○△×）から自動で割り振るツール。グループLINEにリンクを送って集められます。",
+  description,
+  applicationName: title,
+  openGraph: {
+    type: "website",
+    locale: "ja_JP",
+    siteName: title,
+    title,
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export const viewport: Viewport = {

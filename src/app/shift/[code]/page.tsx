@@ -152,7 +152,7 @@ export default function ShiftRespondPage() {
   if (!board) {
     return (
       <main className="shift-shell">
-        <h1 className="shift-brand-mark">シフト合わせ</h1>
+        <h1 className="shift-brand-mark">シフトメイキング</h1>
         <p className="shift-error">{error || "見つかりません"}</p>
       </main>
     );
@@ -167,7 +167,7 @@ export default function ShiftRespondPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          シフト合わせ
+          シフトメイキング
         </motion.p>
         <motion.h1
           className="shift-brand-mark"
