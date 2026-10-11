@@ -8,6 +8,7 @@ create table if not exists public.profiles (
 
 alter table public.profiles add column if not exists goal text;
 alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists background_url text;
 
 create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),

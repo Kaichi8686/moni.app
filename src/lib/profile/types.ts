@@ -3,6 +3,8 @@ export type ProfileView = {
   displayName: string;
   username: string;
   avatarUrl: string | null;
+  /** プロフィール背景（カバー）画像 */
+  backgroundUrl: string | null;
   bio: string;
   website: string | null;
   school?: string | null;

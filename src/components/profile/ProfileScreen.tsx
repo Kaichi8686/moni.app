@@ -251,6 +251,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             onToggleFollow={onToggleFollow}
             onFollowChange={() => void reload()}
             onAvatarUpdated={() => void reload()}
+            onBackgroundUpdated={() => void reload()}
             viewerId={viewerId}
             profileUserId={profile.id}
             streakDays={
