@@ -193,13 +193,9 @@ export function ProjectTabGlide({
       setLoading(false);
       return;
     }
-    const uid = userId;
-    if (!uid) {
-      setLoading(false);
-      return;
-    }
 
     const client = supabase;
+    const uid = userId;
     setLoading(true);
     setErr("");
     let settled = false;
@@ -211,61 +207,68 @@ export function ProjectTabGlide({
     }, 12_000);
 
     try {
-      const ownedResult = await withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧");
-      if (ownedResult.error) setErr(ownedResult.error);
+      let mergedJoined: ProjectRow[] = [];
+      if (uid) {
+        const ownedResult = await withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧");
+        if (ownedResult.error) setErr(ownedResult.error);
 
-      let memberIds: string[] = [];
-      try {
-        const memRes = await withQueryTimeout(
-          client.from("project_members").select("project_id").eq("user_id", uid),
-          "参加プロジェクト",
-        );
-        if (memRes.error) {
-          setErr((prev) => prev || memRes.error.message);
-        } else {
-          memberIds = [...new Set((memRes.data ?? []).map((m: { project_id: string }) => m.project_id))];
+        let memberIds: string[] = [];
+        try {
+          const memRes = await withQueryTimeout(
+            client.from("project_members").select("project_id").eq("user_id", uid),
+            "参加プロジェクト",
+          );
+          if (memRes.error) {
+            setErr((prev) => prev || memRes.error.message);
+          } else {
+            memberIds = [...new Set((memRes.data ?? []).map((m: { project_id: string }) => m.project_id))];
+          }
+        } catch (e) {
+          setErr((prev) => prev || (e instanceof Error ? e.message : "参加プロジェクトの取得に失敗しました。"));
         }
-      } catch (e) {
-        setErr((prev) => prev || (e instanceof Error ? e.message : "参加プロジェクトの取得に失敗しました。"));
-      }
 
-      const memberResult =
-        memberIds.length > 0
-          ? await withQueryTimeout(fetchProjectsByIds(client, memberIds), "参加プロジェクト詳細")
-          : { rows: [] as ProjectRow[], error: null };
-      if (memberResult.error) setErr((prev) => prev || memberResult.error || "");
+        const memberResult =
+          memberIds.length > 0
+            ? await withQueryTimeout(fetchProjectsByIds(client, memberIds), "参加プロジェクト詳細")
+            : { rows: [] as ProjectRow[], error: null };
+        if (memberResult.error) setErr((prev) => prev || memberResult.error || "");
 
-      const byId = new Map<string, ProjectRow>();
-      for (const row of [...(memberResult.rows ?? []), ...(ownedResult.rows ?? [])]) {
-        byId.set(row.id, row);
+        const byId = new Map<string, ProjectRow>();
+        for (const row of [...(memberResult.rows ?? []), ...(ownedResult.rows ?? [])]) {
+          byId.set(row.id, row);
+        }
+        mergedJoined = [...byId.values()].sort(
+          (a, b) => new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime(),
+        );
+        void Promise.all(
+          mergedJoined
+            .filter((p) => p.owner_id === uid)
+            .map((p) => ensureOwnerMembership(p.id, p.owner_id).catch(() => undefined)),
+        );
       }
-      const mergedJoined = [...byId.values()].sort(
-        (a, b) => new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime(),
-      );
-      void Promise.all(
-        mergedJoined
-          .filter((p) => p.owner_id === uid)
-          .map((p) => ensureOwnerMembership(p.id, p.owner_id).catch(() => undefined)),
-      );
       setJoinedProjects(mergedJoined.slice(0, 200));
       setJoinedIds(new Set(mergedJoined.map((p) => p.id)));
 
-      const [pubRes, favIdsRes, focusRes] = await Promise.all([
-        fetchPublicProjects(client, 80),
-        fetchFavoriteProjectIds(client, uid),
-        fetchWorkingOnProjectId(client, uid),
-      ]);
+      const pubRes = await fetchPublicProjects(client, 80);
       if (pubRes.error) setErr((prev) => prev || pubRes.error || "");
       setPublicProjects(pubRes.rows);
-      setWorkingOnId(focusRes.projectId);
-      if (focusRes.schemaMissing || favIdsRes.schemaMissing) setSocialSchemaMissing(true);
 
       let favoriteRows: ProjectRow[] = [];
-      if (favIdsRes.ids.length > 0) {
-        const favFetch = await fetchProjectsByIds(client, favIdsRes.ids);
-        const favMap = new Map(favFetch.rows.map((p) => [p.id, p]));
-        favoriteRows = favIdsRes.ids.map((id) => favMap.get(id)).filter(Boolean) as ProjectRow[];
+      let focusId: string | null = null;
+      if (uid) {
+        const [favIdsRes, focusRes] = await Promise.all([
+          fetchFavoriteProjectIds(client, uid),
+          fetchWorkingOnProjectId(client, uid),
+        ]);
+        focusId = focusRes.projectId;
+        if (focusRes.schemaMissing || favIdsRes.schemaMissing) setSocialSchemaMissing(true);
+        if (favIdsRes.ids.length > 0) {
+          const favFetch = await fetchProjectsByIds(client, favIdsRes.ids);
+          const favMap = new Map(favFetch.rows.map((p) => [p.id, p]));
+          favoriteRows = favIdsRes.ids.map((id) => favMap.get(id)).filter(Boolean) as ProjectRow[];
+        }
       }
+      setWorkingOnId(focusId);
       setFavoriteProjects(favoriteRows);
 
       const allForMeta = [...mergedJoined, ...pubRes.rows, ...favoriteRows];
@@ -638,24 +641,6 @@ export function ProjectTabGlide({
     if (data?.id) router.push(`/projects/${data.id as string}/overview`);
   }
 
-  if (!hasSession) {
-    return (
-      <div className="flex min-h-[min(70vh,640px)] flex-col items-center justify-center px-6 text-center">
-        <p className="text-lg font-bold text-zinc-900">{tx("プロジェクトを始めよう", "Start a project")}</p>
-        <p className="mt-2 max-w-sm text-sm text-zinc-600">
-          {tx("ログインすると、プロジェクトの作成・参加・発見ができます。", "Sign in to create, join, and discover projects.")}
-        </p>
-        <button
-          type="button"
-          className="mt-4 min-h-[44px] rounded-xl bg-zinc-900 px-6 text-sm font-semibold text-white"
-          onClick={() => onNavigate("account")}
-        >
-          {tx("ログインする", "Log in")}
-        </button>
-      </div>
-    );
-  }
-
   const toastOk =
     toast.includes("しました") ||
     toast.toLowerCase().includes("saved") ||
@@ -700,7 +685,14 @@ export function ProjectTabGlide({
             </label>
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                if (!hasSession) {
+                  flash(tx("ログインが必要です。", "Please sign in."));
+                  onNavigate("account");
+                  return;
+                }
+                setCreateOpen(true);
+              }}
               className="inline-flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl bg-zinc-900 text-white transition hover:bg-zinc-800"
               aria-label={tx("新規プロジェクト", "New project")}
             >
@@ -761,12 +753,36 @@ export function ProjectTabGlide({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-7 px-3 py-4 pb-10 sm:px-5 sm:py-5">
             {/* A/B: Working on hero */}
-            <WorkingOnHero
-              project={workingOnProject}
-              memberCount={workingOnProject ? memberCounts[workingOnProject.id] ?? 0 : 0}
-              loading={loading && !workingOnProject}
-              onPromptSet={() => joinedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            />
+            {!hasSession ? (
+              <section className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-gradient-to-br from-[#fff8f4] via-white to-[#f4f7fb] px-5 py-8 sm:px-8">
+                <h2
+                  className="text-2xl leading-tight text-zinc-900 sm:text-3xl"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {tx("アイディアを実現する拠点へ", "Your hub for turning ideas into action")}
+                </h2>
+                <p className="mt-2 max-w-lg text-sm leading-relaxed text-zinc-600">
+                  {tx(
+                    "ログインすると、取り組み中のプロジェクトや参加中・お気に入りをここにまとめられます。公開プロジェクトは下から探せます。",
+                    "Sign in to pin what you’re working on and manage joined and saved projects. Browse public projects below.",
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("account")}
+                  className="mt-5 inline-flex min-h-[44px] items-center rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
+                >
+                  {tx("ログインする", "Log in")}
+                </button>
+              </section>
+            ) : (
+              <WorkingOnHero
+                project={workingOnProject}
+                memberCount={workingOnProject ? memberCounts[workingOnProject.id] ?? 0 : 0}
+                loading={loading && !workingOnProject}
+                onPromptSet={() => joinedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              />
+            )}
 
             {/* C: Joined */}
             <section ref={joinedSectionRef} aria-labelledby="joined-heading">
@@ -850,7 +866,7 @@ export function ProjectTabGlide({
                       likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
                       likedByMe={likedIds.has(project.id)}
                       favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial={!socialSchemaMissing}
+                      showSocial
                       menuItems={menuForProject(project)}
                       likeBusy={busyLikeId === project.id}
                       favoriteBusy={busyFavoriteId === project.id}
@@ -906,7 +922,7 @@ export function ProjectTabGlide({
                       likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
                       likedByMe={likedIds.has(project.id)}
                       favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial={!socialSchemaMissing}
+                      showSocial
                       menuItems={menuForProject(project)}
                       likeBusy={busyLikeId === project.id}
                       favoriteBusy={busyFavoriteId === project.id}
@@ -963,7 +979,7 @@ export function ProjectTabGlide({
                       likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
                       likedByMe={likedIds.has(project.id)}
                       favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial={!socialSchemaMissing}
+                      showSocial
                       menuItems={menuForProject(project)}
                       likeBusy={busyLikeId === project.id}
                       favoriteBusy={busyFavoriteId === project.id}
