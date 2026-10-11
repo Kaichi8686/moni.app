@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import { createSkillRequest, SKILL_OPTIONS } from "@/lib/discover/skillRequests";
@@ -37,6 +38,7 @@ export function ProjectTalentPanel({
   const [compensation, setCompensation] = useState("なし（経験・実績として）");
   const [postToBoard, setPostToBoard] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [published, setPublished] = useState(false);
 
   useEffect(() => {
     setTargetDraft(recruitmentTarget);
@@ -76,17 +78,13 @@ export function ProjectTalentPanel({
         });
       }
 
+      setPublished(true);
       onRecruitmentSaved();
       onNotice(
-        postToBoard
-          ? tx(
-              "募集を公開しました。探すタブのプロジェクトとスキル募集に反映されます。",
-              "Recruitment posted. It appears on Discover projects and the skills board.",
-            )
-          : tx(
-              "欲しい人材を保存しました。探すタブの公開プロジェクトに表示されます。",
-              "Saved. It will show on public projects in Discover.",
-            ),
+        tx(
+          "募集を公開しました。探すタブの「募集」から確認できます。",
+          "Recruitment published. Check it under Explore → Recruiting.",
+        ),
       );
     } catch (e) {
       onNotice(e instanceof Error ? e.message : tx("保存に失敗しました", "Failed to save"));
@@ -208,6 +206,14 @@ export function ProjectTalentPanel({
             >
               {saving ? tx("公開中…", "Publishing…") : tx("募集を公開する", "Publish recruitment")}
             </button>
+            {published || recruiting ? (
+              <Link
+                href="/?tab=chat&segment=recruit"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-900"
+              >
+                {tx("探すタブの募集で見る", "View on Explore → Recruiting")}
+              </Link>
+            ) : null}
           </>
         )}
       </div>

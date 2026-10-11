@@ -163,7 +163,7 @@ function createMentorWelcomeMessage(): MentorChatMessage {
 
 type DmPeerRow = { room_id: string; peer_id: string; peer_name: string };
 type GroupRoomRow = { room_id: string; room_name: string; owner_id?: string };
-type ExploreSegment = "friends" | "projects";
+type ExploreSegment = "friends" | "projects" | "recruit";
 type TalkRoomMeta = { previewText: string; timeLabel: string; unread: number };
 type OpsEvent = { id: string; name: string; at: string; page: FeaturePage; userId: string | null };
 type ReportEntry = {
@@ -1083,6 +1083,10 @@ export default function Home() {
       setMentorSubTab("ai");
     }
     if (tab === "chat") setChatSubView("list");
+    const segment = params.get("segment");
+    if (segment === "friends" || segment === "projects" || segment === "recruit") {
+      setExploreSegment(segment);
+    }
   }, [router, showLandingPage]);
 
   useEffect(() => {
@@ -5087,6 +5091,22 @@ export default function Home() {
                   <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreSegment === "recruit"}
+                className={`relative min-h-[40px] flex-1 px-2 text-[13px] font-semibold transition sm:px-3 sm:text-sm ${
+                  exploreSegment === "recruit"
+                    ? "text-zinc-900"
+                    : "text-zinc-400 hover:text-zinc-700"
+                }`}
+                onClick={() => setExploreSegment("recruit")}
+              >
+                {t("searchRecruit")}
+                {exploreSegment === "recruit" ? (
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                ) : null}
+              </button>
             </div>
 
             {exploreSegment === "friends" ? (
@@ -5166,9 +5186,13 @@ export default function Home() {
                     : null}
                 </ul>
               </div>
-            ) : (
+            ) : exploreSegment === "projects" ? (
               <div className="flex-1 pt-3" role="tabpanel">
                 <DiscoverPublicProjects showSectionHeader={false} />
+              </div>
+            ) : (
+              <div className="flex-1 pt-3" role="tabpanel">
+                <DiscoverPublicProjects showSectionHeader={false} recruitBoard />
               </div>
             )}
           </div>

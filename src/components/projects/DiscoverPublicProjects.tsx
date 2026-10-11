@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
@@ -14,6 +15,8 @@ const PROJECT_SELECT_FALLBACK =
 
 type Props = {
   showSectionHeader?: boolean;
+  /** 仲間募集中のプロジェクトだけ表示（自分の募集も含む） */
+  recruitBoard?: boolean;
 };
 
 function formatLaunchedAt(iso: string, locale: "ja" | "en"): string {
@@ -26,7 +29,7 @@ function formatLaunchedAt(iso: string, locale: "ja" | "en"): string {
   });
 }
 
-export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
+export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard = false }: Props) {
   const { tx, locale } = useI18n();
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
@@ -35,8 +38,12 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
-  const [recruitingOnly, setRecruitingOnly] = useState(false);
+  const [recruitingOnly, setRecruitingOnly] = useState(recruitBoard);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRecruitingOnly(recruitBoard);
+  }, [recruitBoard]);
   const [toast, setToast] = useState("");
   const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
   const [joinMsgDraft, setJoinMsgDraft] = useState("");
@@ -124,15 +131,23 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
 
   const browseList = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return projects.filter((p) => {
-      if (memberIds.has(p.id)) return false;
+    const filtered = projects.filter((p) => {
       const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
-      if (recruitingOnly && !recruiting) return false;
+      const isMine = memberIds.has(p.id);
+      // 通常のプロジェクト一覧では参加済みを隠す。募集ボードでは自分の募集も見えるようにする。
+      if (isMine && !(recruitBoard && recruiting)) return false;
+      if ((recruitBoard || recruitingOnly) && !recruiting) return false;
       if (!q) return true;
       const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""} ${p.recruitment_message ?? ""}`;
       return hay.toLowerCase().includes(q);
     });
-  }, [projects, memberIds, query, recruitingOnly]);
+    return [...filtered].sort((a, b) => {
+      const ar = Boolean(a.recruitment_target?.trim() || a.recruitment_message?.trim()) ? 1 : 0;
+      const br = Boolean(b.recruitment_target?.trim() || b.recruitment_message?.trim()) ? 1 : 0;
+      if (br !== ar) return br - ar;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+  }, [projects, memberIds, query, recruitingOnly, recruitBoard]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
@@ -187,12 +202,21 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
     <div className="h-full">
       {showSectionHeader ? (
         <div className="mb-3">
-          <h4 className="text-sm font-semibold text-zinc-900">{tx("プロジェクトを探す", "Discover projects")}</h4>
+          <h4 className="text-sm font-semibold text-zinc-900">
+            {recruitBoard
+              ? tx("仲間を募集中のプロジェクト", "Projects recruiting teammates")
+              : tx("プロジェクトを探す", "Discover projects")}
+          </h4>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-            {tx(
-              "欲しい人材を募集中の公開プロジェクトもここから見つかります。カードをタップして詳細を見られます。",
-              "Find public projects recruiting talent here. Tap a card for details.",
-            )}
+            {recruitBoard
+              ? tx(
+                  "欲しい人材を公開しているプロジェクトだけ表示します。カードをタップして詳細を見られます。",
+                  "Only projects with open roles. Tap a card for details.",
+                )
+              : tx(
+                  "欲しい人材を募集中の公開プロジェクトもここから見つかります。カードをタップして詳細を見られます。",
+                  "Find public projects recruiting talent here. Tap a card for details.",
+                )}
           </p>
         </div>
       ) : null}
@@ -206,7 +230,11 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           placeholder={tx("欲しい人材・キーワードで検索", "Search by talent or keyword")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label={tx("公開プロジェクトを検索", "Search public projects")}
+          aria-label={
+            recruitBoard
+              ? tx("募集を検索", "Search open roles")
+              : tx("公開プロジェクトを検索", "Search public projects")
+          }
         />
         <button
           type="submit"
@@ -221,20 +249,22 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         </button>
       </form>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className={`min-h-[32px] rounded-lg px-3 text-[12px] font-semibold transition ${
-            recruitingOnly
-              ? "bg-emerald-600 text-white"
-              : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-          }`}
-          onClick={() => setRecruitingOnly((v) => !v)}
-          aria-pressed={recruitingOnly}
-        >
-          {tx("仲間募集のみ", "Recruiting only")}
-        </button>
-      </div>
+      {!recruitBoard ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={`min-h-[32px] rounded-lg px-3 text-[12px] font-semibold transition ${
+              recruitingOnly
+                ? "bg-emerald-600 text-white"
+                : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+            onClick={() => setRecruitingOnly((v) => !v)}
+            aria-pressed={recruitingOnly}
+          >
+            {tx("仲間募集のみ", "Recruiting only")}
+          </button>
+        </div>
+      ) : null}
 
       {toast ? (
         <p className={`mt-2 text-xs font-medium ${toastOk ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
@@ -243,7 +273,9 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
       <div className="mt-3">
         {!loading && browseList.length > 0 && !query.trim() ? (
           <p className="mb-2 text-[12px] font-semibold text-zinc-500">
-            {tx("注目のプロジェクト（最近更新）", "Featured projects (recently updated)")}
+            {recruitBoard
+              ? tx("仲間募集中（最近更新）", "Open roles (recently updated)")
+              : tx("注目のプロジェクト（最近更新）", "Featured projects (recently updated)")}
           </p>
         ) : null}
         {!loading && browseList.length > 0 && query.trim() ? (
@@ -258,14 +290,20 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
             <p className="text-sm font-medium text-zinc-700">
               {query.trim()
-                ? tx("条件に合う公開プロジェクトはありません。", "No public projects match your search.")
-                : uid
-                  ? tx("まだおすすめが少ないです。検索して探してみましょう。", "Few recommendations yet. Try searching.")
-                  : tx("ログインすると公開プロジェクトに応募できます。", "Sign in to apply to public projects.")}
+                ? recruitBoard
+                  ? tx("条件に合う募集はありません。", "No open roles match your search.")
+                  : tx("条件に合う公開プロジェクトはありません。", "No public projects match your search.")
+                : recruitBoard
+                  ? tx("まだ公開中の募集がありません。", "No open recruitments yet.")
+                  : uid
+                    ? tx("まだおすすめが少ないです。検索して探してみましょう。", "Few recommendations yet. Try searching.")
+                    : tx("ログインすると公開プロジェクトに応募できます。", "Sign in to apply to public projects.")}
             </p>
             {!query.trim() ? (
               <p className="mt-2 text-[12px] text-zinc-500">
-                {tx("名前・説明・カテゴリから検索できます", "Search by name, description, or category.")}
+                {recruitBoard
+                  ? tx("プロジェクトの「募集」から欲しい人材を公開できます", "Post open roles from a project’s Recruit screen.")
+                  : tx("名前・説明・カテゴリから検索できます", "Search by name, description, or category.")}
               </p>
             ) : null}
           </div>
@@ -276,6 +314,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
               const c = PROJECT_ICON_BG[projectHashIndex(p.id, PROJECT_ICON_BG.length)];
               const thumb = p.thumbnail_url?.trim();
               const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
+              const isMine = memberIds.has(p.id);
               return (
                 <li key={p.id} className="min-w-0">
                   <button
@@ -286,7 +325,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                       setJoinMsgDraft("");
                     }}
                   >
-                    <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -301,6 +340,11 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                           {(p.name.trim().charAt(0) || "P").toUpperCase()}
                         </span>
                       )}
+                      {isMine ? (
+                        <span className="absolute left-2 top-2 rounded-md bg-zinc-900/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                          {tx("あなた", "You")}
+                        </span>
+                      ) : null}
                     </div>
                     <span className="flex w-full min-w-0 flex-col gap-0.5 px-2.5 py-2.5">
                       <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
@@ -458,40 +502,60 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
               </dl>
 
               <div className="mt-5 flex flex-col gap-2">
-                <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
-                  {tx(
-                    "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
-                    "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
-                  )}
-                </p>
-                {uid ? (
-                  detailPending ? (
-                    <p className="text-center text-sm font-medium text-amber-800">
-                      {tx("参加申請済みです", "Join request already sent")}
+                {memberIds.has(detail.id) ? (
+                  <>
+                    <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-center text-[12px] leading-relaxed text-emerald-800">
+                      {tx(
+                        "これはあなたのプロジェクトの募集です。探すタブにもこのように表示されます。",
+                        "This is your project’s recruitment. This is how it appears on Discover.",
+                      )}
                     </p>
-                  ) : (
-                    <>
-                      <textarea
-                        className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                        rows={2}
-                        placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
-                        value={joinMsgDraft}
-                        onChange={(e) => setJoinMsgDraft(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        disabled={detailBusy}
-                        onClick={() => void submitJoin(detail.id)}
-                        className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
-                      >
-                        {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
-                      </button>
-                    </>
-                  )
+                    <Link
+                      href={`/projects/${detail.id}/recruit`}
+                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
+                      onClick={() => setDetailProject(null)}
+                    >
+                      {tx("募集を編集する", "Edit recruitment")}
+                    </Link>
+                  </>
                 ) : (
-                  <p className="text-center text-xs text-zinc-500">
-                    {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
-                  </p>
+                  <>
+                    <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
+                      {tx(
+                        "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
+                        "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
+                      )}
+                    </p>
+                    {uid ? (
+                      detailPending ? (
+                        <p className="text-center text-sm font-medium text-amber-800">
+                          {tx("参加申請済みです", "Join request already sent")}
+                        </p>
+                      ) : (
+                        <>
+                          <textarea
+                            className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                            rows={2}
+                            placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
+                            value={joinMsgDraft}
+                            onChange={(e) => setJoinMsgDraft(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            disabled={detailBusy}
+                            onClick={() => void submitJoin(detail.id)}
+                            className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
+                          >
+                            {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
+                          </button>
+                        </>
+                      )
+                    ) : (
+                      <p className="text-center text-xs text-zinc-500">
+                        {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
