@@ -418,7 +418,6 @@ export default function WorkspaceOverview() {
           projectName={project.name}
           userId={uid}
           canEdit={canEdit}
-          memberIds={project.members.map((m) => m.id)}
           recruitmentTarget={projectMeta?.recruitment_target ?? ""}
           recruitmentMessage={projectMeta?.recruitment_message ?? ""}
           visibility={projectMeta?.visibility === "private" ? "private" : "public"}
