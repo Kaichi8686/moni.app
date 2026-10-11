@@ -39,12 +39,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
-  const [recruitingOnly, setRecruitingOnly] = useState(recruitBoard);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRecruitingOnly(recruitBoard);
-  }, [recruitBoard]);
   const [toast, setToast] = useState("");
   const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
   const [joinMsgDraft, setJoinMsgDraft] = useState("");
@@ -142,7 +137,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
       const isMine = memberIds.has(p.id);
       // 通常のプロジェクト一覧では参加済みを隠す。募集ボードでは自分の募集も見えるようにする。
       if (isMine && !(recruitBoard && recruiting)) return false;
-      if ((recruitBoard || recruitingOnly) && !recruiting) return false;
+      if (recruitBoard && !recruiting) return false;
       if (!q) return true;
       const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""} ${p.recruitment_message ?? ""}`;
       return hay.toLowerCase().includes(q);
@@ -153,7 +148,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
       if (br !== ar) return br - ar;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
-  }, [projects, memberIds, query, recruitingOnly, recruitBoard]);
+  }, [projects, memberIds, query, recruitBoard]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
@@ -254,23 +249,6 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
           <span className="hidden sm:inline">{tx("絞り込む", "Search")}</span>
         </button>
       </form>
-
-      {!recruitBoard ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className={`min-h-[32px] rounded-lg px-3 text-[12px] font-semibold transition ${
-              recruitingOnly
-                ? "bg-emerald-600 text-white"
-                : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-            onClick={() => setRecruitingOnly((v) => !v)}
-            aria-pressed={recruitingOnly}
-          >
-            {tx("仲間募集のみ", "Recruiting only")}
-          </button>
-        </div>
-      ) : null}
 
       {toast ? (
         <p className={`mt-2 text-xs font-medium ${toastOk ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
