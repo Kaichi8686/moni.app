@@ -14,11 +14,14 @@ import type {
 } from "@/lib/shift/types";
 
 const DATA_DIR = path.join(process.cwd(), ".data", "shift");
+const BUCKET = "festival-shift";
 
 type StoreBundle = {
   board: ShiftBoard;
   responses: ShiftResponse[];
 };
+
+let bucketReady: Promise<void> | null = null;
 
 async function ensureDir(): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -39,11 +42,60 @@ async function readFileBundle(code: string): Promise<StoreBundle | null> {
 
 async function writeFileBundle(bundle: StoreBundle): Promise<void> {
   await ensureDir();
-  await fs.writeFile(filePath(bundle.board.code), JSON.stringify(bundle, null, 2), "utf8");
+  await fs.writeFile(filePath(bundle.board.code), JSON.stringify(bundle), "utf8");
 }
 
 function supabaseEnabled(): boolean {
   return Boolean(getSupabaseAdmin());
+}
+
+async function ensureBucket(): Promise<void> {
+  if (!supabaseEnabled()) return;
+  if (!bucketReady) {
+    bucketReady = (async () => {
+      const admin = getSupabaseAdmin()!;
+      const { data, error } = await admin.storage.listBuckets();
+      if (error) throw new Error(error.message);
+      if (!data?.some((b) => b.name === BUCKET)) {
+        const { error: createErr } = await admin.storage.createBucket(BUCKET, {
+          public: false,
+          fileSizeLimit: 2 * 1024 * 1024,
+        });
+        // race: already exists is fine
+        if (createErr && !/already exists|duplicate/i.test(createErr.message)) {
+          throw new Error(createErr.message);
+        }
+      }
+    })().catch((e) => {
+      bucketReady = null;
+      throw e;
+    });
+  }
+  await bucketReady;
+}
+
+function objectPath(code: string): string {
+  return `boards/${code}.json`;
+}
+
+async function readRemoteBundle(code: string): Promise<StoreBundle | null> {
+  await ensureBucket();
+  const admin = getSupabaseAdmin()!;
+  const { data, error } = await admin.storage.from(BUCKET).download(objectPath(code));
+  if (error || !data) return null;
+  const text = await data.text();
+  return JSON.parse(text) as StoreBundle;
+}
+
+async function writeRemoteBundle(bundle: StoreBundle): Promise<void> {
+  await ensureBucket();
+  const admin = getSupabaseAdmin()!;
+  const body = JSON.stringify(bundle);
+  const { error } = await admin.storage.from(BUCKET).upload(objectPath(bundle.board.code), body, {
+    contentType: "application/json",
+    upsert: true,
+  });
+  if (error) throw new Error(error.message);
 }
 
 function normalizeDays(input: CreateBoardInput["days"]): ShiftDay[] {
@@ -75,9 +127,8 @@ async function uniqueCode(): Promise<string> {
   for (let i = 0; i < 12; i++) {
     const code = makeShareCode(8);
     if (supabaseEnabled()) {
-      const admin = getSupabaseAdmin()!;
-      const { data } = await admin.from("festival_shift_boards").select("code").eq("code", code).maybeSingle();
-      if (!data) return code;
+      const existing = await readRemoteBundle(code);
+      if (!existing) return code;
     } else {
       const existing = await readFileBundle(code);
       if (!existing) return code;
@@ -102,84 +153,19 @@ export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> 
     assignments: null,
   };
 
+  const bundle = { board, responses: [] as ShiftResponse[] };
   if (supabaseEnabled()) {
-    const admin = getSupabaseAdmin()!;
-    const { error } = await admin.from("festival_shift_boards").insert({
-      id: board.id,
-      code: board.code,
-      admin_key: board.adminKey,
-      title: board.title,
-      note: board.note,
-      days: board.days,
-      slots: board.slots,
-      roles: board.roles,
-      assignments: null,
-      created_at: board.createdAt,
-      updated_at: board.updatedAt,
-    });
-    if (error) throw new Error(error.message);
-    return board;
+    await writeRemoteBundle(bundle);
+  } else {
+    await writeFileBundle(bundle);
   }
-
-  await writeFileBundle({ board, responses: [] });
   return board;
-}
-
-function rowToBoard(row: Record<string, unknown>): ShiftBoard {
-  return {
-    id: String(row.id),
-    code: String(row.code),
-    adminKey: String(row.admin_key),
-    title: String(row.title ?? ""),
-    note: String(row.note ?? ""),
-    days: (row.days as ShiftDay[]) ?? [],
-    slots: (row.slots as ShiftSlot[]) ?? [],
-    roles: (row.roles as ShiftRole[]) ?? [],
-    createdAt: String(row.created_at ?? ""),
-    updatedAt: String(row.updated_at ?? ""),
-    assignments: (row.assignments as ShiftAssignmentResult | null) ?? null,
-  };
-}
-
-function rowToResponse(row: Record<string, unknown>): ShiftResponse {
-  return {
-    id: String(row.id),
-    boardId: String(row.board_id),
-    name: String(row.name ?? ""),
-    prefs: (row.prefs as Record<string, Pref>) ?? {},
-    preferredRoleIds: (row.preferred_role_ids as string[]) ?? [],
-    note: String(row.note ?? ""),
-    createdAt: String(row.created_at ?? ""),
-    updatedAt: String(row.updated_at ?? ""),
-  };
 }
 
 export async function getBundle(code: string): Promise<StoreBundle | null> {
   const normalized = code.trim().toLowerCase();
   if (!normalized) return null;
-
-  if (supabaseEnabled()) {
-    const admin = getSupabaseAdmin()!;
-    const { data: boardRow, error } = await admin
-      .from("festival_shift_boards")
-      .select("*")
-      .eq("code", normalized)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!boardRow) return null;
-    const board = rowToBoard(boardRow as Record<string, unknown>);
-    const { data: responseRows, error: rErr } = await admin
-      .from("festival_shift_responses")
-      .select("*")
-      .eq("board_id", board.id)
-      .order("created_at", { ascending: true });
-    if (rErr) throw new Error(rErr.message);
-    return {
-      board,
-      responses: (responseRows ?? []).map((r) => rowToResponse(r as Record<string, unknown>)),
-    };
-  }
-
+  if (supabaseEnabled()) return readRemoteBundle(normalized);
   return readFileBundle(normalized);
 }
 
@@ -226,34 +212,15 @@ export async function upsertResponse(
         updatedAt: now,
       };
 
-  if (supabaseEnabled()) {
-    const admin = getSupabaseAdmin()!;
-    const { error } = await admin.from("festival_shift_responses").upsert(
-      {
-        id: response.id,
-        board_id: response.boardId,
-        name: response.name,
-        prefs: response.prefs,
-        preferred_role_ids: response.preferredRoleIds,
-        note: response.note,
-        created_at: response.createdAt,
-        updated_at: response.updatedAt,
-      },
-      { onConflict: "id" },
-    );
-    if (error) throw new Error(error.message);
-    await admin
-      .from("festival_shift_boards")
-      .update({ updated_at: now, assignments: null })
-      .eq("id", bundle.board.id);
-    return response;
-  }
-
   const nextResponses = existing
     ? bundle.responses.map((r) => (r.id === response.id ? response : r))
     : [...bundle.responses, response];
   const nextBoard = { ...bundle.board, updatedAt: now, assignments: null };
-  await writeFileBundle({ board: nextBoard, responses: nextResponses });
+  const next = { board: nextBoard, responses: nextResponses };
+
+  if (supabaseEnabled()) await writeRemoteBundle(next);
+  else await writeFileBundle(next);
+
   return response;
 }
 
@@ -268,18 +235,11 @@ export async function saveAssignments(
 
   const now = new Date().toISOString();
   const nextBoard = { ...bundle.board, assignments, updatedAt: now };
+  const next = { board: nextBoard, responses: bundle.responses };
 
-  if (supabaseEnabled()) {
-    const admin = getSupabaseAdmin()!;
-    const { error } = await admin
-      .from("festival_shift_boards")
-      .update({ assignments, updated_at: now })
-      .eq("id", bundle.board.id);
-    if (error) throw new Error(error.message);
-    return nextBoard;
-  }
+  if (supabaseEnabled()) await writeRemoteBundle(next);
+  else await writeFileBundle(next);
 
-  await writeFileBundle({ board: nextBoard, responses: bundle.responses });
   return nextBoard;
 }
 
