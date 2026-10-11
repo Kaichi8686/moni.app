@@ -64,7 +64,8 @@ export default function BunkasaiShiftPage() {
   }, []);
 
   useEffect(() => {
-    if (!supabaseEnabled || !supabase) {
+    const client = supabase;
+    if (!supabaseEnabled || !client) {
       setLoading(false);
       setStatus({
         tone: "error",
@@ -79,7 +80,7 @@ export default function BunkasaiShiftPage() {
       if (!cancelled) setLoading(false);
     })();
 
-    const channel = supabase
+    const channel = client
       .channel("bunkasai-signups-live")
       .on(
         "postgres_changes",
@@ -92,7 +93,7 @@ export default function BunkasaiShiftPage() {
 
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      void client.removeChannel(channel);
     };
   }, [refresh]);
 
