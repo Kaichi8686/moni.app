@@ -13,7 +13,11 @@ import type {
   ShiftSlot,
 } from "@/lib/shift/types";
 
-const DATA_DIR = path.join(process.cwd(), ".data", "shift");
+/** Vercel の /var/task は読み取り専用なので /tmp を使う（ローカルは .data） */
+const DATA_DIR =
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+    ? path.join("/tmp", "shift-data")
+    : path.join(process.cwd(), ".data", "shift");
 const BUCKET = "festival-shift";
 
 type StoreBundle = {
