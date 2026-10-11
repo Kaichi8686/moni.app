@@ -1,0 +1,249 @@
+.bunkasai-root {
+  --bk-ink: #1f2430;
+  --bk-muted: #5c6578;
+  --bk-card: rgba(255, 255, 255, 0.92);
+  --bk-line: rgba(31, 36, 48, 0.08);
+  --bk-accent: #ff6b2c;
+  --bk-accent-deep: #e85a1c;
+  --bk-mint: #1fad8f;
+  --bk-sky: #3d9cf0;
+  --bk-warn: #f0b429;
+  --font-bunkasai-ui: var(--font-bunkasai), "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+
+  min-height: 100dvh;
+  color: var(--bk-ink);
+  font-family: var(--font-bunkasai-ui);
+  background:
+    radial-gradient(900px 420px at 0% -10%, rgba(255, 138, 61, 0.35), transparent 55%),
+    radial-gradient(700px 380px at 100% 0%, rgba(61, 156, 240, 0.28), transparent 50%),
+    radial-gradient(600px 300px at 50% 100%, rgba(31, 173, 143, 0.18), transparent 45%),
+    linear-gradient(180deg, #fff8f1 0%, #f3f8ff 55%, #eefaf6 100%);
+}
+
+.bunkasai-shell {
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 1.25rem 1rem calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+.bunkasai-hero {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+
+.bunkasai-kicker {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--bk-accent-deep);
+  background: rgba(255, 107, 44, 0.12);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.bunkasai-title {
+  margin: 0;
+  font-size: clamp(1.85rem, 7vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.bunkasai-sub {
+  margin: 0.55rem 0 0;
+  color: var(--bk-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.bunkasai-mine {
+  margin-top: 1rem;
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(135deg, rgba(31, 173, 143, 0.16), rgba(61, 156, 240, 0.12));
+  border: 1px solid rgba(31, 173, 143, 0.25);
+  text-align: left;
+}
+
+.bunkasai-mine strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 0.2rem;
+}
+
+.bunkasai-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.bunkasai-card {
+  background: var(--bk-card);
+  border: 1px solid var(--bk-line);
+  border-radius: 22px;
+  padding: 1rem 1rem 0.95rem;
+  box-shadow: 0 10px 28px rgba(31, 36, 48, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+.bunkasai-card[data-full="true"] {
+  opacity: 0.78;
+}
+
+.bunkasai-card[data-mine="true"] {
+  border-color: rgba(31, 173, 143, 0.45);
+  box-shadow: 0 0 0 3px rgba(31, 173, 143, 0.12), 0 10px 28px rgba(31, 36, 48, 0.05);
+}
+
+.bunkasai-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bunkasai-slot-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.bunkasai-slot-time {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--bk-ink);
+}
+
+.bunkasai-slot-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--bk-muted);
+}
+
+.bunkasai-count {
+  flex-shrink: 0;
+  min-width: 4.8rem;
+  text-align: center;
+  border-radius: 16px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(61, 156, 240, 0.1);
+  font-weight: 800;
+}
+
+.bunkasai-count[data-full="true"] {
+  background: rgba(240, 180, 41, 0.22);
+  color: #8a5a00;
+}
+
+.bunkasai-count small {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--bk-muted);
+}
+
+.bunkasai-members {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.bunkasai-members li {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--bk-muted);
+  background: rgba(31, 36, 48, 0.04);
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+}
+
+.bunkasai-members li[data-me="true"] {
+  background: rgba(31, 173, 143, 0.18);
+  color: #0f7664;
+}
+
+.bunkasai-empty {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--bk-muted);
+}
+
+.bunkasai-actions {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.bunkasai-btn {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  min-height: 3.1rem;
+  padding: 0.85rem 1rem;
+  font: inherit;
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+}
+
+.bunkasai-btn:active {
+  transform: scale(0.98);
+}
+
+.bunkasai-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bunkasai-btn-primary {
+  background: var(--bk-accent);
+  color: #fff;
+}
+
+.bunkasai-btn-primary:hover:not(:disabled) {
+  background: var(--bk-accent-deep);
+}
+
+.bunkasai-btn-ghost {
+  background: #fff;
+  color: var(--bk-ink);
+  border: 1px solid var(--bk-line);
+}
+
+.bunkasai-btn-danger {
+  background: rgba(220, 70, 70, 0.1);
+  color: #b42318;
+  border: 1px solid rgba(220, 70, 70, 0.18);
+}
+
+.bunkasai-status {
+  margin: 0.75rem 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.bunkasai-status[data-tone="error"] {
+  color: #b42318;
+}
+
+.bunkasai-status[data-tone="ok"] {
+  color: #0f7664;
+}
+
+.bunkasai-status[data-tone="muted"] {
+  color: var(--bk-muted);
+}
+
+.bunkasai-foot {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--bk-muted);
+  line-height: 1.5;
+}
