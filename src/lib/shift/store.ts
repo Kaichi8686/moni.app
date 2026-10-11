@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { makeAdminKey, makeId, makeShareCode } from "@/lib/shift/codes";
+import { generateSlotsFromSchedule } from "@/lib/shift/slots";
 import type {
   CreateBoardInput,
   Pref,
@@ -10,10 +11,16 @@ import type {
   ShiftDay,
   ShiftResponse,
   ShiftRole,
+  ShiftScheduleConfig,
   ShiftSlot,
+  UpdateBoardInput,
 } from "@/lib/shift/types";
+import { DEFAULT_SCHEDULE, normalizeBoard } from "@/lib/shift/types";
 
-const DATA_DIR = path.join(process.cwd(), ".data", "shift");
+const DATA_DIR =
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+    ? path.join("/tmp", "shift-data")
+    : path.join(process.cwd(), ".data", "shift");
 const BUCKET = "festival-shift";
 
 type StoreBundle = {
@@ -34,7 +41,7 @@ function filePath(code: string): string {
 async function readFileBundle(code: string): Promise<StoreBundle | null> {
   try {
     const raw = await fs.readFile(filePath(code), "utf8");
-    return JSON.parse(raw) as StoreBundle;
+    return hydrateBundle(JSON.parse(raw) as StoreBundle);
   } catch {
     return null;
   }
@@ -61,7 +68,6 @@ async function ensureBucket(): Promise<void> {
           public: false,
           fileSizeLimit: 2 * 1024 * 1024,
         });
-        // race: already exists is fine
         if (createErr && !/already exists|duplicate/i.test(createErr.message)) {
           throw new Error(createErr.message);
         }
@@ -78,13 +84,20 @@ function objectPath(code: string): string {
   return `boards/${code}.json`;
 }
 
+function hydrateBundle(bundle: StoreBundle): StoreBundle {
+  return {
+    board: normalizeBoard(bundle.board),
+    responses: bundle.responses ?? [],
+  };
+}
+
 async function readRemoteBundle(code: string): Promise<StoreBundle | null> {
   await ensureBucket();
   const admin = getSupabaseAdmin()!;
   const { data, error } = await admin.storage.from(BUCKET).download(objectPath(code));
   if (error || !data) return null;
   const text = await data.text();
-  return JSON.parse(text) as StoreBundle;
+  return hydrateBundle(JSON.parse(text) as StoreBundle);
 }
 
 async function writeRemoteBundle(bundle: StoreBundle): Promise<void> {
@@ -106,16 +119,7 @@ function normalizeDays(input: CreateBoardInput["days"]): ShiftDay[] {
   }));
 }
 
-function normalizeSlots(input: CreateBoardInput["slots"]): ShiftSlot[] {
-  return input.map((s, i) => ({
-    id: `s${i + 1}`,
-    label: s.label.trim() || `時間帯${i + 1}`,
-    start: s.start?.trim() || undefined,
-    end: s.end?.trim() || undefined,
-  }));
-}
-
-function normalizeRoles(input: CreateBoardInput["roles"]): ShiftRole[] {
+function normalizeRoles(input: NonNullable<UpdateBoardInput["roles"]>): ShiftRole[] {
   return input.map((r, i) => ({
     id: `r${i + 1}`,
     name: r.name.trim() || `役割${i + 1}`,
@@ -123,22 +127,59 @@ function normalizeRoles(input: CreateBoardInput["roles"]): ShiftRole[] {
   }));
 }
 
+function normalizeSchedule(input?: ShiftScheduleConfig): ShiftScheduleConfig {
+  const base = input ?? DEFAULT_SCHEDULE;
+  return {
+    dayStart: base.dayStart || DEFAULT_SCHEDULE.dayStart,
+    dayEnd: base.dayEnd || DEFAULT_SCHEDULE.dayEnd,
+    slotMinutes: Math.max(15, Math.min(240, Math.floor(base.slotMinutes || 60))),
+    breaks: (base.breaks ?? []).map((b, i) => ({
+      id: b.id || `br${i + 1}`,
+      label: (b.label || "休み時間").trim(),
+      start: b.start,
+      end: b.end,
+    })),
+    maxConsecutive: Math.max(0, Math.min(20, Math.floor(base.maxConsecutive || 0))),
+    buddyPairs: (base.buddyPairs ?? []).map((p, i) => ({
+      id: p.id || `bp${i + 1}`,
+      nameA: p.nameA.trim(),
+      nameB: p.nameB.trim(),
+    })),
+  };
+}
+
+function slotsFromInput(input: CreateBoardInput): ShiftSlot[] {
+  if (input.slots && input.slots.length > 0) {
+    return input.slots.map((s, i) => ({
+      id: s.isBreak ? `b${i + 1}` : `s${i + 1}`,
+      label: s.label.trim() || `時間帯${i + 1}`,
+      start: s.start?.trim() || undefined,
+      end: s.end?.trim() || undefined,
+      isBreak: Boolean(s.isBreak),
+    }));
+  }
+  return generateSlotsFromSchedule(normalizeSchedule(input.schedule));
+}
+
 async function uniqueCode(): Promise<string> {
   for (let i = 0; i < 12; i++) {
     const code = makeShareCode(8);
-    if (supabaseEnabled()) {
-      const existing = await readRemoteBundle(code);
-      if (!existing) return code;
-    } else {
-      const existing = await readFileBundle(code);
-      if (!existing) return code;
-    }
+    const existing = supabaseEnabled()
+      ? await readRemoteBundle(code)
+      : await readFileBundle(code);
+    if (!existing) return code;
   }
   return makeShareCode(10);
 }
 
+async function persist(bundle: StoreBundle): Promise<void> {
+  if (supabaseEnabled()) await writeRemoteBundle(bundle);
+  else await writeFileBundle(bundle);
+}
+
 export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> {
   const now = new Date().toISOString();
+  const schedule = normalizeSchedule(input.schedule);
   const board: ShiftBoard = {
     id: makeId(),
     code: await uniqueCode(),
@@ -146,19 +187,15 @@ export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> 
     title: input.title.trim() || "文化祭シフト",
     note: (input.note ?? "").trim(),
     days: normalizeDays(input.days),
-    slots: normalizeSlots(input.slots),
+    slots: slotsFromInput({ ...input, schedule }),
     roles: normalizeRoles(input.roles),
+    schedule,
     createdAt: now,
     updatedAt: now,
     assignments: null,
   };
 
-  const bundle = { board, responses: [] as ShiftResponse[] };
-  if (supabaseEnabled()) {
-    await writeRemoteBundle(bundle);
-  } else {
-    await writeFileBundle(bundle);
-  }
+  await persist({ board, responses: [] });
   return board;
 }
 
@@ -167,6 +204,31 @@ export async function getBundle(code: string): Promise<StoreBundle | null> {
   if (!normalized) return null;
   if (supabaseEnabled()) return readRemoteBundle(normalized);
   return readFileBundle(normalized);
+}
+
+export async function updateBoard(
+  code: string,
+  adminKey: string,
+  input: UpdateBoardInput,
+): Promise<ShiftBoard> {
+  const bundle = await getBundle(code);
+  if (!bundle) throw new Error("NOT_FOUND");
+  if (bundle.board.adminKey !== adminKey) throw new Error("FORBIDDEN");
+
+  const now = new Date().toISOString();
+  const next: ShiftBoard = { ...bundle.board, updatedAt: now, assignments: null };
+
+  if (input.title !== undefined) next.title = input.title.trim() || next.title;
+  if (input.note !== undefined) next.note = input.note.trim();
+  if (input.days) next.days = normalizeDays(input.days);
+  if (input.roles) next.roles = normalizeRoles(input.roles);
+  if (input.schedule) {
+    next.schedule = normalizeSchedule(input.schedule);
+    next.slots = generateSlotsFromSchedule(next.schedule);
+  }
+
+  await persist({ board: next, responses: bundle.responses });
+  return next;
 }
 
 export async function upsertResponse(
@@ -215,12 +277,10 @@ export async function upsertResponse(
   const nextResponses = existing
     ? bundle.responses.map((r) => (r.id === response.id ? response : r))
     : [...bundle.responses, response];
-  const nextBoard = { ...bundle.board, updatedAt: now, assignments: null };
-  const next = { board: nextBoard, responses: nextResponses };
-
-  if (supabaseEnabled()) await writeRemoteBundle(next);
-  else await writeFileBundle(next);
-
+  await persist({
+    board: { ...bundle.board, updatedAt: now, assignments: null },
+    responses: nextResponses,
+  });
   return response;
 }
 
@@ -235,11 +295,7 @@ export async function saveAssignments(
 
   const now = new Date().toISOString();
   const nextBoard = { ...bundle.board, assignments, updatedAt: now };
-  const next = { board: nextBoard, responses: bundle.responses };
-
-  if (supabaseEnabled()) await writeRemoteBundle(next);
-  else await writeFileBundle(next);
-
+  await persist({ board: nextBoard, responses: bundle.responses });
   return nextBoard;
 }
 

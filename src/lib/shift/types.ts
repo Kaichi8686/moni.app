@@ -1,4 +1,4 @@
-/** 文化祭シフト合わせ — スタンドアロン（moniログイン不要） */
+/** シフトメイキング — スタンドアロン（ログイン不要） */
 
 export type Pref = "prefer" | "ok" | "ng";
 
@@ -15,6 +15,15 @@ export type ShiftSlot = {
   start?: string;
   /** 例: "13:00" */
   end?: string;
+  /** 休み時間（誰も入れない） */
+  isBreak?: boolean;
+};
+
+export type ShiftBreak = {
+  id: string;
+  label: string;
+  start: string; // HH:mm
+  end: string;
 };
 
 export type ShiftRole = {
@@ -22,6 +31,26 @@ export type ShiftRole = {
   name: string;
   /** 1コマあたりの必要人数 */
   needed: number;
+};
+
+/** バディ（なるべく同じコマに入れる） */
+export type ShiftBuddyPair = {
+  id: string;
+  nameA: string;
+  nameB: string;
+};
+
+export type ShiftScheduleConfig = {
+  /** 営業/公開の開始 HH:mm */
+  dayStart: string;
+  /** 終了 HH:mm */
+  dayEnd: string;
+  /** 何分ごとにシフトを切り替えるか */
+  slotMinutes: number;
+  breaks: ShiftBreak[];
+  /** 連続で入れる最大コマ数（0=制限なし） */
+  maxConsecutive: number;
+  buddyPairs: ShiftBuddyPair[];
 };
 
 export type ShiftCellKey = string; // `${dayId}:${slotId}`
@@ -35,9 +64,9 @@ export type ShiftBoard = {
   days: ShiftDay[];
   slots: ShiftSlot[];
   roles: ShiftRole[];
+  schedule: ShiftScheduleConfig;
   createdAt: string;
   updatedAt: string;
-  /** 自動割り振り結果（未実行なら null） */
   assignments: ShiftAssignmentResult | null;
 };
 
@@ -45,9 +74,7 @@ export type ShiftResponse = {
   id: string;
   boardId: string;
   name: string;
-  /** day:slot → 希望 */
   prefs: Record<ShiftCellKey, Pref>;
-  /** やりたい役割 ID */
   preferredRoleIds: string[];
   note: string;
   createdAt: string;
@@ -72,21 +99,35 @@ export type CellAssignment = {
 export type ShiftAssignmentResult = {
   generatedAt: string;
   cells: CellAssignment[];
-  /** 誰が何コマ入ったか */
   loadByResponseId: Record<string, number>;
   unassignedNames: string[];
-};
-
-export type PublicBoard = Omit<ShiftBoard, "adminKey"> & {
-  responseCount: number;
 };
 
 export type CreateBoardInput = {
   title: string;
   note?: string;
   days: Array<{ label: string; date?: string }>;
-  slots: Array<{ label: string; start?: string; end?: string }>;
   roles: Array<{ name: string; needed: number }>;
+  schedule: ShiftScheduleConfig;
+  /** 手動スロットを渡す場合（通常は schedule から生成） */
+  slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean }>;
+};
+
+export type UpdateBoardInput = {
+  title?: string;
+  note?: string;
+  days?: Array<{ label: string; date?: string }>;
+  roles?: Array<{ name: string; needed: number }>;
+  schedule?: ShiftScheduleConfig;
+};
+
+export const DEFAULT_SCHEDULE: ShiftScheduleConfig = {
+  dayStart: "09:00",
+  dayEnd: "17:00",
+  slotMinutes: 60,
+  breaks: [{ id: "br1", label: "昼休み", start: "12:00", end: "13:00" }],
+  maxConsecutive: 2,
+  buddyPairs: [],
 };
 
 export function cellKey(dayId: string, slotId: string): ShiftCellKey {
@@ -96,4 +137,12 @@ export function cellKey(dayId: string, slotId: string): ShiftCellKey {
 export function parseCellKey(key: ShiftCellKey): { dayId: string; slotId: string } {
   const i = key.indexOf(":");
   return { dayId: key.slice(0, i), slotId: key.slice(i + 1) };
+}
+
+export function normalizeBoard(board: ShiftBoard): ShiftBoard {
+  return {
+    ...board,
+    schedule: board.schedule ?? { ...DEFAULT_SCHEDULE, breaks: [], buddyPairs: [] },
+    slots: (board.slots ?? []).map((s) => ({ ...s, isBreak: Boolean(s.isBreak) })),
+  };
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getBundle, upsertResponse } from "@/lib/shift/store";
-import type { Pref } from "@/lib/shift/types";
+import { getBundle, updateBoard, upsertResponse } from "@/lib/shift/store";
+import type { Pref, UpdateBoardInput } from "@/lib/shift/types";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function GET(req: Request, ctx: Ctx) {
 
   try {
     const bundle = await getBundle(code);
-    if (!bundle) return bad("見つかりません", 404);
+    if (!bundle) return bad("シフト表が見つかりません", 404);
 
     const isAdmin = Boolean(adminKey && adminKey === bundle.board.adminKey);
     const publicBoard = {
@@ -28,9 +28,10 @@ export async function GET(req: Request, ctx: Ctx) {
       days: bundle.board.days,
       slots: bundle.board.slots,
       roles: bundle.board.roles,
+      schedule: bundle.board.schedule,
       createdAt: bundle.board.createdAt,
       updatedAt: bundle.board.updatedAt,
-      assignments: isAdmin ? bundle.board.assignments : null,
+      assignments: bundle.board.assignments,
     };
 
     return NextResponse.json({
@@ -87,8 +88,29 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ ok: true, response });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "保存に失敗しました";
-    if (msg === "NOT_FOUND") return bad("見つかりません", 404);
+    if (msg === "NOT_FOUND") return bad("シフト表が見つかりません", 404);
     if (msg === "NAME_REQUIRED") return bad("名前を入力してください");
+    return bad(msg, 500);
+  }
+}
+
+export async function PATCH(req: Request, ctx: Ctx) {
+  const { code } = await ctx.params;
+  let body: UpdateBoardInput & { adminKey?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return bad("JSON が不正です");
+  }
+  if (!body.adminKey) return bad("管理者キーが必要です", 403);
+
+  try {
+    const board = await updateBoard(code, body.adminKey, body);
+    return NextResponse.json({ ok: true, board });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "更新に失敗しました";
+    if (msg === "NOT_FOUND") return bad("シフト表が見つかりません", 404);
+    if (msg === "FORBIDDEN") return bad("管理者キーが違います", 403);
     return bad(msg, 500);
   }
 }
