@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, ImagePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
@@ -10,6 +10,8 @@ import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { profileUsername } from "@/lib/profile/username";
 import { supabase } from "@/lib/supabase";
+
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 export function EditProfileForm() {
   const router = useRouter();
@@ -23,12 +25,14 @@ export function EditProfileForm() {
     school: "",
     location: "",
     avatarUrl: null as string | null,
+    backgroundUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
   });
   const [initialForm, setInitialForm] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [backgroundUploading, setBackgroundUploading] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -43,6 +47,7 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills",
         "display_name,goal,avatar_url,bio,website,school,location",
@@ -64,6 +69,7 @@ export function EditProfileForm() {
         school: (data?.school as string | null) ?? "",
         location: (data?.location as string | null) ?? "",
         avatarUrl: (data?.avatar_url as string | null) ?? null,
+        backgroundUrl: (data?.background_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
       };
@@ -97,6 +103,55 @@ export function EditProfileForm() {
       setMessage(e instanceof Error ? e.message : tx("アップロードに失敗しました", "Upload failed"));
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleBackgroundUpload(file: File) {
+    if (!supabase || !userId) return;
+    setBackgroundUploading(true);
+    setMessage("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload-background", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const json = (await res.json()) as { backgroundUrl?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("アップロード失敗", "Upload failed"));
+      setForm((f) => ({ ...f, backgroundUrl: json.backgroundUrl ?? f.backgroundUrl }));
+      setMessage(tx("背景を更新しました", "Background updated"));
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : tx("アップロードに失敗しました", "Upload failed"));
+    } finally {
+      setBackgroundUploading(false);
+    }
+  }
+
+  async function handleBackgroundRemove() {
+    if (!supabase || !userId) return;
+    setBackgroundUploading(true);
+    setMessage("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const res = await fetch("/api/upload-background", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("削除に失敗しました", "Couldn’t remove"));
+      setForm((f) => ({ ...f, backgroundUrl: null }));
+      setMessage(tx("背景を削除しました", "Background removed"));
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : tx("削除に失敗しました", "Couldn’t remove"));
+    } finally {
+      setBackgroundUploading(false);
     }
   }
 
@@ -190,6 +245,55 @@ export function EditProfileForm() {
       </header>
 
       <div className="profile-inset space-y-6 py-5">
+        <div className="account-card overflow-hidden">
+          <div className="relative h-36 w-full bg-zinc-100 sm:h-40">
+            {form.backgroundUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: "linear-gradient(145deg, #e4e4e7 0%, #d4d4d8 42%, #a1a1aa 100%)",
+                }}
+                aria-hidden
+              />
+            )}
+            <label className="absolute bottom-3 right-3 inline-flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg border border-white/30 bg-black/45 px-3 text-[12px] font-semibold text-white backdrop-blur-sm">
+              {form.backgroundUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+              {backgroundUploading
+                ? tx("アップロード中…", "Uploading…")
+                : form.backgroundUrl
+                  ? tx("背景を変更", "Change background")
+                  : tx("背景を追加", "Add background")}
+              <input
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="hidden"
+                disabled={backgroundUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleBackgroundUpload(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {form.backgroundUrl ? (
+            <div className="flex justify-end px-4 py-2">
+              <button
+                type="button"
+                disabled={backgroundUploading}
+                onClick={() => void handleBackgroundRemove()}
+                className="text-[12px] font-medium transition-opacity disabled:opacity-40"
+                style={{ color: "var(--color-text-secondary)" }}
+              >
+                {tx("背景を削除", "Remove background")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+
         <div className="account-card flex flex-col items-center py-6">
           <div className="relative mb-3">
             <ProfileAvatar displayName={form.displayName} avatarUrl={form.avatarUrl} size="lg" />
@@ -200,7 +304,7 @@ export function EditProfileForm() {
               <Camera className="h-4 w-4 text-white" aria-hidden />
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept={IMAGE_ACCEPT}
                 className="hidden"
                 disabled={uploading}
                 onChange={(e) => {
@@ -215,7 +319,7 @@ export function EditProfileForm() {
             {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を変更", "Change photo")}
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept={IMAGE_ACCEPT}
               className="hidden"
               disabled={uploading}
               onChange={(e) => {
