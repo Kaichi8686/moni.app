@@ -11,6 +11,10 @@ npm install
 npm run dev
 ```
 
+## 文化祭シフト（ログイン不要・同じURL）
+
+クラス向けのシンプル版は `/bunkasai` です。設定手順は [`docs/BUNKASAI_SHIFT.md`](docs/BUNKASAI_SHIFT.md)。
+
 ## 他のPC・スマホから編集する
 
 手順の詳細は [`docs/MULTI_DEVICE.md`](docs/MULTI_DEVICE.md) を見てください。
