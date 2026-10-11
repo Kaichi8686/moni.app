@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { M_PLUS_Rounded_1c } from "next/font/google";
+import { Zen_Maru_Gothic } from "next/font/google";
 import "./bunkasai.css";
 
-const rounded = M_PLUS_Rounded_1c({
-  weight: ["400", "500", "700", "800"],
+const rounded = Zen_Maru_Gothic({
+  weight: ["400", "500", "700", "900"],
   subsets: ["latin"],
   variable: "--font-bunkasai",
   display: "swap",
