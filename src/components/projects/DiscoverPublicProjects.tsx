@@ -590,7 +590,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
             </div>,
             document.body,
           )
-      ) : null}
+        : null}
     </div>
   );
 }
