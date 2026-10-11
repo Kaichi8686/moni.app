@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
@@ -38,15 +39,15 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
-  const [recruitingOnly, setRecruitingOnly] = useState(recruitBoard);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRecruitingOnly(recruitBoard);
-  }, [recruitBoard]);
   const [toast, setToast] = useState("");
   const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
   const [joinMsgDraft, setJoinMsgDraft] = useState("");
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -136,7 +137,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
       const isMine = memberIds.has(p.id);
       // 通常のプロジェクト一覧では参加済みを隠す。募集ボードでは自分の募集も見えるようにする。
       if (isMine && !(recruitBoard && recruiting)) return false;
-      if ((recruitBoard || recruitingOnly) && !recruiting) return false;
+      if (recruitBoard && !recruiting) return false;
       if (!q) return true;
       const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""} ${p.recruitment_message ?? ""}`;
       return hay.toLowerCase().includes(q);
@@ -147,7 +148,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
       if (br !== ar) return br - ar;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
-  }, [projects, memberIds, query, recruitingOnly, recruitBoard]);
+  }, [projects, memberIds, query, recruitBoard]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
@@ -248,23 +249,6 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
           <span className="hidden sm:inline">{tx("絞り込む", "Search")}</span>
         </button>
       </form>
-
-      {!recruitBoard ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className={`min-h-[32px] rounded-lg px-3 text-[12px] font-semibold transition ${
-              recruitingOnly
-                ? "bg-emerald-600 text-white"
-                : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-            onClick={() => setRecruitingOnly((v) => !v)}
-            aria-pressed={recruitingOnly}
-          >
-            {tx("仲間募集のみ", "Recruiting only")}
-          </button>
-        </div>
-      ) : null}
 
       {toast ? (
         <p className={`mt-2 text-xs font-medium ${toastOk ? "text-emerald-700" : "text-rose-600"}`}>{toast}</p>
@@ -385,199 +369,206 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
         ) : null}
       </div>
 
-      {detail ? (
-        <div
-          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="project-detail-title"
-          onClick={() => setDetailProject(null)}
-        >
-          <div
-            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
-              <h3 id="project-detail-title" className="text-base font-bold text-zinc-900">
-                {tx("プロジェクト詳細", "Project details")}
-              </h3>
-              <button
-                type="button"
-                className="rounded-full px-3 py-1 text-sm text-zinc-500 hover:bg-zinc-100"
-                onClick={() => setDetailProject(null)}
-              >
-                {tx("閉じる", "Close")}
-              </button>
-            </div>
-
-            <div className="p-4">
-              <div className="flex gap-3">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
-                  {detail.thumbnail_url?.trim() ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span
-                      className={`flex h-full w-full items-center justify-center text-2xl text-white ${PROJECT_ICON_BG[projectHashIndex(detail.id, PROJECT_ICON_BG.length)]}`}
-                    >
-                      {(detail.name.trim().charAt(0) || "P").toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-lg font-bold text-zinc-900">{detail.name}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">{typeLabel(detail.business_type ?? null)}</p>
-                  {detail.category?.trim() ? (
-                    <p className="mt-1 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
-                      {detail.category}
-                    </p>
-                  ) : null}
-                </div>
+      {portalReady && detail
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex flex-col bg-white pt-[env(safe-area-inset-top,0px)]"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="project-detail-title"
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2.5">
+                <button
+                  type="button"
+                  className="rounded-full p-2.5 text-lg leading-none text-zinc-700 transition hover:bg-zinc-100"
+                  onClick={() => setDetailProject(null)}
+                  aria-label={tx("閉じる", "Close")}
+                >
+                  ←
+                </button>
+                <h3 id="project-detail-title" className="text-sm font-semibold text-zinc-900">
+                  {tx("プロジェクト詳細", "Project details")}
+                </h3>
+                <span className="w-11 shrink-0" aria-hidden />
               </div>
 
-              <dl className="mt-4 space-y-3 text-sm">
-                {(() => {
-                  const brief = resolveProjectBrief({
-                    coachingContext: detail.coaching_context,
-                    description: detail.description,
-                  });
-                  if (hasProjectBriefContent(brief)) {
-                    return (
-                      <>
-                        {brief.problemMotivation ? (
-                          <div>
-                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                              {tx(
-                                "どのようなことを解決したくて思いついたか",
-                                "What problem sparked this project",
-                              )}
-                            </dt>
-                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                              {brief.problemMotivation}
-                            </dd>
-                          </div>
-                        ) : null}
-                        {brief.projectGoal ? (
-                          <div>
-                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                              {tx("このプロジェクトのゴール", "Project goal")}
-                            </dt>
-                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{brief.projectGoal}</dd>
-                          </div>
-                        ) : null}
-                        {brief.whatToDo ? (
-                          <div>
-                            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                              {tx("何をするのか", "What we’ll do")}
-                            </dt>
-                            <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{brief.whatToDo}</dd>
-                          </div>
-                        ) : null}
-                      </>
-                    );
-                  }
-                  return (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-4">
+                  <div className="flex gap-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+                      {detail.thumbnail_url?.trim() ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <span
+                          className={`flex h-full w-full items-center justify-center text-3xl text-white ${PROJECT_ICON_BG[projectHashIndex(detail.id, PROJECT_ICON_BG.length)]}`}
+                        >
+                          {(detail.name.trim().charAt(0) || "P").toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <p className="text-[22px] font-bold leading-tight tracking-tight text-zinc-900">{detail.name}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{typeLabel(detail.business_type ?? null)}</p>
+                      {detail.category?.trim() ? (
+                        <p className="mt-1.5 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                          {detail.category}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <dl className="mt-6 space-y-4 text-sm">
+                    {(() => {
+                      const brief = resolveProjectBrief({
+                        coachingContext: detail.coaching_context,
+                        description: detail.description,
+                      });
+                      if (hasProjectBriefContent(brief)) {
+                        return (
+                          <>
+                            {brief.problemMotivation ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx(
+                                    "どのようなことを解決したくて思いついたか",
+                                    "What problem sparked this project",
+                                  )}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.problemMotivation}
+                                </dd>
+                              </div>
+                            ) : null}
+                            {brief.projectGoal ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx("このプロジェクトのゴール", "Project goal")}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.projectGoal}
+                                </dd>
+                              </div>
+                            ) : null}
+                            {brief.whatToDo ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx("何をするのか", "What we’ll do")}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.whatToDo}
+                                </dd>
+                              </div>
+                            ) : null}
+                          </>
+                        );
+                      }
+                      return (
+                        <div>
+                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                            {tx("説明", "Description")}
+                          </dt>
+                          <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                            {detail.description?.trim() || tx("未設定", "Not set")}
+                          </dd>
+                        </div>
+                      );
+                    })()}
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                        {tx("説明", "Description")}
+                        {tx("発足", "Launched")}
                       </dt>
-                      <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                        {detail.description?.trim() || tx("未設定", "Not set")}
+                      <dd className="mt-1 text-zinc-800">{formatLaunchedAt(detail.created_at, locale)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("オーナー", "Owner")}
+                      </dt>
+                      <dd className="mt-1 text-zinc-800">
+                        {ownerNames[detail.owner_id] ?? tx("オーナー", "Owner")}
                       </dd>
                     </div>
-                  );
-                })()}
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("発足", "Launched")}
-                  </dt>
-                  <dd className="mt-1 text-zinc-800">{formatLaunchedAt(detail.created_at, locale)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("オーナー", "Owner")}
-                  </dt>
-                  <dd className="mt-1 text-zinc-800">{ownerNames[detail.owner_id] ?? tx("オーナー", "Owner")}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("欲しい仲間・姿勢", "Who we’re looking for")}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                    {detail.recruitment_target?.trim() || tx("未設定", "Not set")}
-                  </dd>
-                </div>
-                {(detail.recruitment_message ?? "").trim() ? (
-                  <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                      {tx("理念・ビジョン", "Vision")}
-                    </dt>
-                    <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{detail.recruitment_message}</dd>
-                  </div>
-                ) : null}
-              </dl>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("欲しい仲間・姿勢", "Who we’re looking for")}
+                      </dt>
+                      <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                        {detail.recruitment_target?.trim() || tx("未設定", "Not set")}
+                      </dd>
+                    </div>
+                    {(detail.recruitment_message ?? "").trim() ? (
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                          {tx("理念・ビジョン", "Vision")}
+                        </dt>
+                        <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                          {detail.recruitment_message}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
 
-              <div className="mt-5 flex flex-col gap-2">
-                {memberIds.has(detail.id) ? (
-                  <>
-                    <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-center text-[12px] leading-relaxed text-emerald-800">
+                  {memberIds.has(detail.id) ? (
+                    <p className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-center text-[12px] leading-relaxed text-emerald-800">
                       {tx(
                         "これはあなたのプロジェクトの募集です。探すタブにもこのように表示されます。",
                         "This is your project’s recruitment. This is how it appears on Discover.",
                       )}
                     </p>
-                    <Link
-                      href={`/projects/${detail.id}/recruit`}
-                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
-                      onClick={() => setDetailProject(null)}
-                    >
-                      {tx("募集を編集する", "Edit recruitment")}
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
+                  ) : (
+                    <p className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
                       {tx(
                         "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
                         "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
                       )}
                     </p>
-                    {uid ? (
-                      detailPending ? (
-                        <p className="text-center text-sm font-medium text-amber-800">
-                          {tx("参加申請済みです", "Join request already sent")}
-                        </p>
-                      ) : (
-                        <>
-                          <textarea
-                            className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                            rows={2}
-                            placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
-                            value={joinMsgDraft}
-                            onChange={(e) => setJoinMsgDraft(e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            disabled={detailBusy}
-                            onClick={() => void submitJoin(detail.id)}
-                            className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
-                          >
-                            {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
-                          </button>
-                        </>
-                      )
-                    ) : (
-                      <p className="text-center text-xs text-zinc-500">
-                        {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
+                  )}
+                </div>
+
+                <div className="shrink-0 border-t border-zinc-200 bg-white px-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
+                  {memberIds.has(detail.id) ? (
+                    <Link
+                      href={`/projects/${detail.id}/recruit`}
+                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
+                      onClick={() => setDetailProject(null)}
+                    >
+                      {tx("募集を編集する", "Edit recruitment")}
+                    </Link>
+                  ) : uid ? (
+                    detailPending ? (
+                      <p className="py-2 text-center text-sm font-medium text-amber-800">
+                        {tx("参加申請済みです", "Join request already sent")}
                       </p>
-                    )}
-                  </>
-                )}
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <textarea
+                          className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                          rows={2}
+                          placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
+                          value={joinMsgDraft}
+                          onChange={(e) => setJoinMsgDraft(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={detailBusy}
+                          onClick={() => void submitJoin(detail.id)}
+                          className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
+                        >
+                          {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="py-2 text-center text-xs text-zinc-500">
+                      {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
