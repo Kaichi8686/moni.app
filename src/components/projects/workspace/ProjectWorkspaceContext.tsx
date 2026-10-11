@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Calendar, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, UserSearch, Radio } from "lucide-react";
+import { ArrowLeft, Calendar, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -998,6 +998,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       documents: ["資料", "Documents"],
       members: ["メンバー", "Members"],
       chat: ["メール", "Mail"],
+      recruit: ["募集", "Recruit"],
       schedule: ["予定", "Schedule"],
       activity: ["活動", "Activity"],
     };
@@ -1106,16 +1107,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
                       onClick={() => {
                         setActionMenuOpen(false);
-                        const href = `/projects/${projectId}/overview#project-talent`;
-                        if (pathname === `/projects/${projectId}/overview`) {
-                          document.getElementById("project-talent")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        } else {
-                          router.push(href);
-                        }
+                        router.push(`/projects/${projectId}/recruit`);
                       }}
                     >
-                      <UserSearch className="h-4 w-4 text-[#6B7280]" aria-hidden />
-                      {tx("欲しい人材", "Wanted talent")}
+                      <Megaphone className="h-4 w-4 text-[#6B7280]" aria-hidden />
+                      {tx("募集", "Recruit")}
                     </button>
                     <button
                       type="button"
