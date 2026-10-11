@@ -362,6 +362,15 @@ export function ProjectTabGlide({
     return userId;
   }
 
+  function openCreate() {
+    if (!hasSession) {
+      flash(tx("ログインが必要です。", "Please sign in."));
+      onNavigate("account");
+      return;
+    }
+    setCreateOpen(true);
+  }
+
   async function onToggleLike(projectId: string) {
     const uid = await requireAuth();
     if (!uid || !supabase || busyLikeId) return;
@@ -685,14 +694,7 @@ export function ProjectTabGlide({
             </label>
             <button
               type="button"
-              onClick={() => {
-                if (!hasSession) {
-                  flash(tx("ログインが必要です。", "Please sign in."));
-                  onNavigate("account");
-                  return;
-                }
-                setCreateOpen(true);
-              }}
+              onClick={openCreate}
               className="inline-flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl bg-zinc-900 text-white transition hover:bg-zinc-800"
               aria-label={tx("新規プロジェクト", "New project")}
             >
@@ -822,7 +824,7 @@ export function ProjectTabGlide({
                     <button
                       type="button"
                       className="min-h-[40px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                      onClick={() => setCreateOpen(true)}
+                      onClick={openCreate}
                     >
                       {tx("プロジェクトを作る", "Create project")}
                     </button>
@@ -839,7 +841,7 @@ export function ProjectTabGlide({
                 <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <button
                     type="button"
-                    onClick={() => setCreateOpen(true)}
+                    onClick={openCreate}
                     className="flex w-[11.5rem] shrink-0 flex-col overflow-hidden rounded-2xl border-2 border-dashed border-zinc-300 bg-white/80 transition hover:border-zinc-400 sm:w-[13rem]"
                   >
                     <div className="flex aspect-[4/3] items-center justify-center bg-zinc-50">
