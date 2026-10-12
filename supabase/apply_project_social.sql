@@ -1,8 +1,8 @@
--- Project social: likes, favorites (bookmarks), and per-user "working on" focus
+-- Project social: likes + per-user "working on" focus
 -- Re-runnable. Depends on: apply_projects_feature.sql (projects, project_members, project_is_member)
 
 -- ---------------------------------------------------------------------------
--- Likes (軽いいいね。お気に入りとは独立)
+-- Likes
 -- ---------------------------------------------------------------------------
 create table if not exists public.project_likes (
   project_id uuid not null references public.projects (id) on delete cascade,
@@ -83,46 +83,6 @@ create policy "project likes delete own"
   using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
--- Favorites / bookmarks (保存。いいねとは独立)
--- ---------------------------------------------------------------------------
-create table if not exists public.project_favorites (
-  project_id uuid not null references public.projects (id) on delete cascade,
-  user_id uuid not null references auth.users (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  primary key (project_id, user_id)
-);
-
-create index if not exists idx_project_favorites_user on public.project_favorites (user_id, created_at desc);
-
-alter table public.project_favorites enable row level security;
-
-drop policy if exists "project favorites read own" on public.project_favorites;
-create policy "project favorites read own"
-  on public.project_favorites for select
-  using (auth.uid() = user_id);
-
-drop policy if exists "project favorites insert own" on public.project_favorites;
-create policy "project favorites insert own"
-  on public.project_favorites for insert
-  with check (
-    auth.uid() = user_id
-    and exists (
-      select 1 from public.projects p
-      where p.id = project_id
-        and (
-          p.visibility = 'public'
-          or p.owner_id = auth.uid()
-          or public.project_is_member(p.id, auth.uid())
-        )
-    )
-  );
-
-drop policy if exists "project favorites delete own" on public.project_favorites;
-create policy "project favorites delete own"
-  on public.project_favorites for delete
-  using (auth.uid() = user_id);
-
--- ---------------------------------------------------------------------------
 -- Working-on focus: one project per user (must be a member)
 -- ---------------------------------------------------------------------------
 create table if not exists public.user_project_focus (
@@ -178,7 +138,7 @@ create trigger trg_user_project_focus_touch
 before insert or update on public.user_project_focus
 for each row execute function public.user_project_focus_touch();
 
--- Clear focus when membership is removed (keep owner row intact until project delete cascades)
+-- Clear focus when membership is removed
 create or replace function public.clear_focus_on_member_leave()
 returns trigger
 language plpgsql

@@ -16,16 +16,14 @@ import {
 } from "@/lib/projects/projectBrief";
 import {
   clearWorkingOnProject,
-  fetchFavoriteProjectIds,
+  fetchLikesForProjects,
   fetchMemberCounts,
   fetchOwnerNames,
   fetchPublicProjects,
-  fetchSocialForProjects,
   fetchWorkingOnProjectId,
   matchesProjectQuery,
   setWorkingOnProject,
   sortProjects,
-  toggleProjectFavorite,
   toggleProjectLike,
   type ProjectSortKey,
 } from "@/lib/projects/projectSocial";
@@ -149,14 +147,12 @@ export function ProjectTabGlide({
   const [joinedProjects, setJoinedProjects] = useState<ProjectRow[]>([]);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
   const [publicProjects, setPublicProjects] = useState<ProjectRow[]>([]);
-  const [favoriteProjects, setFavoriteProjects] = useState<ProjectRow[]>([]);
   const [workingOnId, setWorkingOnId] = useState<string | null>(null);
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({});
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-  const [favoritedIds, setFavoritedIds] = useState<Set<string>>(new Set());
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
-  const [socialSchemaMissing, setSocialSchemaMissing] = useState(false);
+  const [likesSchemaMissing, setLikesSchemaMissing] = useState(false);
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<ProjectSortKey>("newest");
@@ -165,7 +161,6 @@ export function ProjectTabGlide({
   const [err, setErr] = useState("");
   const [toast, setToast] = useState("");
   const [busyLikeId, setBusyLikeId] = useState<string | null>(null);
-  const [busyFavoriteId, setBusyFavoriteId] = useState<string | null>(null);
   const [busyFocusId, setBusyFocusId] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -253,44 +248,31 @@ export function ProjectTabGlide({
       if (pubRes.error) setErr((prev) => prev || pubRes.error || "");
       setPublicProjects(pubRes.rows);
 
-      let favoriteRows: ProjectRow[] = [];
       let focusId: string | null = null;
       if (uid) {
-        const [favIdsRes, focusRes] = await Promise.all([
-          fetchFavoriteProjectIds(client, uid),
-          fetchWorkingOnProjectId(client, uid),
-        ]);
+        const focusRes = await fetchWorkingOnProjectId(client, uid);
         focusId = focusRes.projectId;
-        if (focusRes.schemaMissing || favIdsRes.schemaMissing) setSocialSchemaMissing(true);
-        if (favIdsRes.ids.length > 0) {
-          const favFetch = await fetchProjectsByIds(client, favIdsRes.ids);
-          const favMap = new Map(favFetch.rows.map((p) => [p.id, p]));
-          favoriteRows = favIdsRes.ids.map((id) => favMap.get(id)).filter(Boolean) as ProjectRow[];
-        }
       }
       setWorkingOnId(focusId);
-      setFavoriteProjects(favoriteRows);
 
-      const allForMeta = [...mergedJoined, ...pubRes.rows, ...favoriteRows];
+      const allForMeta = [...mergedJoined, ...pubRes.rows];
       const uniqueIds = [...new Set(allForMeta.map((p) => p.id))];
       const ownerIds = [...new Set(allForMeta.map((p) => p.owner_id))];
 
-      const [counts, names, social] = await Promise.all([
+      const [counts, names, likes] = await Promise.all([
         fetchMemberCounts(client, uniqueIds),
         fetchOwnerNames(client, ownerIds),
-        fetchSocialForProjects(client, uid, uniqueIds),
+        fetchLikesForProjects(client, uid, uniqueIds),
       ]);
       setMemberCounts(counts);
       setOwnerNames(names);
-      setLikedIds(social.likedIds);
-      setFavoritedIds(social.favoritedIds);
+      setLikedIds(likes.likedIds);
       const countsFromRows: Record<string, number> = {};
       for (const p of allForMeta) {
         if (typeof p.like_count === "number") countsFromRows[p.id] = p.like_count;
       }
-      setLikeCounts({ ...countsFromRows, ...social.likeCounts });
-      if (social.socialSchemaMissing) setSocialSchemaMissing(true);
-      else setSocialSchemaMissing(false);
+      setLikeCounts({ ...countsFromRows, ...likes.likeCounts });
+      setLikesSchemaMissing(likes.likesSchemaMissing);
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("読み込みに失敗しました。", "Failed to load."));
     } finally {
@@ -314,10 +296,9 @@ export function ProjectTabGlide({
     return (
       joinedProjects.find((p) => p.id === workingOnId) ||
       publicProjects.find((p) => p.id === workingOnId) ||
-      favoriteProjects.find((p) => p.id === workingOnId) ||
       null
     );
-  }, [workingOnId, joinedProjects, publicProjects, favoriteProjects]);
+  }, [workingOnId, joinedProjects, publicProjects]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -333,12 +314,6 @@ export function ProjectTabGlide({
     if (categoryFilter !== "all") list = list.filter((p) => (p.category?.trim() || "") === categoryFilter);
     return sortProjects(list, sort === "popular" ? "newest" : sort, likeCounts);
   }, [joinedProjects, query, categoryFilter, sort, likeCounts]);
-
-  const filteredFavorites = useMemo(() => {
-    let list = favoriteProjects.filter((p) => matchesProjectQuery(p, query));
-    if (categoryFilter !== "all") list = list.filter((p) => (p.category?.trim() || "") === categoryFilter);
-    return list;
-  }, [favoriteProjects, query, categoryFilter]);
 
   const discoverList = useMemo(() => {
     const list = publicProjects.filter((p) => {
@@ -374,13 +349,10 @@ export function ProjectTabGlide({
   async function onToggleLike(projectId: string) {
     const uid = await requireAuth();
     if (!uid || !supabase || busyLikeId) return;
-    if (socialSchemaMissing) {
-      flash(tx("いいね機能の準備がまだ完了していません。", "Likes are not available yet."));
-      return;
-    }
     const currentlyLiked = likedIds.has(projectId);
     const prevCount = likeCounts[projectId] ?? 0;
     setBusyLikeId(projectId);
+    // Optimistic UI — always attempt the API so a freshly-applied migration works immediately
     setLikedIds((prev) => {
       const next = new Set(prev);
       if (currentlyLiked) next.delete(projectId);
@@ -401,10 +373,11 @@ export function ProjectTabGlide({
           return next;
         });
         setLikeCounts((prev) => ({ ...prev, [projectId]: prevCount }));
-        if (res.schemaMissing) setSocialSchemaMissing(true);
+        if (res.schemaMissing) setLikesSchemaMissing(true);
         flash(res.error || tx("いいねに失敗しました。", "Could not update like."));
         return;
       }
+      setLikesSchemaMissing(false);
       setLikedIds((prev) => {
         const next = new Set(prev);
         if (res.liked) next.add(projectId);
@@ -413,54 +386,6 @@ export function ProjectTabGlide({
       });
     } finally {
       setBusyLikeId(null);
-    }
-  }
-
-  async function onToggleFavorite(projectId: string) {
-    const uid = await requireAuth();
-    if (!uid || !supabase || busyFavoriteId) return;
-    if (socialSchemaMissing) {
-      flash(tx("お気に入り機能の準備がまだ完了していません。", "Favorites are not available yet."));
-      return;
-    }
-    const currentlyFavorited = favoritedIds.has(projectId);
-    setBusyFavoriteId(projectId);
-    setFavoritedIds((prev) => {
-      const next = new Set(prev);
-      if (currentlyFavorited) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
-    if (currentlyFavorited) {
-      setFavoriteProjects((prev) => prev.filter((p) => p.id !== projectId));
-    } else {
-      const found =
-        joinedProjects.find((p) => p.id === projectId) ||
-        publicProjects.find((p) => p.id === projectId) ||
-        null;
-      if (found) setFavoriteProjects((prev) => [found, ...prev.filter((p) => p.id !== projectId)]);
-    }
-    try {
-      const res = await toggleProjectFavorite(supabase, uid, projectId, currentlyFavorited);
-      if (!res.ok) {
-        setFavoritedIds((prev) => {
-          const next = new Set(prev);
-          if (currentlyFavorited) next.add(projectId);
-          else next.delete(projectId);
-          return next;
-        });
-        void load();
-        if (res.schemaMissing) setSocialSchemaMissing(true);
-        flash(res.error || tx("お気に入りの更新に失敗しました。", "Could not update favorite."));
-        return;
-      }
-      flash(
-        res.favorited
-          ? tx("お気に入りに保存しました", "Saved to favorites")
-          : tx("お気に入りを解除しました", "Removed from favorites"),
-      );
-    } finally {
-      setBusyFavoriteId(null);
     }
   }
 
@@ -478,7 +403,6 @@ export function ProjectTabGlide({
       const res = await setWorkingOnProject(supabase, uid, projectId);
       if (!res.ok) {
         setWorkingOnId(prev);
-        if (res.schemaMissing) setSocialSchemaMissing(true);
         flash(res.error || tx("設定に失敗しました。", "Could not update."));
         return;
       }
@@ -499,7 +423,6 @@ export function ProjectTabGlide({
       const res = await clearWorkingOnProject(supabase, uid);
       if (!res.ok) {
         setWorkingOnId(prev);
-        if (res.schemaMissing) setSocialSchemaMissing(true);
         flash(res.error || tx("解除に失敗しました。", "Could not clear."));
         return;
       }
@@ -765,8 +688,8 @@ export function ProjectTabGlide({
                 </h2>
                 <p className="mt-2 max-w-lg text-sm leading-relaxed text-zinc-600">
                   {tx(
-                    "ログインすると、取り組み中のプロジェクトや参加中・お気に入りをここにまとめられます。公開プロジェクトは下から探せます。",
-                    "Sign in to pin what you’re working on and manage joined and saved projects. Browse public projects below.",
+                    "ログインすると、取り組み中のプロジェクトや参加中の活動をここにまとめられます。公開プロジェクトは下から探せます。",
+                    "Sign in to pin what you’re working on and manage joined projects. Browse public projects below.",
                   )}
                 </p>
                 <button
@@ -867,76 +790,17 @@ export function ProjectTabGlide({
                       memberCount={memberCounts[project.id] ?? 0}
                       likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
                       likedByMe={likedIds.has(project.id)}
-                      favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial
+                      showLike
                       menuItems={menuForProject(project)}
                       likeBusy={busyLikeId === project.id}
-                      favoriteBusy={busyFavoriteId === project.id}
                       onToggleLike={() => void onToggleLike(project.id)}
-                      onToggleFavorite={() => void onToggleFavorite(project.id)}
                     />
                   ))}
                 </div>
               )}
             </section>
 
-            {/* D: Favorites */}
-            <section aria-labelledby="favorites-heading">
-              <div className="mb-3">
-                <h2 id="favorites-heading" className="text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
-                  {tx("お気に入りのプロジェクト", "Favorite projects")}
-                </h2>
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  {tx("あとから見返すために保存したプロジェクト", "Projects you’ve bookmarked to revisit")}
-                </p>
-              </div>
-              {filteredFavorites.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/70 px-4 py-5 text-center">
-                  <p className="text-sm font-semibold text-zinc-800">
-                    {searching
-                      ? tx("条件に合うお気に入りはありません", "No favorites match")
-                      : tx("まだお気に入りはありません", "No favorites yet")}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {tx("公開プロジェクトの保存ボタンから登録できます。", "Tap Save on a public project to bookmark it.")}
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-3 min-h-[40px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
-                    onClick={() => discoverSectionRef.current?.scrollIntoView({ behavior: "smooth" })}
-                  >
-                    {tx("公開プロジェクトを探す", "Discover public projects")}
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {filteredFavorites.map((project) => (
-                    <ProjectFeedCard
-                      key={project.id}
-                      project={project}
-                      variant="compact"
-                      ownerName={
-                        project.owner_id === userId
-                          ? tx("あなた", "You")
-                          : ownerNames[project.owner_id]
-                      }
-                      memberCount={memberCounts[project.id] ?? 0}
-                      likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
-                      likedByMe={likedIds.has(project.id)}
-                      favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial
-                      menuItems={menuForProject(project)}
-                      likeBusy={busyLikeId === project.id}
-                      favoriteBusy={busyFavoriteId === project.id}
-                      onToggleLike={() => void onToggleLike(project.id)}
-                      onToggleFavorite={() => void onToggleFavorite(project.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* E: Discover */}
+            {/* D: Discover */}
             <section ref={discoverSectionRef} aria-labelledby="discover-heading">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
@@ -954,6 +818,15 @@ export function ProjectTabGlide({
                   {tx("探すタブへ", "Open Discover")}
                 </Link>
               </div>
+
+              {likesSchemaMissing ? (
+                <p className="mb-2 text-xs text-amber-700">
+                  {tx(
+                    "いいねを有効にするには、管理者によるデータベース更新が必要です。",
+                    "Likes need a database update from an admin before they can be saved.",
+                  )}
+                </p>
+              ) : null}
 
               {loading && publicProjects.length === 0 ? (
                 <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
@@ -980,13 +853,10 @@ export function ProjectTabGlide({
                       memberCount={memberCounts[project.id] ?? 0}
                       likeCount={likeCounts[project.id] ?? project.like_count ?? 0}
                       likedByMe={likedIds.has(project.id)}
-                      favoritedByMe={favoritedIds.has(project.id)}
-                      showSocial
+                      showLike
                       menuItems={menuForProject(project)}
                       likeBusy={busyLikeId === project.id}
-                      favoriteBusy={busyFavoriteId === project.id}
                       onToggleLike={() => void onToggleLike(project.id)}
-                      onToggleFavorite={() => void onToggleFavorite(project.id)}
                     />
                   ))}
                 </div>
