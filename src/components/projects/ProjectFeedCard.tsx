@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bookmark, Heart, Users } from "lucide-react";
+import { Heart, Users } from "lucide-react";
 import type { ProjectRow } from "@/lib/projects/types";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
@@ -17,13 +17,10 @@ type Props = {
   memberCount?: number;
   likeCount?: number;
   likedByMe?: boolean;
-  favoritedByMe?: boolean;
-  showSocial?: boolean;
+  showLike?: boolean;
   menuItems?: ProjectCardMenuItem[];
   likeBusy?: boolean;
-  favoriteBusy?: boolean;
   onToggleLike?: () => void;
-  onToggleFavorite?: () => void;
 };
 
 export function ProjectFeedCard({
@@ -33,13 +30,10 @@ export function ProjectFeedCard({
   memberCount = 0,
   likeCount = 0,
   likedByMe = false,
-  favoritedByMe = false,
-  showSocial = true,
+  showLike = true,
   menuItems,
   likeBusy,
-  favoriteBusy,
   onToggleLike,
-  onToggleFavorite,
 }: Props) {
   const { tx } = useI18n();
   const color = PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
@@ -110,17 +104,17 @@ export function ProjectFeedCard({
           ) : null}
         </div>
 
-        {showSocial ? (
-          <div className="mt-1.5 flex items-center gap-1 border-t border-zinc-100 pt-2">
+        {showLike ? (
+          <div className="mt-1.5 border-t border-zinc-100 pt-2">
             <button
               type="button"
               disabled={likeBusy || !onToggleLike}
               aria-pressed={likedByMe}
               aria-label={likedByMe ? tx("いいねを解除", "Unlike") : tx("いいね", "Like")}
-              className={`inline-flex min-h-9 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 ${
+              className={`inline-flex min-h-9 w-full touch-manipulation items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 ${
                 likedByMe
                   ? "bg-rose-50 text-rose-600"
-                  : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                  : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100 active:scale-[0.98]"
               }`}
               onClick={(e) => {
                 e.preventDefault();
@@ -130,27 +124,6 @@ export function ProjectFeedCard({
             >
               <Heart className={`h-3.5 w-3.5 ${likedByMe ? "fill-current" : ""}`} aria-hidden />
               <span>{likeCount}</span>
-            </button>
-            <button
-              type="button"
-              disabled={favoriteBusy || !onToggleFavorite}
-              aria-pressed={favoritedByMe}
-              aria-label={favoritedByMe ? tx("お気に入りを解除", "Remove favorite") : tx("お気に入り", "Favorite")}
-              className={`inline-flex min-h-9 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 ${
-                favoritedByMe
-                  ? "bg-amber-50 text-amber-700"
-                  : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
-              }`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onToggleFavorite?.();
-              }}
-            >
-              <Bookmark className={`h-3.5 w-3.5 ${favoritedByMe ? "fill-current" : ""}`} aria-hidden />
-              <span className="sr-only sm:not-sr-only sm:inline">
-                {favoritedByMe ? tx("保存済", "Saved") : tx("保存", "Save")}
-              </span>
             </button>
           </div>
         ) : null}

@@ -3,15 +3,8 @@ import type { ProjectRow } from "@/lib/projects/types";
 
 export type ProjectSocialState = {
   likedByMe: boolean;
-  favoritedByMe: boolean;
   likeCount: number;
 };
-
-export type ProjectWithSocial = ProjectRow &
-  ProjectSocialState & {
-    memberCount: number;
-    ownerName?: string;
-  };
 
 function isSchemaMismatchError(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
@@ -20,6 +13,7 @@ function isSchemaMismatchError(error: { code?: string; message?: string } | null
     error.code === "42703" ||
     error.code === "PGRST204" ||
     error.code === "42P01" ||
+    error.code === "PGRST205" ||
     msg.includes("does not exist") ||
     msg.includes("schema cache") ||
     msg.includes("Could not find the table")
@@ -97,79 +91,37 @@ export async function fetchOwnerNames(
   return map;
 }
 
-export async function fetchSocialForProjects(
+export async function fetchLikesForProjects(
   client: SupabaseClient,
   userId: string | null,
   projectIds: string[],
 ): Promise<{
   likedIds: Set<string>;
-  favoritedIds: Set<string>;
   likeCounts: Record<string, number>;
-  socialSchemaMissing: boolean;
+  likesSchemaMissing: boolean;
 }> {
   const likedIds = new Set<string>();
-  const favoritedIds = new Set<string>();
   const likeCounts: Record<string, number> = {};
   if (projectIds.length === 0) {
-    return { likedIds, favoritedIds, likeCounts, socialSchemaMissing: false };
+    return { likedIds, likeCounts, likesSchemaMissing: false };
   }
-
-  let socialSchemaMissing = false;
 
   for (const batch of chunkIds(projectIds, 90)) {
     const likesRes = await client.from("project_likes").select("project_id,user_id").in("project_id", batch);
     if (likesRes.error) {
       if (isSchemaMismatchError(likesRes.error)) {
-        socialSchemaMissing = true;
-        break;
+        return { likedIds, likeCounts, likesSchemaMissing: true };
       }
-    } else {
-      for (const row of likesRes.data ?? []) {
-        const pid = row.project_id as string;
-        likeCounts[pid] = (likeCounts[pid] ?? 0) + 1;
-        if (userId && row.user_id === userId) likedIds.add(pid);
-      }
+      continue;
+    }
+    for (const row of likesRes.data ?? []) {
+      const pid = row.project_id as string;
+      likeCounts[pid] = (likeCounts[pid] ?? 0) + 1;
+      if (userId && row.user_id === userId) likedIds.add(pid);
     }
   }
 
-  if (!socialSchemaMissing && userId) {
-    for (const batch of chunkIds(projectIds, 90)) {
-      const favRes = await client
-        .from("project_favorites")
-        .select("project_id")
-        .eq("user_id", userId)
-        .in("project_id", batch);
-      if (favRes.error) {
-        if (isSchemaMismatchError(favRes.error)) {
-          socialSchemaMissing = true;
-          break;
-        }
-      } else {
-        for (const row of favRes.data ?? []) {
-          favoritedIds.add(row.project_id as string);
-        }
-      }
-    }
-  }
-
-  return { likedIds, favoritedIds, likeCounts, socialSchemaMissing };
-}
-
-export async function fetchFavoriteProjectIds(
-  client: SupabaseClient,
-  userId: string,
-): Promise<{ ids: string[]; schemaMissing: boolean }> {
-  const { data, error } = await client
-    .from("project_favorites")
-    .select("project_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(80);
-  if (error) {
-    if (isSchemaMismatchError(error)) return { ids: [], schemaMissing: true };
-    return { ids: [], schemaMissing: false };
-  }
-  return { ids: (data ?? []).map((r) => r.project_id as string), schemaMissing: false };
+  return { likedIds, likeCounts, likesSchemaMissing: false };
 }
 
 export async function fetchWorkingOnProjectId(
@@ -255,48 +207,6 @@ export async function toggleProjectLike(
     return { ok: false, liked: currentlyLiked, error: error.message };
   }
   return { ok: true, liked: true, error: null };
-}
-
-export async function toggleProjectFavorite(
-  client: SupabaseClient,
-  userId: string,
-  projectId: string,
-  currentlyFavorited: boolean,
-): Promise<{ ok: boolean; favorited: boolean; error: string | null; schemaMissing?: boolean }> {
-  if (currentlyFavorited) {
-    const { error } = await client
-      .from("project_favorites")
-      .delete()
-      .eq("project_id", projectId)
-      .eq("user_id", userId);
-    if (error) {
-      if (isSchemaMismatchError(error)) {
-        return {
-          ok: false,
-          favorited: currentlyFavorited,
-          error: "お気に入り機能の準備がまだ完了していません。",
-          schemaMissing: true,
-        };
-      }
-      return { ok: false, favorited: currentlyFavorited, error: error.message };
-    }
-    return { ok: true, favorited: false, error: null };
-  }
-
-  const { error } = await client.from("project_favorites").insert({ project_id: projectId, user_id: userId });
-  if (error) {
-    if (isSchemaMismatchError(error)) {
-      return {
-        ok: false,
-        favorited: currentlyFavorited,
-        error: "お気に入り機能の準備がまだ完了していません。",
-        schemaMissing: true,
-      };
-    }
-    if (error.code === "23505") return { ok: true, favorited: true, error: null };
-    return { ok: false, favorited: currentlyFavorited, error: error.message };
-  }
-  return { ok: true, favorited: true, error: null };
 }
 
 export function matchesProjectQuery(project: ProjectRow, query: string): boolean {
