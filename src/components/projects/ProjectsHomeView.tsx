@@ -46,7 +46,7 @@ export function ProjectsHomeView() {
   return (
     <div
       id="moni-app"
-      className="relative flex min-h-[100dvh] flex-col bg-white pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
+      className="relative flex min-h-[100dvh] flex-col bg-[var(--startup-bg)] pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
     >
       <div className="relative mx-auto flex w-full max-w-none flex-1 flex-col pb-bottom-nav">
         <AppBrandHeader
