@@ -25,7 +25,7 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import {
-  followBackUser,
+  approveIncomingFollowRequest,
   rejectIncomingFollowRequest,
   toggleFollowRelation,
 } from "@/lib/profile/followActions";
@@ -3667,12 +3667,17 @@ export default function Home() {
 
   async function approveFollowRequest(requestId: string, followerId: string) {
     if (!supabase || !session) return;
-    const result = await followBackUser(supabase, session.user.id, followerId, requestId);
+    const result = await approveIncomingFollowRequest(
+      supabase,
+      session.user.id,
+      requestId,
+      followerId,
+    );
     if (!result.ok) {
-      setAuthMessage(`フォローバックに失敗: ${result.error}`);
+      setAuthMessage(`承認に失敗: ${result.error}`);
       return;
     }
-    setAuthMessage("フォローバックしました。相互フォローになるとメールできます。");
+    setAuthMessage("フォローを承認しました。通知からフォローバックできます。");
     await loadSocialGraphRef.current(session.user.id);
   }
 
@@ -5797,7 +5802,7 @@ export default function Home() {
                           className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white"
                           onClick={() => void approveFollowRequest(req.requestId, req.followerId)}
                         >
-                          フォローバック
+                          承認
                         </button>
                         <button
                           type="button"

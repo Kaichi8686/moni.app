@@ -13,7 +13,11 @@ import {
   type ProjectInviteRow,
   type ProjectNotificationRow,
 } from "@/lib/projects/projectInvites";
-import { followBackUser, rejectIncomingFollowRequest } from "@/lib/profile/followActions";
+import {
+  approveIncomingFollowRequest,
+  followBackUser,
+  rejectIncomingFollowRequest,
+} from "@/lib/profile/followActions";
 import {
   fetchFollowNotices,
   type FollowNoticeItem,
@@ -143,13 +147,35 @@ export function ProjectInviteBellPanel({
     void loadInbox();
   }
 
+  async function onApproveRequest(notice: FollowNoticeItem) {
+    if (!supabase || !notice.requestId) {
+      toast("Supabase が未設定です");
+      return;
+    }
+    setBusyId(notice.id);
+    const res = await approveIncomingFollowRequest(
+      supabase,
+      userId,
+      notice.requestId,
+      notice.actorId,
+    );
+    setBusyId(null);
+    if (!res.ok) {
+      toast(res.error);
+      return;
+    }
+    toast("フォローを承認しました。フォローバックできます");
+    onAccepted?.();
+    void loadInbox();
+  }
+
   async function onFollowBack(notice: FollowNoticeItem) {
     if (!supabase) {
       toast("Supabase が未設定です");
       return;
     }
     setBusyId(notice.id);
-    const res = await followBackUser(supabase, userId, notice.actorId, notice.requestId);
+    const res = await followBackUser(supabase, userId, notice.actorId);
     setBusyId(null);
     if (!res.ok) {
       toast(res.error);
@@ -242,7 +268,26 @@ export function ProjectInviteBellPanel({
                               })}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {!notice.isFollowingActor || notice.kind === "follow_request" ? (
+                              {notice.kind === "follow_request" && notice.requestId ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={busyId === notice.id}
+                                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                                    onClick={() => void onApproveRequest(notice)}
+                                  >
+                                    承認
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busyId === notice.id}
+                                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 disabled:opacity-50"
+                                    onClick={() => void onRejectFollow(notice)}
+                                  >
+                                    拒否
+                                  </button>
+                                </>
+                              ) : !notice.isFollowingActor ? (
                                 <button
                                   type="button"
                                   disabled={busyId === notice.id}
@@ -250,16 +295,6 @@ export function ProjectInviteBellPanel({
                                   onClick={() => void onFollowBack(notice)}
                                 >
                                   フォローバック
-                                </button>
-                              ) : null}
-                              {notice.kind === "follow_request" && notice.requestId ? (
-                                <button
-                                  type="button"
-                                  disabled={busyId === notice.id}
-                                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 disabled:opacity-50"
-                                  onClick={() => void onRejectFollow(notice)}
-                                >
-                                  拒否
                                 </button>
                               ) : null}
                             </div>

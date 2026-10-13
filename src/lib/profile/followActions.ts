@@ -166,49 +166,69 @@ export async function loadMutualFollowList(
 }
 
 /**
- * Follow-back from a notification:
- * - Accept pending request (them → you) when present
- * - Follow them (you → them) so the relationship becomes mutual when their account is public
+ * Approve a private-account follow request (them → you only).
+ * After this, the actor becomes a follower and follow-back can be offered separately.
+ */
+export async function approveIncomingFollowRequest(
+  client: SupabaseClient,
+  viewerId: string,
+  requestId: string,
+  followerId: string,
+): Promise<FollowBackResult> {
+  if (!viewerId || !requestId || !followerId || viewerId === followerId) {
+    return { ok: false, error: "無効なリクエストです。" };
+  }
+
+  const { error: insertError } = await client.from("follows").insert({
+    follower_id: followerId,
+    following_id: viewerId,
+  });
+  if (insertError && insertError.code !== "23505") {
+    return { ok: false, error: insertError.message, code: insertError.code };
+  }
+
+  const { error: updateError } = await client
+    .from("follow_requests")
+    .update({ status: "accepted", resolved_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .eq("following_id", viewerId)
+    .eq("follower_id", followerId);
+  if (updateError) {
+    return { ok: false, error: updateError.message, code: updateError.code };
+  }
+  return { ok: true };
+}
+
+export async function rejectIncomingFollowRequest(
+  client: SupabaseClient,
+  viewerId: string,
+  requestId: string,
+): Promise<FollowBackResult> {
+  const { error } = await client
+    .from("follow_requests")
+    .update({ status: "rejected", resolved_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .eq("following_id", viewerId);
+  if (error) return { ok: false, error: error.message, code: error.code };
+  return { ok: true };
+}
+
+/**
+ * Follow-back someone who already follows you (you → them).
+ * Does not approve pending requests — call approveIncomingFollowRequest first for private accounts.
  */
 export async function followBackUser(
   client: SupabaseClient,
   viewerId: string,
   actorId: string,
-  requestId?: string | null,
 ): Promise<FollowBackResult> {
   if (!viewerId || !actorId || viewerId === actorId) {
     return { ok: false, error: "無効なユーザーです。" };
   }
 
-  let resolvedRequestId = requestId ?? null;
-  if (!resolvedRequestId) {
-    const { data } = await client
-      .from("follow_requests")
-      .select("id")
-      .eq("follower_id", actorId)
-      .eq("following_id", viewerId)
-      .eq("status", "pending")
-      .maybeSingle();
-    resolvedRequestId = (data as { id?: string } | null)?.id ?? null;
-  }
-
-  if (resolvedRequestId) {
-    const { error: insertError } = await client.from("follows").insert({
-      follower_id: actorId,
-      following_id: viewerId,
-    });
-    if (insertError && insertError.code !== "23505") {
-      return { ok: false, error: insertError.message, code: insertError.code };
-    }
-
-    const { error: updateError } = await client
-      .from("follow_requests")
-      .update({ status: "accepted", resolved_at: new Date().toISOString() })
-      .eq("id", resolvedRequestId)
-      .eq("following_id", viewerId);
-    if (updateError) {
-      return { ok: false, error: updateError.message, code: updateError.code };
-    }
+  const theyFollowYou = await isFollowingUser(client, actorId, viewerId);
+  if (!theyFollowYou) {
+    return { ok: false, error: "先にフォローリクエストを承認してください。" };
   }
 
   const alreadyFollowing = await isFollowingUser(client, viewerId, actorId);
@@ -230,19 +250,5 @@ export async function followBackUser(
   if (error && error.code !== "23505") {
     return { ok: false, error: error.message, code: error.code };
   }
-  return { ok: true };
-}
-
-export async function rejectIncomingFollowRequest(
-  client: SupabaseClient,
-  viewerId: string,
-  requestId: string,
-): Promise<FollowBackResult> {
-  const { error } = await client
-    .from("follow_requests")
-    .update({ status: "rejected", resolved_at: new Date().toISOString() })
-    .eq("id", requestId)
-    .eq("following_id", viewerId);
-  if (error) return { ok: false, error: error.message, code: error.code };
   return { ok: true };
 }
