@@ -23,6 +23,7 @@ import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { toggleFollowRelation } from "@/lib/profile/followActions";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
@@ -3630,54 +3631,31 @@ export default function Home() {
     }
     if (!supabase || !session) return;
 
-    const isFollowing = followingIds.includes(targetUserId);
-    const isPending = outgoingRequestIds.includes(targetUserId);
-
-    if (isFollowing) {
-      const { error } = await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", session.user.id)
-        .eq("following_id", targetUserId);
-      if (error) {
-        setAuthMessage(`フォロー解除に失敗: ${error.message}`);
-        return;
-      }
-      setAuthMessage("フォローを解除しました。");
-      await loadSocialGraphRef.current(session.user.id);
+    const result = await toggleFollowRelation(supabase, session.user.id, targetUserId);
+    if (!result.ok) {
+      setAuthMessage(`フォロー操作に失敗: ${result.error}`);
       return;
     }
 
-    if (isPending) {
-      const { error } = await supabase
-        .from("follow_requests")
-        .delete()
-        .eq("follower_id", session.user.id)
-        .eq("following_id", targetUserId)
-        .eq("status", "pending");
-      if (error) {
-        setAuthMessage(`リクエスト取り消しに失敗: ${error.message}`);
-        return;
-      }
-      setAuthMessage("フォローリクエストを取り消しました。");
-      await loadSocialGraphRef.current(session.user.id);
-      return;
+    // Optimistic local update so the button reacts immediately.
+    if (result.state === "following") {
+      setFollowingIds((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]));
+      setOutgoingRequestIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage("フォローしました。");
+    } else if (result.state === "pending") {
+      setOutgoingRequestIds((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]));
+      setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage("フォローリクエストを送りました。");
+    } else {
+      setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+      setOutgoingRequestIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage(
+        followingIds.includes(targetUserId)
+          ? "フォローを解除しました。"
+          : "フォローリクエストを取り消しました。",
+      );
     }
 
-    const { error } = await supabase.from("follow_requests").insert({
-      follower_id: session.user.id,
-      following_id: targetUserId,
-      status: "pending",
-    });
-    if (error && error.code !== "23505") {
-      if (error.code === "42P01" || error.code === "PGRST205") {
-        setAuthMessage("フォローリクエスト機能を有効化中です。少し待って再試行してください。");
-      } else {
-        setAuthMessage(`フォローリクエスト送信に失敗: ${error.message}`);
-      }
-      return;
-    }
-    setAuthMessage("フォローリクエストを送りました。");
     await loadSocialGraphRef.current(session.user.id);
   }
 

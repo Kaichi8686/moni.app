@@ -260,6 +260,15 @@ create policy "update own incoming follow requests" on public.follow_requests fo
 create policy "delete own pending follow requests" on public.follow_requests for delete using (
   auth.uid() = follower_id and status = 'pending'
 );
+-- 再フォロー: 過去の accepted/rejected 行を pending に戻す
+create policy "reopen own follow requests" on public.follow_requests for update using (
+  auth.uid() = follower_id
+) with check (
+  auth.uid() = follower_id and status = 'pending'
+);
+create policy "delete incoming follow requests" on public.follow_requests for delete using (
+  auth.uid() = following_id
+);
 
 alter table public.projects add column if not exists business_type text check (business_type in ('maker', 'software', 'social'));
 
