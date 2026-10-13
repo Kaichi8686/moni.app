@@ -4844,7 +4844,7 @@ export default function Home() {
                 <span className="font-semibold text-zinc-900">使い分け:</span> 「相談AI」は考え整理、「検証」は反応チェック用です。
               </p>
               <a
-                href="/idea"
+                href="/idea?ai=excavate"
                 className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] font-semibold text-sky-900 no-underline transition hover:bg-sky-100"
               >
                 <span>アイデアが浮かばない人はこちら → AI発掘インタビュー</span>
@@ -4883,7 +4883,7 @@ export default function Home() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <a
-                href="/idea"
+                href="/idea?ai=excavate"
                 className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800 no-underline transition hover:bg-sky-100"
               >
                 アイデア発掘

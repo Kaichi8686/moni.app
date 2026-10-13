@@ -74,14 +74,17 @@ type Props = {
   /** standalone = full page; hub = ideas tab; project = workspace */
   variant?: "standalone" | "hub" | "project";
   projectId?: string;
-  /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
+  /** Hub default mode (相談 → consult, 発掘 → excavate) */
   initialMode?: IdeaPersonalAiMode;
+  /** Fill the parent (e.g. fullscreen overlay) instead of accounting for hub chrome */
+  fullscreen?: boolean;
 };
 
 export function IdeaInterviewApp({
   variant = "standalone",
   projectId,
   initialMode = "excavate",
+  fullscreen = false,
 }: Props) {
   const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
@@ -633,13 +636,16 @@ export function IdeaInterviewApp({
     );
   }
 
-  const shellClass = isHub
-    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-7.5rem)] min-h-[420px] w-full overflow-hidden bg-white"
-    : isProject
-      ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
-      : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
+  const shellClass = fullscreen
+    ? "flex h-full min-h-0 w-full overflow-hidden bg-white"
+    : isHub
+      ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-7.5rem)] min-h-[420px] w-full overflow-hidden bg-white"
+      : isProject
+        ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
+        : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
   const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
+  const showExitControl = !isHub && !fullscreen;
 
   return (
     <div className={shellClass}>
@@ -650,7 +656,7 @@ export function IdeaInterviewApp({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
           <div className="flex items-center gap-2">
-            {!isHub ? (
+            {showExitControl ? (
               <Link
                 href={exitHref}
                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
@@ -664,12 +670,14 @@ export function IdeaInterviewApp({
               </Link>
             ) : null}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">AI</p>
+              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">
+                {fullscreen ? modeLabel : "AI"}
+              </p>
               <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
                 {session.phase === "results" && !isConsult
                   ? `${tx("アイデアの種", "Idea seeds")} · ${activeTitle}`
                   : !isConsult && session.theme
-                    ? `${modeLabel} · ${tx(
+                    ? `${fullscreen ? "" : `${modeLabel} · `}${tx(
                         themeLabel(session.theme),
                         (
                           {
@@ -682,7 +690,9 @@ export function IdeaInterviewApp({
                           } as const
                         )[session.theme],
                       )} · ${activeTitle}`
-                    : `${modeLabel} · ${activeTitle}`}
+                    : fullscreen
+                      ? activeTitle
+                      : `${modeLabel} · ${activeTitle}`}
               </p>
             </div>
             <div className="flex shrink-0 gap-1.5">
