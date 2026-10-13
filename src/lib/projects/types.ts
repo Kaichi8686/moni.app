@@ -55,8 +55,6 @@ export type ProjectRow = {
   updated_at: string;
   /** オンボーディングなど（JSON）。カラム未適用時は欠落しうる */
   coaching_context?: unknown;
-  /** いいね数（apply_project_social.sql 適用後）。未適用時は欠落しうる */
-  like_count?: number | null;
 };
 
 export type ProjectMemberRow = {
