@@ -1,19 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboxConversation, Message, MessageContentType } from "@/lib/types/messages";
 import { mapInboxRow, mapMessageRow, profileToSender } from "@/lib/messages/mappers";
+import { areMutualFollowers, loadMutualFollowList } from "@/lib/profile/followActions";
+
+export type DirectConversationResult =
+  | { ok: true; conversationId: string }
+  | { ok: false; reason: "not_mutual" | "error" };
 
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
-): Promise<string | null> {
+): Promise<DirectConversationResult> {
+  const { data: sessionData } = await client.auth.getSession();
+  const uid = sessionData.session?.user.id;
+  if (!uid) return { ok: false, reason: "error" };
+
+  const mutual = await areMutualFollowers(client, uid, otherUserId);
+  if (!mutual) return { ok: false, reason: "not_mutual" };
+
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,
   });
   if (error) {
+    const msg = error.message || "";
+    if (/mutual follow required/i.test(msg)) {
+      return { ok: false, reason: "not_mutual" };
+    }
     console.error("get_or_create_direct_conversation", error);
-    return null;
+    return { ok: false, reason: "error" };
   }
-  return data as string;
+  if (!data) return { ok: false, reason: "error" };
+  return { ok: true, conversationId: data as string };
 }
 
 /** 参加中プロジェクトのグループラインを inbox に揃える */
@@ -33,6 +50,59 @@ export async function ensureMyProjectConversations(
   for (const projectId of ids) {
     const convId = await getOrCreateProjectConversation(client, projectId);
     if (convId) convIds.push(convId);
+  }
+  return convIds;
+}
+
+/** 既存の 1:1 相手 userId 一覧（すでに inbox にある人） */
+async function loadExistingDirectPeerIds(
+  client: SupabaseClient,
+  userId: string,
+): Promise<Set<string>> {
+  const { data: memberships } = await client
+    .from("conversation_members")
+    .select("conversation_id")
+    .eq("user_id", userId);
+  const convIds = (memberships ?? []).map((m) => m.conversation_id as string);
+  if (convIds.length === 0) return new Set();
+
+  const { data: directConvs } = await client
+    .from("conversations")
+    .select("id")
+    .eq("type", "direct")
+    .in("id", convIds);
+  const directIds = (directConvs ?? []).map((c) => c.id as string);
+  if (directIds.length === 0) return new Set();
+
+  const { data: members } = await client
+    .from("conversation_members")
+    .select("conversation_id, user_id")
+    .in("conversation_id", directIds);
+
+  const peers = new Set<string>();
+  for (const row of members ?? []) {
+    const uid = row.user_id as string;
+    if (uid !== userId) peers.add(uid);
+  }
+  return peers;
+}
+
+/** 相互フォロー相手の 1:1 メールを inbox に自動作成／表示する（未作成分のみ） */
+export async function ensureMyMutualDirectConversations(
+  client: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const peers = await loadMutualFollowList(client, userId);
+  if (peers.length === 0) return [];
+
+  const existingPeers = await loadExistingDirectPeerIds(client, userId);
+  const missing = peers.filter((p) => !existingPeers.has(p.id));
+  if (missing.length === 0) return [];
+
+  const convIds: string[] = [];
+  for (const peer of missing) {
+    const result = await getOrCreateDirectConversation(client, peer.id);
+    if (result.ok) convIds.push(result.conversationId);
   }
   return convIds;
 }

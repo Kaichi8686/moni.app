@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
+import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import type { ProjectRow } from "@/lib/projects/types";
 import {
   fetchIncomingProjectInvites,
@@ -12,6 +13,17 @@ import {
   type ProjectInviteRow,
   type ProjectNotificationRow,
 } from "@/lib/projects/projectInvites";
+import {
+  approveIncomingFollowRequest,
+  followBackUser,
+  rejectIncomingFollowRequest,
+} from "@/lib/profile/followActions";
+import {
+  fetchFollowNotices,
+  type FollowNoticeItem,
+} from "@/lib/profile/socialNotifications";
+import { getOrCreateDirectConversation } from "@/lib/messages/api";
+import { supabase } from "@/lib/supabase";
 
 const EMPTY_PROJECTS: ProjectRow[] = [];
 
@@ -34,6 +46,7 @@ export function ProjectInviteBellPanel({
 }: Props) {
   const [invites, setInvites] = useState<ProjectInviteRow[]>([]);
   const [notifications, setNotifications] = useState<ProjectNotificationRow[]>([]);
+  const [followNotices, setFollowNotices] = useState<FollowNoticeItem[]>([]);
   const [projectNames, setProjectNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -45,12 +58,18 @@ export function ProjectInviteBellPanel({
   const loadInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const [incoming, notes] = await Promise.all([
+      const followPromise =
+        supabase != null
+          ? fetchFollowNotices(supabase, userId)
+          : Promise.resolve([] as FollowNoticeItem[]);
+      const [incoming, notes, follows] = await Promise.all([
         fetchIncomingProjectInvites(userId),
         fetchMyProjectNotifications(userId),
+        followPromise,
       ]);
       setInvites(incoming);
       setNotifications(notes);
+      setFollowNotices(follows);
 
       const ids = [
         ...new Set([...incoming.map((i) => i.project_id), ...notes.map((n) => n.project_id).filter(Boolean)]),
@@ -129,6 +148,67 @@ export function ProjectInviteBellPanel({
     void loadInbox();
   }
 
+  async function onApproveRequest(notice: FollowNoticeItem) {
+    if (!supabase || !notice.requestId) {
+      toast("Supabase が未設定です");
+      return;
+    }
+    setBusyId(notice.id);
+    const res = await approveIncomingFollowRequest(
+      supabase,
+      userId,
+      notice.requestId,
+      notice.actorId,
+    );
+    setBusyId(null);
+    if (!res.ok) {
+      toast(res.error);
+      return;
+    }
+    toast("フォローを承認しました。フォローバックできます");
+    onAccepted?.();
+    void loadInbox();
+  }
+
+  async function onFollowBack(notice: FollowNoticeItem) {
+    if (!supabase) {
+      toast("Supabase が未設定です");
+      return;
+    }
+    setBusyId(notice.id);
+    const res = await followBackUser(supabase, userId, notice.actorId);
+    if (!res.ok) {
+      setBusyId(null);
+      toast(res.error);
+      return;
+    }
+    // 相互フォロー成立 → メール一覧に相手をすぐ出す
+    const dm = await getOrCreateDirectConversation(supabase, notice.actorId);
+    setBusyId(null);
+    toast(
+      dm.ok
+        ? "フォローバックしました。メールに相手が表示されます"
+        : "フォローバックしました。相互フォローになるとメールできます",
+    );
+    setFollowNotices((prev) => prev.filter((n) => n.id !== notice.id));
+    onAccepted?.();
+    void loadInbox();
+  }
+
+  async function onRejectFollow(notice: FollowNoticeItem) {
+    if (!supabase || !notice.requestId) return;
+    setBusyId(notice.id);
+    const res = await rejectIncomingFollowRequest(supabase, userId, notice.requestId);
+    setBusyId(null);
+    if (!res.ok) {
+      toast(res.error);
+      return;
+    }
+    toast("フォローリクエストを拒否しました");
+    setFollowNotices((prev) => prev.filter((n) => n.id !== notice.id));
+    void loadInbox();
+  }
+
   if (!visible) return null;
 
   return (
@@ -163,6 +243,77 @@ export function ProjectInviteBellPanel({
             <p className="py-8 text-center text-sm text-zinc-400">読み込み中…</p>
           ) : (
             <div className="space-y-4">
+              <section>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">フォロー</p>
+                {followNotices.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-3 py-4 text-center text-xs text-zinc-500">
+                    新しいフォローはありません
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {followNotices.map((notice) => (
+                      <li key={notice.id} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3">
+                        <div className="flex items-start gap-3">
+                          <MemberAvatarBubble
+                            userId={notice.actorId}
+                            name={notice.actorName}
+                            avatarUrl={notice.actorAvatarUrl}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-zinc-900">
+                              {notice.kind === "follow_request"
+                                ? `${notice.actorName} さんからフォローリクエスト`
+                                : `${notice.actorName} さんにフォローされました`}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-zinc-500">{notice.actorGoal}</p>
+                            <p className="mt-0.5 text-[11px] text-zinc-400">
+                              {new Date(notice.createdAt).toLocaleString("ja-JP", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {notice.kind === "follow_request" && notice.requestId ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={busyId === notice.id}
+                                    className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                                    onClick={() => void onApproveRequest(notice)}
+                                  >
+                                    承認
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busyId === notice.id}
+                                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 disabled:opacity-50"
+                                    onClick={() => void onRejectFollow(notice)}
+                                  >
+                                    拒否
+                                  </button>
+                                </>
+                              ) : !notice.isFollowingActor ? (
+                                <button
+                                  type="button"
+                                  disabled={busyId === notice.id}
+                                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                                  onClick={() => void onFollowBack(notice)}
+                                >
+                                  フォローバック
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
               <section>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">プロジェクト招待</p>
                 {invites.length === 0 ? (

@@ -24,7 +24,12 @@ import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
-import { toggleFollowRelation } from "@/lib/profile/followActions";
+import {
+  approveIncomingFollowRequest,
+  rejectIncomingFollowRequest,
+  toggleFollowRelation,
+} from "@/lib/profile/followActions";
+import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
@@ -3662,36 +3667,25 @@ export default function Home() {
 
   async function approveFollowRequest(requestId: string, followerId: string) {
     if (!supabase || !session) return;
-    const { error: insertError } = await supabase.from("follows").insert({
-      follower_id: followerId,
-      following_id: session.user.id,
-    });
-    if (insertError && insertError.code !== "23505") {
-      setAuthMessage(`承認に失敗: ${insertError.message}`);
+    const result = await approveIncomingFollowRequest(
+      supabase,
+      session.user.id,
+      requestId,
+      followerId,
+    );
+    if (!result.ok) {
+      setAuthMessage(`承認に失敗: ${result.error}`);
       return;
     }
-    const { error: updateError } = await supabase
-      .from("follow_requests")
-      .update({ status: "accepted", resolved_at: new Date().toISOString() })
-      .eq("id", requestId)
-      .eq("following_id", session.user.id);
-    if (updateError) {
-      setAuthMessage(`承認後の更新に失敗: ${updateError.message}`);
-      return;
-    }
-    setAuthMessage("フォローリクエストを承認しました。");
+    setAuthMessage("フォローを承認しました。通知からフォローバックできます。");
     await loadSocialGraphRef.current(session.user.id);
   }
 
   async function rejectFollowRequest(requestId: string) {
     if (!supabase || !session) return;
-    const { error } = await supabase
-      .from("follow_requests")
-      .update({ status: "rejected", resolved_at: new Date().toISOString() })
-      .eq("id", requestId)
-      .eq("following_id", session.user.id);
-    if (error) {
-      setAuthMessage(`リクエスト拒否に失敗: ${error.message}`);
+    const result = await rejectIncomingFollowRequest(supabase, session.user.id, requestId);
+    if (!result.ok) {
+      setAuthMessage(`リクエスト拒否に失敗: ${result.error}`);
       return;
     }
     setAuthMessage("フォローリクエストを拒否しました。");
@@ -4098,6 +4092,13 @@ export default function Home() {
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
+              ) : session ? (
+                <ProjectNoticeBell
+                  userId={session.user.id}
+                  onAccepted={() => {
+                    void loadSocialGraphRef.current(session.user.id);
+                  }}
+                />
               ) : undefined
             }
           />

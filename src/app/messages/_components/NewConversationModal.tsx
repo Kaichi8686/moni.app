@@ -9,7 +9,7 @@ import {
   getOrCreateDirectConversation,
   getOrCreateProjectConversation,
 } from "@/lib/messages/api";
-import { loadFollowList } from "@/lib/profile/profileData";
+import { loadMutualFollowList } from "@/lib/profile/followActions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -19,7 +19,7 @@ type Props = {
   onCreated: () => void;
 };
 
-type Mode = "following" | "projects" | "group";
+type Mode = "mutual" | "projects" | "group";
 
 type UserRow = { id: string; display_name: string; avatar_url: string | null };
 type ProjectRow = { id: string; name: string; icon?: string | null };
@@ -27,9 +27,9 @@ type ProjectRow = { id: string; name: string; icon?: string | null };
 export function NewConversationModal({ currentUserId, onClose, onCreated }: Props) {
   const { tx } = useI18n();
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("following");
+  const [mode, setMode] = useState<Mode>("mutual");
   const [query, setQuery] = useState("");
-  const [following, setFollowing] = useState<UserRow[]>([]);
+  const [mutualPeers, setMutualPeers] = useState<UserRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
@@ -40,8 +40,8 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     if (!supabase) return;
     const client = supabase;
     void (async () => {
-      const list = await loadFollowList(client, currentUserId, "following", currentUserId);
-      setFollowing(
+      const list = await loadMutualFollowList(client, currentUserId);
+      setMutualPeers(
         list.map((u) => ({
           id: u.id,
           display_name: u.displayName,
@@ -65,11 +65,11 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     })();
   }, [currentUserId]);
 
-  const filteredFollowing = useMemo(() => {
+  const filteredMutual = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return following;
-    return following.filter((u) => u.display_name.toLowerCase().includes(q));
-  }, [following, query]);
+    if (!q) return mutualPeers;
+    return mutualPeers.filter((u) => u.display_name.toLowerCase().includes(q));
+  }, [mutualPeers, query]);
 
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -81,14 +81,18 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     if (!supabase) return;
     setLoading(true);
     setError("");
-    const convId = await getOrCreateDirectConversation(supabase, otherId);
+    const result = await getOrCreateDirectConversation(supabase, otherId);
     setLoading(false);
-    if (convId) {
+    if (result.ok) {
       onCreated();
-      router.push(`/messages/${convId}`);
+      router.push(`/messages/${result.conversationId}`);
       return;
     }
-    setError(tx("トークを開けませんでした", "Could not open chat"));
+    setError(
+      result.reason === "not_mutual"
+        ? tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+        : tx("トークを開けませんでした", "Could not open chat"),
+    );
   };
 
   const openProjectLine = async (projectId: string) => {
@@ -118,7 +122,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     if (!supabase || selectedIds.size === 0) return;
     setLoading(true);
     setError("");
-    const names = following.filter((u) => selectedIds.has(u.id)).map((u) => u.display_name);
+    const names = mutualPeers.filter((u) => selectedIds.has(u.id)).map((u) => u.display_name);
     const defaultName =
       groupName.trim() ||
       (names.length <= 2 ? names.join("・") : `${names.slice(0, 2).join("・")} ほか`);
@@ -133,7 +137,7 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
   };
 
   const modes: Array<{ key: Mode; label: string }> = [
-    { key: "following", label: tx("フォロー中", "Following") },
+    { key: "mutual", label: tx("相互フォロー", "Friends") },
     { key: "projects", label: tx("プロジェクト", "Projects") },
     { key: "group", label: tx("グループ作成", "New group") },
   ];
@@ -194,14 +198,17 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
 
         {error ? <p className="px-4 pt-2 text-xs text-rose-600">{error}</p> : null}
 
-        {mode === "following" ? (
+        {mode === "mutual" ? (
           <ul className="max-h-[50dvh] overflow-y-auto">
-            {filteredFollowing.length === 0 ? (
+            {filteredMutual.length === 0 ? (
               <li className="px-4 py-8 text-center text-sm text-zinc-500">
-                {tx("フォロー中の人がいません。検索タブから仲間を見つけましょう。", "You are not following anyone yet. Find people in Search.")}
+                {tx(
+                  "相互フォローの人がいません。通知からフォローバックするとメールできます。",
+                  "No mutual follows yet. Follow back from notifications to unlock mail.",
+                )}
               </li>
             ) : (
-              filteredFollowing.map((u) => (
+              filteredMutual.map((u) => (
                 <li key={u.id}>
                   <button
                     type="button"
@@ -268,16 +275,16 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
                 onChange={(e) => setGroupName(e.target.value)}
               />
               <p className="text-[11px] text-zinc-500">
-                {tx("フォロー中の人から参加者を選んでください", "Pick people you follow")}
+                {tx("相互フォローの人から参加者を選んでください", "Pick mutual follows")}
               </p>
             </div>
             <ul>
-              {filteredFollowing.length === 0 ? (
+              {filteredMutual.length === 0 ? (
                 <li className="px-4 py-8 text-center text-sm text-zinc-500">
-                  {tx("フォロー中の人がいません。", "No followed people yet.")}
+                  {tx("相互フォローの人がいません。", "No mutual follows yet.")}
                 </li>
               ) : (
-                filteredFollowing.map((u) => {
+                filteredMutual.map((u) => {
                   const selected = selectedIds.has(u.id);
                   return (
                     <li key={u.id}>

@@ -93,12 +93,26 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_conv_id uuid;
+  v_mutual boolean;
 begin
   if v_uid is null then
     raise exception 'not authenticated';
   end if;
   if p_other_user_id is null or p_other_user_id = v_uid then
     raise exception 'invalid peer';
+  end if;
+
+  -- 相互フォローのみ 1:1 メールを開始できる
+  select exists (
+    select 1 from public.follows f1
+    where f1.follower_id = v_uid and f1.following_id = p_other_user_id
+  ) and exists (
+    select 1 from public.follows f2
+    where f2.follower_id = p_other_user_id and f2.following_id = v_uid
+  ) into v_mutual;
+
+  if not coalesce(v_mutual, false) then
+    raise exception 'mutual follow required';
   end if;
 
   select c.id into v_conv_id

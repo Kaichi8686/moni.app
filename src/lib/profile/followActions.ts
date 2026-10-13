@@ -1,11 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { hasPendingFollowRequest, isFollowingUser } from "@/lib/profile/profileData";
+import {
+  hasPendingFollowRequest,
+  isFollowingUser,
+  loadFollowList,
+} from "@/lib/profile/profileData";
+import type { FollowListUser } from "@/lib/profile/types";
 
 export type FollowRelationState = "following" | "pending" | "none";
 
 export type FollowActionResult =
   | { ok: true; state: FollowRelationState }
   | { ok: false; error: string; code?: string };
+
+export type FollowBackResult = { ok: true } | { ok: false; error: string; code?: string };
 
 async function isPrivateProfile(client: SupabaseClient, targetId: string): Promise<boolean> {
   const { data, error } = await client.from("profiles").select("is_private").eq("id", targetId).maybeSingle();
@@ -121,4 +128,127 @@ export async function toggleFollowRelation(
   }
 
   return { ok: false, error: error.message, code: error.code };
+}
+
+/** True when both users follow each other. */
+export async function areMutualFollowers(
+  client: SupabaseClient,
+  userA: string,
+  userB: string,
+): Promise<boolean> {
+  if (!userA || !userB || userA === userB) return false;
+  const [aFollowsB, bFollowsA] = await Promise.all([
+    isFollowingUser(client, userA, userB),
+    isFollowingUser(client, userB, userA),
+  ]);
+  return aFollowsB && bFollowsA;
+}
+
+/** People the viewer follows who also follow the viewer (for Mail new-DM list). */
+export async function loadMutualFollowList(
+  client: SupabaseClient,
+  viewerId: string,
+): Promise<FollowListUser[]> {
+  const following = await loadFollowList(client, viewerId, "following", viewerId);
+  if (following.length === 0) return [];
+
+  const ids = following.map((u) => u.id);
+  const { data } = await client
+    .from("follows")
+    .select("follower_id")
+    .eq("following_id", viewerId)
+    .in("follower_id", ids);
+
+  const mutualIds = new Set(
+    ((data ?? []) as Array<{ follower_id: string }>).map((r) => r.follower_id),
+  );
+  return following.filter((u) => mutualIds.has(u.id));
+}
+
+/**
+ * Approve a private-account follow request (them → you only).
+ * After this, the actor becomes a follower and follow-back can be offered separately.
+ */
+export async function approveIncomingFollowRequest(
+  client: SupabaseClient,
+  viewerId: string,
+  requestId: string,
+  followerId: string,
+): Promise<FollowBackResult> {
+  if (!viewerId || !requestId || !followerId || viewerId === followerId) {
+    return { ok: false, error: "無効なリクエストです。" };
+  }
+
+  const { error: insertError } = await client.from("follows").insert({
+    follower_id: followerId,
+    following_id: viewerId,
+  });
+  if (insertError && insertError.code !== "23505") {
+    return { ok: false, error: insertError.message, code: insertError.code };
+  }
+
+  const { error: updateError } = await client
+    .from("follow_requests")
+    .update({ status: "accepted", resolved_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .eq("following_id", viewerId)
+    .eq("follower_id", followerId);
+  if (updateError) {
+    return { ok: false, error: updateError.message, code: updateError.code };
+  }
+  return { ok: true };
+}
+
+export async function rejectIncomingFollowRequest(
+  client: SupabaseClient,
+  viewerId: string,
+  requestId: string,
+): Promise<FollowBackResult> {
+  const { error } = await client
+    .from("follow_requests")
+    .update({ status: "rejected", resolved_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .eq("following_id", viewerId);
+  if (error) return { ok: false, error: error.message, code: error.code };
+  return { ok: true };
+}
+
+/**
+ * Follow-back someone who already follows you (you → them).
+ * Does not approve pending requests — call approveIncomingFollowRequest first for private accounts.
+ */
+export async function followBackUser(
+  client: SupabaseClient,
+  viewerId: string,
+  actorId: string,
+): Promise<FollowBackResult> {
+  if (!viewerId || !actorId || viewerId === actorId) {
+    return { ok: false, error: "無効なユーザーです。" };
+  }
+
+  const theyFollowYou = await isFollowingUser(client, actorId, viewerId);
+  if (!theyFollowYou) {
+    return { ok: false, error: "先にフォローリクエストを承認してください。" };
+  }
+
+  const alreadyFollowing = await isFollowingUser(client, viewerId, actorId);
+  if (alreadyFollowing) return { ok: true };
+
+  const privateProfile = await isPrivateProfile(client, actorId);
+  if (privateProfile) {
+    const requestResult = await sendOrReopenFollowRequest(client, viewerId, actorId);
+    if (!requestResult.ok) {
+      return { ok: false, error: requestResult.error, code: requestResult.code };
+    }
+    return { ok: true };
+  }
+
+  const { error } = await client.from("follows").insert({
+    follower_id: viewerId,
+    following_id: actorId,
+  });
+  if (error && error.code !== "23505") {
+    return { ok: false, error: error.message, code: error.code };
+  }
+  return { ok: true };
 }
