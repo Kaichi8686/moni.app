@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Calendar, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
+import { ArrowLeft, Calendar, LogOut, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -18,6 +18,7 @@ import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/vali
 import { logProjectActivity } from "@/lib/projects/projectActivity";
 import { recordUserActivity } from "@/lib/gamification/recordUserActivity";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
+import { leaveProject as leaveProjectApi } from "@/lib/projects/leaveProject";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
@@ -103,6 +104,7 @@ type Ctx = {
   canEdit: boolean;
   isOwner: boolean;
   deleteProject: () => Promise<void>;
+  leaveProject: () => Promise<void>;
   reload: () => Promise<void>;
   createSchedule: (payload: {
     title: string;
@@ -194,6 +196,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
+  const [leavingProject, setLeavingProject] = useState(false);
   const [projectMeta, setProjectMeta] = useState<ProjectSettingsMeta | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [projectContext, setProjectContext] = useState<ProjectIssueContext | null>(null);
@@ -774,6 +777,34 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     router.push(HOME_PROJECTS_HREF);
   }, [isOwner, project, projectId, router]);
 
+  const leaveProject = useCallback(async () => {
+    if (!project || isOwner) {
+      throw new Error(
+        tx(
+          "オーナーはメンバータブから権限を引き継いで脱退してください。",
+          "Owners must transfer ownership from the Members tab before leaving.",
+        ),
+      );
+    }
+    const result = await leaveProjectApi(projectId);
+    if (!result.ok) throw new Error(result.error);
+    clearLastProjectIfMatches(projectId);
+    router.push(HOME_PROJECTS_HREF);
+  }, [isOwner, project, projectId, router, tx]);
+
+  const confirmLeaveProject = useCallback(async () => {
+    setLeavingProject(true);
+    try {
+      await leaveProject();
+      setActionMenuOpen(false);
+    } catch (e) {
+      setHeaderNotice(e instanceof Error ? e.message : tx("脱退に失敗しました", "Failed to leave project"));
+      window.setTimeout(() => setHeaderNotice(""), 4000);
+    } finally {
+      setLeavingProject(false);
+    }
+  }, [leaveProject, tx]);
+
   const confirmDeleteProject = useCallback(async () => {
     setDeletingProject(true);
     try {
@@ -922,6 +953,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         canEdit,
         isOwner,
         deleteProject,
+        leaveProject,
         reload,
         createPhase,
         movePhase,
@@ -956,6 +988,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       canEdit,
       isOwner,
       deleteProject,
+      leaveProject,
       reload,
       createPhase,
       movePhase,
@@ -1148,6 +1181,30 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                     {project ? (
                       <>
                         <div className="my-1 border-t border-[#F1F3F5]" aria-hidden />
+                        {!isOwner ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={leavingProject}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  tx(
+                                    "このプロジェクトから脱退しますか？メンバーではなくなり、アクセスできなくなります。",
+                                    "Leave this project? You’ll no longer be a member and will lose access.",
+                                  ),
+                                )
+                              ) {
+                                return;
+                              }
+                              void confirmLeaveProject();
+                            }}
+                          >
+                            <LogOut className="h-4 w-4" aria-hidden />
+                            {leavingProject ? tx("脱退中…", "Leaving…") : tx("プロジェクトを脱退", "Leave project")}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           role="menuitem"
@@ -1201,6 +1258,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           onClose={() => setSettingsOpen(false)}
           onSaved={() => void reload()}
           onDelete={deleteProject}
+          onLeft={() => {
+            clearLastProjectIfMatches(projectId);
+            router.push(HOME_PROJECTS_HREF);
+          }}
           onNotice={(message) => {
             setHeaderNotice(message);
             window.setTimeout(() => setHeaderNotice(""), 3200);
