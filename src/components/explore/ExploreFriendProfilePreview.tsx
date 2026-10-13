@@ -109,10 +109,10 @@ export function ExploreFriendProfilePreview({
   const addLabel = !member.id
     ? tx("追加できません", "Can't add")
     : isFollowing
-      ? tx("追加済み", "Added")
+      ? tx("フォロー中", "Following")
       : isPending
-        ? tx("リクエスト中", "Requested")
-        : tx("追加", "Add");
+        ? tx("申請中", "Requested")
+        : tx("フォロー", "Follow");
 
   const AddIcon = isFollowing ? UserCheck : isPending ? UserMinus : UserPlus;
 

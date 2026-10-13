@@ -4254,7 +4254,11 @@ export default function Home() {
                       }`}
                       onClick={() => void toggleFollow(u.id)}
                     >
-                      {followingIds.includes(u.id) ? `${u.name} ✓` : outgoingRequestIds.includes(u.id) ? `${u.name} 申請中` : u.name}
+                      {followingIds.includes(u.id)
+                        ? `${u.name} · フォロー中`
+                        : outgoingRequestIds.includes(u.id)
+                          ? `${u.name} · 申請中`
+                          : u.name}
                     </button>
                   ))}
                 </div>
@@ -4284,7 +4288,11 @@ export default function Home() {
                         className="rounded-lg bg-[#0095f6] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#188ff0] disabled:opacity-50"
                         onClick={() => void toggleFollow(u.id)}
                       >
-                        {followingIds.includes(u.id) ? accountText.followed : outgoingRequestIds.includes(u.id) ? "リクエスト中" : "リクエスト送信"}
+                        {followingIds.includes(u.id)
+                          ? accountText.followed
+                          : outgoingRequestIds.includes(u.id)
+                            ? "申請中"
+                            : "フォロー"}
                       </button>
                     </li>
                   ))}

@@ -103,7 +103,7 @@ export function ProfileActionButtons({
     ? tx("フォロー中", "Following")
     : pending
       ? tx("申請中", "Requested")
-      : tx("フォローする", "Follow");
+      : tx("フォロー", "Follow");
 
   return (
     <div className="flex w-full flex-col gap-1.5">
