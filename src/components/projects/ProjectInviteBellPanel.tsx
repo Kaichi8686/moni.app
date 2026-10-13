@@ -22,6 +22,7 @@ import {
   fetchFollowNotices,
   type FollowNoticeItem,
 } from "@/lib/profile/socialNotifications";
+import { getOrCreateDirectConversation } from "@/lib/messages/api";
 import { supabase } from "@/lib/supabase";
 
 const EMPTY_PROJECTS: ProjectRow[] = [];
@@ -176,12 +177,19 @@ export function ProjectInviteBellPanel({
     }
     setBusyId(notice.id);
     const res = await followBackUser(supabase, userId, notice.actorId);
-    setBusyId(null);
     if (!res.ok) {
+      setBusyId(null);
       toast(res.error);
       return;
     }
-    toast("フォローバックしました。相互フォローになるとメールできます");
+    // 相互フォロー成立 → メール一覧に相手をすぐ出す
+    const dm = await getOrCreateDirectConversation(supabase, notice.actorId);
+    setBusyId(null);
+    toast(
+      dm.ok
+        ? "フォローバックしました。メールに相手が表示されます"
+        : "フォローバックしました。相互フォローになるとメールできます",
+    );
     setFollowNotices((prev) => prev.filter((n) => n.id !== notice.id));
     onAccepted?.();
     void loadInbox();

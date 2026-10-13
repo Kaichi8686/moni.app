@@ -10,7 +10,11 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { NewConversationModal } from "@/app/messages/_components/NewConversationModal";
-import { ensureMyProjectConversations, fetchInboxConversations } from "@/lib/messages/api";
+import {
+  ensureMyMutualDirectConversations,
+  ensureMyProjectConversations,
+  fetchInboxConversations,
+} from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -55,7 +59,7 @@ export function InboxList() {
   const peerHandledRef = useRef<string | null>(null);
   const projectSyncRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { syncMutual?: boolean }) => {
     if (!supabase) return;
     setLoadError(null);
     try {
@@ -77,6 +81,15 @@ export function InboxList() {
         }
       }
 
+      // 相互フォロー相手の 1:1 を自動で inbox に出す（未作成分のみ）
+      if (opts?.syncMutual !== false) {
+        try {
+          await ensureMyMutualDirectConversations(supabase, uid);
+        } catch (e) {
+          console.warn("ensureMyMutualDirectConversations", e);
+        }
+      }
+
       const rows = await fetchInboxConversations(supabase, uid);
       setConversations(rows);
     } catch (e) {
@@ -88,7 +101,7 @@ export function InboxList() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load({ syncMutual: true });
   }, [load]);
 
   useEffect(() => {
@@ -102,21 +115,29 @@ export function InboxList() {
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => {
-          if (!cancelled) void load();
+          if (!cancelled) void load({ syncMutual: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations" },
         () => {
-          if (!cancelled) void load();
+          if (!cancelled) void load({ syncMutual: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversation_members" },
         () => {
-          if (!cancelled) void load();
+          if (!cancelled) void load({ syncMutual: false });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "follows" },
+        () => {
+          // 相互フォロー成立で名前をメール一覧に出す
+          if (!cancelled) void load({ syncMutual: true });
         },
       )
       .subscribe();
@@ -124,8 +145,10 @@ export function InboxList() {
     void ensureRealtimeAuth(client);
 
     const poll = window.setInterval(() => {
-      if (!cancelled && document.visibilityState === "visible") void load();
-    }, 3000);
+      if (!cancelled && document.visibilityState === "visible") {
+        void load({ syncMutual: true });
+      }
+    }, 8000);
 
     return () => {
       cancelled = true;
@@ -180,8 +203,8 @@ export function InboxList() {
       return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
     }
     return tx(
-      "まだトークがありません。相互フォローの人やプロジェクトのグループラインを右上から始めましょう。",
-      "No chats yet. Start one with mutual follows or a project group line.",
+      "まだトークがありません。相互フォローになると相手の名前がここに自動で表示されます。",
+      "No chats yet. Mutual follows appear here automatically.",
     );
   })();
 
