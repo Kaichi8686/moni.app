@@ -13,6 +13,7 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
+import { DiscoverRecruitBoard } from "@/components/projects/DiscoverRecruitBoard";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
@@ -5193,7 +5194,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="flex-1 pt-3" role="tabpanel">
-                <DiscoverPublicProjects showSectionHeader={false} recruitBoard />
+                <DiscoverRecruitBoard />
               </div>
             )}
           </div>
