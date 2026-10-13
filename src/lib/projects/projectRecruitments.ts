@@ -22,6 +22,9 @@ export type ProjectRecruitment = {
   projectOwnerId?: string;
 };
 
+/** null = 未判定 / true = 専用テーブルあり / false = skill_requests フォールバック */
+let dedicatedTableAvailable: boolean | null = null;
+
 function mapRow(row: Record<string, unknown>): ProjectRecruitment {
   return {
     id: row.id as string,
@@ -53,11 +56,85 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
   );
 }
 
+function mapSkillRequestRow(row: Record<string, unknown>): ProjectRecruitment {
+  const description = ((row.description as string | null) ?? "").trim();
+  // "プロジェクト名 — 本文" 形式なら本文だけ取り出す
+  let message = description;
+  const sep = " — ";
+  const idx = description.indexOf(sep);
+  if (idx >= 0) message = description.slice(idx + sep.length).trim();
+
+  const skillName = ((row.skill_name as string | null) ?? "").trim();
+  const statusRaw = ((row.status as string | null) ?? "open").toLowerCase();
+  return {
+    id: row.id as string,
+    projectId: (row.project_id as string | null) ?? "",
+    createdBy: row.requester_id as string,
+    title: skillName,
+    message,
+    skillName,
+    duration: ((row.duration as string | null) ?? "1週間").trim() || "1週間",
+    compensation:
+      ((row.compensation as string | null) ?? "なし（経験・実績として）").trim() ||
+      "なし（経験・実績として）",
+    skillRequestId: row.id as string,
+    status: statusRaw === "open" ? "open" : "closed",
+    createdAt: row.created_at as string,
+    closedAt: null,
+  };
+}
+
+async function hasDedicatedTable(client: SupabaseClient): Promise<boolean> {
+  if (dedicatedTableAvailable !== null) return dedicatedTableAvailable;
+  const { error } = await client.from("project_recruitments").select("id").limit(1);
+  if (error && isMissingTable(error)) {
+    dedicatedTableAvailable = false;
+    return false;
+  }
+  // 権限エラー等でもテーブルはあるとみなす
+  dedicatedTableAvailable = true;
+  return true;
+}
+
+async function syncSummaryFromSkillRequests(
+  client: SupabaseClient,
+  projectId: string,
+): Promise<void> {
+  const { data, error } = await client
+    .from("skill_requests")
+    .select("skill_name,description,created_at")
+    .eq("project_id", projectId)
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error) throw new Error(error.message);
+  const open = data ?? [];
+  const titles = open
+    .map((r) => ((r.skill_name as string | null) ?? "").trim())
+    .filter(Boolean);
+  const latestDesc = ((open[0]?.description as string | null) ?? "").trim();
+  let latestMessage = latestDesc;
+  const sep = " — ";
+  const idx = latestDesc.indexOf(sep);
+  if (idx >= 0) latestMessage = latestDesc.slice(idx + sep.length).trim();
+  await client
+    .from("projects")
+    .update({
+      recruitment_target: titles.join(" / "),
+      recruitment_message: latestMessage,
+    })
+    .eq("id", projectId);
+}
+
 /** 公開中の募集タイトルを projects.recruitment_* に同期（既存 Discover 互換） */
 export async function syncProjectRecruitmentSummary(
   client: SupabaseClient,
   projectId: string,
 ): Promise<void> {
+  if (!(await hasDedicatedTable(client))) {
+    await syncSummaryFromSkillRequests(client, projectId);
+    return;
+  }
   const { data, error } = await client
     .from("project_recruitments")
     .select("title,message,created_at")
@@ -66,7 +143,11 @@ export async function syncProjectRecruitmentSummary(
     .order("created_at", { ascending: false })
     .limit(5);
   if (error) {
-    if (isMissingTable(error)) return;
+    if (isMissingTable(error)) {
+      dedicatedTableAvailable = false;
+      await syncSummaryFromSkillRequests(client, projectId);
+      return;
+    }
     throw new Error(error.message);
   }
   const open = data ?? [];
@@ -81,10 +162,28 @@ export async function syncProjectRecruitmentSummary(
     .eq("id", projectId);
 }
 
+async function listFromSkillRequests(
+  client: SupabaseClient,
+  projectId: string,
+): Promise<ProjectRecruitment[]> {
+  const { data, error } = await client
+    .from("skill_requests")
+    .select("id,requester_id,project_id,skill_name,description,duration,compensation,status,created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .map((row) => mapSkillRequestRow(row as Record<string, unknown>))
+    .filter((r) => r.projectId);
+}
+
 export async function listProjectRecruitments(
   client: SupabaseClient,
   projectId: string,
 ): Promise<ProjectRecruitment[]> {
+  if (!(await hasDedicatedTable(client))) {
+    return listFromSkillRequests(client, projectId);
+  }
   const { data, error } = await client
     .from("project_recruitments")
     .select(
@@ -93,31 +192,41 @@ export async function listProjectRecruitments(
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
   if (error) {
-    if (isMissingTable(error)) return [];
+    if (isMissingTable(error)) {
+      dedicatedTableAvailable = false;
+      return listFromSkillRequests(client, projectId);
+    }
     throw new Error(error.message);
   }
   return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
 }
 
-export async function listOpenRecruitmentsForDiscover(
+async function listOpenFromSkillRequests(
   client: SupabaseClient,
   opts?: { limit?: number; excludeProjectIds?: string[] },
 ): Promise<ProjectRecruitment[]> {
   const limit = opts?.limit ?? 80;
   const { data, error } = await client
-    .from("project_recruitments")
-    .select(
-      "id,project_id,created_by,title,message,skill_name,duration,compensation,skill_request_id,status,created_at,closed_at",
-    )
+    .from("skill_requests")
+    .select("id,requester_id,project_id,skill_name,description,duration,compensation,status,created_at")
     .eq("status", "open")
+    .not("project_id", "is", null)
     .order("created_at", { ascending: false })
     .limit(limit * 2);
-  if (error) {
-    if (isMissingTable(error)) return [];
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
-  const rows = (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  const rows = (data ?? [])
+    .map((row) => mapSkillRequestRow(row as Record<string, unknown>))
+    .filter((r) => r.projectId);
+  return attachPublicProjects(client, rows, opts);
+}
+
+async function attachPublicProjects(
+  client: SupabaseClient,
+  rows: ProjectRecruitment[],
+  opts?: { limit?: number; excludeProjectIds?: string[] },
+): Promise<ProjectRecruitment[]> {
+  const limit = opts?.limit ?? 80;
   const projectIds = [...new Set(rows.map((r) => r.projectId))];
   if (projectIds.length === 0) return [];
 
@@ -157,6 +266,95 @@ export async function listOpenRecruitmentsForDiscover(
     .slice(0, limit);
 }
 
+export async function listOpenRecruitmentsForDiscover(
+  client: SupabaseClient,
+  opts?: { limit?: number; excludeProjectIds?: string[] },
+): Promise<ProjectRecruitment[]> {
+  const limit = opts?.limit ?? 80;
+  if (!(await hasDedicatedTable(client))) {
+    return listOpenFromSkillRequests(client, opts);
+  }
+  const { data, error } = await client
+    .from("project_recruitments")
+    .select(
+      "id,project_id,created_by,title,message,skill_name,duration,compensation,skill_request_id,status,created_at,closed_at",
+    )
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(limit * 2);
+  if (error) {
+    if (isMissingTable(error)) {
+      dedicatedTableAvailable = false;
+      return listOpenFromSkillRequests(client, opts);
+    }
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  return attachPublicProjects(client, rows, opts);
+}
+
+async function createViaSkillRequests(
+  client: SupabaseClient,
+  input: {
+    projectId: string;
+    userId: string;
+    projectName: string;
+    title: string;
+    message?: string;
+    skillName?: string;
+    duration?: string;
+    compensation?: string;
+  },
+): Promise<ProjectRecruitment> {
+  const title = input.title.trim();
+  const skillName = (input.skillName ?? title).trim() || title;
+  const description = [input.projectName, input.message?.trim() || title].filter(Boolean).join(" — ");
+  const duration = input.duration ?? "1週間";
+  const compensation = input.compensation ?? "なし（経験・実績として）";
+
+  const { data, error } = await client
+    .from("skill_requests")
+    .insert({
+      requester_id: input.userId,
+      project_id: input.projectId,
+      // 欲しい人材を大きく出すため skill_name にタイトルを入れる
+      skill_name: title,
+      description,
+      duration,
+      compensation,
+      status: "open",
+    })
+    .select(
+      "id,requester_id,project_id,skill_name,description,duration,compensation,status,created_at",
+    )
+    .single();
+
+  if (error) {
+    // insert+select が失敗したら createSkillRequest へ
+    try {
+      await createSkillRequest(client, input.userId, {
+        skillName: title || skillName,
+        description,
+        projectId: input.projectId,
+        duration,
+        compensation,
+      });
+      const list = await listFromSkillRequests(client, input.projectId);
+      const created = list.find((r) => r.status === "open" && r.title === title) ?? list[0];
+      if (!created) throw new Error(error.message);
+      await syncSummaryFromSkillRequests(client, input.projectId);
+      return created;
+    } catch (e) {
+      throw new Error(e instanceof Error ? e.message : error.message);
+    }
+  }
+
+  const created = mapSkillRequestRow(data as Record<string, unknown>);
+  await syncSummaryFromSkillRequests(client, input.projectId);
+  return created;
+}
+
 export async function createProjectRecruitment(
   client: SupabaseClient,
   input: {
@@ -179,6 +377,10 @@ export async function createProjectRecruitment(
     await client.from("projects").update({ visibility: "public" }).eq("id", input.projectId);
   }
 
+  if (!(await hasDedicatedTable(client))) {
+    return createViaSkillRequests(client, input);
+  }
+
   let skillRequestId: string | null = null;
   if (input.postToSkillBoard !== false) {
     const skillName = (input.skillName ?? title).trim() || title;
@@ -196,9 +398,7 @@ export async function createProjectRecruitment(
       .select("id")
       .maybeSingle();
     if (skillErr) {
-      // skill_requests が無い環境ではスキップして募集本体だけ作る
       if (!isMissingTable(skillErr) && skillErr.code !== "42P01") {
-        // insert without returning if select fails — fall back to createSkillRequest
         try {
           await createSkillRequest(client, input.userId, {
             skillName,
@@ -236,9 +436,8 @@ export async function createProjectRecruitment(
 
   if (error) {
     if (isMissingTable(error)) {
-      throw new Error(
-        "募集テーブル未適用です。supabase/apply_project_recruitments.sql を適用してください。",
-      );
+      dedicatedTableAvailable = false;
+      return createViaSkillRequests(client, input);
     }
     throw new Error(error.message);
   }
@@ -253,6 +452,17 @@ export async function closeProjectRecruitment(
   recruitmentId: string,
   projectId: string,
 ): Promise<void> {
+  if (!(await hasDedicatedTable(client))) {
+    const { error } = await client
+      .from("skill_requests")
+      .update({ status: "closed" })
+      .eq("id", recruitmentId)
+      .eq("project_id", projectId);
+    if (error) throw new Error(error.message);
+    await syncSummaryFromSkillRequests(client, projectId);
+    return;
+  }
+
   const { data, error } = await client
     .from("project_recruitments")
     .update({ status: "closed", closed_at: new Date().toISOString() })
@@ -262,9 +472,15 @@ export async function closeProjectRecruitment(
     .maybeSingle();
   if (error) {
     if (isMissingTable(error)) {
-      throw new Error(
-        "募集テーブル未適用です。supabase/apply_project_recruitments.sql を適用してください。",
-      );
+      dedicatedTableAvailable = false;
+      const { error: skErr } = await client
+        .from("skill_requests")
+        .update({ status: "closed" })
+        .eq("id", recruitmentId)
+        .eq("project_id", projectId);
+      if (skErr) throw new Error(skErr.message);
+      await syncSummaryFromSkillRequests(client, projectId);
+      return;
     }
     throw new Error(error.message);
   }
@@ -291,6 +507,24 @@ export async function ensureLegacyRecruitmentMigrated(
   if (!title) return;
   const existing = await listProjectRecruitments(client, opts.projectId);
   if (existing.length > 0) return;
+
+  if (!(await hasDedicatedTable(client))) {
+    // 複数タイトルが " / " 区切りの場合は先頭だけ移行
+    const first = title.split(" / ")[0]?.trim() || title;
+    try {
+      await client.from("skill_requests").insert({
+        requester_id: opts.ownerId,
+        project_id: opts.projectId,
+        skill_name: first,
+        description: opts.recruitmentMessage.trim() || null,
+        status: "open",
+      });
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+
   try {
     await client.from("project_recruitments").insert({
       project_id: opts.projectId,
