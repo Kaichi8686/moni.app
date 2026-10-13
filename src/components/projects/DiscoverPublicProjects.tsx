@@ -1,16 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
+import { hasProjectBriefContent, resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const PROJECT_SELECT =
+  "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,coaching_context,created_at,updated_at";
+const PROJECT_SELECT_FALLBACK =
   "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,created_at,updated_at";
 
 type Props = {
   showSectionHeader?: boolean;
+  /** 仲間募集中のプロジェクトだけ表示（自分の募集も含む） */
+  recruitBoard?: boolean;
 };
 
 function formatLaunchedAt(iso: string, locale: "ja" | "en"): string {
@@ -23,7 +30,7 @@ function formatLaunchedAt(iso: string, locale: "ja" | "en"): string {
   });
 }
 
-export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
+export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard = false }: Props) {
   const { tx, locale } = useI18n();
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
@@ -36,6 +43,11 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
   const [toast, setToast] = useState("");
   const [detailProject, setDetailProject] = useState<ProjectRow | null>(null);
   const [joinMsgDraft, setJoinMsgDraft] = useState("");
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -55,12 +67,32 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         .order("updated_at", { ascending: false })
         .limit(80);
 
+      let rows: ProjectRow[] = [];
       if (pubRes.error) {
-        setProjects([]);
-        return;
+        const msg = pubRes.error.message ?? "";
+        const schemaMismatch =
+          pubRes.error.code === "42703" ||
+          pubRes.error.code === "PGRST204" ||
+          msg.includes("does not exist") ||
+          msg.includes("schema cache");
+        if (!schemaMismatch) {
+          setProjects([]);
+          return;
+        }
+        const fallback = await supabase
+          .from("projects")
+          .select(PROJECT_SELECT_FALLBACK)
+          .eq("visibility", "public")
+          .order("updated_at", { ascending: false })
+          .limit(80);
+        if (fallback.error) {
+          setProjects([]);
+          return;
+        }
+        rows = (fallback.data ?? []) as ProjectRow[];
+      } else {
+        rows = (pubRes.data ?? []) as ProjectRow[];
       }
-
-      const rows = (pubRes.data ?? []) as ProjectRow[];
       const ownerIds = [...new Set(rows.map((p) => p.owner_id))];
       const nameMap: Record<string, string> = {};
       if (ownerIds.length > 0) {
@@ -100,13 +132,23 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
 
   const browseList = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return projects.filter((p) => {
-      if (memberIds.has(p.id)) return false;
+    const filtered = projects.filter((p) => {
+      const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
+      const isMine = memberIds.has(p.id);
+      // 通常のプロジェクト一覧では参加済みを隠す。募集ボードでは自分の募集も見えるようにする。
+      if (isMine && !(recruitBoard && recruiting)) return false;
+      if (recruitBoard && !recruiting) return false;
       if (!q) return true;
-      const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""}`;
+      const hay = `${p.name} ${p.description ?? ""} ${p.category ?? ""} ${(p.tags ?? []).join(" ")} ${p.recruitment_target ?? ""} ${p.recruitment_message ?? ""}`;
       return hay.toLowerCase().includes(q);
     });
-  }, [projects, memberIds, query]);
+    return [...filtered].sort((a, b) => {
+      const ar = Boolean(a.recruitment_target?.trim() || a.recruitment_message?.trim()) ? 1 : 0;
+      const br = Boolean(b.recruitment_target?.trim() || b.recruitment_message?.trim()) ? 1 : 0;
+      if (br !== ar) return br - ar;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+  }, [projects, memberIds, query, recruitBoard]);
 
   async function submitJoin(projectId: string) {
     if (!supabase || !uid) {
@@ -161,12 +203,21 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
     <div className="h-full">
       {showSectionHeader ? (
         <div className="mb-3">
-          <h4 className="text-sm font-semibold text-zinc-900">{tx("プロジェクトを探す", "Discover projects")}</h4>
+          <h4 className="text-sm font-semibold text-zinc-900">
+            {recruitBoard
+              ? tx("仲間を募集中のプロジェクト", "Projects recruiting teammates")
+              : tx("プロジェクトを探す", "Discover projects")}
+          </h4>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-            {tx(
-              "参加していない公開プロジェクトだけ表示。カードをタップして詳細を見られます。",
-              "Shows public projects you haven’t joined. Tap a card for details.",
-            )}
+            {recruitBoard
+              ? tx(
+                  "欲しい人材を公開しているプロジェクトだけ表示します。カードをタップして詳細を見られます。",
+                  "Only projects with open roles. Tap a card for details.",
+                )
+              : tx(
+                  "欲しい人材を募集中の公開プロジェクトもここから見つかります。カードをタップして詳細を見られます。",
+                  "Find public projects recruiting talent here. Tap a card for details.",
+                )}
           </p>
         </div>
       ) : null}
@@ -177,10 +228,14 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
       >
         <input
           className="min-h-[44px] w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 sm:text-sm"
-          placeholder={tx("キーワードで検索", "Search by keyword")}
+          placeholder={tx("欲しい人材・キーワードで検索", "Search by talent or keyword")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label={tx("公開プロジェクトを検索", "Search public projects")}
+          aria-label={
+            recruitBoard
+              ? tx("募集を検索", "Search open roles")
+              : tx("公開プロジェクトを検索", "Search public projects")
+          }
         />
         <button
           type="submit"
@@ -202,7 +257,9 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
       <div className="mt-3">
         {!loading && browseList.length > 0 && !query.trim() ? (
           <p className="mb-2 text-[12px] font-semibold text-zinc-500">
-            {tx("注目のプロジェクト（最近更新）", "Featured projects (recently updated)")}
+            {recruitBoard
+              ? tx("仲間募集中（最近更新）", "Open roles (recently updated)")
+              : tx("注目のプロジェクト（最近更新）", "Featured projects (recently updated)")}
           </p>
         ) : null}
         {!loading && browseList.length > 0 && query.trim() ? (
@@ -217,14 +274,20 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
             <p className="text-sm font-medium text-zinc-700">
               {query.trim()
-                ? tx("条件に合う公開プロジェクトはありません。", "No public projects match your search.")
-                : uid
-                  ? tx("まだおすすめが少ないです。検索して探してみましょう。", "Few recommendations yet. Try searching.")
-                  : tx("ログインすると公開プロジェクトに応募できます。", "Sign in to apply to public projects.")}
+                ? recruitBoard
+                  ? tx("条件に合う募集はありません。", "No open roles match your search.")
+                  : tx("条件に合う公開プロジェクトはありません。", "No public projects match your search.")
+                : recruitBoard
+                  ? tx("まだ公開中の募集がありません。", "No open recruitments yet.")
+                  : uid
+                    ? tx("まだおすすめが少ないです。検索して探してみましょう。", "Few recommendations yet. Try searching.")
+                    : tx("ログインすると公開プロジェクトに応募できます。", "Sign in to apply to public projects.")}
             </p>
             {!query.trim() ? (
               <p className="mt-2 text-[12px] text-zinc-500">
-                {tx("名前・説明・カテゴリから検索できます", "Search by name, description, or category.")}
+                {recruitBoard
+                  ? tx("プロジェクトの「募集」から欲しい人材を公開できます", "Post open roles from a project’s Recruit screen.")
+                  : tx("名前・説明・カテゴリから検索できます", "Search by name, description, or category.")}
               </p>
             ) : null}
           </div>
@@ -235,6 +298,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
               const c = PROJECT_ICON_BG[projectHashIndex(p.id, PROJECT_ICON_BG.length)];
               const thumb = p.thumbnail_url?.trim();
               const recruiting = Boolean(p.recruitment_target?.trim() || p.recruitment_message?.trim());
+              const isMine = memberIds.has(p.id);
               return (
                 <li key={p.id} className="min-w-0">
                   <button
@@ -245,7 +309,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                       setJoinMsgDraft("");
                     }}
                   >
-                    <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-zinc-100">
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -260,19 +324,42 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
                           {(p.name.trim().charAt(0) || "P").toUpperCase()}
                         </span>
                       )}
+                      {isMine ? (
+                        <span className="absolute left-2 top-2 rounded-md bg-zinc-900/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                          {tx("あなた", "You")}
+                        </span>
+                      ) : null}
                     </div>
                     <span className="flex w-full min-w-0 flex-col gap-0.5 px-2.5 py-2.5">
-                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
-                        {p.name}
-                      </span>
-                      <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
-                        {lineLabel(p.business_type)}
-                      </span>
-                      <span
-                        className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
-                      >
-                        {recruiting ? tx("仲間募集", "Recruiting") : tx("公開中", "Public")}
-                      </span>
+                      {recruitBoard ? (
+                        <>
+                          <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
+                            {p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[11px] font-medium text-zinc-500">
+                            {p.name}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                            {lineLabel(p.business_type)}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
+                            {p.name}
+                          </span>
+                          <span className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800 sm:text-[11px]">
+                            {lineLabel(p.business_type)}
+                          </span>
+                          <span
+                            className={`line-clamp-1 w-full text-[11px] font-medium ${recruiting ? "text-emerald-700" : "text-zinc-500"}`}
+                          >
+                            {recruiting
+                              ? p.recruitment_target?.trim() || tx("仲間募集", "Recruiting")
+                              : tx("公開中", "Public")}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </button>
                 </li>
@@ -282,136 +369,206 @@ export function DiscoverPublicProjects({ showSectionHeader = true }: Props) {
         ) : null}
       </div>
 
-      {detail ? (
-        <div
-          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="project-detail-title"
-          onClick={() => setDetailProject(null)}
-        >
-          <div
-            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
-              <h3 id="project-detail-title" className="text-base font-bold text-zinc-900">
-                {tx("プロジェクト詳細", "Project details")}
-              </h3>
-              <button
-                type="button"
-                className="rounded-full px-3 py-1 text-sm text-zinc-500 hover:bg-zinc-100"
-                onClick={() => setDetailProject(null)}
-              >
-                {tx("閉じる", "Close")}
-              </button>
-            </div>
-
-            <div className="p-4">
-              <div className="flex gap-3">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
-                  {detail.thumbnail_url?.trim() ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span
-                      className={`flex h-full w-full items-center justify-center text-2xl text-white ${PROJECT_ICON_BG[projectHashIndex(detail.id, PROJECT_ICON_BG.length)]}`}
-                    >
-                      {(detail.name.trim().charAt(0) || "P").toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-lg font-bold text-zinc-900">{detail.name}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">{typeLabel(detail.business_type ?? null)}</p>
-                  {detail.category?.trim() ? (
-                    <p className="mt-1 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
-                      {detail.category}
-                    </p>
-                  ) : null}
-                </div>
+      {portalReady && detail
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex flex-col bg-white pt-[env(safe-area-inset-top,0px)]"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="project-detail-title"
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2.5">
+                <button
+                  type="button"
+                  className="rounded-full p-2.5 text-lg leading-none text-zinc-700 transition hover:bg-zinc-100"
+                  onClick={() => setDetailProject(null)}
+                  aria-label={tx("閉じる", "Close")}
+                >
+                  ←
+                </button>
+                <h3 id="project-detail-title" className="text-sm font-semibold text-zinc-900">
+                  {tx("プロジェクト詳細", "Project details")}
+                </h3>
+                <span className="w-11 shrink-0" aria-hidden />
               </div>
 
-              <dl className="mt-4 space-y-3 text-sm">
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("説明", "Description")}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                    {detail.description?.trim() || tx("未設定", "Not set")}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("発足", "Launched")}
-                  </dt>
-                  <dd className="mt-1 text-zinc-800">{formatLaunchedAt(detail.created_at, locale)}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("オーナー", "Owner")}
-                  </dt>
-                  <dd className="mt-1 text-zinc-800">{ownerNames[detail.owner_id] ?? tx("オーナー", "Owner")}</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                    {tx("欲しい仲間・姿勢", "Who we’re looking for")}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                    {detail.recruitment_target?.trim() || tx("未設定", "Not set")}
-                  </dd>
-                </div>
-                {(detail.recruitment_message ?? "").trim() ? (
-                  <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                      {tx("理念・ビジョン", "Vision")}
-                    </dt>
-                    <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">{detail.recruitment_message}</dd>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-4">
+                  <div className="flex gap-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+                      {detail.thumbnail_url?.trim() ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={detail.thumbnail_url.trim()} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <span
+                          className={`flex h-full w-full items-center justify-center text-3xl text-white ${PROJECT_ICON_BG[projectHashIndex(detail.id, PROJECT_ICON_BG.length)]}`}
+                        >
+                          {(detail.name.trim().charAt(0) || "P").toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <p className="text-[22px] font-bold leading-tight tracking-tight text-zinc-900">{detail.name}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{typeLabel(detail.business_type ?? null)}</p>
+                      {detail.category?.trim() ? (
+                        <p className="mt-1.5 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                          {detail.category}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
-              </dl>
 
-              <div className="mt-5 flex flex-col gap-2">
-                <p className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
-                  {tx(
-                    "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
-                    "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
-                  )}
-                </p>
-                {uid ? (
-                  detailPending ? (
-                    <p className="text-center text-sm font-medium text-amber-800">
-                      {tx("参加申請済みです", "Join request already sent")}
+                  <dl className="mt-6 space-y-4 text-sm">
+                    {(() => {
+                      const brief = resolveProjectBrief({
+                        coachingContext: detail.coaching_context,
+                        description: detail.description,
+                      });
+                      if (hasProjectBriefContent(brief)) {
+                        return (
+                          <>
+                            {brief.problemMotivation ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx(
+                                    "どのようなことを解決したくて思いついたか",
+                                    "What problem sparked this project",
+                                  )}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.problemMotivation}
+                                </dd>
+                              </div>
+                            ) : null}
+                            {brief.projectGoal ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx("このプロジェクトのゴール", "Project goal")}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.projectGoal}
+                                </dd>
+                              </div>
+                            ) : null}
+                            {brief.whatToDo ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx("何をするのか", "What we’ll do")}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.whatToDo}
+                                </dd>
+                              </div>
+                            ) : null}
+                          </>
+                        );
+                      }
+                      return (
+                        <div>
+                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                            {tx("説明", "Description")}
+                          </dt>
+                          <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                            {detail.description?.trim() || tx("未設定", "Not set")}
+                          </dd>
+                        </div>
+                      );
+                    })()}
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("発足", "Launched")}
+                      </dt>
+                      <dd className="mt-1 text-zinc-800">{formatLaunchedAt(detail.created_at, locale)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("オーナー", "Owner")}
+                      </dt>
+                      <dd className="mt-1 text-zinc-800">
+                        {ownerNames[detail.owner_id] ?? tx("オーナー", "Owner")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                        {tx("欲しい仲間・姿勢", "Who we’re looking for")}
+                      </dt>
+                      <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                        {detail.recruitment_target?.trim() || tx("未設定", "Not set")}
+                      </dd>
+                    </div>
+                    {(detail.recruitment_message ?? "").trim() ? (
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                          {tx("理念・ビジョン", "Vision")}
+                        </dt>
+                        <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                          {detail.recruitment_message}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+
+                  {memberIds.has(detail.id) ? (
+                    <p className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-center text-[12px] leading-relaxed text-emerald-800">
+                      {tx(
+                        "これはあなたのプロジェクトの募集です。探すタブにもこのように表示されます。",
+                        "This is your project’s recruitment. This is how it appears on Discover.",
+                      )}
                     </p>
                   ) : (
-                    <>
-                      <textarea
-                        className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
-                        rows={2}
-                        placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
-                        value={joinMsgDraft}
-                        onChange={(e) => setJoinMsgDraft(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        disabled={detailBusy}
-                        onClick={() => void submitJoin(detail.id)}
-                        className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
-                      >
-                        {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
-                      </button>
-                    </>
-                  )
-                ) : (
-                  <p className="text-center text-xs text-zinc-500">
-                    {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
-                  </p>
-                )}
+                    <p className="mt-6 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-center text-[12px] leading-relaxed text-zinc-500">
+                      {tx(
+                        "探すタブからは説明と募集内容のみ確認できます。中身を見るには参加申請が承認される必要があります。",
+                        "From Discover you can only view the description and recruitment info. Join and get approved to open the project.",
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                <div className="shrink-0 border-t border-zinc-200 bg-white px-5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
+                  {memberIds.has(detail.id) ? (
+                    <Link
+                      href={`/projects/${detail.id}/recruit`}
+                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white"
+                      onClick={() => setDetailProject(null)}
+                    >
+                      {tx("募集を編集する", "Edit recruitment")}
+                    </Link>
+                  ) : uid ? (
+                    detailPending ? (
+                      <p className="py-2 text-center text-sm font-medium text-amber-800">
+                        {tx("参加申請済みです", "Join request already sent")}
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <textarea
+                          className="w-full resize-none rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+                          rows={2}
+                          placeholder={tx("参加申請のメッセージ（任意）", "Message with your request (optional)")}
+                          value={joinMsgDraft}
+                          onChange={(e) => setJoinMsgDraft(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={detailBusy}
+                          onClick={() => void submitJoin(detail.id)}
+                          className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
+                        >
+                          {detailBusy ? tx("送信中…", "Sending…") : tx("参加申請を送る", "Send join request")}
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="py-2 text-center text-xs text-zinc-500">
+                      {tx("参加申請にはログインが必要です", "Sign in to send a join request")}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -12,7 +12,7 @@ alter table public.project_tasks add constraint project_tasks_status_check
 -- 2) オンボーディング用 JSON（プロジェクト単位）
 alter table public.projects add column if not exists coaching_context jsonb not null default '{}'::jsonb;
 
-comment on column public.projects.coaching_context is 'プロジェクトの追加コンテキスト: dreamStatement, stuckNow, roughDeadline, onboardingDoneAt など';
+comment on column public.projects.coaching_context is 'プロジェクトの追加コンテキスト: dreamStatement, problemMotivation, whatToDo, stuckNow, roughDeadline, onboardingDoneAt など';
 
 -- 3) マイルストーン（ロードマップステップ）の完了条件
 alter table public.project_roadmap_steps add column if not exists completion_criteria text not null default '';

@@ -6,25 +6,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Mail } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
+import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
+import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
-import { InboxNoticeBell } from "@/components/ui/InboxNoticeBell";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
 import { SignupOnboardingWizard } from "@/components/onboarding/SignupOnboardingWizard";
-import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import type { MentorClientContext } from "@/lib/ai/mentorContext";
 import { readLastProject } from "@/lib/workspace/lastProject";
 import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/appAdmin";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { ageFromBirthday } from "@/lib/profile/birthday";
-import { countryLabel } from "@/lib/profile/countries";
-import { genderLabel } from "@/lib/profile/gender";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
@@ -33,6 +32,7 @@ import {
   projectNotificationHref,
   type ProjectNotificationRow,
 } from "@/lib/projects/notifications";
+import { formatNotificationBody } from "@/lib/projects/projectInvites";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -171,7 +171,7 @@ function createMentorWelcomeMessage(): MentorChatMessage {
 
 type DmPeerRow = { room_id: string; peer_id: string; peer_name: string };
 type GroupRoomRow = { room_id: string; room_name: string; owner_id?: string };
-type ExploreSegment = "friends" | "projects";
+type ExploreSegment = "friends" | "projects" | "recruit";
 type TalkRoomMeta = { previewText: string; timeLabel: string; unread: number };
 type OpsEvent = { id: string; name: string; at: string; page: FeaturePage; userId: string | null };
 type ReportEntry = {
@@ -1094,7 +1094,7 @@ export default function Home() {
       return;
     }
     if (tab === "posts" || community === "qna") {
-      router.replace("/idea?tab=qna");
+      router.replace("/idea?tab=qna&view=board");
       return;
     }
     if (community === "progress") {
@@ -1117,6 +1117,10 @@ export default function Home() {
       setMentorSubTab("ai");
     }
     if (tab === "chat") setChatSubView("list");
+    const segment = params.get("segment");
+    if (segment === "friends" || segment === "projects" || segment === "recruit") {
+      setExploreSegment(segment);
+    }
   }, [router, showLandingPage]);
 
   useEffect(() => {
@@ -2043,7 +2047,7 @@ export default function Home() {
       items.push({
         id: `project-notice-${row.id}`,
         level: row.type === "join_request_rejected" ? "warn" : "info",
-        text: row.body,
+        text: formatNotificationBody(row.type, row.body),
         kind: "project",
         projectNotification: row,
       });
@@ -3732,7 +3736,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
@@ -3747,7 +3751,7 @@ export default function Home() {
     } catch {
       /* ignore */
     }
-    router.push("/idea?tab=qna");
+    router.push("/idea?tab=qna&view=board");
     setAuthMessage("アイデアの質問・相談タブを開きました。");
   }
 
@@ -4114,47 +4118,19 @@ export default function Home() {
         </aside>
 
         <div className={searchFullBleed ? "flex min-h-0 flex-1 flex-col" : "space-y-3 sm:space-y-4"}>
-          <header
-            className={
-              searchFullBleed
-                ? "flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 bg-white px-4 py-3 sm:px-5"
-                : "flex items-center justify-between gap-2 border-b border-[#dbdbdb] bg-white px-3 py-2.5 sm:px-4 sm:py-3"
-            }
-          >
-            <h1 className={`moni-wordmark ${searchFullBleed ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"}`}>moni</h1>
-            <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-              <InboxNoticeBell
-                items={notificationItems}
-                onOpen={(item) => {
-                  if (item.kind === "project" && item.projectNotification) {
-                    void openProjectNotification(item.projectNotification);
-                    return;
-                  }
-                  if (item.id === "follow-request") {
-                    // stay on current page — setActivePage("account") redirects to /profile
-                    // and drops this modal before approve/reject can be used
-                    setFollowListModal("requests");
-                    return;
-                  }
-                  if (item.id === "chat-unread") {
-                    // 既読は /messages で会話を開いたときに付く。ここでは遷移のみ
-                    router.push("/messages");
-                  }
-                }}
-              />
-              {!session && canUseSupabase ? (
+          <AppBrandHeader
+            className={searchFullBleed ? "border-zinc-100" : "border-[#dbdbdb]"}
+            right={
+              !session && canUseSupabase ? (
                 <Link
                   href="/login"
                   className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800"
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
-              ) : null}
-              <div className="hidden max-w-[40vw] truncate text-right text-xs text-zinc-500 sm:block">
-                {sessionEmail ? sessionEmail : accountText.loginStatus}
-              </div>
-            </div>
-          </header>
+              ) : undefined
+            }
+          />
 
           <main
             className={
@@ -5004,16 +4980,21 @@ export default function Home() {
               <div className="space-y-3">
                 {mentorMessages.map((m) => (
                   <div key={m.id} className="rounded-2xl border border-[#e5e7eb] bg-white px-3 py-3 sm:px-4">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <div
-                        className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                          m.role === "user" ? "bg-[#dbeafe] text-[#1d4ed8]" : "bg-[#dcfce7] text-[#166534]"
-                        }`}
-                        aria-hidden
-                      >
-                        {m.role === "user" ? "You" : "AI"}
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
+                            m.role === "user" ? "bg-[#dbeafe] text-[#1d4ed8]" : "bg-[#dcfce7] text-[#166534]"
+                          }`}
+                          aria-hidden
+                        >
+                          {m.role === "user" ? "You" : "AI"}
+                        </div>
+                        <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
                       </div>
-                      <p className="text-xs font-semibold text-[#4b5563]">{m.role === "user" ? "あなた" : "相談AI"}</p>
+                      {m.content.trim() && m.id !== mentorStreamingId ? (
+                        <AiChatCopyButton text={m.content} className="text-[#6b7280]" />
+                      ) : null}
                     </div>
                     <AiChatStreamingRichText
                       text={m.content}
@@ -5082,12 +5063,7 @@ export default function Home() {
               : "hidden"
           }
         >
-          <div className="shrink-0">
-            <h3 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">{t("searchTitle")}</h3>
-            <p className="mt-1 text-sm text-zinc-500">{t("searchHint")}</p>
-          </div>
-
-          <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <div
               className="flex shrink-0 gap-1 border-b border-zinc-100"
               role="tablist"
@@ -5122,6 +5098,22 @@ export default function Home() {
               >
                 {t("searchProjects")}
                 {exploreSegment === "projects" ? (
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={exploreSegment === "recruit"}
+                className={`relative min-h-[40px] flex-1 px-2 text-[13px] font-semibold transition sm:px-3 sm:text-sm ${
+                  exploreSegment === "recruit"
+                    ? "text-zinc-900"
+                    : "text-zinc-400 hover:text-zinc-700"
+                }`}
+                onClick={() => setExploreSegment("recruit")}
+              >
+                {t("searchRecruit")}
+                {exploreSegment === "recruit" ? (
                   <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-zinc-900 sm:inset-x-3" aria-hidden />
                 ) : null}
               </button>
@@ -5204,9 +5196,13 @@ export default function Home() {
                     : null}
                 </ul>
               </div>
+            ) : exploreSegment === "projects" ? (
+              <div className="flex-1 pt-3" role="tabpanel">
+                <DiscoverPublicProjects showSectionHeader={false} />
+              </div>
             ) : (
               <div className="flex-1 pt-3" role="tabpanel">
-                <DiscoverPublicProjects showSectionHeader />
+                <DiscoverPublicProjects showSectionHeader={false} recruitBoard />
               </div>
             )}
           </div>
@@ -5788,136 +5784,19 @@ export default function Home() {
       </main>
       {profilePortalReady && activeProfileMember
         ? createPortal(
-            <div
-              className="fixed inset-0 z-[100] flex flex-col bg-white pt-[env(safe-area-inset-top,0px)]"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="peer-profile-title"
-            >
-          <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-3 py-2.5">
-            <button
-              type="button"
-              className="rounded-full p-2.5 text-lg leading-none text-zinc-700 transition hover:bg-zinc-100"
-              onClick={() => setActiveProfileMember(null)}
-              aria-label="閉じる"
-            >
-              ←
-            </button>
-            <span className="text-sm font-semibold text-zinc-900">プロフィール</span>
-            <span className="w-11 shrink-0" aria-hidden />
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 space-y-4 border-b border-zinc-100 px-5 pb-6 pt-2">
-              <div className="flex items-start gap-4">
-                <MemberAvatarBubble
-                  userId={activeProfileMember.id}
-                  name={activeProfileMember.name}
-                  avatarUrl={activeProfileMember.avatarUrl}
-                  size="lg"
-                  className="ring-4 ring-white shadow-md"
-                />
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h2 id="peer-profile-title" className="truncate text-[22px] font-bold leading-tight tracking-tight text-zinc-900">
-                        {activeProfileMember.name}
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className={`shrink-0 rounded-lg border px-3 py-2 text-center text-xs font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
-                        activeProfileMember.id && followingIds.includes(activeProfileMember.id)
-                          ? "border-zinc-300 bg-zinc-50 text-zinc-700"
-                          : activeProfileMember.id && outgoingRequestIds.includes(activeProfileMember.id)
-                            ? "border-zinc-300 bg-zinc-50 text-zinc-600"
-                            : "border-zinc-800 bg-white text-zinc-900 hover:bg-zinc-50"
-                      }`}
-                      disabled={!activeProfileMember.id}
-                      onClick={() => {
-                        if (!activeProfileMember.id) return;
-                        void toggleFollow(activeProfileMember.id);
-                      }}
-                    >
-                      {!activeProfileMember.id ? "フォローできません" : followingIds.includes(activeProfileMember.id)
-                          ? "フォロー中"
-                          : outgoingRequestIds.includes(activeProfileMember.id)
-                            ? "リクエスト中"
-                            : "フォロー"}
-                    </button>
-                  </div>
-                  <p className="mt-1.5 line-clamp-3 text-sm leading-snug text-zinc-500">{activeProfileMember.goal}</p>
-                  {(activeProfileMember.age != null ||
-                  (activeProfileMember.gender && activeProfileMember.gender !== "prefer_not") ||
-                  activeProfileMember.country) ? (
-                    <p className="mt-2 text-[12px] text-zinc-500">
-                      {[
-                        activeProfileMember.age != null
-                          ? tx(`${activeProfileMember.age}歳`, `${activeProfileMember.age} yrs`)
-                          : null,
-                        activeProfileMember.gender && activeProfileMember.gender !== "prefer_not"
-                          ? genderLabel(activeProfileMember.gender, language === "en" ? "en" : "ja")
-                          : null,
-                        activeProfileMember.country
-                          ? countryLabel(activeProfileMember.country, language === "en" ? "en" : "ja")
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <ProfileSkillsTraits
-                skills={activeProfileMember.skills ?? []}
-                traits={activeProfileMember.traits ?? []}
-              />
-              {!activeProfileMember.id ? (
-                <p className="text-center text-xs text-zinc-400">このユーザーはデモ表示のみです。</p>
-              ) : null}
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col bg-zinc-50">
-              <div className="shrink-0 border-b border-zinc-200/80 bg-zinc-50 px-5 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">参加中のプロジェクト</h3>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-4">
-                {peerProfileProjectsLoading ? (
-                  <p className="text-center text-sm text-zinc-500">読み込み中…</p>
-                ) : peerProfileProjects.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-8 text-center text-sm leading-relaxed text-zinc-500">
-                    {activeProfileMember.id
-                      ? "公開プロジェクトへの参加があればここに表示されます（非公開のみの参加は相手からは見えません）。"
-                      : "デモユーザーのためプロジェクトは表示されません。"}
-                  </p>
-                ) : (
-                  <ul className="space-y-3">
-                    {peerProfileProjects.map((p) => (
-                      <li key={`peer-proj-${p.id}`}>
-                        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="min-w-0 flex-1 font-semibold text-zinc-900">{p.name}</p>
-                            <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
-                              {p.visibility === "public" ? "公開" : "非公開"}
-                            </span>
-                          </div>
-                          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-600">
-                            {(p.description ?? "").trim() || "説明はまだありません。"}
-                          </p>
-                          <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
-                            {language === "ja"
-                              ? "探す画面からは説明のみ表示されます。中身を見るにはプロジェクトへの参加が必要です。"
-                              : "Discover shows description only. Join the project to open its contents."}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>,
+            <ExploreFriendProfilePreview
+              key={activeProfileMember.id ?? activeProfileMember.name}
+              member={activeProfileMember}
+              projects={peerProfileProjects}
+              projectsLoading={peerProfileProjectsLoading}
+              isFollowing={Boolean(activeProfileMember.id && followingIds.includes(activeProfileMember.id))}
+              isPending={Boolean(activeProfileMember.id && outgoingRequestIds.includes(activeProfileMember.id))}
+              onClose={() => setActiveProfileMember(null)}
+              onToggleFollow={() => {
+                if (!activeProfileMember.id) return;
+                void toggleFollow(activeProfileMember.id);
+              }}
+            />,
             document.body,
           )
         : null}
@@ -6003,7 +5882,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6019,7 +5897,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6046,7 +5923,6 @@ export default function Home() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6062,7 +5938,6 @@ export default function Home() {
                   <span className="app-bottom-nav-item-icon" aria-hidden>
                     {item.icon}
                   </span>
-                  <span className="max-w-[4.5rem] truncate">{label}</span>
                 </Link>
               );
             }
@@ -6083,7 +5958,6 @@ export default function Home() {
                 <span className="app-bottom-nav-item-icon" aria-hidden>
                   {item.icon}
                 </span>
-                <span className="max-w-[4.5rem] truncate">{label}</span>
                 {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
               </button>
             );

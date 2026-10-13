@@ -18,6 +18,7 @@ export type SkillRequest = {
   requesterId: string;
   requesterName: string;
   projectId: string | null;
+  projectName: string | null;
   skillName: string;
   description: string | null;
   duration: string;
@@ -37,14 +38,32 @@ export async function loadOpenSkillRequests(client: SupabaseClient, limit = 30):
     if (error.code === "42P01") return [];
     throw new Error(error.message);
   }
+
+  const projectIds = [
+    ...new Set(
+      (data ?? [])
+        .map((r) => r.project_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const projectNames: Record<string, string> = {};
+  if (projectIds.length > 0) {
+    const { data: projects } = await client.from("projects").select("id,name").in("id", projectIds);
+    for (const p of projects ?? []) {
+      projectNames[p.id as string] = ((p.name as string | null) ?? "").trim() || "プロジェクト";
+    }
+  }
+
   return (data ?? []).map((r) => {
     const prof = r.profiles as unknown;
     const p = (Array.isArray(prof) ? prof[0] : prof) as { display_name?: string } | null;
+    const projectId = (r.project_id as string | null) ?? null;
     return {
       id: r.id as string,
       requesterId: r.requester_id as string,
       requesterName: (p?.display_name as string)?.trim() || "ユーザー",
-      projectId: (r.project_id as string | null) ?? null,
+      projectId,
+      projectName: projectId ? projectNames[projectId] ?? null : null,
       skillName: r.skill_name as string,
       description: (r.description as string | null) ?? null,
       duration: r.duration as string,

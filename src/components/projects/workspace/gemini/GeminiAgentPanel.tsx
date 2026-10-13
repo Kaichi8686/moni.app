@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/chatConversations";
 import { appendIdeasToVoting } from "@/lib/projects/ideaVoting/appendIdeas";
 import { applyAgentRoadmapToProject, type ApplyRoadmapMode } from "@/lib/projects/applyAgentRoadmap";
+import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -95,6 +96,8 @@ export function GeminiAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const handoffAppliedRef = useRef(false);
+  /** Only persist to the store key that this panel instance last hydrated for (per project). */
+  const persistKeyRef = useRef("");
   /** Capture mount-time value so clearing the parent flag does not re-hydrate old threads */
   const startFreshOnMountRef = useRef(startFresh);
   const onFreshConsumedRef = useRef(onFreshConsumed);
@@ -115,6 +118,7 @@ export function GeminiAgentPanel({
 
   useEffect(() => {
     setHydrated(false);
+    persistKeyRef.current = "";
     handoffAppliedRef.current = false;
     const preferFresh = startFreshOnMountRef.current;
     const storeKey = conversationsKey(projectId, mode);
@@ -164,6 +168,8 @@ export function GeminiAgentPanel({
     setDraft("");
     resetPanels();
     setHistoryOpen(false);
+    // Bind persistence to this project+mode only after hydrate; never write prior project threads here.
+    persistKeyRef.current = storeKey;
     setHydrated(true);
     if (preferFresh) {
       startFreshOnMountRef.current = false;
@@ -192,17 +198,18 @@ export function GeminiAgentPanel({
   }, [hydrated, initialUserMessage, tx]);
 
   useEffect(() => {
-    if (!hydrated || !activeId) return;
+    if (!hydrated || !activeId || !persistKeyRef.current) return;
     setConversations((prev) => upsertActiveConversation(prev, activeId, messages, newTitle));
   }, [messages, activeId, hydrated, newTitle]);
 
   useEffect(() => {
-    if (!hydrated || !activeId) return;
-    saveConversationStore(conversationsKey(projectId, mode), {
+    if (!hydrated || !activeId || !persistKeyRef.current) return;
+    // Use the hydrated project key — do not re-save under a newly changed projectId with stale threads.
+    saveConversationStore(persistKeyRef.current, {
       activeId,
       conversations,
     });
-  }, [activeId, conversations, hydrated, mode, projectId]);
+  }, [activeId, conversations, hydrated]);
 
   useEffect(() => {
     scrollToEnd();
@@ -518,8 +525,16 @@ export function GeminiAgentPanel({
                   onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
                 />
               ) : (
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
               )}
+              {m.content.trim() && !(m.id && m.id === streamingId) ? (
+                <div className={`mt-1.5 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <AiChatCopyButton
+                    text={m.content}
+                    className={m.role === "user" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-zinc-500"}
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
 
@@ -532,10 +547,21 @@ export function GeminiAgentPanel({
 
           {roadmap ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[13px]">
-              <p className="font-bold text-emerald-900">
-                {tx(`計画案（${roadmap.phases.length}段階）`, `Draft plan (${roadmap.phases.length} phases)`)}
-              </p>
-              <ol className="mt-2 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-bold text-emerald-900">
+                  {tx(`計画案（${roadmap.phases.length}段階）`, `Draft plan (${roadmap.phases.length} phases)`)}
+                </p>
+                <AiChatCopyButton
+                  text={roadmap.phases
+                    .map((p, i) => {
+                      const tasks = p.tasks?.map((t) => `・ ${t.task_title}`).join("\n") ?? "";
+                      return [`${i + 1}. ${p.phase_name}`, tasks].filter(Boolean).join("\n");
+                    })
+                    .join("\n\n")}
+                  className="text-emerald-800"
+                />
+              </div>
+              <ol className="mt-2 select-text space-y-2">
                 {roadmap.phases.map((p, i) => (
                   <li key={i} className="rounded-lg bg-white/90 px-2 py-1.5">
                     <span className="font-semibold">
@@ -604,10 +630,23 @@ export function GeminiAgentPanel({
 
           {ideas?.ideas?.length && !streamingId ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px]">
-              <p className="font-bold text-amber-900">
-                {tx(`💡 アイデア ${ideas.ideas.length} 件`, `💡 ${ideas.ideas.length} ideas`)}
-              </p>
-              <ul className="mt-2 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-bold text-amber-900">
+                  {tx(`💡 アイデア ${ideas.ideas.length} 件`, `💡 ${ideas.ideas.length} ideas`)}
+                </p>
+                <AiChatCopyButton
+                  text={ideas.ideas
+                    .map((idea, i) => {
+                      const lines = [`${i + 1}. ${idea.title}`];
+                      if (idea.pitch) lines.push(idea.pitch);
+                      if (idea.first_step) lines.push(`${tx("最初の一歩: ", "First step: ")}${idea.first_step}`);
+                      return lines.join("\n");
+                    })
+                    .join("\n\n")}
+                  className="text-amber-900"
+                />
+              </div>
+              <ul className="mt-2 select-text space-y-2">
                 {ideas.ideas.map((idea, i) => (
                   <li key={i} className="rounded-lg bg-white/90 px-2 py-1.5">
                     <p className="font-semibold">{idea.title}</p>

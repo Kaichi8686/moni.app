@@ -5,6 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { AiTaskSuggestion } from "@/lib/ai/studentCoachPrompt";
 import { parseCoachingContext, resolveUserSituation } from "@/lib/projects/coachingContext";
+import {
+  applyBriefToCoachingContext,
+  composeProjectDescription,
+  emptyProjectBrief,
+  type ProjectBrief,
+} from "@/lib/projects/projectBrief";
 import type { ProjectMemberRow, ProjectRow, ProjectTaskRow } from "@/lib/projects/types";
 import type { UserSituation } from "@/lib/projects/userSituation";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
@@ -52,7 +58,6 @@ export function ProjectsWorkspace({ projectId }: Props) {
 
   const [form, setForm] = useState({
     name: "",
-    description: "",
     category: "general",
     tags: "",
     thumbnail_url: "",
@@ -60,6 +65,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
     recruitment_target: "",
     recruitment_message: "",
   });
+  const [brief, setBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
 
   const [selected, setSelected] = useState<ProjectRow | null>(null);
   const [memberRole, setMemberRole] = useState<"owner" | "admin" | "member" | null>(null);
@@ -204,8 +210,12 @@ export function ProjectsWorkspace({ projectId }: Props) {
 
   async function createProject() {
     if (!supabase || !uid || !form.name.trim()) return;
+    const description = composeProjectDescription(brief);
+    const coaching_context = applyBriefToCoachingContext({}, brief);
     const fullPayload = {
       ...form,
+      description,
+      coaching_context,
       owner_id: uid,
       tags: form.tags.split(",").map((x) => x.trim()).filter(Boolean),
     };
@@ -214,7 +224,8 @@ export function ProjectsWorkspace({ projectId }: Props) {
       {
         owner_id: uid,
         name: form.name.trim(),
-        description: form.description.trim(),
+        description,
+        coaching_context,
         category: form.category.trim() || "general",
         tags: fullPayload.tags,
         visibility: form.visibility,
@@ -222,7 +233,15 @@ export function ProjectsWorkspace({ projectId }: Props) {
       {
         owner_id: uid,
         name: form.name.trim(),
-        description: form.description.trim(),
+        description,
+        category: form.category.trim() || "general",
+        tags: fullPayload.tags,
+        visibility: form.visibility,
+      },
+      {
+        owner_id: uid,
+        name: form.name.trim(),
+        description,
       },
       {
         owner_id: uid,
@@ -260,7 +279,6 @@ export function ProjectsWorkspace({ projectId }: Props) {
     }
     setForm({
       name: "",
-      description: "",
       category: "general",
       tags: "",
       thumbnail_url: "",
@@ -268,6 +286,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
       recruitment_target: "",
       recruitment_message: "",
     });
+    setBrief(emptyProjectBrief());
     await loadProjects();
     if (data?.id) void loadProjectDetail(data.id);
   }
@@ -458,7 +477,27 @@ export function ProjectsWorkspace({ projectId }: Props) {
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <input className={input} placeholder="プロジェクト名" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <input className={input} placeholder="カテゴリ" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} />
-              <textarea className={`${input} sm:col-span-2`} placeholder="説明文" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+              <textarea
+                className={`${input} sm:col-span-2`}
+                rows={3}
+                placeholder="どのようなことを解決したくてこのプロジェクトを思いついたか"
+                value={brief.problemMotivation}
+                onChange={(e) => setBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
+              />
+              <textarea
+                className={`${input} sm:col-span-2`}
+                rows={2}
+                placeholder="このプロジェクトのゴール"
+                value={brief.projectGoal}
+                onChange={(e) => setBrief((b) => ({ ...b, projectGoal: e.target.value }))}
+              />
+              <textarea
+                className={`${input} sm:col-span-2`}
+                rows={2}
+                placeholder="何をするのか"
+                value={brief.whatToDo}
+                onChange={(e) => setBrief((b) => ({ ...b, whatToDo: e.target.value }))}
+              />
               <input className={input} placeholder="タグ（カンマ区切り）" value={form.tags} onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))} />
               <input className={input} placeholder="サムネイルURL" value={form.thumbnail_url} onChange={(e) => setForm((p) => ({ ...p, thumbnail_url: e.target.value }))} />
               <input className={input} placeholder="募集対象" value={form.recruitment_target} onChange={(e) => setForm((p) => ({ ...p, recruitment_target: e.target.value }))} />

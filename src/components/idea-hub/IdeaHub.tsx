@@ -3,6 +3,7 @@
 import { Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
@@ -16,12 +17,19 @@ function IdeaHubInner() {
   const searchParams = useSearchParams();
   const { tx, locale } = useI18n();
   const tab = parseIdeaHubTab(searchParams.get("tab"));
+  const qnaBoard = tab === "qna" && searchParams.get("view") === "board";
 
   const setTab = useCallback(
     (next: IdeaHubTab) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (next === "excavate") params.delete("tab");
-      else params.set("tab", next);
+      if (next === "excavate") {
+        params.delete("tab");
+        params.delete("view");
+      } else {
+        params.set("tab", next);
+        if (next !== "qna") params.delete("view");
+        else params.delete("view"); // default consult AI; board via view=board link
+      }
       const qs = params.toString();
       router.replace(qs ? `/idea?${qs}` : "/idea", { scroll: false });
     },
@@ -31,17 +39,12 @@ function IdeaHubInner() {
   return (
     <div className="min-h-[100dvh] bg-white pb-bottom-nav">
       <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-        <div className="mx-auto max-w-lg px-4 pt-3 pb-2">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <p className="moni-wordmark text-[15px]">moni</p>
-              <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("アイデア", "Ideas")}</h1>
-            </div>
-          </div>
+        <div className="mx-auto max-w-lg pb-2">
+          <AppBrandHeader bare className="px-4 pt-1" />
           <div
             role="tablist"
             aria-label={tx("アイデア機能の切り替え", "Idea tools")}
-            className="grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1"
+            className="mx-4 mt-1 grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1"
           >
             {IDEA_HUB_TABS.map((item) => {
               const active = tab === item.id;
@@ -68,8 +71,30 @@ function IdeaHubInner() {
       </header>
 
       <div role="tabpanel">
-        {tab === "excavate" ? <IdeaInterviewApp variant="hub" /> : null}
-        {tab === "qna" ? <IdeaQnAPanel active={tab === "qna"} /> : null}
+        {tab === "excavate" ? <IdeaInterviewApp variant="hub" initialMode="excavate" /> : null}
+        {tab === "qna" ? (
+          qnaBoard ? (
+            <div>
+              <div className="mx-auto max-w-lg px-4 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("tab", "qna");
+                    params.delete("view");
+                    router.replace(`/idea?${params.toString()}`, { scroll: false });
+                  }}
+                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                >
+                  {tx("← 相談AIに戻る", "← Back to consult AI")}
+                </button>
+              </div>
+              <IdeaQnAPanel active={tab === "qna"} />
+            </div>
+          ) : (
+            <IdeaInterviewApp variant="hub" initialMode="consult" />
+          )
+        ) : null}
         {tab === "mine" ? <MyIdeasPanel onGoExcavate={() => setTab("excavate")} /> : null}
         {tab === "interviews" ? (
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />

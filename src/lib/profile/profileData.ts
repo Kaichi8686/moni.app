@@ -8,6 +8,9 @@ import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
@@ -67,6 +70,7 @@ export async function loadProfileView(
   ]);
 
   const avatarUrl = resolveMemberAvatarUrl(userId, (row.avatar_url as string | null) ?? null);
+  const backgroundRaw = (row.background_url as string | null | undefined)?.trim() || null;
 
   const school = (row.school as string | null | undefined)?.trim() || null;
   const location = (row.location as string | null | undefined)?.trim() || null;
@@ -95,6 +99,7 @@ export async function loadProfileView(
     displayName,
     username: profileUsername(displayName, userId),
     avatarUrl,
+    backgroundUrl: backgroundRaw,
     bio: resolveProfileBio(row as { bio?: string | null; goal?: string | null }),
     website: (row.website as string | null)?.trim() || null,
     ...(school ? { school } : {}),

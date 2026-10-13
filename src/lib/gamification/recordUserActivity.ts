@@ -3,7 +3,9 @@ import { parseProfileBadges, syncUserBadges } from "@/lib/gamification/syncBadge
 import {
   bumpActivityLog,
   computeUserStreakPatch,
+  normalizeActivityLastDate,
   parseActivityLog,
+  streakFromActivityLog,
   type UserActivityState,
 } from "@/lib/gamification/userActivityStreak";
 
@@ -16,6 +18,8 @@ export type RecordActivityResult = {
 const PROFILE_GAMIFICATION_SELECTS = [
   "id,activity_streak,activity_last_date,activity_log,badges",
   "id,activity_streak,activity_last_date,activity_log",
+  "id,activity_streak,activity_log,badges",
+  "id,activity_streak,activity_log",
   "id",
 ];
 
@@ -45,30 +49,43 @@ export async function recordUserActivity(
       typeof row.activity_streak === "number" && Number.isFinite(row.activity_streak)
         ? Math.floor(row.activity_streak)
         : 0,
-    activityLastDate: typeof row.activity_last_date === "string" ? row.activity_last_date : null,
+    activityLastDate: normalizeActivityLastDate(row.activity_last_date),
     activityLog: parseActivityLog(row.activity_log),
   };
 
   const prevBadgeIds = new Set(parseProfileBadges(row.badges).map((b) => b.id));
   const nextLog = bumpActivityLog(prev.activityLog, points);
-  const streakPatch = computeUserStreakPatch(prev);
+  const streakPatch = computeUserStreakPatch({ ...prev, activityLog: nextLog });
   const nextStreak =
-    typeof streakPatch.activityStreak === "number" ? streakPatch.activityStreak : prev.activityStreak;
+    typeof streakPatch.activityStreak === "number"
+      ? streakPatch.activityStreak
+      : Math.max(prev.activityStreak, streakFromActivityLog(nextLog));
 
   const update: Record<string, unknown> = {
     activity_log: nextLog,
+    activity_streak: nextStreak,
   };
-  if (typeof streakPatch.activityStreak === "number") {
-    update.activity_streak = streakPatch.activityStreak;
-  }
   if (typeof streakPatch.activityLastDate === "string") {
     update.activity_last_date = streakPatch.activityLastDate;
+  } else if (prev.activityLastDate) {
+    update.activity_last_date = prev.activityLastDate;
   }
 
   const { error } = await client.from("profiles").update(update).eq("id", userId);
   if (error) {
-    if (error.code === "42703") return null;
-    throw new Error(error.message);
+    // activity_last_date が無い DB でも log + streak は進める
+    if (error.code === "42703" && "activity_last_date" in update) {
+      delete update.activity_last_date;
+      const retry = await client.from("profiles").update(update).eq("id", userId);
+      if (retry.error) {
+        if (retry.error.code === "42703") return null;
+        throw new Error(retry.error.message);
+      }
+    } else if (error.code === "42703") {
+      return null;
+    } else {
+      throw new Error(error.message);
+    }
   }
 
   let mergedBadges = parseProfileBadges(row.badges);
@@ -82,7 +99,7 @@ export async function recordUserActivity(
 
   return {
     streak: nextStreak,
-    streakChanged: Object.keys(streakPatch).length > 0,
+    streakChanged: nextStreak !== prev.activityStreak || Object.keys(streakPatch).length > 0,
     newBadges,
   };
 }

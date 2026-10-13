@@ -208,6 +208,19 @@ export default function DiscoverPage() {
                 <li key={s.id} className="rounded-2xl border border-gray-100 bg-white p-4">
                   <p className="text-xs text-violet-600">{s.skillName}</p>
                   <p className="font-semibold">{s.requesterName}</p>
+                  {s.projectName ? (
+                    <p className="mt-0.5 text-xs font-medium text-emerald-700">
+                      プロジェクト: {s.projectName}
+                      {s.projectId ? (
+                        <>
+                          {" · "}
+                          <Link href={`/projects/${s.projectId}/overview`} className="underline">
+                            開く
+                          </Link>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
                   {s.description ? <p className="mt-1 text-sm text-gray-600">{s.description}</p> : null}
                   <p className="mt-2 text-[11px] text-gray-400">
                     {s.duration} · {s.compensation}

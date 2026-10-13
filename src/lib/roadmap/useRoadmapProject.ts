@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { buildPhasesFromTemplate } from "@/lib/roadmap/phaseTemplates";
@@ -24,6 +24,7 @@ export function useRoadmapProject(projectId: string) {
   const [phases, setPhases] = useState<RoadmapPhase[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const reload = useCallback(async () => {
     if (!supabase) {
@@ -31,7 +32,8 @@ export function useRoadmapProject(projectId: string) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // 初回以外は loading を立てず、達成直後に一覧が古い状態へ戻らないようにする
+    if (!hasLoadedRef.current) setLoading(true);
     setError("");
     try {
       const client = supabase;
@@ -86,11 +88,13 @@ export function useRoadmapProject(projectId: string) {
 
       setPhases(nestPhasesWithTasks((ph ?? []) as PhaseRowDb[], (tasks ?? []) as PhaseTaskRowDb[]));
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [projectId]);
 
   useEffect(() => {
+    hasLoadedRef.current = false;
     void reload();
   }, [reload]);
 

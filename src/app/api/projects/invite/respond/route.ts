@@ -68,8 +68,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "プロジェクトが不明です" }, { status: 400 });
   }
 
-  const projectName = payload.projectName?.trim() || "プロジェクト";
-  const inviterId = payload.inviterId;
+  const { data: project } = await admin
+    .from("projects")
+    .select("name")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  const projectName =
+    payload.projectName?.trim() ||
+    (typeof project?.name === "string" ? project.name.trim() : "") ||
+    "プロジェクト";
 
   if (action === "accept") {
     const { error: mErr } = await admin.from("project_members").upsert(
@@ -85,8 +93,8 @@ export async function POST(req: NextRequest) {
   const { error: uErr } = await admin
     .from("project_notifications")
     .update({
-      type: action === "accept" ? "project_invite_resolved" : "project_invite_resolved",
-      body: JSON.stringify({ ...payload, status: nextStatus }),
+      type: "project_invite_resolved",
+      body: JSON.stringify({ ...payload, status: nextStatus, projectName }),
       read_at: new Date().toISOString(),
     })
     .eq("id", inviteId);
@@ -95,17 +103,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: uErr.message || "更新に失敗しました" }, { status: 500 });
   }
 
-  if (inviterId) {
-    await admin.from("project_notifications").insert({
-      user_id: inviterId,
-      project_id: projectId,
-      type: action === "accept" ? "project_invite_accepted" : "project_invite_declined",
-      body:
-        action === "accept"
-          ? `招待した相手が「${projectName}」への参加を承認しました。`
-          : `招待した相手が「${projectName}」への参加を辞退しました。`,
-    });
-  }
-
+  // 招待者への結果通知は送らない（お知らせは自分に関することだけ）
   return NextResponse.json({ ok: true });
 }

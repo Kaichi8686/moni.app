@@ -122,7 +122,7 @@ export default function WorkspaceGeminiHub() {
   return (
     <div className="h-[100dvh] w-full bg-white">
       <GeminiAgentPanel
-        key={`${mode}-${handoffPrompt ? "handoff" : "plain"}`}
+        key={`${projectId}-${mode}-${handoffPrompt ? "handoff" : "plain"}`}
         mode={panelMode}
         projectId={projectId}
         projectName={project.name}

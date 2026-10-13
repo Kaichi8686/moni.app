@@ -49,6 +49,7 @@ export function TemplateAiPanel({
       </div>
 
       <GeminiAgentPanel
+        key={projectId}
         mode="roadmap"
         projectId={projectId}
         projectName={projectName}

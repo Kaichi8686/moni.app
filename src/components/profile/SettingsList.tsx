@@ -13,6 +13,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { SettingsRow, type SettingsItem } from "@/components/settings/SettingsRow";
 import { isAppAdminUser } from "@/lib/auth/appAdmin";
@@ -140,17 +141,19 @@ export function SettingsList() {
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col bg-[#FAFAFA] pb-bottom-nav text-zinc-900 antialiased">
-      <header className="flex shrink-0 items-center gap-2 border-b border-[#E5E7EB] bg-white px-4 py-3 sm:px-6">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-zinc-100"
-          aria-label={tx("戻る", "Back")}
-        >
-          <ChevronLeft className="h-5 w-5 text-zinc-900" />
-        </button>
-        <h1 className="moni-wordmark text-lg">moni</h1>
-      </header>
+      <AppBrandHeader
+        left={
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg transition hover:bg-zinc-100"
+            aria-label={tx("戻る", "Back")}
+          >
+            <ChevronLeft className="h-5 w-5 text-zinc-900" />
+          </button>
+        }
+        className="border-[#E5E7EB]"
+      />
 
       {session && isAdmin ? (
         <div className="shrink-0 border-b border-[#E5E7EB] bg-white p-4 sm:px-6">

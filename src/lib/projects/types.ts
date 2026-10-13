@@ -8,7 +8,11 @@ export type ProjectNotificationType =
   | "join_request_received"
   | "join_request_accepted"
   | "join_request_rejected"
-  | "project_invited";
+  | "project_invited"
+  | "project_invite"
+  | "project_invite_accepted"
+  | "project_invite_declined"
+  | "project_invite_resolved";
 
 export type ProjectNotificationRow = {
   id: string;

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Mono, Geist, Geist_Mono, Instrument_Serif, Noto_Sans_JP } from "next/font/google";
+import { DM_Mono, Geist, Geist_Mono, Grand_Hotel, Instrument_Serif, Noto_Sans_JP } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
@@ -32,6 +32,14 @@ const instrumentSerif = Instrument_Serif({
   style: ["normal", "italic"],
   subsets: ["latin"],
   variable: "--font-instrument-serif",
+  display: "swap",
+});
+
+/** Instagram-style script wordmark (Billabong-adjacent) */
+const grandHotel = Grand_Hotel({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-moni-script",
   display: "swap",
 });
 
@@ -100,7 +108,7 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSansJp.variable} ${dmMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSansJp.variable} ${dmMono.variable} ${instrumentSerif.variable} ${grandHotel.variable} h-full antialiased`}
     >
       <body className="min-h-dvh min-h-[100dvh] flex flex-col touch-manipulation">
         <Providers>{children}</Providers>

@@ -5,6 +5,14 @@ import { ImagePlus, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import type { ProjectRow, ProjectVisibility } from "@/lib/projects/types";
+import { parseCoachingContext } from "@/lib/projects/coachingContext";
+import {
+  applyBriefToCoachingContext,
+  composeProjectDescription,
+  emptyProjectBrief,
+  resolveProjectBrief,
+  type ProjectBrief,
+} from "@/lib/projects/projectBrief";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type ProjectSettingsMeta = Pick<
@@ -22,6 +30,7 @@ type Props = {
   isOwner: boolean;
   name: string;
   description?: string;
+  coachingContext?: unknown;
   meta: ProjectSettingsMeta | null;
   onClose: () => void;
   onSaved: () => void;
@@ -37,6 +46,7 @@ export function ProjectSettingsModal({
   isOwner,
   name,
   description,
+  coachingContext,
   meta,
   onClose,
   onSaved,
@@ -53,7 +63,7 @@ export function ProjectSettingsModal({
   const [editThumb, setEditThumb] = useState("");
   const [thumbPreview, setThumbPreview] = useState<string | null>(null);
   const [showUrlField, setShowUrlField] = useState(false);
-  const [editDescription, setEditDescription] = useState("");
+  const [editBrief, setEditBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [editCategory, setEditCategory] = useState("");
   const [editBusinessType, setEditBusinessType] = useState<"maker" | "software" | "social">("software");
   const [editRecruitmentTarget, setEditRecruitmentTarget] = useState("");
@@ -79,7 +89,7 @@ export function ProjectSettingsModal({
     setErr("");
     setConfirmDelete(false);
     setEditName(name);
-    setEditDescription(description ?? "");
+    setEditBrief(resolveProjectBrief({ coachingContext, description }));
     const thumb = meta?.thumbnail_url?.trim() ?? "";
     setEditThumb(thumb);
     setThumbPreview(thumb || null);
@@ -91,7 +101,7 @@ export function ProjectSettingsModal({
     setEditRecruitmentTarget(meta?.recruitment_target ?? "");
     setEditRecruitmentMessage(meta?.recruitment_message ?? "");
     setEditVisibility(meta?.visibility === "private" ? "private" : "public");
-  }, [open, name, description, meta]);
+  }, [open, name, description, coachingContext, meta]);
 
   useEffect(() => () => clearPreviewObjectUrl(), []);
 
@@ -170,10 +180,13 @@ export function ProjectSettingsModal({
     setSaving(true);
     setErr("");
     try {
+      const descriptionText = composeProjectDescription(editBrief);
+      const nextCoaching = applyBriefToCoachingContext(parseCoachingContext(coachingContext), editBrief);
       const payload: Record<string, unknown> = {
           name: trimmedName,
           thumbnail_url: editThumb.trim() || null,
-          description: editDescription.trim(),
+          description: descriptionText,
+          coaching_context: nextCoaching,
           category: editCategory.trim() || tx("探究", "Inquiry"),
           business_type: editBusinessType,
           recruitment_target: editRecruitmentTarget.trim(),
@@ -181,7 +194,20 @@ export function ProjectSettingsModal({
           updated_at: new Date().toISOString(),
         };
       if (isOwner) payload.visibility = editVisibility;
-      const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+      let { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+      if (error) {
+        const schemaMismatch =
+          error.code === "42703" ||
+          error.code === "PGRST204" ||
+          error.message.includes("does not exist") ||
+          error.message.includes("schema cache");
+        if (schemaMismatch) {
+          const { coaching_context: _drop, ...withoutCoaching } = payload;
+          void _drop;
+          const retry = await supabase.from("projects").update(withoutCoaching).eq("id", projectId);
+          error = retry.error;
+        }
+      }
       if (error) {
         setErr(error.message);
         return;
@@ -230,7 +256,9 @@ export function ProjectSettingsModal({
             <h2 id="project-settings-title" className="text-base font-bold text-[#1A1A1A]">
               {tx("プロジェクト設定", "Project settings")}
             </h2>
-            <p className="mt-1 text-[12px] text-[#6B7280]">{tx("名前・説明・募集内容などを編集できます。", "Edit the name, description, recruiting details, and more.")}</p>
+            <p className="mt-1 text-[12px] text-[#6B7280]">
+              {tx("名前・詳細・募集内容などを編集できます。", "Edit the name, details, recruiting info, and more.")}
+            </p>
           </div>
           <button type="button" className="rounded-md p-1 text-gray-500 hover:bg-gray-100" onClick={onClose} aria-label={tx("閉じる", "Close")}>
             <X className="h-4 w-4" />
@@ -329,14 +357,36 @@ export function ProjectSettingsModal({
               ) : null}
             </div>
 
-            <label className="block text-[12px] font-medium text-[#6B7280]">
-              {tx("説明", "Description")}
-              <textarea
-                className="mt-1 min-h-[4.5rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-              />
-            </label>
+            <div className="space-y-2 rounded-lg border border-[#E5E7EB] bg-[#F7F8F8] p-3">
+              <p className="text-[12px] font-semibold text-[#374151]">{tx("プロジェクトの詳細", "Project details")}</p>
+              <label className="block text-[12px] font-medium text-[#6B7280]">
+                {tx(
+                  "どのようなことを解決したくてこのプロジェクトを思いついたか",
+                  "What problem made you think of this project?",
+                )}
+                <textarea
+                  className="mt-1 min-h-[4rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  value={editBrief.problemMotivation}
+                  onChange={(e) => setEditBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[12px] font-medium text-[#6B7280]">
+                {tx("このプロジェクトのゴール", "Project goal")}
+                <textarea
+                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  value={editBrief.projectGoal}
+                  onChange={(e) => setEditBrief((b) => ({ ...b, projectGoal: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[12px] font-medium text-[#6B7280]">
+                {tx("何をするのか", "What will you do?")}
+                <textarea
+                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  value={editBrief.whatToDo}
+                  onChange={(e) => setEditBrief((b) => ({ ...b, whatToDo: e.target.value }))}
+                />
+              </label>
+            </div>
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("カテゴリ", "Category")}
               <input
