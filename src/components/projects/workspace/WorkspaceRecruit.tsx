@@ -53,7 +53,8 @@ export default function WorkspaceRecruit() {
         });
       }
       const list = await listProjectRecruitments(supabase, projectId);
-      setRows(list);
+      // このプロジェクトの募集だけ表示（他プロジェクト分が混ざらないようにする）
+      setRows(list.filter((r) => r.projectId === projectId));
     } catch (e) {
       showNotice(e instanceof Error ? e.message : tx("募集の取得に失敗しました", "Failed to load recruitments"));
     } finally {
@@ -130,13 +131,16 @@ export default function WorkspaceRecruit() {
       <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
+            <p className="text-[11px] font-semibold text-zinc-500">
+              {tx(`${project.name} の募集`, `Recruiting for ${project.name}`)}
+            </p>
+            <h2 className="mt-0.5 text-base font-semibold text-zinc-950 sm:text-lg">
               {tx("欲しい人材を募集", "Recruit talent")}
             </h2>
             <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
               {tx(
-                "募集はいくつでも出せます。不要になったら締め切ってください。",
-                "You can post multiple openings and close them anytime.",
+                "このプロジェクトの募集だけを管理できます。いくつでも出せて、不要になったら締め切れます。",
+                "Manage openings for this project only. Post as many as you need and close any time.",
               )}
             </p>
           </div>
@@ -231,7 +235,10 @@ export default function WorkspaceRecruit() {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-zinc-900">
-            {tx(`公開中（${openRows.length}）`, `Open (${openRows.length})`)}
+            {tx(
+              `このプロジェクトの公開中（${openRows.length}）`,
+              `Open for this project (${openRows.length})`,
+            )}
           </h3>
           {openRows.length > 0 ? (
             <Link
@@ -246,7 +253,10 @@ export default function WorkspaceRecruit() {
           <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
         ) : openRows.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
-            {tx("公開中の募集はまだありません。", "No open recruitments yet.")}
+            {tx(
+              "このプロジェクトの公開中の募集はまだありません。",
+              "No open recruitments for this project yet.",
+            )}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -285,7 +295,10 @@ export default function WorkspaceRecruit() {
       {closedRows.length > 0 ? (
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-zinc-500">
-            {tx(`締め切り済み（${closedRows.length}）`, `Closed (${closedRows.length})`)}
+            {tx(
+              `このプロジェクトの締め切り済み（${closedRows.length}）`,
+              `Closed for this project (${closedRows.length})`,
+            )}
           </h3>
           <ul className="space-y-2">
             {closedRows.map((r) => (

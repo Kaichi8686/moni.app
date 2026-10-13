@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSkillRequest } from "@/lib/discover/skillRequests";
+import { createSkillRequest, SKILL_OPTIONS } from "@/lib/discover/skillRequests";
+
+const SKILL_OPTION_SET = new Set<string>(SKILL_OPTIONS);
 
 export type ProjectRecruitmentStatus = "open" | "closed";
 
@@ -65,13 +67,17 @@ function mapSkillRequestRow(row: Record<string, unknown>): ProjectRecruitment {
   if (idx >= 0) message = description.slice(idx + sep.length).trim();
 
   const skillName = ((row.skill_name as string | null) ?? "").trim();
+  // 旧形式: skill_name がカテゴリ、本文が欲しい人材 → 題名は本文を優先
+  // 新形式: skill_name に欲しい人材が入る
+  const title =
+    message && SKILL_OPTION_SET.has(skillName) ? message : skillName || message;
   const statusRaw = ((row.status as string | null) ?? "open").toLowerCase();
   return {
     id: row.id as string,
     projectId: (row.project_id as string | null) ?? "",
     createdBy: row.requester_id as string,
-    title: skillName,
-    message,
+    title: title.trim() || skillName || "募集",
+    message: SKILL_OPTION_SET.has(skillName) && message === title ? "" : message,
     skillName,
     duration: ((row.duration as string | null) ?? "1週間").trim() || "1週間",
     compensation:
@@ -102,21 +108,17 @@ async function syncSummaryFromSkillRequests(
 ): Promise<void> {
   const { data, error } = await client
     .from("skill_requests")
-    .select("skill_name,description,created_at")
+    .select("id,requester_id,project_id,skill_name,description,duration,compensation,status,created_at")
     .eq("project_id", projectId)
     .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(5);
   if (error) throw new Error(error.message);
-  const open = data ?? [];
-  const titles = open
-    .map((r) => ((r.skill_name as string | null) ?? "").trim())
-    .filter(Boolean);
-  const latestDesc = ((open[0]?.description as string | null) ?? "").trim();
-  let latestMessage = latestDesc;
-  const sep = " — ";
-  const idx = latestDesc.indexOf(sep);
-  if (idx >= 0) latestMessage = latestDesc.slice(idx + sep.length).trim();
+  const open = (data ?? [])
+    .map((row) => mapSkillRequestRow(row as Record<string, unknown>))
+    .filter((r) => r.projectId === projectId);
+  const titles = open.map((r) => r.title.trim()).filter(Boolean);
+  const latestMessage = open[0]?.message?.trim() || "";
   await client
     .from("projects")
     .update({
@@ -166,6 +168,7 @@ async function listFromSkillRequests(
   client: SupabaseClient,
   projectId: string,
 ): Promise<ProjectRecruitment[]> {
+  if (!projectId) return [];
   const { data, error } = await client
     .from("skill_requests")
     .select("id,requester_id,project_id,skill_name,description,duration,compensation,status,created_at")
@@ -174,13 +177,14 @@ async function listFromSkillRequests(
   if (error) throw new Error(error.message);
   return (data ?? [])
     .map((row) => mapSkillRequestRow(row as Record<string, unknown>))
-    .filter((r) => r.projectId);
+    .filter((r) => r.projectId === projectId);
 }
 
 export async function listProjectRecruitments(
   client: SupabaseClient,
   projectId: string,
 ): Promise<ProjectRecruitment[]> {
+  if (!projectId) return [];
   if (!(await hasDedicatedTable(client))) {
     return listFromSkillRequests(client, projectId);
   }
@@ -198,7 +202,9 @@ export async function listProjectRecruitments(
     }
     throw new Error(error.message);
   }
-  return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  return (data ?? [])
+    .map((row) => mapRow(row as Record<string, unknown>))
+    .filter((r) => r.projectId === projectId);
 }
 
 async function listOpenFromSkillRequests(
