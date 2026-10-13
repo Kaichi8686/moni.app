@@ -207,8 +207,8 @@ export function DiscoverRecruitBoard() {
                         </span>
                       ) : null}
                     </div>
-                    <span className="flex w-full min-w-0 flex-col gap-0.5 px-2.5 py-2.5">
-                      <span className="line-clamp-2 w-full break-words [overflow-wrap:anywhere] text-[14px] font-semibold leading-snug text-zinc-900 sm:text-[15px]">
+                    <span className="flex w-full min-w-0 flex-col gap-1 px-2.5 py-2.5">
+                      <span className="line-clamp-3 w-full break-words [overflow-wrap:anywhere] text-[17px] font-bold leading-snug tracking-tight text-zinc-950 sm:text-[18px]">
                         {r.title}
                       </span>
                       <span className="line-clamp-1 w-full text-[11px] font-medium text-zinc-500">
@@ -246,8 +246,10 @@ export function DiscoverRecruitBoard() {
                 <span className="w-10" />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                <p className="text-lg font-semibold text-zinc-950">{detail.title}</p>
-                <p className="mt-1 text-sm text-zinc-500">{detail.projectName}</p>
+                <p className="text-2xl font-bold leading-snug tracking-tight text-zinc-950">
+                  {detail.title}
+                </p>
+                <p className="mt-1.5 text-sm text-zinc-500">{detail.projectName}</p>
                 {detail.message ? (
                   <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{detail.message}</p>
                 ) : null}
