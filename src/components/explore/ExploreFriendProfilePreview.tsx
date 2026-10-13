@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { loadProfileView } from "@/lib/profile/profileData";
@@ -16,6 +17,8 @@ export type ExploreFriendPreviewMember = {
   goal: string;
   strength: string;
   avatarUrl?: string | null;
+  skills?: string[];
+  traits?: string[];
 };
 
 export type ExploreFriendPreviewProject = {
@@ -57,8 +60,8 @@ export function ExploreFriendProfilePreview({
   const followerCount = profile?.followerCount ?? 0;
   const bio = (profile?.bio ?? member.goal).trim();
   const displayName = profile?.displayName ?? member.name;
-  const skills = profile?.skills ?? [];
-  const traits = profile?.traits ?? [];
+  const skills = profile?.skills?.length ? profile.skills : (member.skills ?? []);
+  const traits = profile?.traits?.length ? profile.traits : (member.traits ?? []);
 
   useEffect(() => {
     if (!supabase || !member.id) return;
@@ -230,44 +233,7 @@ export function ExploreFriendProfilePreview({
                 {[profile.school, profile.location].filter(Boolean).join(" · ")}
               </p>
             ) : null}
-            {skills.length || traits.length ? (
-              <div className="space-y-2.5 pt-1">
-                {skills.length ? (
-                  <div>
-                    <p className="mb-1.5 text-[11px] font-semibold text-zinc-400">
-                      {tx("特技", "Skills")}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {skills.slice(0, 8).map((skill) => (
-                        <span
-                          key={`skill-${skill}`}
-                          className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {traits.length ? (
-                  <div>
-                    <p className="mb-1.5 text-[11px] font-semibold text-zinc-400">
-                      {tx("性格", "Traits")}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {traits.slice(0, 8).map((trait) => (
-                        <span
-                          key={`trait-${trait}`}
-                          className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900 ring-1 ring-amber-100"
-                        >
-                          {trait}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            <ProfileSkillsTraits skills={skills} traits={traits} className="pt-1" />
           </section>
 
           <section className="mt-6 space-y-3">
