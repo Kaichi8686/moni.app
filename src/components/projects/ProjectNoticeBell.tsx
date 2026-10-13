@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
+import { countActionableFollowNotices } from "@/lib/profile/socialNotifications";
 import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   userId: string | null;
@@ -16,12 +18,16 @@ export function ProjectNoticeBell({ userId, onAccepted }: Props) {
   const [toast, setToast] = useState("");
 
   const refreshBadge = useCallback(async (uid: string) => {
-    const [invites, notes] = await Promise.all([
+    const followCountPromise = supabase
+      ? countActionableFollowNotices(supabase, uid)
+      : Promise.resolve(0);
+    const [invites, notes, followCount] = await Promise.all([
       fetchIncomingProjectInvites(uid),
       fetchMyProjectNotifications(uid, 40),
+      followCountPromise,
     ]);
     const unreadNotes = notes.filter((n) => !n.read_at && n.type !== "project_invite").length;
-    setBadge(invites.length + unreadNotes);
+    setBadge(invites.length + unreadNotes + followCount);
   }, []);
 
   useEffect(() => {

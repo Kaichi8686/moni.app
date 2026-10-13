@@ -8,6 +8,7 @@ import { ja, enUS } from "date-fns/locale";
 import { FolderKanban, Pencil, Search, Users } from "lucide-react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { NewConversationModal } from "@/app/messages/_components/NewConversationModal";
 import { ensureMyProjectConversations, fetchInboxConversations } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
@@ -179,8 +180,8 @@ export function InboxList() {
       return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
     }
     return tx(
-      "まだトークがありません。右上からフォロー中の人やプロジェクトのグループラインを始めましょう。",
-      "No chats yet. Start one with people you follow or a project group line.",
+      "まだトークがありません。相互フォローの人やプロジェクトのグループラインを右上から始めましょう。",
+      "No chats yet. Start one with mutual follows or a project group line.",
     );
   })();
 
@@ -191,20 +192,23 @@ export function InboxList() {
           bare
           className="py-1"
           right={
-            <button
-              type="button"
-              onClick={() => {
-                if (!userId) {
-                  router.push("/login?next=/messages");
-                  return;
-                }
-                setShowNew(true);
-              }}
-              className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
-              aria-label={tx("新しいメール", "New mail")}
-            >
-              <Pencil className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              {userId ? <ProjectNoticeBell userId={userId} /> : null}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!userId) {
+                    router.push("/login?next=/messages");
+                    return;
+                  }
+                  setShowNew(true);
+                }}
+                className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
+                aria-label={tx("新しいメール", "New mail")}
+              >
+                <Pencil className="h-5 w-5" />
+              </button>
+            </div>
           }
         />
       </div>

@@ -1,19 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboxConversation, Message, MessageContentType } from "@/lib/types/messages";
 import { mapInboxRow, mapMessageRow, profileToSender } from "@/lib/messages/mappers";
+import { areMutualFollowers } from "@/lib/profile/followActions";
+
+export type DirectConversationResult =
+  | { ok: true; conversationId: string }
+  | { ok: false; reason: "not_mutual" | "error" };
 
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
-): Promise<string | null> {
+): Promise<DirectConversationResult> {
+  const { data: sessionData } = await client.auth.getSession();
+  const uid = sessionData.session?.user.id;
+  if (!uid) return { ok: false, reason: "error" };
+
+  const mutual = await areMutualFollowers(client, uid, otherUserId);
+  if (!mutual) return { ok: false, reason: "not_mutual" };
+
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,
   });
   if (error) {
+    const msg = error.message || "";
+    if (/mutual follow required/i.test(msg)) {
+      return { ok: false, reason: "not_mutual" };
+    }
     console.error("get_or_create_direct_conversation", error);
-    return null;
+    return { ok: false, reason: "error" };
   }
-  return data as string;
+  if (!data) return { ok: false, reason: "error" };
+  return { ok: true, conversationId: data as string };
 }
 
 /** 参加中プロジェクトのグループラインを inbox に揃える */

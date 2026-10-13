@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
-import { toggleFollowRelation } from "@/lib/profile/followActions";
+import { areMutualFollowers, toggleFollowRelation } from "@/lib/profile/followActions";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -38,11 +38,33 @@ export function ProfileActionButtons({
   const [loading, setLoading] = useState(false);
   const [followAnim, setFollowAnim] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [canMessage, setCanMessage] = useState(false);
 
   useEffect(() => {
     setFollowing(isFollowing);
     setPending(isPending);
   }, [isFollowing, isPending]);
+
+  useEffect(() => {
+    if (!supabase || isOwnProfile) {
+      setCanMessage(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) {
+        if (!cancelled) setCanMessage(false);
+        return;
+      }
+      const mutual = await areMutualFollowers(supabase, uid, profileId);
+      if (!cancelled) setCanMessage(mutual);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnProfile, profileId, following]);
 
   async function handleFollow() {
     if (!supabase) {
@@ -82,7 +104,11 @@ export function ProfileActionButtons({
       router.push("/login");
       return;
     }
-    await navigateToDirectMessage(supabase, router, profileId);
+    setActionError("");
+    const result = await navigateToDirectMessage(supabase, router, profileId);
+    if (!result.ok && result.reason === "not_mutual") {
+      setActionError(tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other"));
+    }
   }
 
   if (isOwnProfile) {
@@ -118,7 +144,21 @@ export function ProfileActionButtons({
         >
           {loading ? tx("処理中…", "Working…") : followLabel}
         </button>
-        <button type="button" onClick={() => void openMessage()} className={iconBtn} aria-label={tx("メッセージ", "Message")}>
+        <button
+          type="button"
+          onClick={() => void openMessage()}
+          className={`${iconBtn} ${canMessage ? "" : "opacity-50"}`}
+          aria-label={
+            canMessage
+              ? tx("メッセージ", "Message")
+              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+          }
+          title={
+            canMessage
+              ? tx("メッセージ", "Message")
+              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+          }
+        >
           <MessageCircle className="h-[18px] w-[18px]" />
         </button>
         <button type="button" className={iconBtn} aria-label={tx("その他", "More")}>
