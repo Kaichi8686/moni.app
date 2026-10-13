@@ -47,7 +47,7 @@ export function ProfileHeader({
   profileUserId,
   streakDays,
 }: Props) {
-  const { tx } = useI18n();
+  const { locale, tx } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
