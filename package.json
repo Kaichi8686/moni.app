@@ -13,7 +13,6 @@
     "check": "npm run lint && npm run typecheck && npm run build",
     "deploy:prod": "npx vercel --prod --yes",
     "db:messages": "node scripts/apply-conversations-messages.mjs",
-    "db:project-social": "node scripts/apply-project-social.mjs",
     "vapid:generate": "web-push generate-vapid-keys"
   },
   "dependencies": {
