@@ -102,6 +102,9 @@ type Ctx = {
   uid: string | null;
   canEdit: boolean;
   isOwner: boolean;
+  /** オーナー／管理者向け: 承認待ちの参加申請数 */
+  pendingJoinRequestCount: number;
+  refreshPendingJoinRequests: () => Promise<void>;
   deleteProject: () => Promise<void>;
   reload: () => Promise<void>;
   createSchedule: (payload: {
@@ -233,6 +236,25 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   }, [actionMenuOpen]);
   const [canEdit, setCanEdit] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
+  const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0);
+
+  const refreshPendingJoinRequests = useCallback(async () => {
+    if (!supabase || !isValidProjectUuid(projectId) || !isModerator) {
+      setPendingJoinRequestCount(0);
+      return;
+    }
+    const { count, error: countErr } = await supabase
+      .from("project_join_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("status", "pending");
+    if (countErr) {
+      setPendingJoinRequestCount(0);
+      return;
+    }
+    setPendingJoinRequestCount(count ?? 0);
+  }, [isModerator, projectId]);
 
   const reload = useCallback(async () => {
     if (!supabase || !isValidProjectUuid(projectId)) {
@@ -260,6 +282,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         setSchedules([]);
         setCanEdit(false);
         setIsOwner(false);
+        setIsModerator(false);
+        setPendingJoinRequestCount(0);
         return;
       }
       const row = prow as ProjectDbRow;
@@ -269,8 +293,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       const member = userId ? memberRows.find((m) => m.user_id === userId) : undefined;
       const owner = Boolean(userId && row.owner_id === userId);
       const editable = Boolean(userId && (owner || member));
+      const moderator = Boolean(
+        userId && (owner || member?.role === "owner" || member?.role === "admin"),
+      );
       setCanEdit(editable);
       setIsOwner(owner);
+      setIsModerator(moderator);
+      if (!moderator) setPendingJoinRequestCount(0);
 
       const ids = [...new Set([row.owner_id, ...memberRows.map((m) => m.user_id)])];
       const { data: profs } = await client.from("profiles").select("id,display_name,avatar_url").in("id", ids);
@@ -349,6 +378,25 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!isModerator || !uid) {
+      setPendingJoinRequestCount(0);
+      return;
+    }
+    void refreshPendingJoinRequests();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshPendingJoinRequests();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshPendingJoinRequests();
+    }, 20000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(poll);
+    };
+  }, [isModerator, uid, refreshPendingJoinRequests]);
 
   const createPhase = useCallback(
     async (input: { title: string; startDate: string; endDate: string; status: Phase["status"]; color: string }) => {
@@ -921,6 +969,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         uid,
         canEdit,
         isOwner,
+        pendingJoinRequestCount,
+        refreshPendingJoinRequests,
         deleteProject,
         reload,
         createPhase,
@@ -955,6 +1005,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       uid,
       canEdit,
       isOwner,
+      pendingJoinRequestCount,
+      refreshPendingJoinRequests,
       deleteProject,
       reload,
       createPhase,
@@ -1046,17 +1098,35 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 <button
                   type="button"
                   disabled={!project}
-                  className={`inline-flex h-10 w-10 items-center justify-center rounded-md border transition disabled:opacity-50 ${
+                  className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md border transition disabled:opacity-50 ${
                     actionMenuOpen
                       ? "border-[#5E6AD2] bg-[#EEF0FF] text-[#5E6AD2]"
                       : "border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F7F8F8]"
                   }`}
-                  aria-label={tx("その他のメニュー", "More")}
+                  aria-label={
+                    pendingJoinRequestCount > 0
+                      ? tx(
+                          `その他のメニュー（参加申請 ${pendingJoinRequestCount}件）`,
+                          `More (${pendingJoinRequestCount} join requests)`,
+                        )
+                      : tx("その他のメニュー", "More")
+                  }
                   aria-haspopup="menu"
                   aria-expanded={actionMenuOpen}
-                  onClick={() => setActionMenuOpen((v) => !v)}
+                  onClick={() => {
+                    setActionMenuOpen((v) => {
+                      const next = !v;
+                      if (next) void refreshPendingJoinRequests();
+                      return next;
+                    });
+                  }}
                 >
                   <MoreHorizontal className="h-5 w-5" aria-hidden />
+                  {pendingJoinRequestCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                      {pendingJoinRequestCount > 9 ? "9+" : pendingJoinRequestCount}
+                    </span>
+                  ) : null}
                 </button>
                 {actionMenuOpen ? (
                   <div
@@ -1079,8 +1149,15 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                         router.push(`/projects/${projectId}/members`);
                       }}
                     >
-                      <Users className="h-4 w-4 text-[#6B7280]" aria-hidden />
-                      {tx("メンバー", "Members")}
+                      <Users className="h-4 w-4 shrink-0 text-[#6B7280]" aria-hidden />
+                      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                        {tx("メンバー", "Members")}
+                        {pendingJoinRequestCount > 0 ? (
+                          <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                            {pendingJoinRequestCount > 9 ? "9+" : pendingJoinRequestCount}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                     {canEdit ? (
                       <button

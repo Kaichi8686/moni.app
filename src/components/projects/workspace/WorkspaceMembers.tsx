@@ -27,7 +27,7 @@ type JoinRequestRow = {
 export default function WorkspaceMembers() {
   const { tx } = useI18n();
   const router = useRouter();
-  const { project, projectId, loading, uid, reload } = useProjectWorkspace();
+  const { project, projectId, loading, uid, reload, refreshPendingJoinRequests } = useProjectWorkspace();
   const [joinRequests, setJoinRequests] = useState<JoinRequestRow[]>([]);
   const [requesterNames, setRequesterNames] = useState<Record<string, string>>({});
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -92,6 +92,7 @@ export default function WorkspaceMembers() {
       }
       const rows = (data ?? []) as JoinRequestRow[];
       setJoinRequests(rows);
+      void refreshPendingJoinRequests();
       const ids = [...new Set(rows.map((r) => r.requester_id))];
       if (ids.length > 0) {
         const { data: profs } = await supabase.from("profiles").select("id,display_name").in("id", ids);
@@ -106,7 +107,7 @@ export default function WorkspaceMembers() {
     } finally {
       setRequestsLoading(false);
     }
-  }, [canInviteOrReview, projectId]);
+  }, [canInviteOrReview, projectId, refreshPendingJoinRequests]);
 
   useEffect(() => {
     if (!moderatorRolesLoaded) return;
@@ -191,6 +192,7 @@ export default function WorkspaceMembers() {
           : tx("参加申請を拒否しました。", "Join request rejected."),
       );
       await loadJoinRequests();
+      await refreshPendingJoinRequests();
       await reload();
     } finally {
       setReviewBusyId(null);
