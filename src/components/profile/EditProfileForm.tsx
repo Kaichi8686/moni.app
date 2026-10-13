@@ -28,6 +28,7 @@ export function EditProfileForm() {
     backgroundUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
+    isPrivate: false,
   });
   const [initialForm, setInitialForm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,6 +48,7 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,is_private",
         "display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
         "display_name,goal,avatar_url,bio,website,school,location,skills",
@@ -72,6 +74,7 @@ export function EditProfileForm() {
         backgroundUrl: (data?.background_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
+        isPrivate: Boolean(data?.is_private),
       };
       setForm(next);
       setInitialForm(JSON.stringify(next));
@@ -161,12 +164,13 @@ export function EditProfileForm() {
     setMessage("");
     const skills = normalizeTagList(form.skills);
     const traits = normalizeTagList(form.traits);
-    const payload: Record<string, string | string[]> = {
+    const payload: Record<string, string | string[] | boolean> = {
       display_name: form.displayName.trim() || "ユーザー",
       goal: form.bio.trim(),
       bio: form.bio.trim(),
       skills,
       traits,
+      is_private: form.isPrivate,
     };
     if (form.website.trim()) payload.website = form.website.trim();
     if (form.school.trim()) payload.school = form.school.trim();
@@ -175,11 +179,18 @@ export function EditProfileForm() {
     const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
     setSaving(false);
     if (error) {
-      const withoutTraits = { ...payload };
-      delete withoutTraits.traits;
-      let fallback = await supabase.from("profiles").update(withoutTraits).eq("id", userId);
+      // Drop newer columns one by one for older DBs.
+      const withoutPrivate = { ...payload };
+      delete withoutPrivate.is_private;
+      let fallback = await supabase.from("profiles").update(withoutPrivate).eq("id", userId);
       if (fallback.error) {
-        const withoutSkills = { ...withoutTraits };
+        const withoutTraits = { ...withoutPrivate };
+        delete withoutTraits.traits;
+        fallback = await supabase.from("profiles").update(withoutTraits).eq("id", userId);
+      }
+      if (fallback.error) {
+        const withoutSkills = { ...withoutPrivate };
+        delete withoutSkills.traits;
         delete withoutSkills.skills;
         fallback = await supabase.from("profiles").update(withoutSkills).eq("id", userId);
       }
@@ -194,8 +205,17 @@ export function EditProfileForm() {
         }
         setMessage(
           tx(
-            "特技・性格の保存には Supabase で apply_profile_skills_traits.sql を実行してください（他の項目は保存済み）。",
-            "Run apply_profile_skills_traits.sql in Supabase to save skills/traits (other fields were saved).",
+            "一部の項目の保存には Supabase で apply_profile_instagram.sql などを実行してください（基本項目は保存済み）。",
+            "Run apply_profile_instagram.sql in Supabase to save all fields (basic fields were saved).",
+          ),
+        );
+        return;
+      }
+      if (/is_private|does not exist/i.test(error.message)) {
+        setMessage(
+          tx(
+            "公開／非公開の保存には Supabase で apply_profile_instagram.sql を実行してください（他の項目は保存済み）。",
+            "Run apply_profile_instagram.sql in Supabase to save privacy (other fields were saved).",
           ),
         );
         return;
@@ -362,6 +382,65 @@ export function EditProfileForm() {
             </div>
           </div>
         ))}
+
+        <div className="account-card overflow-hidden px-4 py-4">
+          <p className="text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
+            {tx("アカウントの公開範囲", "Account privacy")}
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
+            {form.isPrivate
+              ? tx(
+                  "非公開：フォローにはあなたの承認が必要です。申請中と表示されます。",
+                  "Private: others must request to follow you. Their button shows Requested.",
+                )
+              : tx(
+                  "公開：フォローボタンを押すとそのままフォローできます。",
+                  "Public: anyone can follow you immediately.",
+                )}
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isPrivate: false }))}
+              className="min-h-[44px] touch-manipulation rounded-lg border text-[13px] font-semibold transition active:scale-[0.98]"
+              style={
+                !form.isPrivate
+                  ? {
+                      borderColor: "var(--color-text-primary)",
+                      background: "var(--color-text-primary)",
+                      color: "#fff",
+                    }
+                  : {
+                      borderColor: "var(--color-border, #e4e4e7)",
+                      background: "transparent",
+                      color: "var(--color-text-primary)",
+                    }
+              }
+            >
+              {tx("公開", "Public")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isPrivate: true }))}
+              className="min-h-[44px] touch-manipulation rounded-lg border text-[13px] font-semibold transition active:scale-[0.98]"
+              style={
+                form.isPrivate
+                  ? {
+                      borderColor: "var(--color-text-primary)",
+                      background: "var(--color-text-primary)",
+                      color: "#fff",
+                    }
+                  : {
+                      borderColor: "var(--color-border, #e4e4e7)",
+                      background: "transparent",
+                      color: "var(--color-text-primary)",
+                    }
+              }
+            >
+              {tx("非公開", "Private")}
+            </button>
+          </div>
+        </div>
 
         <div className="account-card px-4 py-4">
           <SkillsTraitsEditor

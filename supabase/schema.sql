@@ -9,6 +9,9 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists goal text;
 alter table public.profiles add column if not exists avatar_url text;
 alter table public.profiles add column if not exists background_url text;
+alter table public.profiles add column if not exists bio text;
+alter table public.profiles add column if not exists website text;
+alter table public.profiles add column if not exists is_private boolean not null default false;
 
 create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),
@@ -259,6 +262,15 @@ create policy "update own incoming follow requests" on public.follow_requests fo
 );
 create policy "delete own pending follow requests" on public.follow_requests for delete using (
   auth.uid() = follower_id and status = 'pending'
+);
+-- 再フォロー: 過去の accepted/rejected 行を pending に戻す
+create policy "reopen own follow requests" on public.follow_requests for update using (
+  auth.uid() = follower_id
+) with check (
+  auth.uid() = follower_id and status = 'pending'
+);
+create policy "delete incoming follow requests" on public.follow_requests for delete using (
+  auth.uid() = following_id
 );
 
 alter table public.projects add column if not exists business_type text check (business_type in ('maker', 'software', 'social'));
