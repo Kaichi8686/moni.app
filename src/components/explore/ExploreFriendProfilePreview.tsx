@@ -1,18 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  MoreHorizontal,
-  Share2,
-  UserPlus,
-  UserCheck,
-  UserMinus,
-} from "lucide-react";
+import { ArrowLeft, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { loadProfileView } from "@/lib/profile/profileData";
@@ -26,6 +17,8 @@ export type ExploreFriendPreviewMember = {
   goal: string;
   strength: string;
   avatarUrl?: string | null;
+  skills?: string[];
+  traits?: string[];
 };
 
 export type ExploreFriendPreviewProject = {
@@ -59,9 +52,7 @@ export function ExploreFriendProfilePreview({
   onToggleFollow,
 }: Props) {
   const { tx, locale } = useI18n();
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileView | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState("");
 
   const avatarSrc = resolveMemberAvatarUrl(member.id, member.avatarUrl);
@@ -69,6 +60,8 @@ export function ExploreFriendProfilePreview({
   const followerCount = profile?.followerCount ?? 0;
   const bio = (profile?.bio ?? member.goal).trim();
   const displayName = profile?.displayName ?? member.name;
+  const skills = profile?.skills?.length ? profile.skills : (member.skills ?? []);
+  const traits = profile?.traits?.length ? profile.traits : (member.traits ?? []);
 
   useEffect(() => {
     if (!supabase || !member.id) return;
@@ -111,8 +104,8 @@ export function ExploreFriendProfilePreview({
     : isFollowing
       ? tx("フォロー中", "Following")
       : isPending
-        ? tx("申請中", "Requested")
-        : tx("フォロー", "Follow");
+        ? tx("リクエスト中", "Requested")
+        : tx("追加", "Add");
 
   const AddIcon = isFollowing ? UserCheck : isPending ? UserMinus : UserPlus;
 
@@ -148,62 +141,22 @@ export function ExploreFriendProfilePreview({
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2.25} />
         </button>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition active:scale-95 disabled:opacity-40"
-            onClick={() => void handleShare()}
-            disabled={!member.id}
-            aria-label={tx("共有", "Share")}
-          >
-            <Share2 className="h-5 w-5" strokeWidth={2.1} />
-          </button>
-          <div className="relative">
-            <button
-              type="button"
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition active:scale-95"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label={tx("その他", "More")}
-              aria-expanded={menuOpen}
-            >
-              <MoreHorizontal className="h-5 w-5" strokeWidth={2.25} />
-            </button>
-            {menuOpen ? (
-              <div className="absolute right-0 top-[calc(100%+0.4rem)] min-w-[11.5rem] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 py-1 shadow-xl backdrop-blur-xl">
-                {member.id ? (
-                  <Link
-                    href={`/profile/${member.id}`}
-                    className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    {tx("プロフィールを開く", "Open profile")}
-                  </Link>
-                ) : null}
-                <button
-                  type="button"
-                  className="block w-full px-4 py-2.5 text-left text-sm font-medium text-white transition hover:bg-white/10"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setDetailsOpen(true);
-                  }}
-                >
-                  {tx("詳細を見る", "View details")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <button
+          type="button"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition active:scale-95 disabled:opacity-40"
+          onClick={() => void handleShare()}
+          disabled={!member.id}
+          aria-label={tx("共有", "Share")}
+        >
+          <Share2 className="h-5 w-5" strokeWidth={2.1} />
+        </button>
       </div>
 
-      {/* Spacer keeps hero dominant until details expand */}
-      <div className="relative z-10 min-h-0 flex-1" onClick={() => setMenuOpen(false)} />
+      {/* Spacer keeps hero dominant above the sheet */}
+      <div className="relative z-10 min-h-0 flex-1" />
 
       {/* Bottom identity + CTA */}
-      <div
-        className={`relative z-20 shrink-0 px-5 transition-[padding] duration-300 ease-out ${
-          detailsOpen ? "pb-3" : "pb-[max(1.1rem,env(safe-area-inset-bottom,0px))]"
-        }`}
-      >
+      <div className="relative z-20 shrink-0 px-5 pb-3">
         <div className="mb-4 flex items-center gap-3.5">
           <MemberAvatarBubble
             userId={member.id}
@@ -228,35 +181,19 @@ export function ExploreFriendProfilePreview({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            disabled={!member.id}
-            onClick={onToggleFollow}
-            className={`inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full px-5 text-[16px] font-bold transition active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
-              isFollowing || isPending
-                ? "bg-white/18 text-white backdrop-blur-md ring-1 ring-white/25"
-                : "bg-[#FFE600] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
-            }`}
-          >
-            <AddIcon className="h-[18px] w-[18px]" strokeWidth={2.4} />
-            {addLabel}
-          </button>
-          <button
-            type="button"
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition active:scale-95"
-            onClick={() => setDetailsOpen((v) => !v)}
-            aria-expanded={detailsOpen}
-            aria-controls="peer-profile-details"
-            aria-label={detailsOpen ? tx("詳細を閉じる", "Hide details") : tx("詳細を見る", "Show details")}
-          >
-            {detailsOpen ? (
-              <ChevronDown className="h-5 w-5" strokeWidth={2.4} />
-            ) : (
-              <ChevronUp className="h-5 w-5" strokeWidth={2.4} />
-            )}
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={!member.id}
+          onClick={onToggleFollow}
+          className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[16px] font-bold transition active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
+            isFollowing || isPending
+              ? "bg-white/18 text-white backdrop-blur-md ring-1 ring-white/25"
+              : "bg-[#FFE600] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
+          }`}
+        >
+          <AddIcon className="h-[18px] w-[18px]" strokeWidth={2.4} />
+          {addLabel}
+        </button>
 
         {shareNotice ? (
           <p className="mt-2 text-center text-xs font-medium text-white/80">{shareNotice}</p>
@@ -268,13 +205,10 @@ export function ExploreFriendProfilePreview({
         ) : null}
       </div>
 
-      {/* Details sheet below */}
+      {/* Details sheet — always visible */}
       <div
         id="peer-profile-details"
-        className={`relative z-20 overflow-hidden bg-white text-zinc-900 transition-[max-height] duration-300 ease-out ${
-          detailsOpen ? "max-h-[52vh]" : "max-h-0"
-        }`}
-        aria-hidden={!detailsOpen}
+        className="relative z-20 max-h-[52vh] overflow-hidden bg-white text-zinc-900"
       >
         <div className="flex justify-center border-b border-zinc-100 pt-2.5 pb-2">
           <div className="h-1 w-10 rounded-full bg-zinc-300" />
@@ -284,7 +218,9 @@ export function ExploreFriendProfilePreview({
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
               {tx("プロフィール", "Profile")}
             </h3>
-            <p className="text-[15px] leading-relaxed text-zinc-700">{bio || tx("自己紹介はまだありません。", "No bio yet.")}</p>
+            <p className="text-[15px] leading-relaxed text-zinc-700">
+              {bio || tx("自己紹介はまだありません。", "No bio yet.")}
+            </p>
             {member.strength ? (
               <p className="text-sm font-medium text-zinc-500">
                 {tx("強み", "Strength")}
@@ -297,18 +233,7 @@ export function ExploreFriendProfilePreview({
                 {[profile.school, profile.location].filter(Boolean).join(" · ")}
               </p>
             ) : null}
-            {profile?.skills?.length ? (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {profile.skills.slice(0, 8).map((skill) => (
-                  <span
-                    key={skill}
-                    className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <ProfileSkillsTraits skills={skills} traits={traits} className="pt-1" />
           </section>
 
           <section className="mt-6 space-y-3">
@@ -344,15 +269,6 @@ export function ExploreFriendProfilePreview({
               </ul>
             )}
           </section>
-
-          {member.id ? (
-            <Link
-              href={`/profile/${member.id}`}
-              className="mt-5 flex h-11 w-full items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white transition hover:bg-zinc-800 active:opacity-90"
-            >
-              {tx("プロフィールを開く", "Open full profile")}
-            </Link>
-          ) : null}
         </div>
       </div>
     </div>
