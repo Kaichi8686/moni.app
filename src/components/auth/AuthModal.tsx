@@ -51,7 +51,6 @@ export function AuthModal({ mode: initialMode = "signin", onClose, onAuthenticat
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -187,7 +186,7 @@ export function AuthModal({ mode: initialMode = "signin", onClose, onAuthenticat
       options: {
         ...(emailRedirectTo ? { emailRedirectTo } : {}),
         data: {
-          display_name: displayName.trim() || normalizedEmail.split("@")[0] || "user",
+          display_name: normalizedEmail.split("@")[0] || "user",
         },
       },
     });
@@ -337,15 +336,6 @@ export function AuthModal({ mode: initialMode = "signin", onClose, onAuthenticat
               >
                 {tx("← メールを変更", "← Change email")}
               </button>
-              {mode === "signup" ? (
-                <input
-                  className="auth-modal-input"
-                  autoComplete="nickname"
-                  placeholder={tx("表示名（任意）", "Display name (optional)")}
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
-              ) : null}
               <input
                 type="password"
                 className="auth-modal-input"

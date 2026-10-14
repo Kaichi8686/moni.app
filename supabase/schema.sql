@@ -12,6 +12,11 @@ alter table public.profiles add column if not exists background_url text;
 alter table public.profiles add column if not exists bio text;
 alter table public.profiles add column if not exists website text;
 alter table public.profiles add column if not exists is_private boolean not null default false;
+alter table public.profiles add column if not exists age integer;
+alter table public.profiles add column if not exists birthday date;
+alter table public.profiles add column if not exists gender text;
+alter table public.profiles add column if not exists country text;
+alter table public.profiles add column if not exists onboarding_completed_at timestamptz;
 
 create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),

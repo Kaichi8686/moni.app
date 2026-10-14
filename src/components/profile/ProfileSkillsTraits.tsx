@@ -22,7 +22,7 @@ export function ProfileSkillsTraits({ skills, traits, className = "" }: Props) {
       {skills.length > 0 ? (
         <div>
           <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-            {tx("特技", "Skills")}
+            {tx("興味のあること", "Interests")}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {skills.map((tag) => (
@@ -45,7 +45,7 @@ export function ProfileSkillsTraits({ skills, traits, className = "" }: Props) {
             {traits.map((tag) => (
               <span
                 key={`trait-${tag}`}
-                className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[12px] font-medium text-violet-800 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
+                className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
               >
                 {displayTagLabel(tag, TRAIT_PRESETS, locale)}
               </span>

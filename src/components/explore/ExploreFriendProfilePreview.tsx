@@ -6,6 +6,8 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
+import { countryLabel } from "@/lib/profile/countries";
+import { genderLabel } from "@/lib/profile/gender";
 import { loadProfileView } from "@/lib/profile/profileData";
 import type { ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
@@ -228,9 +230,23 @@ export function ExploreFriendProfilePreview({
                 <span className="text-zinc-800">{member.strength}</span>
               </p>
             ) : null}
-            {profile?.school || profile?.location ? (
+            {profile?.age != null ||
+            profile?.country ||
+            (profile?.gender && profile.gender !== "prefer_not") ||
+            profile?.school ||
+            profile?.location ? (
               <p className="text-sm text-zinc-500">
-                {[profile.school, profile.location].filter(Boolean).join(" · ")}
+                {[
+                  profile?.age != null ? tx(`${profile.age}歳`, `${profile.age} yrs`) : null,
+                  profile?.gender && profile.gender !== "prefer_not"
+                    ? genderLabel(profile.gender, locale)
+                    : null,
+                  profile?.country ? countryLabel(profile.country, locale) : null,
+                  profile?.school,
+                  profile?.location,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             ) : null}
             <ProfileSkillsTraits skills={skills} traits={traits} className="pt-1" />
