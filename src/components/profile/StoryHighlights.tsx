@@ -3,12 +3,35 @@
 import Link from "next/link";
 import { FolderKanban } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import type { ProfileProjectHighlight } from "@/lib/profile/types";
 
 type Props = {
   projects: ProfileProjectHighlight[];
   isOwnProfile: boolean;
 };
+
+function ProjectThumb({ project }: { project: ProfileProjectHighlight }) {
+  const thumb = project.thumbnailUrl?.trim();
+  if (thumb) {
+    return (
+      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-100">
+        {/* eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image */}
+        <img src={thumb} alt="" className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+
+  const color = PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
+  return (
+    <div
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white ${color}`}
+      aria-hidden
+    >
+      {(project.name.trim().charAt(0) || "?").toUpperCase()}
+    </div>
+  );
+}
 
 export function StoryHighlights({ projects, isOwnProfile }: Props) {
   const { tx } = useI18n();
@@ -60,9 +83,7 @@ export function StoryHighlights({ projects, isOwnProfile }: Props) {
             href={`/projects/${project.id}`}
             className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3.5 py-3 transition hover:border-zinc-300"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-[13px] font-bold text-white">
-              {(project.name.trim().charAt(0) || "?").toUpperCase()}
-            </div>
+            <ProjectThumb project={project} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-semibold tracking-tight text-zinc-900">{project.name}</p>
               <p className="mt-0.5 truncate text-[12px] text-zinc-500">
