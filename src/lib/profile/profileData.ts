@@ -111,10 +111,12 @@ export async function loadProfileProjects(
       } | null;
       if (!p?.id) return null;
       const description = (p.description ?? "").trim();
+      const thumbnailUrl = p.thumbnail_url?.trim() || null;
       const item: ProfileProjectHighlight = {
         id: p.id,
         name: p.name,
-        icon: p.thumbnail_url ? "🖼" : "📁",
+        icon: thumbnailUrl ? "🖼" : "📁",
+        thumbnailUrl,
         role: (row as { role?: string }).role ?? "member",
         description: description ? description.slice(0, 60) : undefined,
       };
