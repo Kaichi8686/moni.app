@@ -29,6 +29,8 @@ export type ProfileProjectHighlight = {
   id: string;
   name: string;
   icon: string;
+  /** プロジェクト設定のサムネイル（ある場合は参加一覧で表示） */
+  thumbnailUrl?: string | null;
   role?: string;
   description?: string;
 };

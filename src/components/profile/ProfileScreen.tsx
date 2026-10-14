@@ -13,6 +13,7 @@ import { StoryHighlights } from "@/components/profile/StoryHighlights";
 import { loadProfileGamification } from "@/lib/gamification/profileGamification";
 import { syncUserBadges } from "@/lib/gamification/syncBadges";
 import type { ProfileGamification } from "@/lib/gamification/profileGamification";
+import { toggleFollowRelation } from "@/lib/profile/followActions";
 import {
   ensureProfileRow,
   hasPendingFollowRequest,
@@ -161,6 +162,19 @@ export function ProfileScreen({ userId: propUserId }: Props) {
     setLoading(false);
   }, [propUserId, viewerId, loadProfileData]);
 
+  /** Soft refresh after follow — avoid full-page loading flash that looks like no reaction. */
+  const refreshFollowState = useCallback(async () => {
+    if (!supabase || !viewerId || !profileUserId || viewerId === profileUserId) return;
+    const [f, p, view] = await Promise.all([
+      isFollowingUser(supabase, viewerId, profileUserId),
+      hasPendingFollowRequest(supabase, viewerId, profileUserId),
+      loadProfileView(supabase, profileUserId),
+    ]);
+    setIsFollowing(f);
+    setIsPending(p);
+    if (view) setProfile(view);
+  }, [viewerId, profileUserId]);
+
   const loadFollowListCb = useCallback(
     (type: "followers" | "following") => {
       if (!supabase || !profile) return Promise.resolve([]);
@@ -172,19 +186,18 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   const onToggleFollow = useCallback(
     async (targetId: string) => {
       if (!supabase || !viewerId) return;
-      const following = await isFollowingUser(supabase, viewerId, targetId);
-      if (following) {
-        await supabase.from("follows").delete().eq("follower_id", viewerId).eq("following_id", targetId);
-      } else {
-        await supabase.from("follow_requests").insert({
-          follower_id: viewerId,
-          following_id: targetId,
-          status: "pending",
-        });
+      const result = await toggleFollowRelation(supabase, viewerId, targetId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
-      await reload();
+      if (targetId === profileUserId) {
+        setIsFollowing(result.state === "following");
+        setIsPending(result.state === "pending");
+        await refreshFollowState();
+      }
     },
-    [viewerId, reload],
+    [viewerId, profileUserId, refreshFollowState],
   );
 
   if (!supabaseEnabled) {
@@ -249,7 +262,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             isPending={isPending}
             loadFollowList={loadFollowListCb}
             onToggleFollow={onToggleFollow}
-            onFollowChange={() => void reload()}
+            onFollowChange={() => void refreshFollowState()}
             onAvatarUpdated={() => void reload()}
             onBackgroundUpdated={() => void reload()}
             viewerId={viewerId}

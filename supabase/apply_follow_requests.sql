@@ -30,3 +30,14 @@ create policy "update own incoming follow requests" on public.follow_requests fo
 create policy "delete own pending follow requests" on public.follow_requests for delete using (
   auth.uid() = follower_id and status = 'pending'
 );
+
+drop policy if exists "reopen own follow requests" on public.follow_requests;
+create policy "reopen own follow requests" on public.follow_requests
+for update
+using (auth.uid() = follower_id)
+with check (auth.uid() = follower_id and status = 'pending');
+
+drop policy if exists "delete incoming follow requests" on public.follow_requests;
+create policy "delete incoming follow requests" on public.follow_requests
+for delete
+using (auth.uid() = following_id);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
+import { areMutualFollowers, toggleFollowRelation } from "@/lib/profile/followActions";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -36,14 +37,40 @@ export function ProfileActionButtons({
   const [pending, setPending] = useState(isPending);
   const [loading, setLoading] = useState(false);
   const [followAnim, setFollowAnim] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [canMessage, setCanMessage] = useState(false);
 
   useEffect(() => {
     setFollowing(isFollowing);
     setPending(isPending);
   }, [isFollowing, isPending]);
 
+  useEffect(() => {
+    if (!supabase || isOwnProfile) {
+      setCanMessage(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) {
+        if (!cancelled) setCanMessage(false);
+        return;
+      }
+      const mutual = await areMutualFollowers(supabase, uid, profileId);
+      if (!cancelled) setCanMessage(mutual);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnProfile, profileId, following]);
+
   async function handleFollow() {
-    if (!supabase) return;
+    if (!supabase) {
+      setActionError(tx("Supabase が未設定です", "Supabase is not configured"));
+      return;
+    }
     const { data: session } = await supabase.auth.getSession();
     const uid = session.session?.user.id;
     if (!uid) {
@@ -51,29 +78,18 @@ export function ProfileActionButtons({
       return;
     }
     setLoading(true);
+    setActionError("");
     try {
-      if (following) {
-        await supabase.from("follows").delete().eq("follower_id", uid).eq("following_id", profileId);
-        setFollowing(false);
-      } else if (pending) {
-        await supabase
-          .from("follow_requests")
-          .delete()
-          .eq("follower_id", uid)
-          .eq("following_id", profileId)
-          .eq("status", "pending");
-        setPending(false);
-      } else {
-        const { error } = await supabase.from("follow_requests").insert({
-          follower_id: uid,
-          following_id: profileId,
-          status: "pending",
-        });
-        if (!error || error.code === "23505") {
-          setPending(true);
-          setFollowAnim(true);
-          window.setTimeout(() => setFollowAnim(false), 400);
-        }
+      const result = await toggleFollowRelation(supabase, uid, profileId);
+      if (!result.ok) {
+        setActionError(result.error);
+        return;
+      }
+      setFollowing(result.state === "following");
+      setPending(result.state === "pending");
+      if (result.state === "following" || result.state === "pending") {
+        setFollowAnim(true);
+        window.setTimeout(() => setFollowAnim(false), 400);
       }
       onFollowChange();
     } finally {
@@ -88,7 +104,11 @@ export function ProfileActionButtons({
       router.push("/login");
       return;
     }
-    await navigateToDirectMessage(supabase, router, profileId);
+    setActionError("");
+    const result = await navigateToDirectMessage(supabase, router, profileId);
+    if (!result.ok && result.reason === "not_mutual") {
+      setActionError(tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other"));
+    }
   }
 
   if (isOwnProfile) {
@@ -109,26 +129,43 @@ export function ProfileActionButtons({
     ? tx("フォロー中", "Following")
     : pending
       ? tx("申請中", "Requested")
-      : tx("フォローする", "Follow");
+      : tx("フォロー", "Follow");
 
   return (
-    <div className="flex gap-2">
-      <button
-        type="button"
-        onClick={() => void handleFollow()}
-        disabled={loading}
-        className={`flex-1 disabled:opacity-50 ${followAnim ? "btn-follow-animate" : ""} ${
-          following || pending ? btnSecondary : btnPrimary
-        }`}
-      >
-        {followLabel}
-      </button>
-      <button type="button" onClick={() => void openMessage()} className={iconBtn} aria-label={tx("メッセージ", "Message")}>
-        <MessageCircle className="h-[18px] w-[18px]" />
-      </button>
-      <button type="button" className={iconBtn} aria-label={tx("その他", "More")}>
-        <MoreHorizontal className="h-[18px] w-[18px]" />
-      </button>
+    <div className="flex w-full flex-col gap-1.5">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => void handleFollow()}
+          disabled={loading}
+          className={`flex-1 disabled:opacity-50 ${followAnim ? "btn-follow-animate" : ""} ${
+            following || pending ? btnSecondary : btnPrimary
+          }`}
+        >
+          {loading ? tx("処理中…", "Working…") : followLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => void openMessage()}
+          className={`${iconBtn} ${canMessage ? "" : "opacity-50"}`}
+          aria-label={
+            canMessage
+              ? tx("メッセージ", "Message")
+              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+          }
+          title={
+            canMessage
+              ? tx("メッセージ", "Message")
+              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+          }
+        >
+          <MessageCircle className="h-[18px] w-[18px]" />
+        </button>
+        <button type="button" className={iconBtn} aria-label={tx("その他", "More")}>
+          <MoreHorizontal className="h-[18px] w-[18px]" />
+        </button>
+      </div>
+      {actionError ? <p className="text-[11px] text-rose-600">{actionError}</p> : null}
     </div>
   );
 }

@@ -33,6 +33,7 @@ export function EditProfileForm() {
     avatarUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
+    isPrivate: false,
   });
   const [initialForm, setInitialForm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -53,9 +54,11 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,avatar_url,skills,traits,birthday,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,birthday,age,gender,country",
+        "display_name,avatar_url,skills,traits,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,age,gender,country",
-        "display_name,avatar_url,skills,traits,age,country",
+        "display_name,avatar_url,skills,traits,is_private",
         "display_name,avatar_url,skills,traits",
         "display_name,avatar_url",
       ]) {
@@ -75,6 +78,7 @@ export function EditProfileForm() {
         avatarUrl: (data?.avatar_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
+        isPrivate: Boolean(data?.is_private),
       };
       setForm(next);
       setInitialForm(JSON.stringify(next));
@@ -119,10 +123,11 @@ export function EditProfileForm() {
     const traits = normalizeTagList(form.traits, 3);
     const birthday = parseBirthday(form.birthday);
     const ageNum = birthday ? ageFromBirthday(birthday) : null;
-    const payload: Record<string, string | number | string[] | null> = {
+    const payload: Record<string, string | number | string[] | boolean | null> = {
       display_name: form.displayName.trim() || "ユーザー",
       skills,
       traits,
+      is_private: form.isPrivate,
     };
     if (birthday) payload.birthday = birthday;
     if (ageNum != null) payload.age = ageNum;
@@ -138,6 +143,7 @@ export function EditProfileForm() {
       delete withoutExtra.gender;
       delete withoutExtra.country;
       delete withoutExtra.traits;
+      delete withoutExtra.is_private;
       let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
       if (fallback.error) {
         const withoutSkills = { ...withoutExtra };
@@ -157,6 +163,15 @@ export function EditProfileForm() {
           tx(
             "一部項目の保存には Supabase で apply_profile_onboarding.sql / apply_profile_skills_traits.sql を実行してください（基本項目は保存済み）。",
             "Run apply_profile_onboarding.sql / apply_profile_skills_traits.sql in Supabase for full saves (basic fields were saved).",
+          ),
+        );
+        return;
+      }
+      if (/is_private|does not exist/i.test(error.message)) {
+        setMessage(
+          tx(
+            "公開／非公開の保存には Supabase で apply_profile_instagram.sql を実行してください（他の項目は保存済み）。",
+            "Run apply_profile_instagram.sql in Supabase to save privacy (other fields were saved).",
           ),
         );
         return;
@@ -364,6 +379,46 @@ export function EditProfileForm() {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+
+        <div className={`${fieldCard} px-3.5 py-3`}>
+          <p className="text-[12px] font-medium text-zinc-500">{tx("アカウントの公開範囲", "Account privacy")}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+            {form.isPrivate
+              ? tx(
+                  "非公開：フォローにはあなたの承認が必要です。",
+                  "Private: others must request to follow you.",
+                )
+              : tx(
+                  "公開：フォローボタンを押すとそのままフォローできます。",
+                  "Public: anyone can follow you immediately.",
+                )}
+          </p>
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isPrivate: false }))}
+              className={`min-h-[36px] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+                !form.isPrivate
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {tx("公開", "Public")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, isPrivate: true }))}
+              className={`min-h-[36px] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+                form.isPrivate
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {tx("非公開", "Private")}
+            </button>
           </div>
         </div>
 

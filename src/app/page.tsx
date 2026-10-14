@@ -13,6 +13,7 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
 import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { DiscoverPublicProjects } from "@/components/projects/DiscoverPublicProjects";
+import { DiscoverRecruitBoard } from "@/components/projects/DiscoverRecruitBoard";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
@@ -24,6 +25,12 @@ import { canModerateContent, isAppAdminEmail, isAppAdminUser } from "@/lib/auth/
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { ageFromBirthday } from "@/lib/profile/birthday";
+import {
+  approveIncomingFollowRequest,
+  rejectIncomingFollowRequest,
+  toggleFollowRelation,
+} from "@/lib/profile/followActions";
+import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
@@ -3793,89 +3800,55 @@ export default function Home() {
     }
     if (!supabase || !session) return;
 
-    const isFollowing = followingIds.includes(targetUserId);
-    const isPending = outgoingRequestIds.includes(targetUserId);
-
-    if (isFollowing) {
-      const { error } = await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", session.user.id)
-        .eq("following_id", targetUserId);
-      if (error) {
-        setAuthMessage(`フォロー解除に失敗: ${error.message}`);
-        return;
-      }
-      setAuthMessage("フォローを解除しました。");
-      await loadSocialGraphRef.current(session.user.id);
+    const result = await toggleFollowRelation(supabase, session.user.id, targetUserId);
+    if (!result.ok) {
+      setAuthMessage(`フォロー操作に失敗: ${result.error}`);
       return;
     }
 
-    if (isPending) {
-      const { error } = await supabase
-        .from("follow_requests")
-        .delete()
-        .eq("follower_id", session.user.id)
-        .eq("following_id", targetUserId)
-        .eq("status", "pending");
-      if (error) {
-        setAuthMessage(`リクエスト取り消しに失敗: ${error.message}`);
-        return;
-      }
-      setAuthMessage("フォローリクエストを取り消しました。");
-      await loadSocialGraphRef.current(session.user.id);
-      return;
+    // Optimistic local update so the button reacts immediately.
+    if (result.state === "following") {
+      setFollowingIds((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]));
+      setOutgoingRequestIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage("フォローしました。");
+    } else if (result.state === "pending") {
+      setOutgoingRequestIds((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]));
+      setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage("フォローリクエストを送りました。");
+    } else {
+      setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
+      setOutgoingRequestIds((prev) => prev.filter((id) => id !== targetUserId));
+      setAuthMessage(
+        followingIds.includes(targetUserId)
+          ? "フォローを解除しました。"
+          : "フォローリクエストを取り消しました。",
+      );
     }
 
-    const { error } = await supabase.from("follow_requests").insert({
-      follower_id: session.user.id,
-      following_id: targetUserId,
-      status: "pending",
-    });
-    if (error && error.code !== "23505") {
-      if (error.code === "42P01" || error.code === "PGRST205") {
-        setAuthMessage("フォローリクエスト機能を有効化中です。少し待って再試行してください。");
-      } else {
-        setAuthMessage(`フォローリクエスト送信に失敗: ${error.message}`);
-      }
-      return;
-    }
-    setAuthMessage("フォローリクエストを送りました。");
     await loadSocialGraphRef.current(session.user.id);
   }
 
   async function approveFollowRequest(requestId: string, followerId: string) {
     if (!supabase || !session) return;
-    const { error: insertError } = await supabase.from("follows").insert({
-      follower_id: followerId,
-      following_id: session.user.id,
-    });
-    if (insertError && insertError.code !== "23505") {
-      setAuthMessage(`承認に失敗: ${insertError.message}`);
+    const result = await approveIncomingFollowRequest(
+      supabase,
+      session.user.id,
+      requestId,
+      followerId,
+    );
+    if (!result.ok) {
+      setAuthMessage(`承認に失敗: ${result.error}`);
       return;
     }
-    const { error: updateError } = await supabase
-      .from("follow_requests")
-      .update({ status: "accepted", resolved_at: new Date().toISOString() })
-      .eq("id", requestId)
-      .eq("following_id", session.user.id);
-    if (updateError) {
-      setAuthMessage(`承認後の更新に失敗: ${updateError.message}`);
-      return;
-    }
-    setAuthMessage("フォローリクエストを承認しました。");
+    setAuthMessage("フォローを承認しました。通知からフォローバックできます。");
     await loadSocialGraphRef.current(session.user.id);
   }
 
   async function rejectFollowRequest(requestId: string) {
     if (!supabase || !session) return;
-    const { error } = await supabase
-      .from("follow_requests")
-      .update({ status: "rejected", resolved_at: new Date().toISOString() })
-      .eq("id", requestId)
-      .eq("following_id", session.user.id);
-    if (error) {
-      setAuthMessage(`リクエスト拒否に失敗: ${error.message}`);
+    const result = await rejectIncomingFollowRequest(supabase, session.user.id, requestId);
+    if (!result.ok) {
+      setAuthMessage(`リクエスト拒否に失敗: ${result.error}`);
       return;
     }
     setAuthMessage("フォローリクエストを拒否しました。");
@@ -4128,6 +4101,13 @@ export default function Home() {
                 >
                   {tx("ログイン", "Log in")}
                 </Link>
+              ) : session ? (
+                <ProjectNoticeBell
+                  userId={session.user.id}
+                  onAccepted={() => {
+                    void loadSocialGraphRef.current(session.user.id);
+                  }}
+                />
               ) : undefined
             }
           />
@@ -4285,7 +4265,11 @@ export default function Home() {
                       }`}
                       onClick={() => void toggleFollow(u.id)}
                     >
-                      {followingIds.includes(u.id) ? `${u.name} ✓` : outgoingRequestIds.includes(u.id) ? `${u.name} 申請中` : u.name}
+                      {followingIds.includes(u.id)
+                        ? `${u.name} · フォロー中`
+                        : outgoingRequestIds.includes(u.id)
+                          ? `${u.name} · 申請中`
+                          : u.name}
                     </button>
                   ))}
                 </div>
@@ -4315,7 +4299,11 @@ export default function Home() {
                         className="rounded-lg bg-[#0095f6] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#188ff0] disabled:opacity-50"
                         onClick={() => void toggleFollow(u.id)}
                       >
-                        {followingIds.includes(u.id) ? accountText.followed : outgoingRequestIds.includes(u.id) ? "リクエスト中" : "リクエスト送信"}
+                        {followingIds.includes(u.id)
+                          ? accountText.followed
+                          : outgoingRequestIds.includes(u.id)
+                            ? "申請中"
+                            : "フォロー"}
                       </button>
                     </li>
                   ))}
@@ -5202,7 +5190,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="flex-1 pt-3" role="tabpanel">
-                <DiscoverPublicProjects showSectionHeader={false} recruitBoard />
+                <DiscoverRecruitBoard />
               </div>
             )}
           </div>
