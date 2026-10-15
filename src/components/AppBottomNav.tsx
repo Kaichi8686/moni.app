@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
+import { readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const CLUSTER_STORAGE_KEY = "moni.nav.projectClusterOpen";
@@ -34,12 +35,33 @@ type NavItem = {
 
 type ThumbState = { x: number; y: number; w: number; h: number; visible: boolean };
 
+function isProjectIssuesPath(pathname: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/issues(?:\/|$)/i.test(pathname);
+}
+
+function resolveProjectIssuesHref(pathname: string): string {
+  const fromPath = pathname.match(/^\/projects\/([0-9a-f-]{36})(?:\/|$)/i);
+  if (fromPath?.[1]) return `/projects/${fromPath[1]}/issues`;
+  const last = readLastProject();
+  if (last?.id) return `/projects/${last.id}/issues`;
+  return HOME_PROJECTS_HREF;
+}
+
 const PROJECT_ITEM: NavItem = {
   id: "projects",
   href: HOME_PROJECTS_HREF,
   labelKey: "navProjects",
   icon: <Home className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-  match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
+  match: (p) => {
+    if (p === "/projects") return true;
+    const m = p.match(/^\/projects\/([0-9a-f-]{36})(?:\/(.*))?$/i);
+    if (!m) return false;
+    const rest = m[2] ?? "";
+    // 課題・募集は開いたクラスタ側の専用タブ
+    if (rest === "issues" || rest.startsWith("issues/")) return false;
+    if (rest === "recruit" || rest.startsWith("recruit/")) return false;
+    return true;
+  },
 };
 
 /** Closed (default): same as before — Messages / AI / Find */
@@ -83,17 +105,20 @@ const OPEN_TABS: NavItem[] = [
   },
   {
     id: "issues",
-    href: "/idea",
+    // href is resolved at render time via last/current project
+    href: HOME_PROJECTS_HREF,
     labelKey: "navIdea",
     icon: <ListTodo className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
+    match: (p) => isProjectIssuesPath(p),
   },
   {
     id: "recruit",
     href: "/?tab=chat&segment=recruit",
     labelKey: "navRecruit",
     icon: <Megaphone className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p, tab, segment) => p === "/" && tab === "chat" && segment === "recruit",
+    match: (p, tab, segment) =>
+      (p === "/" && tab === "chat" && segment === "recruit") ||
+      /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(p),
   },
 ];
 
@@ -209,6 +234,7 @@ function NavLink({
   label,
   locale,
   className,
+  href,
 }: {
   item: NavItem;
   active: boolean;
@@ -216,10 +242,11 @@ function NavLink({
   label: string;
   locale: string;
   className?: string;
+  href?: string;
 }) {
   return (
     <Link
-      href={item.href}
+      href={href ?? item.href}
       className={`app-bottom-nav-item ${active ? "is-active" : ""} ${className ?? ""}`.trim()}
       aria-current={active ? "page" : undefined}
       aria-label={
@@ -255,10 +282,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
-  // Only 募集 is exclusive to the open set (課題 shares /idea with closed AI).
+  // 課題・募集は開いたクラスタ専用（閉じた側の AI / 探すとは別）
   const openOnlyActive = OPEN_TABS.some(
-    (item) => item.id === "recruit" && item.match(pathname, tab, segment),
+    (item) =>
+      (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
   );
+  const issuesHref = resolveProjectIssuesHref(pathname);
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
   const [seenRouteKey, setSeenRouteKey] = useState("");
 
@@ -380,6 +409,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
         label={t(item.labelKey)}
         locale={locale}
         className={className}
+        href={item.id === "issues" ? issuesHref : undefined}
       />
     );
   };
