@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
@@ -27,7 +27,7 @@ const PROJECT_ITEM: NavItem = {
   id: "projects",
   href: HOME_PROJECTS_HREF,
   labelKey: "navProjects",
-  icon: "▦",
+  icon: <Home className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
   match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
 };
 
