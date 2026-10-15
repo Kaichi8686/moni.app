@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
@@ -22,6 +31,8 @@ type NavItem = {
   match: NavMatch;
   badgeKey?: "mail";
 };
+
+type ThumbState = { x: number; y: number; w: number; h: number; visible: boolean };
 
 const PROJECT_ITEM: NavItem = {
   id: "projects",
@@ -114,6 +125,83 @@ function writeStoredClusterOpen(open: boolean) {
   }
 }
 
+function measureThumb(container: HTMLElement | null): ThumbState {
+  if (!container) return { x: 0, y: 0, w: 0, h: 0, visible: false };
+  const active = container.querySelector<HTMLElement>(".app-bottom-nav-item.is-active");
+  if (!active) return { x: 0, y: 0, w: 0, h: 0, visible: false };
+  const rootRect = container.getBoundingClientRect();
+  const itemRect = active.getBoundingClientRect();
+  return {
+    x: itemRect.left - rootRect.left + container.scrollLeft,
+    y: itemRect.top - rootRect.top + container.scrollTop,
+    w: itemRect.width,
+    h: itemRect.height,
+    visible: itemRect.width > 0 && itemRect.height > 0,
+  };
+}
+
+function useSlidingThumb(
+  containerRef: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  activeKey: string | null,
+  layoutKey: string | boolean,
+) {
+  const [thumb, setThumb] = useState<ThumbState>({ x: 0, y: 0, w: 0, h: 0, visible: false });
+  const [ready, setReady] = useState(false);
+
+  const update = useCallback(() => {
+    if (!enabled) {
+      setThumb((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+    const next = measureThumb(containerRef.current);
+    setThumb(next);
+    if (next.visible) setReady(true);
+  }, [containerRef, enabled]);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) update();
+    };
+    const raf = window.requestAnimationFrame(run);
+    const timers = [60, 180, 320].map((ms) => window.setTimeout(run, ms));
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf);
+      for (const t of timers) window.clearTimeout(t);
+    };
+  }, [update, enabled, activeKey, layoutKey]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !enabled) return;
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [containerRef, enabled, update]);
+
+  return { thumb, ready };
+}
+
+function SlidingThumb({ thumb, ready }: { thumb: ThumbState; ready: boolean }) {
+  return (
+    <span
+      className={`app-bottom-nav-thumb ${thumb.visible ? "is-visible" : ""} ${ready ? "is-ready" : ""}`}
+      aria-hidden
+      style={{
+        width: thumb.w,
+        height: thumb.h,
+        transform: `translate(${thumb.x}px, ${thumb.y}px)`,
+      }}
+    />
+  );
+}
+
 function NavLink({
   item,
   active,
@@ -142,6 +230,7 @@ function NavLink({
           : label
       }
       title={label}
+      data-nav-id={item.id}
     >
       <span className="app-bottom-nav-item-icon" aria-hidden>
         {item.icon}
@@ -149,7 +238,6 @@ function NavLink({
           <span className="app-bottom-nav-badge">{badgeCount > 99 ? "99+" : badgeCount}</span>
         ) : null}
       </span>
-      {active ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
     </Link>
   );
 }
@@ -162,6 +250,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
   const [openPref, setOpenPref] = useState(() => readStoredClusterOpen() ?? false);
+  const projectPillRef = useRef<HTMLDivElement>(null);
+  const profilePillRef = useRef<HTMLDivElement>(null);
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
@@ -183,6 +273,25 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }
 
   const clusterOpen = openPref;
+  const openSetActiveId =
+    OPEN_TABS.find((item) => item.match(pathname, tab, segment))?.id ??
+    (projectActive ? "projects" : null);
+  const closedSetActiveId =
+    CLOSED_TABS.find((item) => item.match(pathname, tab, segment))?.id ??
+    (profileActive ? "profile" : null);
+
+  const { thumb: projectThumb, ready: projectThumbReady } = useSlidingThumb(
+    projectPillRef,
+    clusterOpen || projectActive,
+    openSetActiveId,
+    clusterOpen,
+  );
+  const { thumb: profileThumb, ready: profileThumbReady } = useSlidingThumb(
+    profilePillRef,
+    !clusterOpen,
+    closedSetActiveId,
+    clusterOpen,
+  );
 
   const toggleCluster = useCallback(() => {
     setOpenPref((prev) => {
@@ -281,8 +390,11 @@ function AppBottomNavInner({ className }: { className?: string }) {
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
-        {/* Project side: compact when closed, grows right when open */}
-        <div className={`app-bottom-nav-project-pill ${clusterOpen ? "is-expanded" : "is-collapsed"}`}>
+        <div
+          ref={projectPillRef}
+          className={`app-bottom-nav-project-pill ${clusterOpen ? "is-expanded" : "is-collapsed"}`}
+        >
+          <SlidingThumb thumb={projectThumb} ready={projectThumbReady} />
           <div className={`app-bottom-nav-project-anchor ${projectActive ? "is-active" : ""}`}>
             <NavLink
               item={PROJECT_ITEM}
@@ -333,12 +445,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
           </button>
         </div>
 
-        {/* Profile side: Msg/AI/Search attached when closed, shrinks to orb when open */}
-        <div className={`app-bottom-nav-profile-pill ${profileActive ? "has-profile-active" : ""}`}>
-          <div
-            className="app-bottom-nav-default-tabs"
-            {...(clusterOpen ? { inert: true } : {})}
-          >
+        <div
+          ref={profilePillRef}
+          className={`app-bottom-nav-profile-pill ${profileActive ? "has-profile-active" : ""}`}
+        >
+          <SlidingThumb thumb={profileThumb} ready={profileThumbReady} />
+          <div className="app-bottom-nav-default-tabs" {...(clusterOpen ? { inert: true } : {})}>
             {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
           </div>
           <div className={`app-bottom-nav-profile-slot ${profileActive ? "is-active" : ""}`}>

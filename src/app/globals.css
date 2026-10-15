@@ -374,6 +374,7 @@ html.moni-landing-active {
 
 /* Project pill: compact when closed → grows right when open */
 .app-bottom-nav-project-pill {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
@@ -405,6 +406,8 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-project-anchor {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 0 0 auto;
   align-items: stretch;
@@ -413,6 +416,7 @@ html.moni-landing-active {
 
 .app-bottom-nav-cluster-toggle {
   position: relative;
+  z-index: 1;
   display: inline-flex;
   width: 1.55rem;
   min-height: 2.75rem;
@@ -491,6 +495,8 @@ html.moni-landing-active {
 
 /* Open-set tabs: grow out to the right from the project pill */
 .app-bottom-nav-open-tabs {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   align-items: stretch;
@@ -515,8 +521,34 @@ html.moni-landing-active {
   pointer-events: auto;
 }
 
+/* Sliding active highlight inside a connected pill */
+.app-bottom-nav-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 9999px;
+  background: rgba(24, 24, 27, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, width, height;
+}
+
+.app-bottom-nav-thumb.is-ready {
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.app-bottom-nav-thumb.is-visible {
+  opacity: 1;
+}
+
 /* Profile pill: wide with Msg/AI/Search when closed → shrinks to orb when open */
 .app-bottom-nav-profile-pill {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
@@ -552,6 +584,8 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-default-tabs {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   align-items: stretch;
@@ -576,6 +610,8 @@ html.moni-landing-active {
 }
 
 .app-bottom-nav-profile-slot {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 0 0 auto;
   width: 2.95rem;
@@ -593,6 +629,7 @@ html.moni-landing-active {
 
 .app-bottom-nav-item {
   position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: 2.9rem;
@@ -607,7 +644,8 @@ html.moni-landing-active {
   font-size: 11px;
   line-height: 1.15;
   letter-spacing: 0.01em;
-  transition: color 150ms ease, background-color 150ms ease;
+  background: transparent;
+  transition: color 150ms ease;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -637,7 +675,6 @@ html.moni-landing-active {
 .app-bottom-nav-item.is-active {
   font-weight: 600;
   color: #18181b;
-  background: rgba(24, 24, 27, 0.08);
 }
 
 .app-bottom-nav-item:not(.is-active) {
@@ -647,12 +684,10 @@ html.moni-landing-active {
 
 .app-bottom-nav-item:not(.is-active):active {
   color: #3f3f46;
-  background: rgba(24, 24, 27, 0.05);
 }
 
 .app-bottom-nav-profile-slot.is-active .app-bottom-nav-item--profile {
   color: #18181b;
-  background: rgba(24, 24, 27, 0.08);
 }
 
 .app-bottom-nav-item-icon {
