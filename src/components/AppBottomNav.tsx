@@ -281,9 +281,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
-        <div
-          className={`app-bottom-nav-pill ${clusterOpen ? "is-expanded" : "is-collapsed"}`}
-        >
+        {/* Project side: compact when closed, grows right when open */}
+        <div className={`app-bottom-nav-project-pill ${clusterOpen ? "is-expanded" : "is-collapsed"}`}>
           <div className={`app-bottom-nav-project-anchor ${projectActive ? "is-active" : ""}`}>
             <NavLink
               item={PROJECT_ITEM}
@@ -311,39 +310,47 @@ function AppBottomNavInner({ className }: { className?: string }) {
             ) : null}
           </div>
 
-          {clusterOpen ? (
-            <>
-              <div id="app-bottom-nav-open-tabs" className="app-bottom-nav-open-tabs">
-                {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra"))}
-              </div>
-              <button
-                type="button"
-                className="app-bottom-nav-cluster-toggle is-collapse"
-                aria-expanded={true}
-                aria-controls="app-bottom-nav-open-tabs"
-                aria-label={collapseLabel}
-                title={collapseLabel}
-                onClick={toggleCluster}
-              >
-                <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
-              </button>
-            </>
-          ) : (
-            <div className="app-bottom-nav-default-tabs" role="presentation">
-              {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
-            </div>
-          )}
+          <div
+            id="app-bottom-nav-open-tabs"
+            className="app-bottom-nav-open-tabs"
+            {...(!clusterOpen ? { inert: true } : {})}
+          >
+            {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra"))}
+          </div>
+
+          <button
+            type="button"
+            className="app-bottom-nav-cluster-toggle is-collapse"
+            aria-expanded={clusterOpen}
+            aria-controls="app-bottom-nav-open-tabs"
+            aria-label={collapseLabel}
+            title={collapseLabel}
+            onClick={toggleCluster}
+            tabIndex={clusterOpen ? 0 : -1}
+            {...(!clusterOpen ? { inert: true } : {})}
+          >
+            <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
+          </button>
         </div>
 
-        <div className={`app-bottom-nav-profile-orb ${profileActive ? "is-active" : ""}`}>
-          <NavLink
-            item={PROFILE_ITEM}
-            active={profileActive}
-            badgeCount={0}
-            label={profileLabel}
-            locale={locale}
-            className="app-bottom-nav-item--profile"
-          />
+        {/* Profile side: Msg/AI/Search attached when closed, shrinks to orb when open */}
+        <div className={`app-bottom-nav-profile-pill ${profileActive ? "has-profile-active" : ""}`}>
+          <div
+            className="app-bottom-nav-default-tabs"
+            {...(clusterOpen ? { inert: true } : {})}
+          >
+            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
+          </div>
+          <div className={`app-bottom-nav-profile-slot ${profileActive ? "is-active" : ""}`}>
+            <NavLink
+              item={PROFILE_ITEM}
+              active={profileActive}
+              badgeCount={0}
+              label={profileLabel}
+              locale={locale}
+              className="app-bottom-nav-item--profile"
+            />
+          </div>
         </div>
       </div>
     </nav>
