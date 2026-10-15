@@ -43,20 +43,20 @@ begin
   order by c.created_at asc
   limit 1;
 
-  if v_conv_id is not null then
-    insert into public.conversation_members (conversation_id, user_id, role)
-    values (v_conv_id, v_uid, 'member')
-    on conflict do nothing;
-    return v_conv_id;
+  if v_conv_id is null then
+    select name into v_name from public.projects where id = p_project_id;
+
+    insert into public.conversations (type, name, icon_emoji, project_id, created_by)
+    values ('project', coalesce(nullif(trim(v_name), ''), 'プロジェクト'), '📁', p_project_id, v_uid)
+    returning id into v_conv_id;
+  else
+    update public.conversations c
+    set name = coalesce(nullif(trim(p.name), ''), c.name)
+    from public.projects p
+    where c.id = v_conv_id and p.id = p_project_id;
   end if;
 
-  select name into v_name from public.projects where id = p_project_id;
-
-  insert into public.conversations (type, name, icon_emoji, project_id, created_by)
-  values ('project', coalesce(nullif(trim(v_name), ''), 'プロジェクト'), '📁', p_project_id, v_uid)
-  returning id into v_conv_id;
-
-  -- オーナー + メンバーを全員参加させる
+  -- オーナー + メンバーを全員参加させる（既存会話でも毎回同期）
   insert into public.conversation_members (conversation_id, user_id, role)
   select v_conv_id, p.owner_id,
     case when p.owner_id = v_uid then 'admin' else 'member' end
