@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
@@ -12,12 +12,14 @@ import type { MessageKey } from "@/lib/i18n/messages";
 
 const CLUSTER_STORAGE_KEY = "moni.nav.projectClusterOpen";
 
+type NavMatch = (pathname: string, tab: string | null, segment: string | null) => boolean;
+
 type NavItem = {
-  id: "projects" | "mail" | "idea" | "search" | "profile";
+  id: string;
   href: string;
   labelKey: MessageKey;
   icon: ReactNode;
-  match: (pathname: string, tab: string | null) => boolean;
+  match: NavMatch;
   badgeKey?: "mail";
 };
 
@@ -29,7 +31,8 @@ const PROJECT_ITEM: NavItem = {
   match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
 };
 
-const CLUSTER_EXTRAS: NavItem[] = [
+/** Closed (default): same as before — Messages / AI / Find */
+const CLOSED_TABS: NavItem[] = [
   {
     id: "mail",
     href: "/messages",
@@ -39,18 +42,47 @@ const CLUSTER_EXTRAS: NavItem[] = [
     badgeKey: "mail",
   },
   {
-    id: "idea",
+    id: "ai",
     href: "/idea",
-    labelKey: "navIdea",
-    icon: "✦",
+    labelKey: "navAi",
+    icon: <Sparkles className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
     match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
   },
   {
     id: "search",
     href: "/?tab=chat",
     labelKey: "navSearch",
-    icon: "⌕",
-    match: (p, tab) => (p === "/" && tab === "chat") || p === "/discover" || p.startsWith("/discover/"),
+    icon: <Search className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    match: (p, tab, segment) =>
+      (p === "/" && tab === "chat" && segment !== "recruit") ||
+      p === "/discover" ||
+      p.startsWith("/discover/"),
+  },
+];
+
+/** Open (project cluster): Messages / Issues / Recruit — with proper marks */
+const OPEN_TABS: NavItem[] = [
+  {
+    id: "mail",
+    href: "/messages",
+    labelKey: "navMail",
+    icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    match: (p) => p === "/messages" || p.startsWith("/messages/"),
+    badgeKey: "mail",
+  },
+  {
+    id: "issues",
+    href: "/idea",
+    labelKey: "navIdea",
+    icon: <ListTodo className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
+  },
+  {
+    id: "recruit",
+    href: "/?tab=chat&segment=recruit",
+    labelKey: "navRecruit",
+    icon: <Megaphone className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    match: (p, tab, segment) => p === "/" && tab === "chat" && segment === "recruit",
   },
 ];
 
@@ -126,20 +158,23 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab");
+  const segment = searchParams.get("segment");
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
   const [openPref, setOpenPref] = useState(() => readStoredClusterOpen() ?? false);
 
-  const projectActive = PROJECT_ITEM.match(pathname, tab);
-  const profileActive = PROFILE_ITEM.match(pathname, tab);
-  const extrasActive = CLUSTER_EXTRAS.some((item) => item.match(pathname, tab));
-  const routeKey = `${pathname}|${tab ?? ""}|${extrasActive ? "1" : "0"}`;
+  const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
+  const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
+  // Only 募集 is exclusive to the open set (課題 shares /idea with closed AI).
+  const openOnlyActive = OPEN_TABS.some(
+    (item) => item.id === "recruit" && item.match(pathname, tab, segment),
+  );
+  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
   const [seenRouteKey, setSeenRouteKey] = useState("");
 
-  // Open the cluster when landing on a satellite tab (Slack-like section reveal).
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
-    if (extrasActive) {
+    if (openOnlyActive) {
       setOpenPref(true);
     } else {
       const stored = readStoredClusterOpen();
@@ -220,9 +255,25 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const projectLabel = t(PROJECT_ITEM.labelKey);
   const profileLabel = t(PROFILE_ITEM.labelKey);
   const expandLabel =
-    locale === "ja" ? "メッセージ・課題・探すを表示" : "Show messages, ideas, and search";
+    locale === "ja" ? "メッセージ・課題・募集を表示" : "Show messages, issues, and recruiting";
   const collapseLabel =
-    locale === "ja" ? "メッセージ・課題・探すを隠す" : "Hide messages, ideas, and search";
+    locale === "ja" ? "メッセージ・課題・募集を隠す" : "Hide messages, issues, and recruiting";
+
+  const renderTab = (item: NavItem, className: string) => {
+    const active = item.match(pathname, tab, segment);
+    const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
+    return (
+      <NavLink
+        key={item.id}
+        item={item}
+        active={active}
+        badgeCount={badgeCount}
+        label={t(item.labelKey)}
+        locale={locale}
+        className={className}
+      />
+    );
+  };
 
   return (
     <nav
@@ -232,7 +283,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
         <div
           className={`app-bottom-nav-cluster ${clusterOpen ? "is-expanded" : "is-collapsed"} ${
-            projectActive || extrasActive ? "has-active" : ""
+            projectActive || (clusterOpen && openOnlyActive) ? "has-active" : ""
           }`}
         >
           <div className={`app-bottom-nav-project-anchor ${projectActive ? "is-active" : ""}`}>
@@ -248,56 +299,45 @@ function AppBottomNavInner({ className }: { className?: string }) {
               <button
                 type="button"
                 className={`app-bottom-nav-cluster-toggle is-expand ${
-                  extrasActive ? "has-hidden-active" : ""
+                  openOnlyActive ? "has-hidden-active" : ""
                 }`}
                 aria-expanded={false}
-                aria-controls="app-bottom-nav-cluster-extras"
+                aria-controls="app-bottom-nav-open-tabs"
                 aria-label={expandLabel}
                 title={expandLabel}
                 onClick={toggleCluster}
               >
                 <ChevronRight className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
-                {extrasActive ? <span className="app-bottom-nav-cluster-dot" aria-hidden /> : null}
+                {openOnlyActive ? <span className="app-bottom-nav-cluster-dot" aria-hidden /> : null}
               </button>
             ) : null}
           </div>
 
-          <div
-            id="app-bottom-nav-cluster-extras"
-            className="app-bottom-nav-cluster-extras"
-            {...(!clusterOpen ? { inert: true } : {})}
-          >
-            {CLUSTER_EXTRAS.map((item) => {
-              const active = item.match(pathname, tab);
-              const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
-              return (
-                <NavLink
-                  key={item.id}
-                  item={item}
-                  active={active}
-                  badgeCount={badgeCount}
-                  label={t(item.labelKey)}
-                  locale={locale}
-                  className="app-bottom-nav-item--extra"
-                />
-              );
-            })}
-          </div>
-
           {clusterOpen ? (
-            <button
-              type="button"
-              className="app-bottom-nav-cluster-toggle is-collapse"
-              aria-expanded={true}
-              aria-controls="app-bottom-nav-cluster-extras"
-              aria-label={collapseLabel}
-              title={collapseLabel}
-              onClick={toggleCluster}
-            >
-              <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
-            </button>
+            <>
+              <div id="app-bottom-nav-open-tabs" className="app-bottom-nav-open-tabs">
+                {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra"))}
+              </div>
+              <button
+                type="button"
+                className="app-bottom-nav-cluster-toggle is-collapse"
+                aria-expanded={true}
+                aria-controls="app-bottom-nav-open-tabs"
+                aria-label={collapseLabel}
+                title={collapseLabel}
+                onClick={toggleCluster}
+              >
+                <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
+              </button>
+            </>
           ) : null}
         </div>
+
+        {!clusterOpen ? (
+          <div className="app-bottom-nav-default-tabs" role="presentation">
+            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
+          </div>
+        ) : null}
 
         <div className="app-bottom-nav-gap" aria-hidden />
 
