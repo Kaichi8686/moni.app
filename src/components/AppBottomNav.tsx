@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { Mail } from "lucide-react";
+import { ChevronRight, Mail } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import type { MessageKey } from "@/lib/i18n/messages";
 
+const CLUSTER_STORAGE_KEY = "moni.nav.projectClusterOpen";
+
 type NavItem = {
+  id: "projects" | "mail" | "idea" | "search" | "profile";
   href: string;
   labelKey: MessageKey;
   icon: ReactNode;
@@ -18,14 +21,17 @@ type NavItem = {
   badgeKey?: "mail";
 };
 
-const NAV: NavItem[] = [
+const PROJECT_ITEM: NavItem = {
+  id: "projects",
+  href: HOME_PROJECTS_HREF,
+  labelKey: "navProjects",
+  icon: "▦",
+  match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
+};
+
+const CLUSTER_EXTRAS: NavItem[] = [
   {
-    href: HOME_PROJECTS_HREF,
-    labelKey: "navProjects",
-    icon: "▦",
-    match: (p) => p === "/projects" || /^\/projects\/[0-9a-f-]{36}/i.test(p),
-  },
-  {
+    id: "mail",
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
@@ -33,24 +39,88 @@ const NAV: NavItem[] = [
     badgeKey: "mail",
   },
   {
+    id: "idea",
     href: "/idea",
     labelKey: "navIdea",
     icon: "✦",
     match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
   },
   {
+    id: "search",
     href: "/?tab=chat",
     labelKey: "navSearch",
     icon: "⌕",
     match: (p, tab) => (p === "/" && tab === "chat") || p === "/discover" || p.startsWith("/discover/"),
   },
-  {
-    href: "/profile",
-    labelKey: "navProfile",
-    icon: "◉",
-    match: (p) => p.startsWith("/profile"),
-  },
 ];
+
+const PROFILE_ITEM: NavItem = {
+  id: "profile",
+  href: "/profile",
+  labelKey: "navProfile",
+  icon: "◉",
+  match: (p) => p.startsWith("/profile"),
+};
+
+function readStoredClusterOpen(): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(CLUSTER_STORAGE_KEY);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeStoredClusterOpen(open: boolean) {
+  try {
+    window.sessionStorage.setItem(CLUSTER_STORAGE_KEY, open ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+function NavLink({
+  item,
+  active,
+  badgeCount,
+  label,
+  locale,
+  className,
+}: {
+  item: NavItem;
+  active: boolean;
+  badgeCount: number;
+  label: string;
+  locale: string;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={item.href}
+      className={`app-bottom-nav-item ${active ? "is-active" : ""} ${className ?? ""}`.trim()}
+      aria-current={active ? "page" : undefined}
+      aria-label={
+        badgeCount > 0
+          ? locale === "ja"
+            ? `${label}、未読${badgeCount}件`
+            : `${label}, ${badgeCount} unread`
+          : label
+      }
+      title={label}
+    >
+      <span className="app-bottom-nav-item-icon" aria-hidden>
+        {item.icon}
+        {badgeCount > 0 ? (
+          <span className="app-bottom-nav-badge">{badgeCount > 99 ? "99+" : badgeCount}</span>
+        ) : null}
+      </span>
+      {active ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
+    </Link>
+  );
+}
 
 function AppBottomNavInner({ className }: { className?: string }) {
   const pathname = usePathname();
@@ -58,6 +128,34 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const tab = searchParams.get("tab");
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
+  const [openPref, setOpenPref] = useState(() => readStoredClusterOpen() ?? false);
+
+  const projectActive = PROJECT_ITEM.match(pathname, tab);
+  const profileActive = PROFILE_ITEM.match(pathname, tab);
+  const extrasActive = CLUSTER_EXTRAS.some((item) => item.match(pathname, tab));
+  const routeKey = `${pathname}|${tab ?? ""}|${extrasActive ? "1" : "0"}`;
+  const [seenRouteKey, setSeenRouteKey] = useState("");
+
+  // Open the cluster when landing on a satellite tab (Slack-like section reveal).
+  if (routeKey !== seenRouteKey) {
+    setSeenRouteKey(routeKey);
+    if (extrasActive) {
+      setOpenPref(true);
+    } else {
+      const stored = readStoredClusterOpen();
+      if (stored !== null) setOpenPref(stored);
+    }
+  }
+
+  const clusterOpen = openPref;
+
+  const toggleCluster = useCallback(() => {
+    setOpenPref((prev) => {
+      const next = !prev;
+      writeStoredClusterOpen(next);
+      return next;
+    });
+  }, []);
 
   const refreshMailUnread = useCallback(async () => {
     if (!supabase) {
@@ -79,7 +177,10 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }, []);
 
   useEffect(() => {
-    void refreshMailUnread();
+    const timer = window.setTimeout(() => {
+      void refreshMailUnread();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [refreshMailUnread, pathname]);
 
   useEffect(() => {
@@ -116,42 +217,86 @@ function AppBottomNavInner({ className }: { className?: string }) {
     };
   }, [refreshMailUnread]);
 
+  const projectLabel = t(PROJECT_ITEM.labelKey);
+  const profileLabel = t(PROFILE_ITEM.labelKey);
+  const expandLabel =
+    locale === "ja" ? "メッセージ・課題・探すを表示" : "Show messages, ideas, and search";
+  const collapseLabel =
+    locale === "ja" ? "メッセージ・課題・探すを隠す" : "Hide messages, ideas, and search";
+
   return (
     <nav
       className={`app-bottom-nav ${className ?? ""}`.trim()}
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
-      <div className="app-bottom-nav-inner">
-        {NAV.map((item) => {
-          const active = item.match(pathname, tab);
-          const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
-          const label = t(item.labelKey);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`app-bottom-nav-item ${active ? "is-active" : ""}`}
-              aria-current={active ? "page" : undefined}
-              aria-label={
-                badgeCount > 0
-                  ? locale === "ja"
-                    ? `${label}、未読${badgeCount}件`
-                    : `${label}, ${badgeCount} unread`
-                  : label
-              }
+      <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
+        <div
+          className={`app-bottom-nav-cluster ${clusterOpen ? "is-expanded" : "is-collapsed"} ${
+            projectActive || extrasActive ? "has-active" : ""
+          }`}
+        >
+          <div className={`app-bottom-nav-project-anchor ${projectActive ? "is-active" : ""}`}>
+            <NavLink
+              item={PROJECT_ITEM}
+              active={projectActive}
+              badgeCount={0}
+              label={projectLabel}
+              locale={locale}
+              className="app-bottom-nav-item--project"
+            />
+            <button
+              type="button"
+              className={`app-bottom-nav-cluster-toggle ${clusterOpen ? "is-open" : ""} ${
+                !clusterOpen && extrasActive ? "has-hidden-active" : ""
+              }`}
+              aria-expanded={clusterOpen}
+              aria-controls="app-bottom-nav-cluster-extras"
+              aria-label={clusterOpen ? collapseLabel : expandLabel}
+              title={clusterOpen ? collapseLabel : expandLabel}
+              onClick={toggleCluster}
             >
-              <span className="app-bottom-nav-item-icon" aria-hidden>
-                {item.icon}
-                {badgeCount > 0 ? (
-                  <span className="app-bottom-nav-badge">
-                    {badgeCount > 99 ? "99+" : badgeCount}
-                  </span>
-                ) : null}
-              </span>
-              {active ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
-            </Link>
-          );
-        })}
+              <ChevronRight className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
+              {!clusterOpen && extrasActive ? (
+                <span className="app-bottom-nav-cluster-dot" aria-hidden />
+              ) : null}
+            </button>
+          </div>
+
+          <div
+            id="app-bottom-nav-cluster-extras"
+            className="app-bottom-nav-cluster-extras"
+            {...(!clusterOpen ? { inert: true } : {})}
+          >
+            {CLUSTER_EXTRAS.map((item) => {
+              const active = item.match(pathname, tab);
+              const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
+              return (
+                <NavLink
+                  key={item.id}
+                  item={item}
+                  active={active}
+                  badgeCount={badgeCount}
+                  label={t(item.labelKey)}
+                  locale={locale}
+                  className="app-bottom-nav-item--extra"
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="app-bottom-nav-gap" aria-hidden />
+
+        <div className={`app-bottom-nav-profile-wrap ${profileActive ? "is-active" : ""}`}>
+          <NavLink
+            item={PROFILE_ITEM}
+            active={profileActive}
+            badgeCount={0}
+            label={profileLabel}
+            locale={locale}
+            className="app-bottom-nav-item--profile"
+          />
+        </div>
       </div>
     </nav>
   );
