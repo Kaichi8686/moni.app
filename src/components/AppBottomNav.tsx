@@ -235,6 +235,7 @@ function NavLink({
   locale,
   className,
   href,
+  onNavigate,
 }: {
   item: NavItem;
   active: boolean;
@@ -243,6 +244,7 @@ function NavLink({
   locale: string;
   className?: string;
   href?: string;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
@@ -258,6 +260,7 @@ function NavLink({
       }
       title={label}
       data-nav-id={item.id}
+      onClick={() => onNavigate?.()}
     >
       <span className="app-bottom-nav-item-icon" aria-hidden>
         {item.icon}
@@ -293,8 +296,14 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
-    if (openOnlyActive) {
+    if (openOnlyActive || projectActive) {
+      // ホーム（プロジェクト）側にいるときはホームブロックを伸ばす
       setOpenPref(true);
+      writeStoredClusterOpen(true);
+    } else if (profileActive) {
+      // プロフィール側にいるときはプロフィールブロックを伸ばす
+      setOpenPref(false);
+      writeStoredClusterOpen(false);
     } else {
       const stored = readStoredClusterOpen();
       if (stored !== null) setOpenPref(stored);
@@ -321,6 +330,19 @@ function AppBottomNavInner({ className }: { className?: string }) {
     closedSetActiveId,
     clusterOpen,
   );
+
+  const setClusterOpen = useCallback((open: boolean) => {
+    setOpenPref(open);
+    writeStoredClusterOpen(open);
+  }, []);
+
+  const expandHomeBlock = useCallback(() => {
+    setClusterOpen(true);
+  }, [setClusterOpen]);
+
+  const expandProfileBlock = useCallback(() => {
+    setClusterOpen(false);
+  }, [setClusterOpen]);
 
   const toggleCluster = useCallback(() => {
     setOpenPref((prev) => {
@@ -433,6 +455,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
               label={projectLabel}
               locale={locale}
               className="app-bottom-nav-item--project"
+              onNavigate={expandHomeBlock}
             />
             {!clusterOpen ? (
               <button
@@ -491,6 +514,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
               label={profileLabel}
               locale={locale}
               className="app-bottom-nav-item--profile"
+              onNavigate={expandProfileBlock}
             />
           </div>
         </div>
