@@ -282,9 +282,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
         <div
-          className={`app-bottom-nav-cluster ${clusterOpen ? "is-expanded" : "is-collapsed"} ${
-            projectActive || (clusterOpen && openOnlyActive) ? "has-active" : ""
-          }`}
+          className={`app-bottom-nav-pill ${clusterOpen ? "is-expanded" : "is-collapsed"}`}
         >
           <div className={`app-bottom-nav-project-anchor ${projectActive ? "is-active" : ""}`}>
             <NavLink
@@ -330,18 +328,14 @@ function AppBottomNavInner({ className }: { className?: string }) {
                 <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
               </button>
             </>
-          ) : null}
+          ) : (
+            <div className="app-bottom-nav-default-tabs" role="presentation">
+              {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
+            </div>
+          )}
         </div>
 
-        {!clusterOpen ? (
-          <div className="app-bottom-nav-default-tabs" role="presentation">
-            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
-          </div>
-        ) : null}
-
-        <div className="app-bottom-nav-gap" aria-hidden />
-
-        <div className={`app-bottom-nav-profile-wrap ${profileActive ? "is-active" : ""}`}>
+        <div className={`app-bottom-nav-profile-orb ${profileActive ? "is-active" : ""}`}>
           <NavLink
             item={PROFILE_ITEM}
             active={profileActive}
