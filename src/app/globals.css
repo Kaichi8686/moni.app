@@ -414,7 +414,6 @@ html.moni-landing-active {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  margin-right: 0.1rem;
   border: 0;
   border-radius: 0.5rem;
   background: transparent;
@@ -423,6 +422,15 @@ html.moni-landing-active {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   transition: color 150ms ease, background-color 150ms ease;
+}
+
+.app-bottom-nav-cluster-toggle.is-expand {
+  margin-right: 0.1rem;
+}
+
+.app-bottom-nav-cluster-toggle.is-collapse {
+  margin-left: 0.05rem;
+  margin-right: 0.15rem;
 }
 
 .app-bottom-nav-cluster-toggle:hover,
@@ -440,11 +448,6 @@ html.moni-landing-active {
   width: 1rem;
   height: 1rem;
   display: block;
-  transition: transform 200ms ease;
-}
-
-.app-bottom-nav-cluster-toggle.is-open .app-bottom-nav-cluster-chevron {
-  transform: rotate(90deg);
 }
 
 .app-bottom-nav-cluster-dot {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
-import { ChevronRight, Mail } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
@@ -244,22 +244,22 @@ function AppBottomNavInner({ className }: { className?: string }) {
               locale={locale}
               className="app-bottom-nav-item--project"
             />
-            <button
-              type="button"
-              className={`app-bottom-nav-cluster-toggle ${clusterOpen ? "is-open" : ""} ${
-                !clusterOpen && extrasActive ? "has-hidden-active" : ""
-              }`}
-              aria-expanded={clusterOpen}
-              aria-controls="app-bottom-nav-cluster-extras"
-              aria-label={clusterOpen ? collapseLabel : expandLabel}
-              title={clusterOpen ? collapseLabel : expandLabel}
-              onClick={toggleCluster}
-            >
-              <ChevronRight className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
-              {!clusterOpen && extrasActive ? (
-                <span className="app-bottom-nav-cluster-dot" aria-hidden />
-              ) : null}
-            </button>
+            {!clusterOpen ? (
+              <button
+                type="button"
+                className={`app-bottom-nav-cluster-toggle is-expand ${
+                  extrasActive ? "has-hidden-active" : ""
+                }`}
+                aria-expanded={false}
+                aria-controls="app-bottom-nav-cluster-extras"
+                aria-label={expandLabel}
+                title={expandLabel}
+                onClick={toggleCluster}
+              >
+                <ChevronRight className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
+                {extrasActive ? <span className="app-bottom-nav-cluster-dot" aria-hidden /> : null}
+              </button>
+            ) : null}
           </div>
 
           <div
@@ -283,6 +283,20 @@ function AppBottomNavInner({ className }: { className?: string }) {
               );
             })}
           </div>
+
+          {clusterOpen ? (
+            <button
+              type="button"
+              className="app-bottom-nav-cluster-toggle is-collapse"
+              aria-expanded={true}
+              aria-controls="app-bottom-nav-cluster-extras"
+              aria-label={collapseLabel}
+              title={collapseLabel}
+              onClick={toggleCluster}
+            >
+              <ChevronLeft className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
+            </button>
+          ) : null}
         </div>
 
         <div className="app-bottom-nav-gap" aria-hidden />
