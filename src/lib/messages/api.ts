@@ -7,6 +7,33 @@ export type DirectConversationResult =
   | { ok: true; conversationId: string }
   | { ok: false; reason: "not_mutual" | "error" };
 
+/** 同じプロジェクト（オーナー or メンバー）に所属しているか */
+export async function shareProjectMembership(
+  client: SupabaseClient,
+  userA: string,
+  userB: string,
+): Promise<boolean> {
+  if (!userA || !userB || userA === userB) return false;
+
+  const [{ data: ownedA }, { data: memA }] = await Promise.all([
+    client.from("projects").select("id").eq("owner_id", userA).limit(80),
+    client.from("project_members").select("project_id").eq("user_id", userA).limit(80),
+  ]);
+  const idsA = new Set<string>();
+  for (const row of ownedA ?? []) idsA.add(row.id as string);
+  for (const row of memA ?? []) idsA.add(row.project_id as string);
+  if (idsA.size === 0) return false;
+
+  const projectIds = [...idsA];
+  const [{ data: ownedB }, { data: memB }] = await Promise.all([
+    client.from("projects").select("id").eq("owner_id", userB).in("id", projectIds),
+    client.from("project_members").select("project_id").eq("user_id", userB).in("project_id", projectIds),
+  ]);
+  if ((ownedB ?? []).length > 0) return true;
+  if ((memB ?? []).length > 0) return true;
+  return false;
+}
+
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
@@ -15,8 +42,10 @@ export async function getOrCreateDirectConversation(
   const uid = sessionData.session?.user.id;
   if (!uid) return { ok: false, reason: "error" };
 
+  // RPC 側で相互フォロー／プロジェクト仲間を判定。クライアントは先に弾いて無駄な RPC を減らす。
   const mutual = await areMutualFollowers(client, uid, otherUserId);
-  if (!mutual) return { ok: false, reason: "not_mutual" };
+  const projectPeer = mutual ? true : await shareProjectMembership(client, uid, otherUserId);
+  if (!mutual && !projectPeer) return { ok: false, reason: "not_mutual" };
 
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,
@@ -33,11 +62,7 @@ export async function getOrCreateDirectConversation(
   return { ok: true, conversationId: data as string };
 }
 
-/** 参加中プロジェクトのグループラインを inbox に揃える */
-export async function ensureMyProjectConversations(
-  client: SupabaseClient,
-  userId: string,
-): Promise<string[]> {
+async function loadMyProjectIds(client: SupabaseClient, userId: string): Promise<string[]> {
   const [{ data: owned }, { data: memberRows }] = await Promise.all([
     client.from("projects").select("id").eq("owner_id", userId).limit(80),
     client.from("project_members").select("project_id").eq("user_id", userId).limit(80),
@@ -45,11 +70,54 @@ export async function ensureMyProjectConversations(
   const ids = new Set<string>();
   for (const row of owned ?? []) ids.add(row.id as string);
   for (const row of memberRows ?? []) ids.add(row.project_id as string);
+  return [...ids];
+}
 
+/** 参加中プロジェクトのグループラインを inbox に揃える（全員参加を同期） */
+export async function ensureMyProjectConversations(
+  client: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const ids = await loadMyProjectIds(client, userId);
   const convIds: string[] = [];
   for (const projectId of ids) {
     const convId = await getOrCreateProjectConversation(client, projectId);
     if (convId) convIds.push(convId);
+  }
+  return convIds;
+}
+
+/** 参加プロジェクトのメンバー全員と 1:1 を inbox に揃える（未作成分のみ） */
+export async function ensureMyProjectPeerDirectConversations(
+  client: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const projectIds = await loadMyProjectIds(client, userId);
+  if (projectIds.length === 0) return [];
+
+  const peerIds = new Set<string>();
+  const [{ data: owned }, { data: memberRows }] = await Promise.all([
+    client.from("projects").select("id, owner_id").in("id", projectIds),
+    client.from("project_members").select("project_id, user_id").in("project_id", projectIds),
+  ]);
+  for (const row of owned ?? []) {
+    const ownerId = row.owner_id as string;
+    if (ownerId && ownerId !== userId) peerIds.add(ownerId);
+  }
+  for (const row of memberRows ?? []) {
+    const mid = row.user_id as string;
+    if (mid && mid !== userId) peerIds.add(mid);
+  }
+  if (peerIds.size === 0) return [];
+
+  const existingPeers = await loadExistingDirectPeerIds(client, userId);
+  const missing = [...peerIds].filter((id) => !existingPeers.has(id));
+  if (missing.length === 0) return [];
+
+  const convIds: string[] = [];
+  for (const peerId of missing) {
+    const result = await getOrCreateDirectConversation(client, peerId);
+    if (result.ok) convIds.push(result.conversationId);
   }
   return convIds;
 }
@@ -114,7 +182,30 @@ export async function getOrCreateProjectConversation(
   const { data, error } = await client.rpc("get_or_create_project_conversation", {
     p_project_id: projectId,
   });
-  if (!error && data) return data as string;
+  if (!error && data) {
+    // 旧 RPC でもクライアント側で可能な範囲のメンバー同期を試す（admin RLS）
+    try {
+      const { data: session } = await client.auth.getSession();
+      const uid = session.session?.user.id;
+      if (uid) {
+        const { data: project } = await client
+          .from("projects")
+          .select("owner_id")
+          .eq("id", projectId)
+          .maybeSingle();
+        await syncProjectConversationMembers(
+          client,
+          data as string,
+          projectId,
+          uid,
+          (project?.owner_id as string | null) ?? null,
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return data as string;
+  }
 
   // RPC 未適用時のフォールバック
   const { data: session } = await client.auth.getSession();
@@ -130,52 +221,71 @@ export async function getOrCreateProjectConversation(
     .limit(1)
     .maybeSingle();
 
-  if (existing?.id) {
-    await client.from("conversation_members").upsert(
-      { conversation_id: existing.id as string, user_id: uid, role: "member" },
-      { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
-    );
-    return existing.id as string;
-  }
-
   const { data: project } = await client.from("projects").select("id, name, owner_id").eq("id", projectId).maybeSingle();
   if (!project) {
     console.error("get_or_create_project_conversation", error);
     return null;
   }
 
-  const { data: created, error: createErr } = await client
-    .from("conversations")
-    .insert({
-      type: "project",
-      name: ((project.name as string | null)?.trim() || "プロジェクト") as string,
-      icon_emoji: "📁",
-      project_id: projectId,
-      created_by: uid,
-    })
-    .select("id")
-    .single();
+  let convId = existing?.id as string | undefined;
+  if (!convId) {
+    const { data: created, error: createErr } = await client
+      .from("conversations")
+      .insert({
+        type: "project",
+        name: ((project.name as string | null)?.trim() || "プロジェクト") as string,
+        icon_emoji: "📁",
+        project_id: projectId,
+        created_by: uid,
+      })
+      .select("id")
+      .single();
 
-  if (createErr || !created?.id) {
-    console.error("create project conversation", createErr ?? error);
-    return null;
+    if (createErr || !created?.id) {
+      console.error("create project conversation", createErr ?? error);
+      return null;
+    }
+    convId = created.id as string;
+  } else {
+    const nextName = ((project.name as string | null)?.trim() || "").trim();
+    if (nextName) {
+      await client.from("conversations").update({ name: nextName }).eq("id", convId);
+    }
   }
 
-  const convId = created.id as string;
+  await syncProjectConversationMembers(client, convId, projectId, uid, project.owner_id as string);
+  return convId;
+}
+
+/** プロジェクト会話にオーナー＋全メンバーを参加させる */
+export async function syncProjectConversationMembers(
+  client: SupabaseClient,
+  conversationId: string,
+  projectId: string,
+  actorUserId?: string | null,
+  ownerId?: string | null,
+): Promise<void> {
+  let resolvedOwner = ownerId ?? null;
+  if (!resolvedOwner) {
+    const { data: project } = await client.from("projects").select("owner_id").eq("id", projectId).maybeSingle();
+    resolvedOwner = (project?.owner_id as string | null) ?? null;
+  }
+
   const { data: memberRows } = await client.from("project_members").select("user_id").eq("project_id", projectId);
-  const memberIds = new Set<string>([(project.owner_id as string) ?? uid, uid]);
+  const memberIds = new Set<string>();
+  if (resolvedOwner) memberIds.add(resolvedOwner);
+  if (actorUserId) memberIds.add(actorUserId);
   for (const row of memberRows ?? []) memberIds.add(row.user_id as string);
+  if (memberIds.size === 0) return;
 
   await client.from("conversation_members").upsert(
     [...memberIds].map((id) => ({
-      conversation_id: convId,
+      conversation_id: conversationId,
       user_id: id,
-      role: id === uid ? "admin" : "member",
+      role: actorUserId && id === actorUserId ? "admin" : "member",
     })),
     { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
   );
-
-  return convId;
 }
 
 export async function createGroupConversation(
