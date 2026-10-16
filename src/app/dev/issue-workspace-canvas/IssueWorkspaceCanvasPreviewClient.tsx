@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
-import type { IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
+import {
+  defaultSheetTextStyle,
+  type IssueWorkspaceBoard,
+} from "@/lib/workspace/issueWorkspaceBoard";
 
 const PREVIEW_BOARD: IssueWorkspaceBoard = {
   v: 1,
@@ -17,6 +20,7 @@ const PREVIEW_BOARD: IssueWorkspaceBoard = {
       color: "yellow",
       text: "アイデアをメモ",
       z: 1,
+      ...defaultSheetTextStyle(),
     },
     {
       id: "preview_sheet_b",
@@ -28,6 +32,7 @@ const PREVIEW_BOARD: IssueWorkspaceBoard = {
       color: "sky",
       text: "次にやること",
       z: 2,
+      ...defaultSheetTextStyle(),
     },
     {
       id: "preview_arrow_ab",

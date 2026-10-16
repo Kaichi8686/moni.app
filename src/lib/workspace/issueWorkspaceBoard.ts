@@ -3,6 +3,8 @@
 export const BOARD_MARKER = "---moni-board-v1---";
 
 export type SheetColor = "yellow" | "pink" | "sky" | "mint" | "orange" | "lavender" | "white";
+export type TextAlign = "left" | "center" | "right";
+export type TextVAlign = "top" | "middle" | "bottom";
 
 export const SHEET_COLOR_ORDER: SheetColor[] = [
   "yellow",
@@ -27,6 +29,13 @@ export const SHEET_COLORS: Record<
   white: { bg: "#FFFFFF", border: "#D4D4D8", labelJa: "白", labelEn: "White" },
 };
 
+export const TEXT_COLOR_ORDER = ["#1A1A1A", "#DC2626", "#2563EB", "#16A34A", "#9333EA", "#FFFFFF"] as const;
+export const FONT_SIZE_PRESETS = [12, 14, 18, 24, 32] as const;
+export const DEFAULT_FONT_SIZE = 14;
+export const DEFAULT_TEXT_COLOR = "#1A1A1A";
+export const DEFAULT_TEXT_ALIGN: TextAlign = "center";
+export const DEFAULT_TEXT_VALIGN: TextVAlign = "middle";
+
 export type BoardSheet = {
   id: string;
   kind: "sheet";
@@ -37,6 +46,10 @@ export type BoardSheet = {
   color: SheetColor;
   text: string;
   z: number;
+  fontSize: number;
+  textColor: string;
+  align: TextAlign;
+  valign: TextVAlign;
 };
 
 export type BoardImage = {
@@ -86,12 +99,37 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isTextAlign(value: unknown): value is TextAlign {
+  return value === "left" || value === "center" || value === "right";
+}
+
+function isTextVAlign(value: unknown): value is TextVAlign {
+  return value === "top" || value === "middle" || value === "bottom";
+}
+
+export function defaultSheetTextStyle(): Pick<BoardSheet, "fontSize" | "textColor" | "align" | "valign"> {
+  return {
+    fontSize: DEFAULT_FONT_SIZE,
+    textColor: DEFAULT_TEXT_COLOR,
+    align: DEFAULT_TEXT_ALIGN,
+    valign: DEFAULT_TEXT_VALIGN,
+  };
+}
+
 function parseSheet(raw: Record<string, unknown>): BoardSheet | null {
   if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y) || !isFiniteNumber(raw.w) || !isFiniteNumber(raw.h)) {
     return null;
   }
   if (typeof raw.id !== "string" || !raw.id) return null;
   if (!isSheetColor(raw.color)) return null;
+  const fontSize =
+    isFiniteNumber(raw.fontSize) && raw.fontSize >= 8 && raw.fontSize <= 72
+      ? Math.round(raw.fontSize)
+      : DEFAULT_FONT_SIZE;
+  const textColor =
+    typeof raw.textColor === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw.textColor)
+      ? raw.textColor
+      : DEFAULT_TEXT_COLOR;
   return {
     id: raw.id,
     kind: "sheet",
@@ -102,6 +140,10 @@ function parseSheet(raw: Record<string, unknown>): BoardSheet | null {
     color: raw.color,
     text: typeof raw.text === "string" ? raw.text : "",
     z: isFiniteNumber(raw.z) ? raw.z : 1,
+    fontSize,
+    textColor,
+    align: isTextAlign(raw.align) ? raw.align : DEFAULT_TEXT_ALIGN,
+    valign: isTextVAlign(raw.valign) ? raw.valign : DEFAULT_TEXT_VALIGN,
   };
 }
 
@@ -186,6 +228,7 @@ export function boardFromPlainText(text: string): IssueWorkspaceBoard {
         color: "yellow",
         text: trimmed,
         z: 1,
+        ...defaultSheetTextStyle(),
       },
     ],
   };
