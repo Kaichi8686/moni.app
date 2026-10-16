@@ -690,27 +690,17 @@ export function IssueWorkspaceCanvas({
           })}
         </div>
 
-        {board.items.length === 0 ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6 pt-28">
-            <div className="max-w-xs rounded-2xl bg-white/90 px-4 py-3 text-center text-sm text-zinc-600 shadow-sm backdrop-blur">
-              {tx(
-                "二本指で拡大縮小。空き地をドラッグで移動。用紙はダブルタップで文字入力。",
-                "Pinch to zoom. Drag empty space to pan. Double-tap a sheet to type.",
-              )}
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      {/* フリースペース内で常に上端に張り付く操作バー */}
+      {/* 操作バーのみ（題名なし）。フリースペース上端に固定 */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30">
         <div
           data-board-ui
-          className="pointer-events-auto border-b border-zinc-200/90 bg-white/95 px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-sm backdrop-blur"
+          className="pointer-events-auto border-b border-zinc-200/80 bg-white/92 px-1.5 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-sm backdrop-blur"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {toolbarStart}
-            <div className="flex min-w-0 flex-1 items-stretch justify-center gap-2">
+            <div className="flex min-w-0 flex-1 items-stretch justify-center gap-1.5">
               <ActionButton
                 active={tool === "sheet"}
                 label={tx("用紙", "Sheet")}
@@ -745,15 +735,14 @@ export function IssueWorkspaceCanvas({
               data-board-ui
               disabled={!canEdit || !selectedId}
               onClick={deleteSelected}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 disabled:opacity-30"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 disabled:opacity-30"
               aria-label={tx("削除", "Delete")}
             >
-              <Trash2 className="h-5 w-5" />
+              <Trash2 className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="mt-2 flex items-center justify-center gap-1.5" data-board-ui>
-            <span className="mr-1 text-[10px] font-semibold text-zinc-400">{tx("色", "Color")}</span>
+          <div className="mt-1.5 flex items-center justify-center gap-1" data-board-ui>
             {SHEET_COLOR_ORDER.map((color) => (
               <button
                 key={color}
@@ -769,7 +758,7 @@ export function IssueWorkspaceCanvas({
                     selectTool("sheet");
                   }
                 }}
-                className={`h-8 w-8 rounded-full border-2 shadow-sm transition ${
+                className={`h-7 w-7 rounded-full border-2 shadow-sm transition ${
                   sheetColor === color ? "scale-110 border-zinc-900" : "border-white"
                 } disabled:opacity-40`}
                 style={{ backgroundColor: SHEET_COLORS[color].bg }}
@@ -778,19 +767,6 @@ export function IssueWorkspaceCanvas({
             ))}
           </div>
         </div>
-
-        {tool === "arrow" ? (
-          <p className="pointer-events-none border-b border-amber-100 bg-amber-50/95 px-3 py-1.5 text-center text-[11px] font-medium text-amber-900">
-            {connectFromId
-              ? tx("つなげ先の用紙や写真をタップ", "Tap the target sheet or photo")
-              : tx("つなぎ始めの用紙や写真をタップ", "Tap the starting sheet or photo")}
-          </p>
-        ) : null}
-        {tool === "sheet" ? (
-          <p className="pointer-events-none border-b border-sky-100 bg-sky-50/95 px-3 py-1.5 text-center text-[11px] font-medium text-sky-900">
-            {tx("キャンバスをタップして用紙を置く", "Tap the canvas to place a colored sheet")}
-          </p>
-        ) : null}
       </div>
     </div>
   );
@@ -830,9 +806,9 @@ function ActionButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`flex min-h-[3.25rem] min-w-[4.5rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-[11px] font-bold transition disabled:opacity-40 ${tones[accent]}`}
+      className={`flex min-h-[2.75rem] min-w-[3.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-1 text-[10px] font-bold transition disabled:opacity-40 ${tones[accent]}`}
     >
-      <Icon className="h-5 w-5" aria-hidden strokeWidth={2.25} />
+      <Icon className="h-4 w-4" aria-hidden strokeWidth={2.25} />
       <span>{label}</span>
     </button>
   );

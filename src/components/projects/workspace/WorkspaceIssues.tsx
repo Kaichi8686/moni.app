@@ -11,7 +11,6 @@ import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import {
   boardFromPlainText,
-  boardPlainText,
   createEmptyBoard,
   SHEET_COLORS,
   type IssueWorkspaceBoard,
@@ -298,9 +297,9 @@ export default function WorkspaceIssues() {
               type="button"
               data-board-ui
               onClick={closeCanvas}
-              className="inline-flex h-11 shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+              className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
             >
-              <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden />
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
               <span>{tx("戻る", "Back")}</span>
             </button>
           }
@@ -330,14 +329,10 @@ export default function WorkspaceIssues() {
 
   if (screen.kind === "task" && activeIssue && activeGenre) {
     const meta = resolveGenreMeta(activeGenre, customGenres);
-    const Icon = meta.icon;
     const submitted = isIssueSubmitted(activeIssue);
     const assignee = assigneeNames(activeIssue, names).join("、");
     const due = dueLabel(activeIssue);
-    const sheetCount = boardDraft.items.filter((item) => item.kind === "sheet").length;
-    const imageCount = boardDraft.items.filter((item) => item.kind === "image").length;
     const previewSheets = boardDraft.items.filter((item) => item.kind === "sheet").slice(0, 4);
-    const previewText = boardPlainText(boardDraft);
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <div className="flex items-center gap-2">
@@ -398,69 +393,47 @@ export default function WorkspaceIssues() {
             />
           </label>
         </div>
-        <section className="space-y-2">
-          <h2 className="text-sm font-bold text-zinc-900">{tx("フリースペース", "Free space")}</h2>
-          <button
-            type="button"
-            onClick={() => openCanvas(activeGenre, activeIssue.id)}
-            className="group flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
+        <button
+          type="button"
+          onClick={() => openCanvas(activeGenre, activeIssue.id)}
+          className="group flex w-full items-stretch overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
+          aria-label={tx("移動", "Go")}
+        >
+          <div
+            className="relative min-h-[4.5rem] min-w-0 flex-1 overflow-hidden"
+            style={{
+              backgroundColor: "#F4F4F5",
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
+              backgroundSize: "16px 16px",
+            }}
           >
-            <div
-              className="relative h-28 w-full overflow-hidden"
-              style={{
-                backgroundColor: "#F4F4F5",
-                backgroundImage:
-                  "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
-                backgroundSize: "16px 16px",
-              }}
-            >
-              {previewSheets.length > 0 ? (
-                <div className="absolute inset-0 flex items-center gap-2 px-4">
-                  {previewSheets.map((sheet) => (
-                    <span
-                      key={sheet.id}
-                      className="h-16 w-14 shrink-0 overflow-hidden rounded-sm border px-1 py-1 text-[9px] leading-tight text-zinc-800 shadow-sm"
-                      style={{
-                        backgroundColor: SHEET_COLORS[sheet.color].bg,
-                        borderColor: SHEET_COLORS[sheet.color].border,
-                      }}
-                    >
-                      {(sheet.text || " ").slice(0, 24)}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center gap-2 text-zinc-400">
-                  <StickyNote className="h-5 w-5" />
-                  <span className="text-xs font-medium">{tx("まだ何も置いていません", "Nothing placed yet")}</span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3 px-3 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-zinc-900">
-                  {tx("フリースペースを開く", "Open free space")}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] text-zinc-500">
-                  {previewText
-                    ? previewText
-                    : tx(
-                        `用紙 ${sheetCount}・写真 ${imageCount}`,
-                        `${sheetCount} sheets · ${imageCount} photos`,
-                      )}
-                </p>
+            {previewSheets.length > 0 ? (
+              <div className="absolute inset-0 flex items-center gap-2 px-3">
+                {previewSheets.map((sheet) => (
+                  <span
+                    key={sheet.id}
+                    className="h-12 w-11 shrink-0 overflow-hidden rounded-sm border px-1 py-0.5 text-[8px] leading-tight text-zinc-800 shadow-sm"
+                    style={{
+                      backgroundColor: SHEET_COLORS[sheet.color].bg,
+                      borderColor: SHEET_COLORS[sheet.color].border,
+                    }}
+                  >
+                    {(sheet.text || " ").slice(0, 18)}
+                  </span>
+                ))}
               </div>
-              <span className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3 text-sm font-semibold text-white group-hover:bg-orange-500">
-                {tx("移動", "Go")}
-                <ArrowRight className="h-4 w-4" />
-              </span>
-            </div>
-          </button>
-          <p className="flex items-center gap-1 text-[11px] text-zinc-400">
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {tx("全画面で用紙・写真・矢印を置けます", "Place sheets, photos, and arrows fullscreen")}
-          </p>
-        </section>
+            ) : (
+              <div className="flex h-full items-center justify-center text-zinc-400">
+                <StickyNote className="h-5 w-5" aria-hidden />
+              </div>
+            )}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 bg-zinc-900 px-4 text-sm font-semibold text-white group-hover:bg-orange-500">
+            {tx("移動", "Go")}
+            <ArrowRight className="h-4 w-4" />
+          </span>
+        </button>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
         <button
           type="button"
