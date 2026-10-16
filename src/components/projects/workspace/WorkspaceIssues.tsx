@@ -1,12 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Camera, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
+import {
+  boardFromPlainText,
+  createEmptyBoard,
+  type IssueWorkspaceBoard,
+} from "@/lib/workspace/issueWorkspaceBoard";
 import {
   createCustomTaskGenreId,
   CUSTOM_TASK_GENRE_LABEL_MAX,
@@ -52,8 +58,9 @@ export default function WorkspaceIssues() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [savingGenre, setSavingGenre] = useState(false);
-  const [workspaceDraft, setWorkspaceDraft] = useState("");
+  const [boardDraft, setBoardDraft] = useState<IssueWorkspaceBoard>(() => createEmptyBoard());
   const fileRef = useRef<HTMLInputElement>(null);
+  const boardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedFromQuery = useRef(false);
   const taskId = screen.kind === "task" ? screen.issueId : "";
 
@@ -67,13 +74,37 @@ export default function WorkspaceIssues() {
     [customGenres, issues],
   );
 
+  // 課題を開いたときだけボードを読み込む（保存後の issues 更新で編集中の下書きを潰さない）
   useEffect(() => {
     if (!taskId) return;
     const issue = issues.find((item) => item.id === taskId);
-    setWorkspaceDraft(issue?.workspaceText ?? "");
+    setBoardDraft(issue?.workspaceBoard ?? boardFromPlainText(issue?.workspaceText ?? ""));
     setBeginDraft(isoToDateInput(issue?.beginAt));
     setDueDraft(isoToDateInput(issue?.dueDate));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- task switch only
+  }, [taskId]);
+
+  useEffect(() => {
+    if (!taskId) return;
+    const issue = issues.find((item) => item.id === taskId);
+    if (!issue) return;
+    setBeginDraft(isoToDateInput(issue.beginAt));
+    setDueDraft(isoToDateInput(issue.dueDate));
   }, [taskId, issues]);
+
+  useEffect(() => {
+    return () => {
+      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+    };
+  }, []);
+
+  function persistBoard(issueId: string, board: IssueWorkspaceBoard) {
+    setBoardDraft(board);
+    if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+    boardSaveTimer.current = setTimeout(() => {
+      void saveIssueWork(issueId, { workspaceBoard: board });
+    }, 400);
+  }
 
   useEffect(() => {
     if (openedFromQuery.current) return;
@@ -188,12 +219,14 @@ export default function WorkspaceIssues() {
     try {
       const { supabase } = await import("@/lib/supabase");
       if (!supabase) throw new Error(tx("画像を保存できません", "Can’t save the photo"));
-      const uploaded: string[] = [];
+      let nextBoard = boardDraft;
       for (const file of Array.from(files)) {
         const result = await uploadProjectImage(supabase, uid, "issue-photo", activeIssue.id, file);
-        uploaded.push(result.publicUrl);
+        nextBoard = appendImageToBoard(nextBoard, result.publicUrl);
       }
-      await saveIssueWork(activeIssue.id, { attachments: [...activeIssue.attachments, ...uploaded] });
+      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+      setBoardDraft(nextBoard);
+      await saveIssueWork(activeIssue.id, { workspaceBoard: nextBoard });
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("画像を追加できませんでした", "Couldn’t add the photo"));
     } finally {
@@ -217,7 +250,7 @@ export default function WorkspaceIssues() {
     const assignee = assigneeNames(activeIssue, names).join("、");
     const due = dueLabel(activeIssue);
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setScreen({ kind: "genre", genre: activeGenre })} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100" aria-label={tx("戻る", "Back")}>
             <ArrowLeft className="h-5 w-5" />
@@ -276,73 +309,55 @@ export default function WorkspaceIssues() {
             />
           </label>
         </div>
-        <section>
-          <h2 className="text-sm font-bold text-zinc-900">{tx("作業スペース", "Workspace")}</h2>
-          <textarea
-            value={workspaceDraft}
-            disabled={!canEdit}
-            onChange={(event) => setWorkspaceDraft(event.target.value)}
-            onBlur={() => {
-              if (workspaceDraft !== activeIssue.workspaceText) {
-                void saveIssueWork(activeIssue.id, { workspaceText: workspaceDraft });
-              }
-            }}
-            placeholder={tx("ここに作業内容を書こう", "Write your work here")}
-            className="mt-2 min-h-40 w-full rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm leading-relaxed outline-none focus:border-orange-400"
-          />
-        </section>
-        <section>
-          <h2 className="text-sm font-bold text-zinc-900">{tx("写真", "Photos")}</h2>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            {activeIssue.attachments.map((url) => (
-              <div key={url} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-zinc-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" className="h-full w-full object-cover" />
-                {canEdit ? (
-                  <button
-                    type="button"
-                    className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white"
-                    onClick={() => void saveIssueWork(activeIssue.id, { attachments: activeIssue.attachments.filter((item) => item !== url) })}
-                    aria-label={tx("写真を外す", "Remove photo")}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            {canEdit ? (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading || !uid}
-                className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50 text-zinc-500 disabled:opacity-40"
-              >
-                <Camera className="h-5 w-5" />
-                <span className="mt-1 text-[11px] font-semibold">{uploading ? tx("追加中", "Adding") : tx("写真", "Photo")}</span>
-              </button>
-            ) : null}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(event) => void addPhotos(event.target.files)}
-            />
+        <section className="space-y-2">
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900">{tx("作業スペース", "Workspace")}</h2>
+              <p className="mt-0.5 text-[11px] text-zinc-500">
+                {tx(
+                  "色付き用紙・写真・矢印で自由に整理できます",
+                  "Arrange colored sheets, photos, and arrows freely",
+                )}
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+              {uploading ? tx("写真を追加中…", "Adding photo…") : tx("ピンチで拡大縮小", "Pinch or Ctrl+scroll to zoom")}
+            </span>
           </div>
-          <p className="mt-1 flex items-center gap-1 text-[11px] text-zinc-400">
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {tx("写真フォルダから選べます", "Choose from your photo library")}
-          </p>
+          <IssueWorkspaceCanvas
+            board={boardDraft}
+            canEdit={canEdit}
+            uploading={uploading}
+            onChange={(board) => persistBoard(activeIssue.id, board)}
+            onRequestPhoto={() => fileRef.current?.click()}
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => void addPhotos(event.target.files)}
+          />
         </section>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
         <button
           type="button"
           disabled={!canEdit || submitted}
-          onClick={() => void saveIssueWork(activeIssue.id, { submittedAt: new Date().toISOString() })}
+          onClick={() => {
+            if (boardSaveTimer.current) {
+              clearTimeout(boardSaveTimer.current);
+              boardSaveTimer.current = null;
+            }
+            void saveIssueWork(activeIssue.id, {
+              workspaceBoard: boardDraft,
+              submittedAt: new Date().toISOString(),
+            });
+          }}
           className="min-h-[52px] w-full rounded-full bg-orange-500 text-base font-bold text-white disabled:opacity-50"
         >
-          {submitted ? tx("提出済み", "Submitted") : tx("📤 提出する", "📤 Submit")}
+          {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
         </button>
       </div>
     );

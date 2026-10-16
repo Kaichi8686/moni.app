@@ -28,7 +28,14 @@ import {
   defaultWorkflowIfMissing,
   embedWorkflowInDescription,
 } from "@/lib/workspace/issueWorkflow";
-import { packWorkDescription, withBeginLabel, withGenreLabel, type IssueWork, type TaskGenre } from "@/lib/workspace/issueWork";
+import {
+  mergeWorkPatch,
+  packWorkDescription,
+  withBeginLabel,
+  withGenreLabel,
+  type IssueWork,
+  type TaskGenre,
+} from "@/lib/workspace/issueWork";
 import { assigneeWriteFields, withAssigneeLabels } from "@/lib/workspace/issueAssignees";
 import { simplifyIssueText } from "@/lib/workspace/issuePlainLanguage";
 import {
@@ -840,12 +847,16 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (!supabase || !canEdit) return;
       const issue = issues.find((i) => i.id === issueId);
       if (!issue) return;
-      const next: IssueWork = {
-        genre: patch.genre ?? issue.genre,
-        workspaceText: patch.workspaceText ?? issue.workspaceText,
-        attachments: patch.attachments ?? issue.attachments,
-        submittedAt: patch.submittedAt === undefined ? issue.submittedAt ?? null : patch.submittedAt,
-      };
+      const next = mergeWorkPatch(
+        {
+          genre: issue.genre,
+          workspaceText: issue.workspaceText,
+          workspaceBoard: issue.workspaceBoard ?? null,
+          attachments: issue.attachments,
+          submittedAt: issue.submittedAt ?? null,
+        },
+        patch,
+      );
       const updatedAt = new Date().toISOString();
       const status = next.submittedAt ? "done" : issue.status === "done" ? "todo" : issue.status;
       const row: Record<string, unknown> = {
@@ -853,6 +864,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         labels: withGenreLabel(issue.labels, next.genre),
         genre: next.genre,
         workspace_text: next.workspaceText,
+        workspace_board_json: next.workspaceBoard,
         attachment_urls: next.attachments,
         submitted_at: next.submittedAt,
         status,
@@ -860,6 +872,12 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         updated_at: updatedAt,
       };
       let { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err && /workspace_board_json|schema cache|42703/i.test(err.message)) {
+        delete row.workspace_board_json;
+        // 列が無い環境では description の packed JSON にボードを残す
+        row.description = packWorkDescription(next);
+        ({ error: err } = await supabase.from("project_issues").update(row).eq("id", issueId));
+      }
       if (err && /genre|workspace_text|attachment_urls|submitted_at|schema cache|42703/i.test(err.message)) {
         ({ error: err } = await supabase
           .from("project_issues")
