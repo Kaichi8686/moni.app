@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
-import {
-  createEmptyBoard,
-  type IssueWorkspaceBoard,
-} from "@/lib/workspace/issueWorkspaceBoard";
+import type { IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
 
 const PREVIEW_BOARD: IssueWorkspaceBoard = {
   v: 1,
@@ -72,13 +69,6 @@ export function IssueWorkspaceCanvasPreviewClient() {
           }}
         />
       </div>
-      <button
-        type="button"
-        className="self-start rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700"
-        onClick={() => setBoard(createEmptyBoard())}
-      >
-        クリア
-      </button>
     </main>
   );
 }
