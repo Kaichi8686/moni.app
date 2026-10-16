@@ -28,6 +28,8 @@ type Props = {
   fillViewport?: boolean;
   /** 招待承認などで一覧を再取得したいときに増やす */
   reloadSignal?: number;
+  /** 一覧表示時に新規作成モーダルを最初から開く */
+  startCreate?: boolean;
 };
 
 /** 一覧用の列のみ。`select *` + order で RLS が重く statement timeout になりやすいため分割取得する */
@@ -122,6 +124,7 @@ export function ProjectTabGlide({
   onNavigate,
   fillViewport = false,
   reloadSignal = 0,
+  startCreate = false,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -131,8 +134,12 @@ export function ProjectTabGlide({
   const [sort, setSort] = useState<SortKey>("newest");
   const [err, setErr] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(startCreate);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (startCreate) setCreateOpen(true);
+  }, [startCreate]);
   const [form, setForm] = useState({
     name: "",
     business_type: "software" as "maker" | "software" | "social",

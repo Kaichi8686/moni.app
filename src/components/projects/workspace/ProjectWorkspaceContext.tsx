@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowLeft, Calendar, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
-import Link from "next/link";
+import { Calendar, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays } from "date-fns";
@@ -46,6 +45,7 @@ import {
   type ProfileLite,
 } from "@/lib/workspace/mapRows";
 import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
+import { ProjectWorkspaceSwitcher } from "@/components/projects/workspace/ProjectWorkspaceSwitcher";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
 import {
@@ -1028,10 +1028,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     ],
   );
 
-  const subtitle = project
-    ? `${project.description?.slice(0, 40) ?? tx("探究", "Inquiry")} · ${tx(`${project.members.length}人`, `${project.members.length} people`)}`
-    : "";
-
   const sectionLabel = useMemo(() => {
     const segment = pathname?.split("/").filter(Boolean)[2] ?? "overview";
     const labels: Record<string, [string, string]> = {
@@ -1052,9 +1048,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     const label = labels[segment] ?? labels.overview;
     return tx(label[0], label[1]);
   }, [pathname, tx]);
-  const isOverview = pathname === `/projects/${projectId}/overview`;
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
-  const headerBackHref = isOverview ? HOME_PROJECTS_HREF : `/projects/${projectId}/overview`;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1069,30 +1063,21 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     <WorkspaceCtx.Provider value={value}>
       <div className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isCoachChat ? "bg-white" : ""}`}>
         {isCoachChat ? null : (
-        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-4 py-2.5 backdrop-blur sm:py-3">
+        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-2 backdrop-blur sm:px-4 sm:py-2.5">
           <div className="mx-auto max-w-3xl">
-            <p className="mb-1 truncate text-[11px] font-medium text-[#8A8F98]">
-              {tx("プロジェクト", "Projects")} / {sectionLabel}
-            </p>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <Link
-                  href={headerBackHref}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
-                  aria-label={
-                    isOverview
-                      ? tx("プロジェクト一覧へ戻る", "Back to projects")
-                      : tx("プロジェクト概要へ戻る", "Back to project overview")
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <ProjectWorkspaceSwitcher
+                  projectId={projectId}
+                  projectName={
+                    project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))
                   }
-                >
-                  <ArrowLeft className="h-5 w-5" aria-hidden />
-                </Link>
-                <div className="min-w-0">
-                  <h1 className="truncate text-base font-semibold tracking-tight text-[#1A1A1A] sm:text-lg">
-                    {project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))}
-                  </h1>
-                  {project ? <p className="truncate text-[11px] text-[#8A8F98]">{subtitle}</p> : null}
-                </div>
+                  thumbnailUrl={projectMeta?.thumbnail_url}
+                  icon={project?.icon}
+                />
+                <p className="mt-0.5 truncate pl-1.5 text-[11px] font-medium text-[#8A8F98]">
+                  {sectionLabel}
+                </p>
               </div>
               <div className="pointer-events-auto relative z-[110] shrink-0" ref={actionMenuRef}>
                 <button
