@@ -1,17 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Search } from "lucide-react";
 import { SKILL_OPTIONS } from "@/lib/discover/skillRequests";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import {
-  closeProjectRecruitment,
-  createProjectRecruitment,
-  ensureLegacyRecruitmentMigrated,
-  listProjectRecruitments,
-  type ProjectRecruitment,
-} from "@/lib/projects/projectRecruitments";
+import { createProjectRecruitment } from "@/lib/projects/projectRecruitments";
+import { searchProfilesForInvite, sendProjectInvite } from "@/lib/projects/projectInvites";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
 
@@ -19,10 +13,7 @@ export default function WorkspaceRecruit() {
   const { tx } = useI18n();
   const { project, projectMeta, projectId, loading, uid, canEdit, isOwner, reload } = useProjectWorkspace();
   const [notice, setNotice] = useState("");
-  const [rows, setRows] = useState<ProjectRecruitment[]>([]);
-  const [listLoading, setListLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [closingId, setClosingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [skillName, setSkillName] = useState<string>(SKILL_OPTIONS[0]);
@@ -30,42 +21,43 @@ export default function WorkspaceRecruit() {
   const [compensation, setCompensation] = useState("なし（経験・実績として）");
   const [postToBoard, setPostToBoard] = useState(true);
 
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [inviteCandidates, setInviteCandidates] = useState<Array<{ id: string; name: string }>>([]);
+  const [inviteSearchBusy, setInviteSearchBusy] = useState(false);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
+  const [inviteErr, setInviteErr] = useState("");
+  const [canInvite, setCanInvite] = useState(false);
+
   const showNotice = useCallback((text: string) => {
     setNotice(text);
     window.setTimeout(() => setNotice(""), 4200);
   }, []);
 
-  const loadList = useCallback(async () => {
-    if (!supabase || !project) {
-      setListLoading(false);
-      return;
-    }
-    setListLoading(true);
-    try {
-      const ownerId =
-        project.members.find((m) => m.role === "owner")?.id ?? (isOwner ? uid : null) ?? uid ?? "";
-      if (ownerId) {
-        await ensureLegacyRecruitmentMigrated(supabase, {
-          projectId,
-          ownerId,
-          recruitmentTarget: projectMeta?.recruitment_target ?? "",
-          recruitmentMessage: projectMeta?.recruitment_message ?? "",
-        });
-      }
-      const list = await listProjectRecruitments(supabase, projectId);
-      // このプロジェクトの募集だけ表示（他プロジェクト分が混ざらないようにする）
-      setRows(list.filter((r) => r.projectId === projectId));
-    } catch (e) {
-      showNotice(e instanceof Error ? e.message : tx("募集の取得に失敗しました", "Failed to load recruitments"));
-    } finally {
-      setListLoading(false);
-    }
-  }, [project, projectId, projectMeta, uid, isOwner, showNotice, tx]);
-
   useEffect(() => {
-    if (loading || !project) return;
-    void loadList();
-  }, [loading, project, loadList]);
+    let cancelled = false;
+    async function checkInviteRole() {
+      if (!supabase || !uid || !projectId) {
+        if (!cancelled) setCanInvite(false);
+        return;
+      }
+      if (isOwner) {
+        if (!cancelled) setCanInvite(true);
+        return;
+      }
+      const { data } = await supabase
+        .from("project_members")
+        .select("role")
+        .eq("project_id", projectId)
+        .eq("user_id", uid)
+        .maybeSingle();
+      const role = (data as { role?: string } | null)?.role;
+      if (!cancelled) setCanInvite(role === "owner" || role === "admin");
+    }
+    void checkInviteRole();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, projectId, isOwner, project?.members]);
 
   async function onCreate() {
     if (!supabase || !uid || !project || !canEdit) return;
@@ -89,7 +81,6 @@ export default function WorkspaceRecruit() {
       });
       setTitle("");
       setMessage("");
-      await loadList();
       await reload();
       showNotice(tx("募集を公開しました", "Recruitment published"));
     } catch (e) {
@@ -99,26 +90,59 @@ export default function WorkspaceRecruit() {
     }
   }
 
-  async function onClose(id: string) {
-    if (!supabase || !canEdit) return;
-    setClosingId(id);
+  async function searchPeople() {
+    if (!uid) return;
+    const q = inviteQuery.trim();
+    if (q.length < 1) {
+      setInviteCandidates([]);
+      return;
+    }
+    setInviteSearchBusy(true);
+    setInviteErr("");
     try {
-      await closeProjectRecruitment(supabase, id, projectId);
-      await loadList();
-      await reload();
-      showNotice(tx("募集を締め切りました", "Recruitment closed"));
+      const memberIds = (project?.members ?? []).map((m) => m.id);
+      const hits = await searchProfilesForInvite(q, [uid, ...memberIds]);
+      setInviteCandidates(
+        hits.map((p) => ({
+          id: p.id,
+          name: p.display_name?.trim() || tx("ユーザー", "User"),
+        })),
+      );
     } catch (e) {
-      showNotice(e instanceof Error ? e.message : tx("締切に失敗しました", "Failed to close"));
+      setInviteErr(e instanceof Error ? e.message : tx("検索に失敗しました", "Search failed"));
+      setInviteCandidates([]);
     } finally {
-      setClosingId(null);
+      setInviteSearchBusy(false);
+    }
+  }
+
+  async function inviteMember(inviteeId: string, inviteeName: string) {
+    setInviteBusyId(inviteeId);
+    setInviteErr("");
+    try {
+      const res = await sendProjectInvite(projectId, inviteeId);
+      if (!res.ok) {
+        const msg = res.error;
+        if (msg.includes("すでにメンバー")) {
+          setInviteErr(tx("すでにメンバーです。", "Already a member."));
+        } else {
+          setInviteErr(msg);
+        }
+        return;
+      }
+      setInviteCandidates((prev) => prev.filter((c) => c.id !== inviteeId));
+      setInviteQuery("");
+      await reload();
+      showNotice(
+        tx(`${inviteeName} さんを招待しました。相手のお知らせに届きます。`, `Invited ${inviteeName}. They’ll get a notification.`),
+      );
+    } finally {
+      setInviteBusyId(null);
     }
   }
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
-
-  const openRows = rows.filter((r) => r.status === "open");
-  const closedRows = rows.filter((r) => r.status === "closed");
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-8">
@@ -139,8 +163,8 @@ export default function WorkspaceRecruit() {
             </h2>
             <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
               {tx(
-                "このプロジェクトの募集だけを管理できます。いくつでも出せて、不要になったら締め切れます。",
-                "Manage openings for this project only. Post as many as you need and close any time.",
+                "欲しい人材を公開して仲間を募るか、表示名で探して直接招待できます。",
+                "Post an opening to recruit teammates, or search by display name and invite directly.",
               )}
             </p>
           </div>
@@ -232,88 +256,81 @@ export default function WorkspaceRecruit() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-zinc-900">
-            {tx(
-              `このプロジェクトの公開中（${openRows.length}）`,
-              `Open for this project (${openRows.length})`,
-            )}
-          </h3>
-          {openRows.length > 0 ? (
-            <Link
-              href="/?tab=chat&segment=recruit"
-              className="text-[12px] font-semibold text-emerald-700 hover:underline"
-            >
-              {tx("探すタブで見る", "View on Explore")}
-            </Link>
-          ) : null}
+      <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
+              {tx("人を探す", "Find people")}
+            </h2>
+            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+              {tx(
+                "表示名で検索して、このプロジェクトに招待できます。",
+                "Search by display name and invite them to this project.",
+              )}
+            </p>
+          </div>
+          <Search className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
         </div>
-        {listLoading ? (
-          <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
-        ) : openRows.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
-            {tx(
-              "このプロジェクトの公開中の募集はまだありません。",
-              "No open recruitments for this project yet.",
-            )}
+
+        {!canInvite ? (
+          <p className="mt-4 text-sm text-zinc-500">
+            {tx("招待はオーナー・管理者のみできます。", "Only owners and admins can invite people.")}
           </p>
         ) : (
-          <ul className="space-y-2">
-            {openRows.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-sm"
+          <div className="mt-4 space-y-3">
+            {inviteErr ? (
+              <p className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[12px] font-medium text-rose-800">
+                {inviteErr}
+              </p>
+            ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <input
+                className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                placeholder={tx("表示名で検索", "Search by display name")}
+                value={inviteQuery}
+                onChange={(e) => setInviteQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void searchPeople();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={inviteSearchBusy || !inviteQuery.trim()}
+                onClick={() => void searchPeople()}
+                className="min-h-[44px] shrink-0 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-900 disabled:opacity-50"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-zinc-900">{r.title}</p>
-                    {r.message ? (
-                      <p className="mt-1 line-clamp-2 text-[12px] text-zinc-600">{r.message}</p>
-                    ) : null}
-                    <p className="mt-1 text-[11px] text-zinc-400">
-                      {[r.skillName, r.duration, r.compensation].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      disabled={closingId === r.id}
-                      className="shrink-0 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-zinc-700 disabled:opacity-50"
-                      onClick={() => void onClose(r.id)}
-                    >
-                      {closingId === r.id ? "…" : tx("締め切る", "Close")}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+                {inviteSearchBusy ? tx("検索中…", "Searching…") : tx("検索", "Search")}
+              </button>
+            </div>
+            <ul className="space-y-2">
+              {inviteCandidates.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 px-3 py-2.5"
+                >
+                  <span className="truncate text-sm font-medium text-zinc-900">{c.name}</span>
+                  <button
+                    type="button"
+                    disabled={inviteBusyId === c.id}
+                    onClick={() => void inviteMember(c.id, c.name)}
+                    className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {inviteBusyId === c.id ? tx("招待中…", "Inviting…") : tx("招待する", "Invite")}
+                  </button>
+                </li>
+              ))}
+              {inviteQuery.trim() && !inviteSearchBusy && inviteCandidates.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-center text-sm text-zinc-500">
+                  {tx("該当するユーザーが見つかりません。", "No matching users.")}
+                </li>
+              ) : null}
+            </ul>
+          </div>
         )}
       </section>
-
-      {closedRows.length > 0 ? (
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-zinc-500">
-            {tx(
-              `このプロジェクトの締め切り済み（${closedRows.length}）`,
-              `Closed for this project (${closedRows.length})`,
-            )}
-          </h3>
-          <ul className="space-y-2">
-            {closedRows.map((r) => (
-              <li key={r.id} className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="text-sm font-medium text-zinc-600 line-through decoration-zinc-300">
-                  {r.title}
-                </p>
-                {r.message ? (
-                  <p className="mt-1 line-clamp-1 text-[12px] text-zinc-400">{r.message}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }

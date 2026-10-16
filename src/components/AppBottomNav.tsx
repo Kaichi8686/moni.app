@@ -9,6 +9,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -17,7 +18,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
-import { readLastProject } from "@/lib/workspace/lastProject";
+import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
 
 const CLUSTER_STORAGE_KEY = "moni.nav.projectClusterOpen";
@@ -39,12 +40,51 @@ function isProjectIssuesPath(pathname: string): boolean {
   return /^\/projects\/[0-9a-f-]{36}\/issues(?:\/|$)/i.test(pathname);
 }
 
-function resolveProjectIssuesHref(pathname: string): string {
+function isProjectRecruitPath(pathname: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(pathname);
+}
+
+function resolveProjectScopedHref(
+  pathname: string,
+  suffix: "issues" | "recruit",
+  lastProjectId?: string | null,
+): string {
   const fromPath = pathname.match(/^\/projects\/([0-9a-f-]{36})(?:\/|$)/i);
-  if (fromPath?.[1]) return `/projects/${fromPath[1]}/issues`;
-  const last = readLastProject();
-  if (last?.id) return `/projects/${last.id}/issues`;
+  if (fromPath?.[1]) return `/projects/${fromPath[1]}/${suffix}`;
+  const lastId = lastProjectId ?? readLastProject()?.id ?? null;
+  if (lastId) return `/projects/${lastId}/${suffix}`;
   return HOME_PROJECTS_HREF;
+}
+
+function resolveProjectIssuesHref(pathname: string, lastProjectId?: string | null): string {
+  return resolveProjectScopedHref(pathname, "issues", lastProjectId);
+}
+
+function resolveProjectRecruitHref(pathname: string, lastProjectId?: string | null): string {
+  return resolveProjectScopedHref(pathname, "recruit", lastProjectId);
+}
+
+function subscribeLastProject(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const onStorage = (e: StorageEvent) => {
+    if (!e.key || e.key === "moni:lastProjectId" || e.key === "moni:lastProjectName") {
+      onStoreChange();
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(LAST_PROJECT_CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(LAST_PROJECT_CHANGE_EVENT, onStoreChange);
+  };
+}
+
+function getLastProjectIdSnapshot(): string | null {
+  return readLastProject()?.id ?? null;
+}
+
+function getLastProjectIdServerSnapshot(): string | null {
+  return null;
 }
 
 const PROJECT_ITEM: NavItem = {
@@ -86,8 +126,8 @@ const CLOSED_TABS: NavItem[] = [
     href: "/?tab=chat",
     labelKey: "navSearch",
     icon: <Search className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p, tab, segment) =>
-      (p === "/" && tab === "chat" && segment !== "recruit") ||
+    match: (p, tab) =>
+      (p === "/" && tab === "chat") ||
       p === "/discover" ||
       p.startsWith("/discover/"),
   },
@@ -113,12 +153,11 @@ const OPEN_TABS: NavItem[] = [
   },
   {
     id: "recruit",
-    href: "/?tab=chat&segment=recruit",
+    // href is resolved at render time via last/current project
+    href: HOME_PROJECTS_HREF,
     labelKey: "navRecruit",
     icon: <Megaphone className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p, tab, segment) =>
-      (p === "/" && tab === "chat" && segment === "recruit") ||
-      /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(p),
+    match: (p) => isProjectRecruitPath(p),
   },
 ];
 
@@ -280,8 +319,14 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
   const [openPref, setOpenPref] = useState(() => readStoredClusterOpen() ?? false);
+  const [seenRouteKey, setSeenRouteKey] = useState("");
   const projectPillRef = useRef<HTMLDivElement>(null);
   const profilePillRef = useRef<HTMLDivElement>(null);
+  const lastProjectId = useSyncExternalStore(
+    subscribeLastProject,
+    getLastProjectIdSnapshot,
+    getLastProjectIdServerSnapshot,
+  );
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
@@ -290,9 +335,10 @@ function AppBottomNavInner({ className }: { className?: string }) {
     (item) =>
       (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
   );
-  const issuesHref = resolveProjectIssuesHref(pathname);
+
+  const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
+  const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
-  const [seenRouteKey, setSeenRouteKey] = useState("");
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
@@ -431,7 +477,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
         label={t(item.labelKey)}
         locale={locale}
         className={className}
-        href={item.id === "issues" ? issuesHref : undefined}
+        href={
+          item.id === "issues" ? issuesHref : item.id === "recruit" ? recruitHref : undefined
+        }
       />
     );
   };
