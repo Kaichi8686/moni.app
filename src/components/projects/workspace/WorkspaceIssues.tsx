@@ -284,7 +284,7 @@ export default function WorkspaceIssues() {
   if (screen.kind === "canvas" && activeIssue) {
     if (!portalReady) return null;
     return createPortal(
-      <div className="fixed inset-0 z-[240] bg-white">
+      <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
         <IssueWorkspaceCanvas
           board={boardDraft}
           canEdit={canEdit}

@@ -165,6 +165,7 @@ export function IssueWorkspaceCanvas({
   toolbarStart,
 }: Props) {
   const { tx, locale } = useI18n();
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<Tool>("navigate");
   const [sheetColor, setSheetColor] = useState<SheetColor>("yellow");
@@ -179,6 +180,21 @@ export function IssueWorkspaceCanvas({
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<PinchState | null>(null);
   const [dragTick, setDragTick] = useState(0);
+  const toolbarHidden = editingId !== null;
+
+  function resetScrollParents() {
+    let node: HTMLElement | null = shellRef.current;
+    while (node) {
+      if (node.scrollTop || node.scrollLeft) {
+        node.scrollTop = 0;
+        node.scrollLeft = 0;
+      }
+      node = node.parentElement;
+    }
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+    }
+  }
 
   const nodes = useMemo(() => board.items.filter(isNode), [board.items]);
   const arrows = useMemo(
@@ -205,6 +221,14 @@ export function IssueWorkspaceCanvas({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // キーボード閉じたあと操作バーが画面外に残らないようスクロールを戻す
+  useEffect(() => {
+    if (editingId) return;
+    resetScrollParents();
+    const timer = window.setTimeout(resetScrollParents, 120);
+    return () => window.clearTimeout(timer);
+  }, [editingId]);
 
   const viewPan = useMemo(
     () => clampPan(pan, zoom, viewport, bounds),
@@ -516,11 +540,11 @@ export function IssueWorkspaceCanvas({
   void dragTick;
 
   const shellClass = fullscreen
-    ? "relative h-full min-h-0 w-full bg-zinc-100"
-    : "relative h-[min(70vh,560px)] overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
+    ? "relative h-full min-h-0 w-full overflow-hidden overscroll-none bg-zinc-100"
+    : "relative h-[min(70vh,560px)] overflow-hidden overscroll-none rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
 
   return (
-    <div className={shellClass}>
+    <div ref={shellRef} className={shellClass}>
       <div
         ref={rootRef}
         id="issue-workspace-canvas-surface"
@@ -629,7 +653,14 @@ export function IssueWorkspaceCanvas({
                       autoFocus
                       value={node.text}
                       onChange={(event) => updateItem(node.id, { text: event.target.value })}
-                      onBlur={() => setEditingId(null)}
+                      onFocus={() => {
+                        // フォーカス時の自動スクロールで操作バーが消えないように抑止
+                        window.setTimeout(resetScrollParents, 0);
+                      }}
+                      onBlur={() => {
+                        setEditingId(null);
+                        window.setTimeout(resetScrollParents, 50);
+                      }}
                       onPointerDown={(event) => event.stopPropagation()}
                       placeholder={tx("ここに書く…", "Write here…")}
                       className="min-h-0 flex-1 resize-none bg-transparent px-2.5 py-2 text-sm leading-relaxed text-zinc-900 outline-none placeholder:text-zinc-400"
@@ -692,11 +723,15 @@ export function IssueWorkspaceCanvas({
 
       </div>
 
-      {/* 操作バーのみ（題名なし）。フリースペース上端に固定 */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30">
+      {/* 操作バー: 常に上端。文字入力中だけ上へ退避 */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 z-[80] transition-transform duration-200 ease-out ${
+          toolbarHidden ? "-translate-y-[110%]" : "translate-y-0"
+        }`}
+      >
         <div
           data-board-ui
-          className="pointer-events-auto border-b border-zinc-200/80 bg-white/92 px-1.5 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-sm backdrop-blur"
+          className="pointer-events-auto border-b border-zinc-200/80 bg-white/95 px-1.5 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-sm backdrop-blur"
         >
           <div className="flex items-center gap-1.5">
             {toolbarStart}
