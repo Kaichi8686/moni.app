@@ -138,7 +138,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
     <div ref={rootRef} className="relative min-w-0 max-w-full">
       <button
         type="button"
-        className="inline-flex max-w-full min-h-11 min-w-0 items-center gap-2 rounded-xl px-1.5 py-1 text-left transition hover:bg-zinc-100 active:bg-zinc-200/80"
+        className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full py-0.5 pr-1.5 text-left transition hover:bg-zinc-100 active:bg-zinc-200/80"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={menuId}
@@ -149,9 +149,9 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
           name={projectName}
           thumbnailUrl={thumbnailUrl}
           icon={icon}
-          size={34}
+          size={32}
         />
-        <span className="min-w-0 truncate text-[16px] font-bold tracking-tight text-zinc-950 sm:text-[17px]">
+        <span className="min-w-0 truncate text-[15px] font-bold tracking-tight text-zinc-950 sm:text-[16px]">
           {projectName || tx("プロジェクト", "Project")}
         </span>
         <ChevronDown
