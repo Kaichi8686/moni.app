@@ -285,7 +285,7 @@ export default function WorkspaceIssues() {
   if (screen.kind === "canvas" && activeIssue) {
     if (!portalReady) return null;
     return createPortal(
-      <div className="fixed inset-0 z-[240] flex flex-col bg-white">
+      <div className="fixed inset-0 z-[240] bg-white">
         <IssueWorkspaceCanvas
           board={boardDraft}
           canEdit={canEdit}
@@ -298,7 +298,7 @@ export default function WorkspaceIssues() {
               type="button"
               data-board-ui
               onClick={closeCanvas}
-              className="mr-1 inline-flex h-9 min-w-[2.75rem] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
+              className="inline-flex h-11 shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
             >
               <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden />
               <span>{tx("戻る", "Back")}</span>
