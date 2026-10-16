@@ -5,9 +5,15 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+
+function subscribeNever() {
+  return () => {};
+}
 import {
   ArrowUpRight,
   Paperclip,
@@ -56,6 +62,8 @@ const DOUBLE_TAP_MS = 380;
 /** 画面内に必ず残すコンテンツの最低ピクセル */
 const KEEP_VISIBLE_PX = 96;
 const EMPTY_WORLD = { minX: 40, minY: 40, maxX: 520, maxY: 420 };
+/** ロイロノート / スライド風の選択枠 */
+const SELECTION_YELLOW = "#FACC15";
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -180,6 +188,7 @@ export function IssueWorkspaceCanvas({
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<PinchState | null>(null);
   const [dragTick, setDragTick] = useState(0);
+  const toolbarMounted = useSyncExternalStore(subscribeNever, () => true, () => false);
   const toolbarHidden = editingId !== null;
 
   function resetScrollParents() {
@@ -600,8 +609,8 @@ export function IssueWorkspaceCanvas({
                     y1={start.y}
                     x2={end.x}
                     y2={end.y}
-                    stroke={selected ? "#EA580C" : arrow.color}
-                    strokeWidth={selected ? 3 : 2.5}
+                    stroke={selected ? SELECTION_YELLOW : arrow.color}
+                    strokeWidth={selected ? 3.5 : 2.5}
                     markerEnd="url(#issue-board-arrowhead)"
                   />
                   <line
@@ -625,15 +634,20 @@ export function IssueWorkspaceCanvas({
 
           {sortedNodes.map((node) => {
             const selected = selectedId === node.id || connectFromId === node.id;
+            const selectionStyle = selected
+              ? {
+                  outline: `3px solid ${SELECTION_YELLOW}`,
+                  outlineOffset: 2,
+                  boxShadow: `0 0 0 5px ${SELECTION_YELLOW}55, 2px 3px 0 rgba(0,0,0,0.08)`,
+                }
+              : { boxShadow: "2px 3px 0 rgba(0,0,0,0.08)" };
             if (node.kind === "sheet") {
               const colors = SHEET_COLORS[node.color];
               return (
                 <div
                   key={node.id}
                   data-board-node
-                  className={`absolute flex flex-col overflow-hidden rounded-sm shadow-md ${
-                    selected ? "ring-2 ring-orange-500 ring-offset-1" : ""
-                  }`}
+                  className="absolute flex flex-col overflow-hidden rounded-sm"
                   style={{
                     left: node.x,
                     top: node.y,
@@ -642,7 +656,7 @@ export function IssueWorkspaceCanvas({
                     zIndex: node.z,
                     backgroundColor: colors.bg,
                     border: `1px solid ${colors.border}`,
-                    boxShadow: "2px 3px 0 rgba(0,0,0,0.08)",
+                    ...selectionStyle,
                   }}
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                 >
@@ -679,7 +693,8 @@ export function IssueWorkspaceCanvas({
                       type="button"
                       data-board-ui
                       aria-label={tx("サイズ変更", "Resize")}
-                      className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize bg-orange-500/80"
+                      className="absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-se-resize rounded-sm border-2 border-white"
+                      style={{ backgroundColor: SELECTION_YELLOW }}
                       onPointerDown={(event) => onResizePointerDown(event, node)}
                     />
                   ) : null}
@@ -691,9 +706,7 @@ export function IssueWorkspaceCanvas({
               <div
                 key={node.id}
                 data-board-node
-                className={`absolute overflow-hidden rounded-sm bg-white shadow-md ${
-                  selected ? "ring-2 ring-orange-500 ring-offset-1" : ""
-                }`}
+                className="absolute overflow-hidden rounded-sm bg-white"
                 style={{
                   left: node.x,
                   top: node.y,
@@ -701,7 +714,7 @@ export function IssueWorkspaceCanvas({
                   height: node.h,
                   zIndex: node.z,
                   border: "1px solid #D4D4D8",
-                  boxShadow: "2px 3px 0 rgba(0,0,0,0.08)",
+                  ...selectionStyle,
                 }}
                 onPointerDown={(event) => onNodePointerDown(event, node)}
               >
@@ -712,7 +725,8 @@ export function IssueWorkspaceCanvas({
                     type="button"
                     data-board-ui
                     aria-label={tx("サイズ変更", "Resize")}
-                    className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize bg-orange-500/80"
+                    className="absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-se-resize rounded-sm border-2 border-white"
+                    style={{ backgroundColor: SELECTION_YELLOW }}
                     onPointerDown={(event) => onResizePointerDown(event, node)}
                   />
                 ) : null}
@@ -723,86 +737,90 @@ export function IssueWorkspaceCanvas({
 
       </div>
 
-      {/* 操作バー: 常に上端。文字入力中だけ上へ退避 */}
-      <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-[80] transition-transform duration-200 ease-out ${
-          toolbarHidden ? "-translate-y-[110%]" : "translate-y-0"
-        }`}
-      >
-        <div
-          data-board-ui
-          className="pointer-events-auto border-b border-zinc-200/80 bg-white/95 px-1.5 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-sm backdrop-blur"
-        >
-          <div className="flex items-center gap-1.5">
-            {toolbarStart}
-            <div className="flex min-w-0 flex-1 items-stretch justify-center gap-1.5">
-              <ActionButton
-                active={tool === "sheet"}
-                label={tx("用紙", "Sheet")}
-                onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
-                icon={StickyNote}
-                disabled={!canEdit}
-                accent="amber"
-              />
-              <ActionButton
-                active={false}
-                label={uploading ? tx("追加中", "Adding") : tx("添付", "Attach")}
-                onClick={() => {
-                  if (!canEdit) return;
-                  selectTool("navigate");
-                  onRequestPhoto();
-                }}
-                icon={Paperclip}
-                disabled={!canEdit || Boolean(uploading)}
-                accent="sky"
-              />
-              <ActionButton
-                active={tool === "arrow"}
-                label={tx("矢印", "Arrow")}
-                onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
-                icon={ArrowUpRight}
-                disabled={!canEdit}
-                accent="violet"
-              />
-            </div>
-            <button
-              type="button"
-              data-board-ui
-              disabled={!canEdit || !selectedId}
-              onClick={deleteSelected}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 disabled:opacity-30"
-              aria-label={tx("削除", "Delete")}
+      {toolbarMounted
+        ? createPortal(
+            <div
+              className={`pointer-events-none fixed inset-x-0 top-0 z-[500] transition-transform duration-200 ease-out ${
+                toolbarHidden ? "-translate-y-[110%]" : "translate-y-0"
+              }`}
             >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
+              <div
+                data-board-ui
+                className="pointer-events-auto border-b border-zinc-200 bg-white px-1.5 pb-1.5 pt-[max(0.35rem,env(safe-area-inset-top))] shadow-md"
+              >
+                <div className="mx-auto flex w-full max-w-3xl items-center gap-1.5">
+                  {toolbarStart}
+                  <div className="flex min-w-0 flex-1 items-stretch justify-center gap-1.5">
+                    <ActionButton
+                      active={tool === "sheet"}
+                      label={tx("用紙", "Sheet")}
+                      onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
+                      icon={StickyNote}
+                      disabled={!canEdit}
+                      accent="amber"
+                    />
+                    <ActionButton
+                      active={false}
+                      label={uploading ? tx("追加中", "Adding") : tx("添付", "Attach")}
+                      onClick={() => {
+                        if (!canEdit) return;
+                        selectTool("navigate");
+                        onRequestPhoto();
+                      }}
+                      icon={Paperclip}
+                      disabled={!canEdit || Boolean(uploading)}
+                      accent="sky"
+                    />
+                    <ActionButton
+                      active={tool === "arrow"}
+                      label={tx("矢印", "Arrow")}
+                      onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
+                      icon={ArrowUpRight}
+                      disabled={!canEdit}
+                      accent="violet"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    data-board-ui
+                    disabled={!canEdit || !selectedId}
+                    onClick={deleteSelected}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 disabled:opacity-30"
+                    aria-label={tx("削除", "Delete")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
 
-          <div className="mt-1.5 flex items-center justify-center gap-1" data-board-ui>
-            {SHEET_COLOR_ORDER.map((color) => (
-              <button
-                key={color}
-                type="button"
-                title={locale === "en" ? SHEET_COLORS[color].labelEn : SHEET_COLORS[color].labelJa}
-                disabled={!canEdit}
-                onClick={() => {
-                  setSheetColor(color);
-                  if (selectedId) {
-                    const node = nodeMap.get(selectedId);
-                    if (node?.kind === "sheet") updateItem(selectedId, { color });
-                  } else {
-                    selectTool("sheet");
-                  }
-                }}
-                className={`h-7 w-7 rounded-full border-2 shadow-sm transition ${
-                  sheetColor === color ? "scale-110 border-zinc-900" : "border-white"
-                } disabled:opacity-40`}
-                style={{ backgroundColor: SHEET_COLORS[color].bg }}
-                aria-label={locale === "en" ? SHEET_COLORS[color].labelEn : SHEET_COLORS[color].labelJa}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+                <div className="mx-auto mt-1.5 flex w-full max-w-3xl items-center justify-center gap-1" data-board-ui>
+                  {SHEET_COLOR_ORDER.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      title={locale === "en" ? SHEET_COLORS[color].labelEn : SHEET_COLORS[color].labelJa}
+                      disabled={!canEdit}
+                      onClick={() => {
+                        setSheetColor(color);
+                        if (selectedId) {
+                          const node = nodeMap.get(selectedId);
+                          if (node?.kind === "sheet") updateItem(selectedId, { color });
+                        } else {
+                          selectTool("sheet");
+                        }
+                      }}
+                      className={`h-7 w-7 rounded-full border-2 shadow-sm transition ${
+                        sheetColor === color ? "scale-110 border-zinc-900" : "border-white"
+                      } disabled:opacity-40`}
+                      style={{ backgroundColor: SHEET_COLORS[color].bg }}
+                      aria-label={locale === "en" ? SHEET_COLORS[color].labelEn : SHEET_COLORS[color].labelJa}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
