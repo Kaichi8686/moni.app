@@ -298,10 +298,10 @@ export default function WorkspaceIssues() {
               type="button"
               data-board-ui
               onClick={closeCanvas}
-              className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 hover:bg-zinc-100"
-              aria-label={tx("課題に戻る", "Back to task")}
+              className="mr-1 inline-flex h-9 min-w-[2.75rem] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 shrink-0" aria-hidden />
+              <span>{tx("戻る", "Back")}</span>
             </button>
           }
         />
