@@ -1028,26 +1028,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     ],
   );
 
-  const sectionLabel = useMemo(() => {
-    const segment = pathname?.split("/").filter(Boolean)[2] ?? "overview";
-    const labels: Record<string, [string, string]> = {
-      overview: ["概要", "Overview"],
-      roadmap: ["ロードマップ", "Roadmap"],
-      issues: ["課題", "Issues"],
-      coach: ["AI", "AI"],
-      "business-idea": ["アイデア", "Ideas"],
-      ideas: ["投票", "Voting"],
-      whiteboard: ["ボード", "Board"],
-      documents: ["資料", "Documents"],
-      members: ["メンバー", "Members"],
-      chat: ["メール", "Mail"],
-      recruit: ["募集", "Recruit"],
-      schedule: ["予定", "Schedule"],
-      activity: ["活動", "Activity"],
-    };
-    const label = labels[segment] ?? labels.overview;
-    return tx(label[0], label[1]);
-  }, [pathname, tx]);
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
 
   useEffect(() => {
@@ -1063,7 +1043,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     <WorkspaceCtx.Provider value={value}>
       <div className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isCoachChat ? "bg-white" : ""}`}>
         {isCoachChat ? null : (
-        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-2 backdrop-blur sm:px-4 sm:py-2.5">
+        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
           <div className="mx-auto max-w-3xl">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -1075,18 +1055,15 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   thumbnailUrl={projectMeta?.thumbnail_url}
                   icon={project?.icon}
                 />
-                <p className="mt-0.5 truncate pl-1.5 text-[11px] font-medium text-[#8A8F98]">
-                  {sectionLabel}
-                </p>
               </div>
               <div className="pointer-events-auto relative z-[110] shrink-0" ref={actionMenuRef}>
                 <button
                   type="button"
                   disabled={!project}
-                  className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md border transition disabled:opacity-50 ${
+                  className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full transition disabled:opacity-50 ${
                     actionMenuOpen
-                      ? "border-[#5E6AD2] bg-[#EEF0FF] text-[#5E6AD2]"
-                      : "border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F7F8F8]"
+                      ? "bg-[#EEF0FF] text-[#5E6AD2]"
+                      : "bg-zinc-100 text-[#374151] hover:bg-zinc-200/80"
                   }`}
                   aria-label={
                     pendingJoinRequestCount > 0
@@ -1108,7 +1085,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 >
                   <MoreHorizontal className="h-5 w-5" aria-hidden />
                   {pendingJoinRequestCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
                       {pendingJoinRequestCount > 9 ? "9+" : pendingJoinRequestCount}
                     </span>
                   ) : null}
