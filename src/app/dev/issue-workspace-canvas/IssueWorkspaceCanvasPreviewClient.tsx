@@ -53,22 +53,25 @@ export function IssueWorkspaceCanvasPreviewClient() {
         <h1 className="text-2xl font-bold text-zinc-950">課題作業スペース（フリーキャンバス）</h1>
         <p className="mt-1 text-sm text-zinc-600">用紙・写真・矢印の操作確認用</p>
       </div>
-      <IssueWorkspaceCanvas
-        board={board}
-        canEdit
-        onChange={setBoard}
-        onRequestPhoto={() => {
-          setBoard((prev) =>
-            appendImageToBoard(
-              prev,
-              "data:image/svg+xml," +
-                encodeURIComponent(
-                  `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="100%" height="100%" fill="#fed7aa"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22" fill="#9a3412">photo</text></svg>`,
-                ),
-            ),
-          );
-        }}
-      />
+      <div className="h-[min(80dvh,720px)] overflow-hidden rounded-2xl border border-zinc-200">
+        <IssueWorkspaceCanvas
+          board={board}
+          canEdit
+          fullscreen
+          onChange={setBoard}
+          onRequestPhoto={() => {
+            setBoard((prev) =>
+              appendImageToBoard(
+                prev,
+                "data:image/svg+xml," +
+                  encodeURIComponent(
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="100%" height="100%" fill="#fed7aa"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22" fill="#9a3412">photo</text></svg>`,
+                  ),
+              ),
+            );
+          }}
+        />
+      </div>
       <button
         type="button"
         className="self-start rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700"

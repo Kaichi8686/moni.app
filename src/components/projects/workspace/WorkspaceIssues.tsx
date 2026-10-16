@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, ArrowRight, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
@@ -10,7 +11,9 @@ import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import {
   boardFromPlainText,
+  boardPlainText,
   createEmptyBoard,
+  SHEET_COLORS,
   type IssueWorkspaceBoard,
 } from "@/lib/workspace/issueWorkspaceBoard";
 import {
@@ -28,7 +31,8 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type Screen =
   | { kind: "list" }
   | { kind: "genre"; genre: TaskGenre }
-  | { kind: "task"; genre: TaskGenre; issueId: string };
+  | { kind: "task"; genre: TaskGenre; issueId: string }
+  | { kind: "canvas"; genre: TaskGenre; issueId: string };
 
 export default function WorkspaceIssues() {
   const { tx, locale } = useI18n();
@@ -43,8 +47,10 @@ export default function WorkspaceIssues() {
     updateIssue,
     coachingContext,
     saveCoachingContext,
+    registerBackHandler,
   } = useProjectWorkspace();
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
+  const [portalReady, setPortalReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
   const [draftGenreLabel, setDraftGenreLabel] = useState("");
@@ -62,7 +68,7 @@ export default function WorkspaceIssues() {
   const fileRef = useRef<HTMLInputElement>(null);
   const boardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedFromQuery = useRef(false);
-  const taskId = screen.kind === "task" ? screen.issueId : "";
+  const taskId = screen.kind === "task" || screen.kind === "canvas" ? screen.issueId : "";
 
   const customGenres = useMemo(
     () => coachingContext.customTaskGenres ?? [],
@@ -98,12 +104,42 @@ export default function WorkspaceIssues() {
     };
   }, []);
 
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (screen.kind !== "canvas") {
+      registerBackHandler(null);
+      return;
+    }
+    registerBackHandler(() => {
+      setScreen({ kind: "task", genre: screen.genre, issueId: screen.issueId });
+      return true;
+    });
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      registerBackHandler(null);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [registerBackHandler, screen]);
+
   function persistBoard(issueId: string, board: IssueWorkspaceBoard) {
     setBoardDraft(board);
     if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
     boardSaveTimer.current = setTimeout(() => {
       void saveIssueWork(issueId, { workspaceBoard: board });
     }, 400);
+  }
+
+  function openCanvas(genre: TaskGenre, issueId: string) {
+    setScreen({ kind: "canvas", genre, issueId });
+  }
+
+  function closeCanvas() {
+    if (screen.kind !== "canvas") return;
+    setScreen({ kind: "task", genre: screen.genre, issueId: screen.issueId });
   }
 
   useEffect(() => {
@@ -141,7 +177,10 @@ export default function WorkspaceIssues() {
   const openIssues = issues.filter((issue) => issue.status !== "cancelled");
   const genreIssues = (genre: TaskGenre) => openIssues.filter((issue) => issue.genre === genre);
   const activeGenre = screen.kind === "list" ? null : screen.genre;
-  const activeIssue = screen.kind === "task" ? issues.find((issue) => issue.id === screen.issueId) ?? null : null;
+  const activeIssue =
+    screen.kind === "task" || screen.kind === "canvas"
+      ? issues.find((issue) => issue.id === screen.issueId) ?? null
+      : null;
   const activePhase = activeIssue?.phaseId ? phases.find((phase) => phase.id === activeIssue.phaseId) : undefined;
   const phaseIndex = activePhase ? phases.findIndex((phase) => phase.id === activePhase.id) : -1;
 
@@ -243,14 +282,64 @@ export default function WorkspaceIssues() {
     return tx(`期限を${Math.abs(days)}日過ぎています`, `${Math.abs(days)} days overdue`);
   }
 
+  if (screen.kind === "canvas" && activeIssue) {
+    if (!portalReady) return null;
+    return createPortal(
+      <div className="fixed inset-0 z-[240] flex flex-col bg-white">
+        <IssueWorkspaceCanvas
+          board={boardDraft}
+          canEdit={canEdit}
+          uploading={uploading}
+          fullscreen
+          onChange={(board) => persistBoard(activeIssue.id, board)}
+          onRequestPhoto={() => fileRef.current?.click()}
+          toolbarStart={
+            <button
+              type="button"
+              data-board-ui
+              onClick={closeCanvas}
+              className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 hover:bg-zinc-100"
+              aria-label={tx("課題に戻る", "Back to task")}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          }
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => void addPhotos(event.target.files)}
+        />
+        {error ? (
+          <p className="absolute bottom-4 left-1/2 z-10 max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
+            {error}
+          </p>
+        ) : null}
+        {uploading ? (
+          <p className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+            {tx("写真を追加中…", "Adding photo…")}
+          </p>
+        ) : null}
+      </div>,
+      document.body,
+    );
+  }
+
   if (screen.kind === "task" && activeIssue && activeGenre) {
     const meta = resolveGenreMeta(activeGenre, customGenres);
     const Icon = meta.icon;
     const submitted = isIssueSubmitted(activeIssue);
     const assignee = assigneeNames(activeIssue, names).join("、");
     const due = dueLabel(activeIssue);
+    const sheetCount = boardDraft.items.filter((item) => item.kind === "sheet").length;
+    const imageCount = boardDraft.items.filter((item) => item.kind === "image").length;
+    const previewSheets = boardDraft.items.filter((item) => item.kind === "sheet").slice(0, 4);
+    const previewText = boardPlainText(boardDraft);
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setScreen({ kind: "genre", genre: activeGenre })} className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100" aria-label={tx("戻る", "Back")}>
             <ArrowLeft className="h-5 w-5" />
@@ -310,36 +399,67 @@ export default function WorkspaceIssues() {
           </label>
         </div>
         <section className="space-y-2">
-          <div className="flex items-end justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-bold text-zinc-900">{tx("作業スペース", "Workspace")}</h2>
-              <p className="mt-0.5 text-[11px] text-zinc-500">
-                {tx(
-                  "色付き用紙・写真・矢印で自由に整理できます",
-                  "Arrange colored sheets, photos, and arrows freely",
-                )}
-              </p>
+          <h2 className="text-sm font-bold text-zinc-900">{tx("フリースペース", "Free space")}</h2>
+          <button
+            type="button"
+            onClick={() => openCanvas(activeGenre, activeIssue.id)}
+            className="group flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
+          >
+            <div
+              className="relative h-28 w-full overflow-hidden"
+              style={{
+                backgroundColor: "#F4F4F5",
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
+                backgroundSize: "16px 16px",
+              }}
+            >
+              {previewSheets.length > 0 ? (
+                <div className="absolute inset-0 flex items-center gap-2 px-4">
+                  {previewSheets.map((sheet) => (
+                    <span
+                      key={sheet.id}
+                      className="h-16 w-14 shrink-0 overflow-hidden rounded-sm border px-1 py-1 text-[9px] leading-tight text-zinc-800 shadow-sm"
+                      style={{
+                        backgroundColor: SHEET_COLORS[sheet.color].bg,
+                        borderColor: SHEET_COLORS[sheet.color].border,
+                      }}
+                    >
+                      {(sheet.text || " ").slice(0, 24)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center gap-2 text-zinc-400">
+                  <StickyNote className="h-5 w-5" />
+                  <span className="text-xs font-medium">{tx("まだ何も置いていません", "Nothing placed yet")}</span>
+                </div>
+              )}
             </div>
-            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
-              <Icon className="h-3.5 w-3.5" aria-hidden />
-              {uploading ? tx("写真を追加中…", "Adding photo…") : tx("ピンチで拡大縮小", "Pinch or Ctrl+scroll to zoom")}
-            </span>
-          </div>
-          <IssueWorkspaceCanvas
-            board={boardDraft}
-            canEdit={canEdit}
-            uploading={uploading}
-            onChange={(board) => persistBoard(activeIssue.id, board)}
-            onRequestPhoto={() => fileRef.current?.click()}
-          />
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(event) => void addPhotos(event.target.files)}
-          />
+            <div className="flex items-center gap-3 px-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-zinc-900">
+                  {tx("フリースペースを開く", "Open free space")}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-zinc-500">
+                  {previewText
+                    ? previewText
+                    : tx(
+                        `用紙 ${sheetCount}・写真 ${imageCount}`,
+                        `${sheetCount} sheets · ${imageCount} photos`,
+                      )}
+                </p>
+              </div>
+              <span className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3 text-sm font-semibold text-white group-hover:bg-orange-500">
+                {tx("移動", "Go")}
+                <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </button>
+          <p className="flex items-center gap-1 text-[11px] text-zinc-400">
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            {tx("全画面で用紙・写真・矢印を置けます", "Place sheets, photos, and arrows fullscreen")}
+          </p>
         </section>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
         <button

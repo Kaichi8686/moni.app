@@ -1,15 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   ArrowUpRight,
   Camera,
-  Hand,
   Minus,
-  MousePointer2,
   Plus,
   StickyNote,
   Trash2,
+  type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
@@ -27,7 +26,8 @@ import {
   type SheetColor,
 } from "@/lib/workspace/issueWorkspaceBoard";
 
-type Tool = "select" | "pan" | "sheet" | "image" | "arrow";
+/** navigate = 通常操作（紙を触る=選択/移動、空き地=パン） */
+type Tool = "navigate" | "sheet" | "arrow";
 
 type Props = {
   board: IssueWorkspaceBoard;
@@ -35,6 +35,10 @@ type Props = {
   uploading?: boolean;
   onChange: (board: IssueWorkspaceBoard) => void;
   onRequestPhoto: () => void;
+  /** 全画面レイアウト（課題フリースペース用） */
+  fullscreen?: boolean;
+  /** ツールバー左端（戻るボタンなど） */
+  toolbarStart?: ReactNode;
 };
 
 const MIN_ZOOM = 0.35;
@@ -43,6 +47,7 @@ const DEFAULT_SHEET_W = 200;
 const DEFAULT_SHEET_H = 160;
 const DEFAULT_IMAGE_W = 200;
 const DEFAULT_IMAGE_H = 150;
+const DOUBLE_TAP_MS = 380;
 
 type DragState =
   | { kind: "pan"; startX: number; startY: number; panX: number; panY: number }
@@ -68,10 +73,18 @@ function isNode(item: BoardItem): item is BoardNode {
   return item.kind === "sheet" || item.kind === "image";
 }
 
-export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRequestPhoto }: Props) {
+export function IssueWorkspaceCanvas({
+  board,
+  canEdit,
+  uploading,
+  onChange,
+  onRequestPhoto,
+  fullscreen = false,
+  toolbarStart,
+}: Props) {
   const { tx, locale } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [tool, setTool] = useState<Tool>("select");
+  const [tool, setTool] = useState<Tool>("navigate");
   const [sheetColor, setSheetColor] = useState<SheetColor>("yellow");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
@@ -79,6 +92,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
   const [pan, setPan] = useState({ x: 24, y: 24 });
   const [zoom, setZoom] = useState(1);
   const dragRef = useRef<DragState | null>(null);
+  const lastTapRef = useRef<{ id: string; at: number } | null>(null);
   const [dragTick, setDragTick] = useState(0);
 
   const nodes = useMemo(() => board.items.filter(isNode), [board.items]);
@@ -92,10 +106,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
     return map;
   }, [nodes]);
 
-  const sortedNodes = useMemo(
-    () => [...nodes].sort((a, b) => a.z - b.z),
-    [nodes],
-  );
+  const sortedNodes = useMemo(() => [...nodes].sort((a, b) => a.z - b.z), [nodes]);
 
   function selectTool(next: Tool) {
     setTool(next);
@@ -107,9 +118,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
   }
 
   function updateItem(id: string, patch: Partial<BoardItem>) {
-    commit(
-      board.items.map((item) => (item.id === id ? ({ ...item, ...patch } as BoardItem) : item)),
-    );
+    commit(board.items.map((item) => (item.id === id ? ({ ...item, ...patch } as BoardItem) : item)));
   }
 
   function clientToWorld(clientX: number, clientY: number) {
@@ -137,7 +146,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
     commit([...board.items, sheet]);
     setSelectedId(sheet.id);
     setEditingId(sheet.id);
-    selectTool("select");
+    selectTool("navigate");
   }
 
   function deleteSelected() {
@@ -155,26 +164,14 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
   }
 
   function bringToFront(id: string) {
-    const z = nextZ(board.items);
-    updateItem(id, { z } as Partial<BoardItem>);
+    updateItem(id, { z: nextZ(board.items) } as Partial<BoardItem>);
   }
 
   function onCanvasPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-board-ui]")) return;
-
-    if (tool === "pan" || event.altKey) {
-      dragRef.current = {
-        kind: "pan",
-        startX: event.clientX,
-        startY: event.clientY,
-        panX: pan.x,
-        panY: pan.y,
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      return;
-    }
+    if (target.closest("[data-board-node]")) return;
 
     if (tool === "sheet" && canEdit) {
       const world = clientToWorld(event.clientX, event.clientY);
@@ -182,17 +179,18 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
       return;
     }
 
-    if (tool === "image" && canEdit) {
-      onRequestPhoto();
-      return;
-    }
-
-    // empty canvas click
-    if (!(event.target as HTMLElement).closest("[data-board-node]")) {
-      setSelectedId(null);
-      setEditingId(null);
-      setConnectFromId(null);
-    }
+    // 空きスペース: ビューをパン（自分自身が移動）
+    setSelectedId(null);
+    setEditingId(null);
+    if (tool === "arrow") setConnectFromId(null);
+    dragRef.current = {
+      kind: "pan",
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function onNodePointerDown(event: ReactPointerEvent<HTMLDivElement>, node: BoardNode) {
@@ -231,13 +229,17 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
       }
       setConnectFromId(null);
       setSelectedId(node.id);
-      selectTool("select");
+      selectTool("navigate");
       return;
     }
 
-    if (tool === "pan") return;
+    if (tool === "sheet") {
+      // 用紙ツール中に既存の紙を触ったら通常操作へ
+      selectTool("navigate");
+    }
 
     setSelectedId(node.id);
+    setEditingId(null);
     bringToFront(node.id);
     dragRef.current = {
       kind: "move",
@@ -282,9 +284,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
       commit(
         board.items.map((item) =>
-          item.id === drag.id && isNode(item)
-            ? { ...item, x: drag.origX + dx, y: drag.origY + dy }
-            : item,
+          item.id === drag.id && isNode(item) ? { ...item, x: drag.origX + dx, y: drag.origY + dy } : item,
         ),
       );
       setDragTick((n) => n + 1);
@@ -306,13 +306,20 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
     }
   }
 
-  function onPointerUp() {
+  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag?.kind === "move" && !drag.moved) {
-      const node = nodeMap.get(drag.id);
-      if (node?.kind === "sheet") setEditingId(node.id);
+    if (!drag || drag.kind !== "move" || drag.moved) return;
+    const node = nodeMap.get(drag.id);
+    if (!node || node.kind !== "sheet" || !canEdit) return;
+    const now = event.timeStamp;
+    const prev = lastTapRef.current;
+    if (prev && prev.id === drag.id && now - prev.at <= DOUBLE_TAP_MS) {
+      setEditingId(node.id);
+      lastTapRef.current = null;
+      return;
     }
+    lastTapRef.current = { id: drag.id, at: now };
   }
 
   function onWheel(event: React.WheelEvent<HTMLDivElement>) {
@@ -322,40 +329,32 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
     setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor)));
   }
 
-  // silence unused dragTick (forces re-render during drag for arrow follow)
   void dragTick;
 
+  const shellClass = fullscreen
+    ? "flex h-full min-h-0 w-full flex-col bg-zinc-100"
+    : "overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm">
+    <div className={shellClass}>
       <div
         data-board-ui
-        className="flex flex-wrap items-center gap-1.5 border-b border-zinc-200 bg-white/95 px-2 py-2"
+        className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-zinc-200 bg-white/95 px-2 py-2"
       >
-        <ToolButton
-          active={tool === "select"}
-          label={tx("選択", "Select")}
-          onClick={() => selectTool("select")}
-          icon={MousePointer2}
-        />
-        <ToolButton
-          active={tool === "pan"}
-          label={tx("移動", "Pan")}
-          onClick={() => selectTool("pan")}
-          icon={Hand}
-        />
+        {toolbarStart}
         <ToolButton
           active={tool === "sheet"}
           label={tx("用紙", "Sheet")}
-          onClick={() => canEdit && selectTool("sheet")}
+          onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
           icon={StickyNote}
           disabled={!canEdit}
         />
         <ToolButton
-          active={tool === "image"}
+          active={false}
           label={tx("写真", "Photo")}
           onClick={() => {
             if (!canEdit) return;
-            selectTool("image");
+            selectTool("navigate");
             onRequestPhoto();
           }}
           icon={Camera}
@@ -364,7 +363,7 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
         <ToolButton
           active={tool === "arrow"}
           label={tx("矢印", "Arrow")}
-          onClick={() => canEdit && selectTool("arrow")}
+          onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
           icon={ArrowUpRight}
           disabled={!canEdit}
         />
@@ -437,14 +436,14 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
       </div>
 
       {tool === "arrow" ? (
-        <p className="border-b border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900">
+        <p className="shrink-0 border-b border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900">
           {connectFromId
             ? tx("つなげ先の用紙や写真をタップ", "Tap the target sheet or photo")
             : tx("つなぎ始めの用紙や写真をタップ", "Tap the starting sheet or photo")}
         </p>
       ) : null}
       {tool === "sheet" ? (
-        <p className="border-b border-sky-100 bg-sky-50 px-3 py-1.5 text-[11px] font-medium text-sky-900">
+        <p className="shrink-0 border-b border-sky-100 bg-sky-50 px-3 py-1.5 text-[11px] font-medium text-sky-900">
           {tx("キャンバスをタップして用紙を置く", "Tap the canvas to place a colored sheet")}
         </p>
       ) : null}
@@ -452,9 +451,9 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
       <div
         ref={rootRef}
         id="issue-workspace-canvas-surface"
-        className={`relative h-[min(70vh,560px)] w-full touch-none overflow-hidden ${
-          tool === "pan" ? "cursor-grab active:cursor-grabbing" : tool === "sheet" ? "cursor-crosshair" : "cursor-default"
-        }`}
+        className={`relative min-h-0 w-full flex-1 touch-none overflow-hidden ${
+          fullscreen ? "h-full" : "h-[min(70vh,560px)]"
+        } ${tool === "sheet" ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
         style={{
           backgroundColor: "#F4F4F5",
           backgroundImage:
@@ -508,7 +507,6 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
                     strokeWidth={selected ? 3 : 2.5}
                     markerEnd="url(#issue-board-arrowhead)"
                   />
-                  {/* hit area */}
                   <line
                     x1={start.x}
                     y1={start.y}
@@ -564,18 +562,13 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
                       className="min-h-0 flex-1 resize-none bg-transparent px-2.5 py-2 text-sm leading-relaxed text-zinc-900 outline-none placeholder:text-zinc-400"
                     />
                   ) : (
-                    <button
-                      type="button"
-                      className="min-h-0 flex-1 overflow-hidden px-2.5 py-2 text-left text-sm leading-relaxed text-zinc-900 whitespace-pre-wrap"
-                      onDoubleClick={(event) => {
-                        event.stopPropagation();
-                        if (canEdit) setEditingId(node.id);
-                      }}
-                    >
+                    <div className="min-h-0 flex-1 overflow-hidden px-2.5 py-2 text-left text-sm leading-relaxed text-zinc-900 whitespace-pre-wrap">
                       {node.text.trim() || (
-                        <span className="text-zinc-400">{tx("タップして編集", "Tap to edit")}</span>
+                        <span className="text-zinc-400">
+                          {tx("ダブルタップで編集", "Double-tap to edit")}
+                        </span>
                       )}
-                    </button>
+                    </div>
                   )}
                   {selected && canEdit ? (
                     <button
@@ -628,8 +621,8 @@ export function IssueWorkspaceCanvas({ board, canEdit, uploading, onChange, onRe
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
             <div className="max-w-xs rounded-2xl bg-white/90 px-4 py-3 text-center text-sm text-zinc-600 shadow-sm backdrop-blur">
               {tx(
-                "色付きの用紙を置いてメモしたり、写真を貼ったり、矢印でつなげられます",
-                "Place colored sheets, add photos, and connect them with arrows",
+                "空き地をドラッグで移動。用紙はドラッグで動かして、ダブルタップで文字入力。",
+                "Drag empty space to pan. Drag sheets to move them, double-tap to type.",
               )}
             </div>
           </div>
@@ -649,7 +642,7 @@ function ToolButton({
   active: boolean;
   label: string;
   onClick: () => void;
-  icon: typeof Hand;
+  icon: LucideIcon;
   disabled?: boolean;
 }) {
   return (
