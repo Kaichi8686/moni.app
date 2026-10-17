@@ -83,6 +83,8 @@ type Props = {
   onModeChange?: (mode: IdeaPersonalAiMode) => void;
   /** Open the mobile history sheet once after mount */
   openHistoryOnMount?: boolean;
+  /** Hub: open as a brand-new chat thread on mount */
+  startFreshOnMount?: boolean;
 };
 
 export function IdeaInterviewApp({
@@ -92,6 +94,7 @@ export function IdeaInterviewApp({
   onExit,
   onModeChange,
   openHistoryOnMount = false,
+  startFreshOnMount = false,
 }: Props) {
   const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
@@ -146,6 +149,11 @@ export function IdeaInterviewApp({
     if (!openHistoryOnMount || !hydrated) return;
     setHistoryOpen(true);
   }, [openHistoryOnMount, hydrated]);
+
+  // Must run before hydrate so the first load is a blank "新規" thread.
+  if (startFreshOnMount && !hydrated) {
+    startFreshOnModeChangeRef.current = true;
+  }
 
   useEffect(() => {
     setOwnerReady(true);
@@ -738,9 +746,13 @@ export function IdeaInterviewApp({
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {showModeHome ? (
-            <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
+            <div
+              className={`flex flex-col items-center justify-center gap-4 px-2 ${
+                isHub ? "min-h-full py-8" : "min-h-[240px] py-6"
+              }`}
+            >
               {isHub ? (
-                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => switchHubMode("consult")}
@@ -778,7 +790,7 @@ export function IdeaInterviewApp({
                 </div>
               )}
 
-              <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
+              <p className="max-w-sm text-center text-[13px] leading-relaxed text-[#6B7280]">
                 {isConsult
                   ? tx(
                       "困っていることや質問を、そのまま送ってください。会話は自動保存され、履歴からいつでも続けられます。",
@@ -791,7 +803,7 @@ export function IdeaInterviewApp({
               </p>
 
               {!isConsult ? (
-                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
                   {IDEA_INTERVIEW_THEMES.map((t) => {
                     const starter = THEME_STARTERS[t.id];
                     return (

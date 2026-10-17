@@ -35,6 +35,7 @@ function IdeaHubInner() {
   const aiMode: IdeaPersonalAiMode = urlTab === "excavate" ? "excavate" : "consult";
 
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
+  const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
 
   const replaceTab = useCallback(
@@ -56,12 +57,14 @@ function IdeaHubInner() {
 
   const goHome = useCallback(() => {
     setOpenHistoryOnChat(false);
+    setStartFreshOnChat(false);
     replaceTab("mine");
   }, [replaceTab]);
 
   const openAi = useCallback(
     (mode: IdeaPersonalAiMode = "consult") => {
       setOpenHistoryOnChat(false);
+      setStartFreshOnChat(true);
       setChatKey((k) => k + 1);
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
@@ -70,6 +73,7 @@ function IdeaHubInner() {
 
   const setAiMode = useCallback(
     (mode: IdeaPersonalAiMode) => {
+      setStartFreshOnChat(false);
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
     [replaceTab],
@@ -95,6 +99,7 @@ function IdeaHubInner() {
           onExit={goHome}
           onModeChange={setAiMode}
           openHistoryOnMount={openHistoryOnChat}
+          startFreshOnMount={startFreshOnChat}
         />
       ) : null}
 
