@@ -1250,7 +1250,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         >
           <main
             className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
-              isCoachChat ? "h-[100dvh]" : isRecruitPage ? "h-[calc(100dvh-3.25rem)]" : ""
+              isCoachChat ? "h-[100dvh]" : isRecruitPage ? "flex min-h-0 flex-1 flex-col" : ""
             }`}
           >
             <div
@@ -1258,7 +1258,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 isCoachChat
                   ? "h-full"
                   : isRecruitPage
-                    ? "h-full overflow-y-auto"
+                    ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
                     : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >
