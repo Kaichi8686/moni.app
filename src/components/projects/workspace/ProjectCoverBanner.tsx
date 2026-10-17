@@ -19,7 +19,7 @@ type Props = {
 };
 
 /**
- * プロフィール画面の背景バナーと同型。プロジェクト写真をフル幅で表示し、権限があればその場で差し替えできる。
+ * プロフィール画面の背景バナーと同型。端まで敷き詰め、権限があればその場で差し替えできる。
  */
 export function ProjectCoverBanner({
   backgroundUrl,
@@ -61,7 +61,8 @@ export function ProjectCoverBanner({
   }
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+    // ワークスペース main の px/py を打ち消し、プロフィール同様に端まで敷く
+    <section className="-mx-4 -mt-4 border-b border-zinc-200 bg-white md:-mx-6 md:-mt-5">
       <div className="relative h-44 w-full overflow-hidden bg-zinc-100 sm:h-52">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
@@ -107,22 +108,24 @@ export function ProjectCoverBanner({
         ) : null}
       </div>
 
-      <div className="px-4 pb-5 pt-0 sm:px-5">
-        <div className="relative z-10 -mt-9 flex items-end gap-4">
-          <div className="shrink-0 rounded-[14px] bg-white p-0.5 shadow-sm ring-1 ring-zinc-200/80">
-            {url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-              <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover sm:h-20 sm:w-20" />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-orange-100 text-3xl sm:h-20 sm:w-20">
-                {iconFallback ?? "📁"}
-              </div>
-            )}
+      <div className="px-4 pb-5 sm:px-5 md:px-6">
+        <div className="relative z-10 mx-auto max-w-3xl">
+          <div className="-mt-9 flex items-end gap-4">
+            <div className="shrink-0 rounded-[14px] bg-white p-0.5 shadow-sm ring-1 ring-zinc-200/80">
+              {url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                <img src={url} alt="" className="h-16 w-16 rounded-xl object-cover sm:h-20 sm:w-20" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-orange-100 text-3xl sm:h-20 sm:w-20">
+                  {iconFallback ?? "📁"}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 pb-0.5 pt-10">{title}</div>
           </div>
-          <div className="min-w-0 flex-1 pb-0.5 pt-10">{title}</div>
+          {children}
+          {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
         </div>
-        {children}
-        {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
       </div>
     </section>
   );

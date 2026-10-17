@@ -164,7 +164,7 @@ export default function WorkspaceOverview() {
         : 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-7 pb-8">
+    <div className="pb-8">
       <ProjectCoverBanner
         key={projectId}
         backgroundUrl={backgroundUrl}
@@ -205,6 +205,7 @@ export default function WorkspaceOverview() {
         </div>
       </ProjectCoverBanner>
 
+      <div className="mx-auto max-w-3xl space-y-7 pt-7">
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
@@ -409,6 +410,7 @@ export default function WorkspaceOverview() {
           <CompactLink href={`/projects/${projectId}/recruit`} icon={Megaphone} label={tx("募集", "Recruit")} />
         </div>
       </section>
+      </div>
     </div>
   );
 }
