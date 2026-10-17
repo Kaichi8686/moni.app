@@ -1047,6 +1047,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   );
 
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
+  const isRecruitPage =
+    pathname === `/projects/${projectId}/recruit` || pathname?.startsWith(`/projects/${projectId}/recruit/`);
+  const isImmersivePage = isCoachChat || isRecruitPage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1059,10 +1062,14 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
 
   return (
     <WorkspaceCtx.Provider value={value}>
-      <div className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isCoachChat ? "bg-white" : ""}`}>
+      <div
+        className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""} ${
+          isRecruitPage ? "flex flex-col" : ""
+        }`}
+      >
         {isCoachChat ? null : (
         <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
-          <div className="mx-auto max-w-3xl">
+          <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <ProjectWorkspaceSwitcher
@@ -1232,9 +1239,29 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           ) : null}
         </header>
         )}
-        <div className={isCoachChat ? "min-h-[100dvh]" : "min-h-[calc(100dvh-3.75rem)]"}>
-          <main className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${isCoachChat ? "h-[100dvh]" : ""}`}>
-            <div className={isCoachChat ? "h-full" : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"}>
+        <div
+          className={
+            isCoachChat
+              ? "min-h-[100dvh]"
+              : isRecruitPage
+                ? "min-h-0 flex-1"
+                : "min-h-[calc(100dvh-3.75rem)]"
+          }
+        >
+          <main
+            className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
+              isCoachChat ? "h-[100dvh]" : isRecruitPage ? "h-[calc(100dvh-3.25rem)]" : ""
+            }`}
+          >
+            <div
+              className={
+                isCoachChat
+                  ? "h-full"
+                  : isRecruitPage
+                    ? "h-full overflow-y-auto"
+                    : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
+              }
+            >
               {error && !isCoachChat ? (
                 <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {error}
