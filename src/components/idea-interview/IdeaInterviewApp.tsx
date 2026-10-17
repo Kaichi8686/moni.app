@@ -76,12 +76,18 @@ type Props = {
   projectId?: string;
   /** Hub default mode (相談 tab → consult, 発掘 tab → excavate) */
   initialMode?: IdeaPersonalAiMode;
+  /** Hub: leave chat and return to My ideas */
+  onExit?: () => void;
+  /** Open the mobile history sheet once after mount */
+  openHistoryOnMount?: boolean;
 };
 
 export function IdeaInterviewApp({
   variant = "standalone",
   projectId,
   initialMode = "excavate",
+  onExit,
+  openHistoryOnMount = false,
 }: Props) {
   const { tx, locale } = useI18n();
   const isProject = variant === "project" && Boolean(projectId);
@@ -131,6 +137,11 @@ export function IdeaInterviewApp({
   useEffect(() => {
     if (!isProject) setAiMode(initialMode);
   }, [initialMode, isProject]);
+
+  useEffect(() => {
+    if (!openHistoryOnMount || !hydrated) return;
+    setHistoryOpen(true);
+  }, [openHistoryOnMount, hydrated]);
 
   useEffect(() => {
     setOwnerReady(true);
@@ -634,7 +645,7 @@ export function IdeaInterviewApp({
   }
 
   const shellClass = isHub
-    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-7.5rem)] min-h-[420px] w-full overflow-hidden bg-white"
+    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-3.75rem)] min-h-[420px] w-full overflow-hidden bg-white"
     : isProject
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
@@ -650,7 +661,16 @@ export function IdeaInterviewApp({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
           <div className="flex items-center gap-2">
-            {!isHub ? (
+            {isHub && onExit ? (
+              <button
+                type="button"
+                onClick={onExit}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                aria-label={tx("マイアイデアに戻る", "Back to My ideas")}
+              >
+                <ArrowLeft className="h-5 w-5" aria-hidden />
+              </button>
+            ) : !isHub ? (
               <Link
                 href={exitHref}
                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
