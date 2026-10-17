@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useRef, useState, type ComponentType } from "react";
 import {
+  Camera,
   Check,
   FileText,
+  ImagePlus,
   ListChecks,
   Megaphone,
   MessageCircle,
@@ -14,15 +16,17 @@ import {
   Sparkles,
   Vote,
 } from "lucide-react";
-import { ProjectCoverBanner } from "@/components/projects/workspace/ProjectCoverBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -86,13 +90,17 @@ export default function WorkspaceOverview() {
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
-  const backgroundUrl = projectMeta?.thumbnail_url?.trim() || "";
+  const photoUrl = (photoPreview ?? projectMeta?.thumbnail_url)?.trim() || "";
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -128,25 +136,37 @@ export default function WorkspaceOverview() {
     [issues, uid],
   );
 
-  async function handleBackgroundUpload(file: File): Promise<string> {
-    if (!canEdit || !supabase) {
-      throw new Error(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
+  async function handlePhotoUpload(file: File | null) {
+    if (!file || !canEdit || !supabase) return;
+    const validationErr = validateProjectImageFile(file);
+    if (validationErr) {
+      setPhotoError(validationErr);
+      return;
     }
-    const { data: session } = await supabase.auth.getSession();
-    const token = session.session?.access_token;
-    if (!token) throw new Error(tx("ログインが必要です", "Login required"));
-    const body = new FormData();
-    body.append("file", file);
-    body.append("projectId", projectId);
-    const res = await fetch("/api/upload-project-image", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body,
-    });
-    const json = (await res.json()) as { publicUrl?: string; error?: string };
-    if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
-    await wsReload();
-    return json.publicUrl ?? "";
+    setPhotoUploading(true);
+    setPhotoError("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const body = new FormData();
+      body.append("file", file);
+      body.append("projectId", projectId);
+      const res = await fetch("/api/upload-project-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const json = (await res.json()) as { publicUrl?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+      setPhotoPreview(json.publicUrl ?? null);
+      await wsReload();
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : tx("写真の変更に失敗しました", "Couldn’t change photo"));
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
   }
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
@@ -164,36 +184,69 @@ export default function WorkspaceOverview() {
         : 0;
 
   return (
-    <div className="pb-8">
-      <ProjectCoverBanner
-        key={projectId}
-        backgroundUrl={backgroundUrl}
-        canEdit={canEdit}
-        iconFallback={project.icon ?? "📁"}
-        onUpload={handleBackgroundUpload}
-        title={
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{project.name}</h2>
-              <p className="mt-1 text-[12px] text-zinc-500">
-                {tx(`${project.members.length}人のメンバー`, `${project.members.length} members`)}
+    <div className="mx-auto max-w-3xl space-y-7 pb-8">
+      <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-start gap-4">
+          <div className="relative shrink-0">
+            <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">
+                  {project.icon ?? "📁"}
+                </div>
+              )}
+            </div>
+            {canEdit ? (
+              <>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => void handlePhotoUpload(e.target.files?.[0] ?? null)}
+                />
+                <button
+                  type="button"
+                  disabled={photoUploading}
+                  onClick={() => photoInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
+                  aria-label={
+                    photoUrl ? tx("プロジェクト写真を変更", "Change project photo") : tx("プロジェクト写真を追加", "Add project photo")
+                  }
+                  title={
+                    photoUrl ? tx("プロジェクト写真を変更", "Change project photo") : tx("プロジェクト写真を追加", "Add project photo")
+                  }
+                >
+                  {photoUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                </button>
+              </>
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{project.name}</h2>
+                <p className="mt-1 text-[12px] text-zinc-500">
+                  {tx(`${project.members.length}人のメンバー`, `${project.members.length} members`)}
+                </p>
+                <p className="mt-1 text-[13px] font-medium text-zinc-700">
+                  {sortedPhases.length > 0
+                    ? tx(
+                        `ステップ ${completedSteps}/${sortedPhases.length} 完了`,
+                        `${completedSteps}/${sortedPhases.length} steps complete`,
+                      )
+                    : tx("ロードマップ未設定", "Roadmap not set")}
+                </p>
+              </div>
+              <p className="shrink-0 text-2xl font-semibold tabular-nums tracking-tight text-orange-500 sm:text-3xl">
+                {progress}%
               </p>
             </div>
-            <p className="shrink-0 text-2xl font-semibold tabular-nums tracking-tight text-orange-500 sm:text-3xl">
-              {progress}%
-            </p>
           </div>
-        }
-      >
-        <p className="mt-3 text-[13px] font-medium text-zinc-700">
-          {sortedPhases.length > 0
-            ? tx(
-                `ステップ ${completedSteps}/${sortedPhases.length} 完了`,
-                `${completedSteps}/${sortedPhases.length} steps complete`,
-              )
-            : tx("ロードマップ未設定", "Roadmap not set")}
-        </p>
-        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100">
+        </div>
+        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-zinc-100">
           <div
             className="h-full rounded-full bg-orange-400 transition-[width] duration-500"
             style={{ width: `${progress}%` }}
@@ -203,9 +256,10 @@ export default function WorkspaceOverview() {
             aria-valuenow={progress}
           />
         </div>
-      </ProjectCoverBanner>
+        {photoError ? <p className="mt-2 text-xs text-rose-600">{photoError}</p> : null}
+        {photoUploading ? <p className="mt-2 text-xs text-zinc-500">{tx("アップロード中…", "Uploading…")}</p> : null}
+      </section>
 
-      <div className="mx-auto max-w-3xl space-y-7 pt-7">
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
@@ -410,7 +464,6 @@ export default function WorkspaceOverview() {
           <CompactLink href={`/projects/${projectId}/recruit`} icon={Megaphone} label={tx("募集", "Recruit")} />
         </div>
       </section>
-      </div>
     </div>
   );
 }
