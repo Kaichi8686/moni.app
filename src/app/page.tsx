@@ -38,6 +38,7 @@ import {
   type ProjectNotificationRow,
 } from "@/lib/projects/notifications";
 import { formatNotificationBody } from "@/lib/projects/projectInvites";
+import { submitUserReport } from "@/lib/report/submitUserReport";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -1584,6 +1585,32 @@ export default function Home() {
       status: "new",
     };
     setReports((prev) => [entry, ...prev].slice(0, 200));
+
+    // プロフィール通報は API 経由で DB 保存 + オーナーへメール通知
+    if (targetType === "profile") {
+      if (!session) {
+        setAuthMessage("通報にはログインが必要です。");
+        return;
+      }
+      const result = await submitUserReport({
+        targetUserId: targetId,
+        reason,
+        excerpt: entry.excerpt,
+        targetType: "profile",
+      });
+      if (!result.ok) {
+        setAuthMessage(`通報の送信に失敗: ${result.error}`);
+        return;
+      }
+      setAuthMessage(
+        result.emailSent === false
+          ? "通報を受け付けました（メール通知は失敗した可能性があります）。"
+          : "通報を受け付けました。運営に通知しました。",
+      );
+      trackOpsEvent(`report_${targetType}`);
+      return;
+    }
+
     if (supabase && session) {
       const { error } = await supabase.from("reports").insert({
         target_type: targetType,

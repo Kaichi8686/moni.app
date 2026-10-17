@@ -291,6 +291,7 @@ export function ProfileHeader({
               isFollowing={isFollowing}
               isPending={isPending}
               profileId={profile.id}
+              profileDisplayName={profile.displayName}
               onFollowChange={onFollowChange}
             />
           </div>
