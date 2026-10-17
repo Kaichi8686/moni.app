@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useRef, useState, type ComponentType } from "react";
 import {
+  Camera,
   Check,
   FileText,
+  ImagePlus,
   ListChecks,
   Megaphone,
   MessageCircle,
@@ -17,10 +19,14 @@ import {
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
+import { supabase } from "@/lib/supabase";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -80,15 +86,21 @@ export default function WorkspaceOverview() {
     phases: workspacePhases,
     loading,
     uid,
+    canEdit,
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
+  const photoUrl = (photoPreview ?? projectMeta?.thumbnail_url)?.trim() || "";
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -124,6 +136,39 @@ export default function WorkspaceOverview() {
     [issues, uid],
   );
 
+  async function handlePhotoUpload(file: File | null) {
+    if (!file || !canEdit || !supabase) return;
+    const validationErr = validateProjectImageFile(file);
+    if (validationErr) {
+      setPhotoError(validationErr);
+      return;
+    }
+    setPhotoUploading(true);
+    setPhotoError("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const body = new FormData();
+      body.append("file", file);
+      body.append("projectId", projectId);
+      const res = await fetch("/api/upload-project-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const json = (await res.json()) as { publicUrl?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+      setPhotoPreview(json.publicUrl ?? null);
+      await wsReload();
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : tx("写真の変更に失敗しました", "Couldn’t change photo"));
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
@@ -142,18 +187,43 @@ export default function WorkspaceOverview() {
     <div className="mx-auto max-w-3xl space-y-7 pb-8">
       <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex items-start gap-4">
-          {projectMeta?.thumbnail_url?.trim() ? (
-            // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-            <img
-              src={projectMeta.thumbnail_url.trim()}
-              alt=""
-              className="h-16 w-16 shrink-0 rounded-2xl border border-zinc-200 object-cover sm:h-20 sm:w-20"
-            />
-          ) : (
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-3xl sm:h-20 sm:w-20">
-              {project.icon ?? "📁"}
+          <div className="relative shrink-0">
+            <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">
+                  {project.icon ?? "📁"}
+                </div>
+              )}
             </div>
-          )}
+            {canEdit ? (
+              <>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => void handlePhotoUpload(e.target.files?.[0] ?? null)}
+                />
+                <button
+                  type="button"
+                  disabled={photoUploading}
+                  onClick={() => photoInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
+                  aria-label={
+                    photoUrl ? tx("プロジェクト写真を変更", "Change project photo") : tx("プロジェクト写真を追加", "Add project photo")
+                  }
+                  title={
+                    photoUrl ? tx("プロジェクト写真を変更", "Change project photo") : tx("プロジェクト写真を追加", "Add project photo")
+                  }
+                >
+                  {photoUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                </button>
+              </>
+            ) : null}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -186,6 +256,8 @@ export default function WorkspaceOverview() {
             aria-valuenow={progress}
           />
         </div>
+        {photoError ? <p className="mt-2 text-xs text-rose-600">{photoError}</p> : null}
+        {photoUploading ? <p className="mt-2 text-xs text-zinc-500">{tx("アップロード中…", "Uploading…")}</p> : null}
       </section>
 
       <section>

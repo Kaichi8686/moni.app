@@ -297,6 +297,12 @@ export function ProjectSettingsModal({
 
             <div>
               <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真", "Photo")}</span>
+              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
+                {tx(
+                  "プロジェクト概要の正方形写真と、探すタブのカードに使われます。",
+                  "Used for the square photo on the project overview and Discover cards.",
+                )}
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
