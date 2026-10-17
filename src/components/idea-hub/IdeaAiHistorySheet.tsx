@@ -21,23 +21,31 @@ type HistoryRow = {
   mode: IdeaPersonalAiMode;
 };
 
+function hasUserMessage(messages: { role: string }[] | undefined): boolean {
+  return Boolean(messages?.some((m) => m.role === "user"));
+}
+
 function toRows(
   excavate: IdeaInterviewConversation[],
   consult: AiSavedConversation[],
 ): HistoryRow[] {
   const rows: HistoryRow[] = [
-    ...excavate.map((c) => ({
-      id: `excavate:${c.id}`,
-      title: c.title,
-      updatedAt: c.updatedAt,
-      mode: "excavate" as const,
-    })),
-    ...consult.map((c) => ({
-      id: `consult:${c.id}`,
-      title: c.title,
-      updatedAt: c.updatedAt,
-      mode: "consult" as const,
-    })),
+    ...excavate
+      .filter((c) => hasUserMessage(c.messages) || c.meta.phase === "results" || c.meta.phase === "chat")
+      .map((c) => ({
+        id: `excavate:${c.id}`,
+        title: c.title,
+        updatedAt: c.updatedAt,
+        mode: "excavate" as const,
+      })),
+    ...consult
+      .filter((c) => hasUserMessage(c.messages))
+      .map((c) => ({
+        id: `consult:${c.id}`,
+        title: c.title,
+        updatedAt: c.updatedAt,
+        mode: "consult" as const,
+      })),
   ];
   return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
