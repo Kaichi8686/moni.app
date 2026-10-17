@@ -8,6 +8,7 @@ import {
   Check,
   History,
   Loader2,
+  MessageCircle,
   MessageSquarePlus,
   Sparkles,
   Users,
@@ -78,6 +79,8 @@ type Props = {
   initialMode?: IdeaPersonalAiMode;
   /** Hub: leave chat and return to My ideas */
   onExit?: () => void;
+  /** Hub: sync URL when switching 相談 / 発掘 cards */
+  onModeChange?: (mode: IdeaPersonalAiMode) => void;
   /** Open the mobile history sheet once after mount */
   openHistoryOnMount?: boolean;
 };
@@ -87,6 +90,7 @@ export function IdeaInterviewApp({
   projectId,
   initialMode = "excavate",
   onExit,
+  onModeChange,
   openHistoryOnMount = false,
 }: Props) {
   const { tx, locale } = useI18n();
@@ -645,12 +649,18 @@ export function IdeaInterviewApp({
   }
 
   const shellClass = isHub
-    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance)-3.75rem)] min-h-[420px] w-full overflow-hidden bg-white"
+    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-[420px] w-full overflow-hidden bg-white"
     : isProject
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
   const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
+
+  const switchHubMode = (mode: IdeaPersonalAiMode) => {
+    if (mode === aiMode) return;
+    if (onModeChange) onModeChange(mode);
+    else setAiMode(mode);
+  };
 
   return (
     <div className={shellClass}>
@@ -729,14 +739,50 @@ export function IdeaInterviewApp({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {showModeHome ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
-                <Sparkles className="h-6 w-6" aria-hidden />
-              </div>
+              {isHub ? (
+                <div className="grid w-full max-w-md grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => switchHubMode("consult")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <MessageCircle className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("相談", "Chat")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("困りごと・次の一手", "Stuck points & next steps")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchHubMode("excavate")}
+                    className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
+                      !isConsult
+                        ? "border-violet-300 bg-violet-50 text-violet-900"
+                        : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-violet-200"
+                    }`}
+                  >
+                    <Sparkles className="h-6 w-6" aria-hidden />
+                    <span className="text-[15px] font-bold">{tx("発掘", "Discover")}</span>
+                    <span className="text-[11px] leading-snug opacity-80">
+                      {tx("日常からビジネスの種を探す", "Find business seeds in daily life")}
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+                  <Sparkles className="h-6 w-6" aria-hidden />
+                </div>
+              )}
+
               <p className="max-w-md text-center text-[13px] leading-relaxed text-[#6B7280]">
                 {isConsult
                   ? tx(
-                      "困っていることや質問を、そのまま送ってください。会話は個人用として自動保存され、履歴からいつでも続けられます。",
-                      "Send whatever you’re stuck on. Chats are saved privately — continue anytime from History.",
+                      "困っていることや質問を、そのまま送ってください。会話は自動保存され、履歴からいつでも続けられます。",
+                      "Send whatever you’re stuck on. Chats are saved automatically — continue anytime from History.",
                     )
                   : tx(
                       "日常のモヤモヤを聞くところから、ビジネスの種を一緒に探します。会話は個人用として自動保存されます。",

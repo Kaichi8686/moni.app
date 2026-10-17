@@ -2,12 +2,11 @@
 
 import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { History, MessageCircle, Sparkles, X } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
-import { IdeaAiHistorySheet } from "@/components/idea-hub/IdeaAiHistorySheet";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
 import { MyIdeasPanel } from "@/components/idea-hub/MyIdeasPanel";
 import { INTERVIEW_ARTICLE_MOCKS } from "@/lib/idea-hub/interviewMocks";
@@ -32,10 +31,9 @@ function IdeaHubInner() {
   const urlTab = parseIdeaHubTab(searchParams.get("tab"));
   const qnaBoard = urlTab === "qna" && searchParams.get("view") === "board";
   const view = viewFromTab(urlTab, qnaBoard);
-  const aiMode: IdeaPersonalAiMode = urlTab === "qna" ? "consult" : "excavate";
+  /** AI full-screen defaults to 相談; excavate via the mode card. */
+  const aiMode: IdeaPersonalAiMode = urlTab === "excavate" ? "excavate" : "consult";
 
-  const [aiMenuOpen, setAiMenuOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
 
@@ -57,51 +55,37 @@ function IdeaHubInner() {
   );
 
   const goHome = useCallback(() => {
-    setAiMenuOpen(false);
-    setHistoryOpen(false);
     setOpenHistoryOnChat(false);
     replaceTab("mine");
   }, [replaceTab]);
 
-  const openAiChat = useCallback(
-    (mode: IdeaPersonalAiMode, opts?: { openHistory?: boolean }) => {
-      setAiMenuOpen(false);
-      setHistoryOpen(false);
-      setOpenHistoryOnChat(Boolean(opts?.openHistory));
+  const openAi = useCallback(
+    (mode: IdeaPersonalAiMode = "consult") => {
+      setOpenHistoryOnChat(false);
       setChatKey((k) => k + 1);
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
     [replaceTab],
   );
 
-  const showMineChrome = view === "mine";
-  const showHistoryInHeader = showMineChrome && aiMenuOpen;
+  const setAiMode = useCallback(
+    (mode: IdeaPersonalAiMode) => {
+      replaceTab(mode === "consult" ? "qna" : "excavate");
+    },
+    [replaceTab],
+  );
 
   return (
     <div className="relative min-h-[100dvh] bg-white pb-bottom-nav">
-      <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-        <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
-          <AppBrandHeader
-            bare
-            right={
-              showHistoryInHeader ? (
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen(true)}
-                  className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-semibold text-zinc-700 hover:bg-zinc-50"
-                >
-                  <History className="h-3.5 w-3.5" aria-hidden />
-                  {tx("履歴", "History")}
-                </button>
-              ) : undefined
-            }
-          />
-        </div>
-      </header>
-
-      {view === "mine" ? (
-        <MyIdeasPanel onGoExcavate={() => openAiChat("excavate")} />
+      {view === "mine" || view === "board" || view === "interviews" ? (
+        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
+            <AppBrandHeader bare />
+          </div>
+        </header>
       ) : null}
+
+      {view === "mine" ? <MyIdeasPanel /> : null}
 
       {view === "chat" ? (
         <IdeaInterviewApp
@@ -109,6 +93,7 @@ function IdeaHubInner() {
           variant="hub"
           initialMode={aiMode}
           onExit={goHome}
+          onModeChange={setAiMode}
           openHistoryOnMount={openHistoryOnChat}
         />
       ) : null}
@@ -143,48 +128,15 @@ function IdeaHubInner() {
         </div>
       ) : null}
 
-      {showMineChrome ? (
-        <div className="pointer-events-none fixed right-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 flex flex-col items-end gap-2 md:bottom-8">
-          {aiMenuOpen ? (
-            <div className="pointer-events-auto flex flex-col items-end gap-2">
-              <button
-                type="button"
-                onClick={() => openAiChat("excavate")}
-                className="inline-flex min-h-[48px] items-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 text-[14px] font-semibold text-sky-800 shadow-[0_8px_24px_rgba(15,23,42,0.12)] transition hover:bg-sky-50"
-              >
-                <Sparkles className="h-4 w-4" aria-hidden />
-                {tx("発掘", "Discover")}
-              </button>
-              <button
-                type="button"
-                onClick={() => openAiChat("consult")}
-                className="inline-flex min-h-[48px] items-center gap-2 rounded-2xl border border-violet-200 bg-white px-4 text-[14px] font-semibold text-violet-800 shadow-[0_8px_24px_rgba(15,23,42,0.12)] transition hover:bg-violet-50"
-              >
-                <MessageCircle className="h-4 w-4" aria-hidden />
-                {tx("相談", "Chat")}
-              </button>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => setAiMenuOpen((open) => !open)}
-            aria-expanded={aiMenuOpen}
-            aria-label={aiMenuOpen ? tx("AIメニューを閉じる", "Close AI menu") : tx("AIを開く", "Open AI")}
-            className={`pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition ${
-              aiMenuOpen ? "bg-zinc-800 hover:bg-zinc-700" : "bg-violet-600 hover:bg-violet-500"
-            }`}
-          >
-            {aiMenuOpen ? <X className="h-5 w-5" aria-hidden /> : <span className="text-[13px] font-bold tracking-wide">AI</span>}
-          </button>
-        </div>
-      ) : null}
-
-      {historyOpen ? (
-        <IdeaAiHistorySheet
-          onClose={() => setHistoryOpen(false)}
-          onSelect={(mode) => openAiChat(mode, { openHistory: true })}
-        />
+      {view === "mine" ? (
+        <button
+          type="button"
+          onClick={() => openAi("consult")}
+          aria-label={tx("AIを開く", "Open AI")}
+          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition hover:bg-violet-500 md:bottom-8"
+        >
+          <Sparkles className="h-6 w-6" aria-hidden />
+        </button>
       ) : null}
 
       <AppBottomNav />

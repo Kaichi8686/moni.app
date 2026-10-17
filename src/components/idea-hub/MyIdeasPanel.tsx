@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { createMyIdea, deleteMyIdea, listMyIdeas } from "@/lib/idea-hub/myIdeas";
 import type { MyIdea } from "@/lib/idea-hub/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -21,12 +21,13 @@ function formatSavedAt(iso: string, locale: "ja" | "en") {
   }
 }
 
-export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
+export function MyIdeasPanel() {
   const { tx, locale } = useI18n();
   const [ideas, setIdeas] = useState<MyIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [loginRequired, setLoginRequired] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
@@ -54,6 +55,12 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
     void refresh();
   }, [refresh]);
 
+  const openComposer = () => {
+    setTitle("");
+    setMemo("");
+    setComposerOpen(true);
+  };
+
   const save = async () => {
     setSaving(true);
     setError("");
@@ -72,8 +79,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
       return;
     }
     setIdeas((prev) => [idea, ...prev]);
-    setTitle("");
-    setMemo("");
+    setComposerOpen(false);
   };
 
   const remove = async (id: string) => {
@@ -116,60 +122,40 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
 
   return (
     <div className="relative mx-auto max-w-lg px-4 pb-28 pt-4">
-      <div className="mb-4">
-        <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("マイアイデア", "My ideas")}</h2>
-        <p className="mt-0.5 text-[12px] text-zinc-500">
-          {tx("思いついた種を、そのまま書いて残せます", "Write down idea seeds as they come")}
-        </p>
-      </div>
-
-      <div className="mb-5 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-3.5">
-        <label className="block text-[12px] font-semibold text-zinc-600">
-          {tx("タイトル", "Title")}
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={tx("例: 学校の提出を自動化するアプリ", "e.g. An app that automates school submissions")}
-            className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-[14px] text-zinc-900 outline-none focus:border-zinc-400"
-          />
-        </label>
-        <label className="mt-3 block text-[12px] font-semibold text-zinc-600">
-          {tx("一言メモ", "Quick note")}
-          <textarea
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            rows={3}
-            placeholder={tx("なぜ気になったか、誰の困りごとかなど", "Why it stood out, whose problem it is, etc.")}
-            className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[14px] text-zinc-900 outline-none focus:border-zinc-400"
-          />
-        </label>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("マイアイデア", "My ideas")}</h2>
+          <p className="mt-0.5 text-[12px] text-zinc-500">
+            {tx("思いついた種を、あとから見返せるメモ箱", "A notebook for ideas you want to revisit")}
+          </p>
+        </div>
         <button
           type="button"
-          disabled={!title.trim() || saving}
-          onClick={() => void save()}
-          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+          onClick={openComposer}
+          className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-zinc-900 px-3.5 text-[12px] font-semibold text-white"
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("保存する", "Save")}
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          {tx("保存", "Save")}
         </button>
       </div>
 
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
       {ideas.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-5 py-8 text-center">
+        <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 px-5 py-10 text-center">
           <span className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
             <Sparkles className="h-5 w-5" aria-hidden />
           </span>
-          <h3 className="text-[15px] font-semibold text-zinc-900">{tx("まだ保存したアイデアはありません", "No saved ideas yet")}</h3>
+          <h3 className="text-[15px] font-semibold text-zinc-900">{tx("まだアイデアがありません", "No ideas yet")}</h3>
           <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-zinc-500">
-            {tx("上に書いて保存するか、右下のAIから発掘してみましょう。", "Write above to save, or open AI at the bottom right to excavate.")}
+            {tx("思いついたことを直接メモしてみましょう。", "Jot something down yourself.")}
           </p>
           <button
             type="button"
-            onClick={onGoExcavate}
-            className="mt-5 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
+            onClick={openComposer}
+            className="mt-5 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
           >
-            {tx("発掘を試す", "Try excavate")}
+            {tx("直接メモする", "Write a note")}
           </button>
         </div>
       ) : (
@@ -220,6 +206,68 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
           ))}
         </ul>
       )}
+
+      {composerOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/35 p-0 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="my-idea-composer-title"
+            className="w-full max-w-lg rounded-t-2xl border border-zinc-200 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl sm:rounded-2xl sm:pb-4"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 id="my-idea-composer-title" className="text-[15px] font-semibold text-zinc-900">
+                {tx("新しいアイデアを保存", "Save a new idea")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setComposerOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"
+                aria-label={tx("閉じる", "Close")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <label className="block text-[12px] font-semibold text-zinc-600">
+              {tx("タイトル", "Title")}
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={tx("例: 学校の提出を自動化するアプリ", "e.g. An app that automates school submissions")}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+                autoFocus
+              />
+            </label>
+            <label className="mt-3 block text-[12px] font-semibold text-zinc-600">
+              {tx("一言メモ", "Quick note")}
+              <textarea
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                rows={4}
+                placeholder={tx("なぜ気になったか、誰の困りごとかなど", "Why it stood out, whose problem it is, etc.")}
+                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setComposerOpen(false)}
+                className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700"
+              >
+                {tx("キャンセル", "Cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={!title.trim() || saving}
+                onClick={() => void save()}
+                className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("保存する", "Save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
