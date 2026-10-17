@@ -102,7 +102,7 @@ export default function WorkspaceRecruit() {
 
   return (
     <div className="flex min-h-full flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-5 pb-10 sm:px-6 sm:py-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-5 pb-6 sm:px-6 sm:py-6">
         {notice ? (
           <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
             {notice}
