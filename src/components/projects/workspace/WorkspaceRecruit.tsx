@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Megaphone, Search } from "lucide-react";
-import { SKILL_OPTIONS } from "@/lib/discover/skillRequests";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { createProjectRecruitment } from "@/lib/projects/projectRecruitments";
 import { searchProfilesForInvite, sendProjectInvite } from "@/lib/projects/projectInvites";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
+
+function formatWeeklyHours(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/時間/.test(trimmed) || /週/.test(trimmed)) return trimmed;
+  return `週${trimmed}時間`;
+}
 
 export default function WorkspaceRecruit() {
   const { tx } = useI18n();
@@ -16,9 +22,9 @@ export default function WorkspaceRecruit() {
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [skillName, setSkillName] = useState<string>(SKILL_OPTIONS[0]);
-  const [duration, setDuration] = useState("1週間");
-  const [compensation, setCompensation] = useState("なし（経験・実績として）");
+  const [role, setRole] = useState("");
+  const [compensation, setCompensation] = useState("");
+  const [weeklyHours, setWeeklyHours] = useState("");
   const [postToBoard, setPostToBoard] = useState(true);
 
   const [inviteQuery, setInviteQuery] = useState("");
@@ -67,20 +73,25 @@ export default function WorkspaceRecruit() {
     }
     setSaving(true);
     try {
+      const roleText = role.trim();
+      const hoursText = formatWeeklyHours(weeklyHours);
       await createProjectRecruitment(supabase, {
         projectId,
         userId: uid,
         projectName: project.name,
         title,
         message,
-        skillName,
-        duration,
-        compensation,
+        skillName: roleText || title.trim(),
+        duration: hoursText || undefined,
+        compensation: compensation.trim() || undefined,
         postToSkillBoard: postToBoard,
         makeProjectPublic: projectMeta?.visibility !== "public",
       });
       setTitle("");
       setMessage("");
+      setRole("");
+      setCompensation("");
+      setWeeklyHours("");
       await reload();
       showNotice(tx("募集を公開しました", "Recruitment published"));
     } catch (e) {
@@ -190,6 +201,47 @@ export default function WorkspaceRecruit() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <label className="block min-w-0">
+                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
+                  {tx("役割", "Role")}
+                </span>
+                <input
+                  className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                  placeholder={tx("例: デザイナー、広報", "e.g. Designer, PR")}
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                />
+              </label>
+              <label className="block min-w-0">
+                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
+                  {tx("報酬", "Compensation")}
+                </span>
+                <input
+                  className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                  placeholder={tx("例: なし、成果報酬", "e.g. Unpaid, revenue share")}
+                  value={compensation}
+                  onChange={(e) => setCompensation(e.target.value)}
+                />
+              </label>
+              <label className="block min-w-0">
+                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
+                  {tx("週の参加時間", "Hours / week")}
+                </span>
+                <div className="flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 px-3 focus-within:border-zinc-400">
+                  <span className="shrink-0 text-sm text-zinc-500">{tx("週", "Weekly")}</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                    placeholder={tx("例: 5", "e.g. 5")}
+                    value={weeklyHours}
+                    onChange={(e) => setWeeklyHours(e.target.value)}
+                  />
+                  <span className="shrink-0 text-sm text-zinc-500">{tx("時間", "hrs")}</span>
+                </div>
+              </label>
+            </div>
             <label className="flex items-start gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
               <input
                 type="checkbox"
@@ -204,40 +256,6 @@ export default function WorkspaceRecruit() {
                 )}
               </span>
             </label>
-            {postToBoard ? (
-              <div className="grid gap-2 sm:grid-cols-3">
-                <select
-                  className="min-h-[40px] rounded-xl border border-zinc-200 px-2 text-sm"
-                  value={skillName}
-                  onChange={(e) => setSkillName(e.target.value)}
-                >
-                  {SKILL_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="min-h-[40px] rounded-xl border border-zinc-200 px-2 text-sm"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                >
-                  <option>1日以内</option>
-                  <option>1週間</option>
-                  <option>1ヶ月</option>
-                  <option>長期</option>
-                </select>
-                <select
-                  className="min-h-[40px] rounded-xl border border-zinc-200 px-2 text-sm"
-                  value={compensation}
-                  onChange={(e) => setCompensation(e.target.value)}
-                >
-                  <option>なし（経験・実績として）</option>
-                  <option>成果報酬</option>
-                  <option>相談</option>
-                </select>
-              </div>
-            ) : null}
             <p className="text-[11px] leading-relaxed text-zinc-500">
               {tx(
                 "公開プロジェクトとして探すタブの「募集」に表示されます。非公開の場合は公開に切り替えます。",
