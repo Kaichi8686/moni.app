@@ -75,18 +75,19 @@ function IdeaHubInner() {
         {tab === "qna" ? (
           qnaBoard ? (
             <div>
-              <div className="mx-auto max-w-lg px-4 pt-3">
+              <div className="mx-auto max-w-lg px-4 pt-2">
                 <button
                   type="button"
+                  aria-label={tx("相談AIに戻る", "Back to consult AI")}
                   onClick={() => {
                     const params = new URLSearchParams(searchParams.toString());
                     params.set("tab", "qna");
                     params.delete("view");
                     router.replace(`/idea?${params.toString()}`, { scroll: false });
                   }}
-                  className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+                  className="mb-0 inline-flex items-center text-[28px] leading-none text-zinc-800"
                 >
-                  {tx("← 相談AIに戻る", "← Back to consult AI")}
+                  ←
                 </button>
               </div>
               <IdeaQnAPanel active={tab === "qna"} />

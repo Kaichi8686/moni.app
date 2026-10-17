@@ -140,13 +140,8 @@ export function QnABoard({
     if (prefillTitle) {
       setNewTitle(prefillTitle);
       onPrefillConsumed?.();
-      window.setTimeout(() => titleRef.current?.focus(), 50);
     }
   }, [prefillTitle, onPrefillConsumed]);
-
-  useEffect(() => {
-    if (focusToken > 0) titleRef.current?.focus();
-  }, [focusToken]);
 
   async function submitQuestion(event?: FormEvent) {
     event?.preventDefault();
@@ -320,12 +315,11 @@ export function QnABoard({
         <QnAComposer
           title={newTitle}
           body={newBody}
-          category={newCategory}
           titleRef={titleRef}
           onTitleChange={setNewTitle}
           onBodyChange={setNewBody}
-          onCategoryChange={setNewCategory}
           onSubmit={(e) => void submitQuestion(e)}
+          focusToken={focusToken}
         />
       ) : (
         <div className="mx-4 mt-4 shrink-0 rounded-lg border border-zinc-200 bg-white px-4 py-6 text-center">
