@@ -13,6 +13,7 @@ import { NewConversationModal } from "@/app/messages/_components/NewConversation
 import {
   ensureMyMutualDirectConversations,
   ensureMyProjectConversations,
+  ensureMyProjectPeerDirectConversations,
   fetchInboxConversations,
 } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
@@ -57,9 +58,8 @@ export function InboxList() {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const peerHandledRef = useRef<string | null>(null);
-  const projectSyncRef = useRef(false);
 
-  const load = useCallback(async (opts?: { syncMutual?: boolean }) => {
+  const load = useCallback(async (opts?: { syncPeers?: boolean }) => {
     if (!supabase) return;
     setLoadError(null);
     try {
@@ -71,18 +71,18 @@ export function InboxList() {
         return;
       }
 
-      // 参加プロジェクトのグループラインを作成／参加してから一覧取得
-      if (!projectSyncRef.current) {
-        projectSyncRef.current = true;
+      // グループライン全員同期・プロジェクト仲間 DM・相互フォロー DM を揃えてから一覧取得
+      if (opts?.syncPeers !== false) {
         try {
           await ensureMyProjectConversations(supabase, uid);
         } catch (e) {
           console.warn("ensureMyProjectConversations", e);
         }
-      }
-
-      // 相互フォロー相手の 1:1 を自動で inbox に出す（未作成分のみ）
-      if (opts?.syncMutual !== false) {
+        try {
+          await ensureMyProjectPeerDirectConversations(supabase, uid);
+        } catch (e) {
+          console.warn("ensureMyProjectPeerDirectConversations", e);
+        }
         try {
           await ensureMyMutualDirectConversations(supabase, uid);
         } catch (e) {
@@ -101,7 +101,7 @@ export function InboxList() {
   }, []);
 
   useEffect(() => {
-    void load({ syncMutual: true });
+    void load({ syncPeers: true });
   }, [load]);
 
   useEffect(() => {
@@ -115,21 +115,21 @@ export function InboxList() {
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversation_members" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
@@ -137,7 +137,14 @@ export function InboxList() {
         { event: "*", schema: "public", table: "follows" },
         () => {
           // 相互フォロー成立で名前をメール一覧に出す
-          if (!cancelled) void load({ syncMutual: true });
+          if (!cancelled) void load({ syncPeers: true });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_members" },
+        () => {
+          if (!cancelled) void load({ syncPeers: true });
         },
       )
       .subscribe();
@@ -146,7 +153,7 @@ export function InboxList() {
 
     const poll = window.setInterval(() => {
       if (!cancelled && document.visibilityState === "visible") {
-        void load({ syncMutual: true });
+        void load({ syncPeers: true });
       }
     }, 8000);
 
@@ -179,11 +186,11 @@ export function InboxList() {
         return title.toLowerCase().includes(q) || lastMessagePreview(c, locale).toLowerCase().includes(q);
       });
     }
+    // 未読を最上段、その中・既読側は直近チャット順
     list.sort((a, b) => {
       const aUnread = a.unreadCount > 0 ? 1 : 0;
       const bUnread = b.unreadCount > 0 ? 1 : 0;
       if (aUnread !== bUnread) return bUnread - aUnread;
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
     });
     return list;
@@ -203,8 +210,8 @@ export function InboxList() {
       return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
     }
     return tx(
-      "まだトークがありません。相互フォローになると相手の名前がここに自動で表示されます。",
-      "No chats yet. Mutual follows appear here automatically.",
+      "まだトークがありません。参加中のプロジェクトや相互フォローの相手がここに自動で表示されます。",
+      "No chats yet. Project teammates and mutual follows appear here automatically.",
     );
   })();
 
@@ -296,8 +303,7 @@ export function InboxList() {
           onClose={() => setShowNew(false)}
           onCreated={() => {
             setShowNew(false);
-            projectSyncRef.current = false;
-            void load();
+            void load({ syncPeers: true });
           }}
         />
       ) : null}
