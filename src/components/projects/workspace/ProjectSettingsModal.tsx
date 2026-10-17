@@ -140,7 +140,7 @@ export function ProjectSettingsModal({
       setThumbPreview(publicUrl || previewObjectUrl.current);
       setEditThumb(publicUrl);
       setShowUrlField(false);
-      onNotice(tx("背景写真を更新しました", "Background photo updated"));
+      onNotice(tx("プロジェクト写真を更新しました", "Project photo updated"));
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("写真のアップロードに失敗しました", "Failed to upload photo"));
@@ -165,7 +165,7 @@ export function ProjectSettingsModal({
           setErr(error.message);
           return;
         }
-        onNotice(tx("背景写真を削除しました", "Background photo removed"));
+        onNotice(tx("プロジェクト写真を削除しました", "Project photo removed"));
         onSaved();
       });
   }
@@ -296,11 +296,11 @@ export function ProjectSettingsModal({
             ) : null}
 
             <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("背景写真", "Background photo")}</span>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真", "Photo")}</span>
               <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
                 {tx(
-                  "プロフィール画面のように、プロジェクト概要の背景に表示されます。探すタブのカードにも使われます。",
-                  "Shown as the project overview background, like a profile cover. Also used on Discover cards.",
+                  "プロジェクト概要の正方形写真と、探すタブのカードに使われます。",
+                  "Used for the square photo on the project overview and Discover cards.",
                 )}
               </p>
               <input
@@ -327,7 +327,7 @@ export function ProjectSettingsModal({
                 ) : (
                   <div className="flex aspect-[2/1] flex-col items-center justify-center gap-1 text-[#6B7280]">
                     <ImagePlus className="h-8 w-8 opacity-50" />
-                    <span className="text-[12px]">{tx("まだ背景写真がありません", "No background photo yet")}</span>
+                    <span className="text-[12px]">{tx("まだ写真がありません", "No photo yet")}</span>
                   </div>
                 )}
               </div>
