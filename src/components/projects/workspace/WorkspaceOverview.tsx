@@ -14,9 +14,11 @@ import {
   Sparkles,
   Vote,
 } from "lucide-react";
+import { ProjectCoverBanner } from "@/components/projects/workspace/ProjectCoverBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { supabase } from "@/lib/supabase";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
@@ -80,6 +82,7 @@ export default function WorkspaceOverview() {
     phases: workspacePhases,
     loading,
     uid,
+    canEdit,
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
@@ -89,6 +92,7 @@ export default function WorkspaceOverview() {
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
+  const backgroundUrl = projectMeta?.thumbnail_url?.trim() || "";
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -124,6 +128,27 @@ export default function WorkspaceOverview() {
     [issues, uid],
   );
 
+  async function handleBackgroundUpload(file: File): Promise<string> {
+    if (!canEdit || !supabase) {
+      throw new Error(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
+    }
+    const { data: session } = await supabase.auth.getSession();
+    const token = session.session?.access_token;
+    if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+    const body = new FormData();
+    body.append("file", file);
+    body.append("projectId", projectId);
+    const res = await fetch("/api/upload-project-image", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+    });
+    const json = (await res.json()) as { publicUrl?: string; error?: string };
+    if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+    await wsReload();
+    return json.publicUrl ?? "";
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
@@ -140,43 +165,35 @@ export default function WorkspaceOverview() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-7 pb-8">
-      <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-start gap-4">
-          {projectMeta?.thumbnail_url?.trim() ? (
-            // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-            <img
-              src={projectMeta.thumbnail_url.trim()}
-              alt=""
-              className="h-16 w-16 shrink-0 rounded-2xl border border-zinc-200 object-cover sm:h-20 sm:w-20"
-            />
-          ) : (
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-3xl sm:h-20 sm:w-20">
-              {project.icon ?? "📁"}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{project.name}</h2>
-                <p className="mt-1 text-[12px] text-zinc-500">
-                  {tx(`${project.members.length}人のメンバー`, `${project.members.length} members`)}
-                </p>
-                <p className="mt-1 text-[13px] font-medium text-zinc-700">
-                  {sortedPhases.length > 0
-                    ? tx(
-                        `ステップ ${completedSteps}/${sortedPhases.length} 完了`,
-                        `${completedSteps}/${sortedPhases.length} steps complete`,
-                      )
-                    : tx("ロードマップ未設定", "Roadmap not set")}
-                </p>
-              </div>
-              <p className="shrink-0 text-2xl font-semibold tabular-nums tracking-tight text-orange-500 sm:text-3xl">
-                {progress}%
+      <ProjectCoverBanner
+        key={projectId}
+        backgroundUrl={backgroundUrl}
+        canEdit={canEdit}
+        iconFallback={project.icon ?? "📁"}
+        onUpload={handleBackgroundUpload}
+        title={
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{project.name}</h2>
+              <p className="mt-1 text-[12px] text-zinc-500">
+                {tx(`${project.members.length}人のメンバー`, `${project.members.length} members`)}
               </p>
             </div>
+            <p className="shrink-0 text-2xl font-semibold tabular-nums tracking-tight text-orange-500 sm:text-3xl">
+              {progress}%
+            </p>
           </div>
-        </div>
-        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-zinc-100">
+        }
+      >
+        <p className="mt-3 text-[13px] font-medium text-zinc-700">
+          {sortedPhases.length > 0
+            ? tx(
+                `ステップ ${completedSteps}/${sortedPhases.length} 完了`,
+                `${completedSteps}/${sortedPhases.length} steps complete`,
+              )
+            : tx("ロードマップ未設定", "Roadmap not set")}
+        </p>
+        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100">
           <div
             className="h-full rounded-full bg-orange-400 transition-[width] duration-500"
             style={{ width: `${progress}%` }}
@@ -186,7 +203,7 @@ export default function WorkspaceOverview() {
             aria-valuenow={progress}
           />
         </div>
-      </section>
+      </ProjectCoverBanner>
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
