@@ -1,4 +1,6 @@
-export type IdeaHubTab = "excavate" | "qna" | "mine" | "interviews";
+export type IdeaHubTab = "mine" | "qna" | "excavate";
+
+export type IdeaAiMode = "consult" | "excavate";
 
 export type MyIdeaSource = "manual" | "interview";
 
@@ -22,23 +24,13 @@ export type MyIdeaInsert = {
   theme?: string | null;
 };
 
-export type InterviewArticle = {
-  id: string;
-  title: string;
-  excerpt: string;
-  authorLabel: string;
-  publishedAt: string;
-  coverTone: "sky" | "amber" | "rose";
-};
-
-export const IDEA_HUB_TABS: Array<{ id: IdeaHubTab; label: string; labelEn: string; shortLabel: string; shortLabelEn: string }> = [
-  { id: "excavate", label: "発掘", labelEn: "Discover", shortLabel: "発掘", shortLabelEn: "Find" },
-  { id: "qna", label: "相談", labelEn: "Chat", shortLabel: "相談", shortLabelEn: "Chat" },
-  { id: "mine", label: "マイアイデア", labelEn: "My ideas", shortLabel: "マイ", shortLabelEn: "Mine" },
-  { id: "interviews", label: "インタビュー", labelEn: "Interviews", shortLabel: "取材", shortLabelEn: "Stories" },
-];
-
 export function parseIdeaHubTab(value: string | null | undefined): IdeaHubTab {
-  if (value === "mine" || value === "interviews" || value === "excavate" || value === "qna") return value;
-  return "excavate";
+  if (value === "qna" || value === "excavate") return value;
+  // legacy: interviews / 取材 tab removed → land on my ideas
+  return "mine";
+}
+
+export function parseIdeaAiMode(value: string | null | undefined): IdeaAiMode | null {
+  if (value === "consult" || value === "excavate") return value;
+  return null;
 }

@@ -27,7 +27,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "プロジェクト内チャットで、やってほしいことを一文で伝えると動きやすくなります。",
         links: [
           { label: "仲間・プロジェクトを探す", href: "/?tab=chat" },
-          { label: "アイデアを掘る", href: "/idea" },
+          { label: "アイデアを掘る", href: "/idea?ai=excavate" },
         ],
       };
     case "missing_info":

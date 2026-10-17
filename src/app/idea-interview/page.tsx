@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Legacy entry — keep bookmarks working by sending users into the Ideas hub excavate tab. */
+/** Legacy entry — open Ideas hub AI excavate overlay. */
 export default function IdeaInterviewRedirectPage() {
-  redirect("/idea");
+  redirect("/idea?ai=excavate");
 }
