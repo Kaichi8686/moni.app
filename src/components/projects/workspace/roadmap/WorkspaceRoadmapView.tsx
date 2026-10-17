@@ -11,6 +11,7 @@ import { RoadmapAddPhaseModal } from "@/components/projects/workspace/roadmap/Ro
 import { IssueDetailSheet } from "@/components/issues/IssueDetailSheet";
 import { IssueModal } from "@/components/issues/IssueModal";
 import { RoadmapPhaseDetailPanel } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailPanel";
+import { ProjectDeletionProposalBanner } from "@/components/projects/workspace/ProjectDeletionProposalBanner";
 import type { Issue } from "@/lib/workspace/types";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -30,6 +31,8 @@ export default function WorkspaceRoadmapView() {
     schedules,
     loading: wsLoading,
     canEdit,
+    isOwner,
+    uid,
     reload: wsReload,
     createIssue,
     updateIssueStatus,
@@ -40,7 +43,9 @@ export default function WorkspaceRoadmapView() {
     projectContext,
     coachingContext,
     setProjectCompletionDate,
+    deleteProject,
   } = useProjectWorkspace();
+  const [deletingProject, setDeletingProject] = useState(false);
   const searchParams = useSearchParams();
   const roadmap = useRoadmapProject(projectId);
   const [addOpen, setAddOpen] = useState(false);
@@ -106,14 +111,38 @@ export default function WorkspaceRoadmapView() {
     [syncReload, tx],
   );
 
+  const finalizeDeleteProject = useCallback(async () => {
+    setDeletingProject(true);
+    setActionError("");
+    try {
+      await deleteProject();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : tx("プロジェクトの削除に失敗しました", "Failed to delete project"));
+    } finally {
+      setDeletingProject(false);
+    }
+  }, [deleteProject, tx]);
+
   if (wsLoading || roadmap.loading) {
     return <p className="p-6 text-sm text-gray-500">{tx("読み込み中...", "Loading…")}</p>;
   }
 
   const err = roadmap.error || actionError;
+  const showDeletionBanner = (project?.members.length ?? 0) > 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {showDeletionBanner ? (
+        <ProjectDeletionProposalBanner
+          projectId={projectId}
+          projectName={project?.name ?? ""}
+          uid={uid}
+          isOwner={isOwner}
+          deleting={deletingProject}
+          onFinalizeDelete={finalizeDeleteProject}
+        />
+      ) : null}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-[#1A1A1A]">{tx("ロードマップ", "Roadmap")}</h1>

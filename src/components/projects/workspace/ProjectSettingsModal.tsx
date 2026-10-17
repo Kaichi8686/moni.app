@@ -431,8 +431,8 @@ export function ProjectSettingsModal({
             <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
               {tx(
-                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上の「三」メニューから「プロジェクト削除…」を開いてください。",
-                "Deleting a project needs 2/3 member approval, then the owner confirms. Open “Delete project…” from the menu (☰) in the top right.",
+                "メンバーが1人のときは確認のあとすぐ削除できます。複数人のときは2/3賛成後にオーナーが最終確定します。右上の「三」メニューから「プロジェクト削除…」を開いてください。",
+                "Solo projects can be deleted after a quick confirm. With multiple members, deletion needs 2/3 approval, then the owner finalizes. Open “Delete project…” from the menu (☰) in the top right.",
               )}
             </p>
           </section>
