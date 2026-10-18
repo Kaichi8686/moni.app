@@ -21,7 +21,7 @@ function formatSavedAt(iso: string, locale: "ja" | "en") {
   }
 }
 
-export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
+export function MyIdeasPanel() {
   const { tx, locale } = useI18n();
   const [ideas, setIdeas] = useState<MyIdea[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +121,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
   }
 
   return (
-    <div className="relative mx-auto max-w-lg px-4 pb-8 pt-4">
+    <div className="relative mx-auto max-w-lg px-4 pb-28 pt-4">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("マイアイデア", "My ideas")}</h2>
@@ -148,24 +148,15 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
           </span>
           <h3 className="text-[15px] font-semibold text-zinc-900">{tx("まだアイデアがありません", "No ideas yet")}</h3>
           <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-zinc-500">
-            {tx("発掘機能を試すか、思いついたことを直接メモしてみましょう。", "Try excavate, or jot something down yourself.")}
+            {tx("思いついたことを直接メモしてみましょう。", "Jot something down yourself.")}
           </p>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <button
-              type="button"
-              onClick={onGoExcavate}
-              className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
-            >
-              {tx("発掘を試す", "Try excavate")}
-            </button>
-            <button
-              type="button"
-              onClick={openComposer}
-              className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
-            >
-              {tx("直接メモする", "Write a note")}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openComposer}
+            className="mt-5 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+          >
+            {tx("直接メモする", "Write a note")}
+          </button>
         </div>
       ) : (
         <ul className="space-y-3">
@@ -243,7 +234,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={tx("例: 学校の提出を自動化するアプリ", "e.g. An app that automates school submissions")}
-                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-base text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white sm:text-sm"
                 autoFocus
               />
             </label>
@@ -254,7 +245,7 @@ export function MyIdeasPanel({ onGoExcavate }: { onGoExcavate: () => void }) {
                 onChange={(e) => setMemo(e.target.value)}
                 rows={4}
                 placeholder={tx("なぜ気になったか、誰の困りごとかなど", "Why it stood out, whose problem it is, etc.")}
-                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-base text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white sm:text-sm"
               />
             </label>
             <div className="mt-4 flex gap-2">

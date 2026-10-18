@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Trash2, X } from "lucide-react";
+import { ImagePlus, LogOut, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { leaveProject, leaveProjectErrorMessage, type LeaveProjectErrorCode } from "@/lib/projects/leaveProject";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import type { ProjectRow, ProjectVisibility } from "@/lib/projects/types";
 import { parseCoachingContext } from "@/lib/projects/coachingContext";
@@ -17,7 +18,13 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type ProjectSettingsMeta = Pick<
   ProjectRow,
-  "thumbnail_url" | "category" | "business_type" | "recruitment_target" | "recruitment_message" | "visibility"
+  | "thumbnail_url"
+  | "background_url"
+  | "category"
+  | "business_type"
+  | "recruitment_target"
+  | "recruitment_message"
+  | "visibility"
 >;
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
@@ -35,6 +42,8 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   onDelete: () => Promise<void>;
+  /** メンバー（非オーナー）が脱退したあと。呼び出し側でリダイレクトなど */
+  onLeft?: () => void;
   onNotice: (message: string) => void;
 };
 
@@ -51,17 +60,23 @@ export function ProjectSettingsModal({
   onClose,
   onSaved,
   onDelete,
+  onLeft,
   onNotice,
 }: Props) {
   const { tx } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
   const previewObjectUrl = useRef<string | null>(null);
+  const bgPreviewObjectUrl = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [thumbUploading, setThumbUploading] = useState(false);
+  const [bgUploading, setBgUploading] = useState(false);
   const [err, setErr] = useState("");
   const [editName, setEditName] = useState("");
   const [editThumb, setEditThumb] = useState("");
+  const [editBg, setEditBg] = useState("");
   const [thumbPreview, setThumbPreview] = useState<string | null>(null);
+  const [bgPreview, setBgPreview] = useState<string | null>(null);
   const [showUrlField, setShowUrlField] = useState(false);
   const [editBrief, setEditBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [editCategory, setEditCategory] = useState("");
@@ -71,6 +86,8 @@ export function ProjectSettingsModal({
   const [editVisibility, setEditVisibility] = useState<ProjectVisibility>("public");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   function clearPreviewObjectUrl() {
     if (previewObjectUrl.current) {
@@ -79,20 +96,34 @@ export function ProjectSettingsModal({
     }
   }
 
+  function clearBgPreviewObjectUrl() {
+    if (bgPreviewObjectUrl.current) {
+      URL.revokeObjectURL(bgPreviewObjectUrl.current);
+      bgPreviewObjectUrl.current = null;
+    }
+  }
+
   useEffect(() => {
     if (!open) {
       clearPreviewObjectUrl();
+      clearBgPreviewObjectUrl();
       setThumbPreview(null);
+      setBgPreview(null);
       setConfirmDelete(false);
+      setConfirmLeave(false);
       return;
     }
     setErr("");
     setConfirmDelete(false);
+    setConfirmLeave(false);
     setEditName(name);
     setEditBrief(resolveProjectBrief({ coachingContext, description }));
     const thumb = meta?.thumbnail_url?.trim() ?? "";
+    const bg = meta?.background_url?.trim() ?? "";
     setEditThumb(thumb);
     setThumbPreview(thumb || null);
+    setEditBg(bg);
+    setBgPreview(bg || null);
     setShowUrlField(Boolean(thumb && !thumb.includes("post-images")));
     setEditCategory(meta?.category ?? "");
     setEditBusinessType(
@@ -103,7 +134,13 @@ export function ProjectSettingsModal({
     setEditVisibility(meta?.visibility === "private" ? "private" : "public");
   }, [open, name, description, coachingContext, meta]);
 
-  useEffect(() => () => clearPreviewObjectUrl(), []);
+  useEffect(
+    () => () => {
+      clearPreviewObjectUrl();
+      clearBgPreviewObjectUrl();
+    },
+    [],
+  );
 
   if (!open) return null;
 
@@ -170,6 +207,75 @@ export function ProjectSettingsModal({
       });
   }
 
+  async function onBackgroundSelected(file: File | null) {
+    if (!file || !canEdit) return;
+    const validationErr = validateProjectImageFile(file);
+    if (validationErr) {
+      setErr(validationErr);
+      return;
+    }
+    if (!supabase || !userId) {
+      setErr(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
+      return;
+    }
+    setBgUploading(true);
+    setErr("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const body = new FormData();
+      body.append("file", file);
+      body.append("projectId", projectId);
+      const res = await fetch("/api/upload-project-background", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const json = (await res.json()) as { backgroundUrl?: string; publicUrl?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+      const publicUrl = json.backgroundUrl ?? json.publicUrl ?? "";
+      clearBgPreviewObjectUrl();
+      bgPreviewObjectUrl.current = URL.createObjectURL(file);
+      setBgPreview(publicUrl || bgPreviewObjectUrl.current);
+      setEditBg(publicUrl);
+      onNotice(tx("背景写真を更新しました", "Background photo updated"));
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : tx("背景のアップロードに失敗しました", "Failed to upload background"));
+    } finally {
+      setBgUploading(false);
+      if (bgInputRef.current) bgInputRef.current.value = "";
+    }
+  }
+
+  function removeBackground() {
+    clearBgPreviewObjectUrl();
+    setBgPreview(null);
+    setEditBg("");
+    if (bgInputRef.current) bgInputRef.current.value = "";
+    if (!canEdit || !supabase) return;
+    void (async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) {
+        setErr(tx("ログインが必要です", "Login required"));
+        return;
+      }
+      const res = await fetch(`/api/upload-project-background?projectId=${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(json.error ?? tx("背景の削除に失敗しました", "Failed to remove background"));
+        return;
+      }
+      onNotice(tx("背景写真を削除しました", "Background photo removed"));
+      onSaved();
+    })();
+  }
+
   async function save() {
     if (!canEdit || !supabase) return;
     const trimmedName = editName.trim();
@@ -185,6 +291,7 @@ export function ProjectSettingsModal({
       const payload: Record<string, unknown> = {
           name: trimmedName,
           thumbnail_url: editThumb.trim() || null,
+          background_url: editBg.trim() || null,
           description: descriptionText,
           coaching_context: nextCoaching,
           category: editCategory.trim() || tx("探究", "Inquiry"),
@@ -202,10 +309,22 @@ export function ProjectSettingsModal({
           error.message.includes("does not exist") ||
           error.message.includes("schema cache");
         if (schemaMismatch) {
-          const { coaching_context: _drop, ...withoutCoaching } = payload;
+          const { coaching_context: _drop, background_url: _bg, ...withoutOptional } = payload;
           void _drop;
-          const retry = await supabase.from("projects").update(withoutCoaching).eq("id", projectId);
+          void _bg;
+          const retry = await supabase.from("projects").update(withoutOptional).eq("id", projectId);
           error = retry.error;
+          if (!error && editBg.trim()) {
+            onSaved();
+            onNotice(tx("プロジェクト設定を保存しました", "Project settings saved"));
+            setErr(
+              tx(
+                "背景の保存には Supabase で apply_project_background_url.sql の実行が必要です。",
+                "To save the background, run apply_project_background_url.sql in Supabase.",
+              ),
+            );
+            return;
+          }
         }
       }
       if (error) {
@@ -220,7 +339,7 @@ export function ProjectSettingsModal({
     }
   }
 
-  const busy = saving || thumbUploading || deleting;
+  const busy = saving || thumbUploading || bgUploading || deleting || leaving;
 
   async function handleDelete() {
     if (!isOwner) return;
@@ -233,6 +352,36 @@ export function ProjectSettingsModal({
       setErr(e instanceof Error ? e.message : tx("削除に失敗しました", "Failed to delete"));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function leaveErrText(code: LeaveProjectErrorCode, fallback: string): string {
+    const ja = leaveProjectErrorMessage(code, fallback);
+    const enMap: Partial<Record<LeaveProjectErrorCode, string>> = {
+      not_authenticated: "Login required.",
+      project_not_found: "Project not found.",
+      owner_must_transfer_first: "Owners must transfer ownership before leaving.",
+      not_a_member: "You’re not a member of this project.",
+      supabase_unavailable: "Supabase is not configured.",
+      unknown: fallback || "Failed to leave the project.",
+    };
+    return tx(ja, enMap[code] ?? (fallback || "Failed to leave the project."));
+  }
+
+  async function handleLeave() {
+    if (isOwner || !userId) return;
+    setLeaving(true);
+    setErr("");
+    try {
+      const result = await leaveProject(projectId);
+      if (!result.ok) {
+        setErr(leaveErrText(result.code, result.error));
+        return;
+      }
+      onClose();
+      onLeft?.();
+    } finally {
+      setLeaving(false);
     }
   }
 
@@ -296,24 +445,27 @@ export function ProjectSettingsModal({
             ) : null}
 
             <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真", "Photo")}</span>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("背景写真", "Background photo")}</span>
+              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
+                {tx("プロジェクト概要の上に横長で表示されます（正方形写真とは別）。", "Shown wide at the top of the overview (separate from the square photo).")}
+              </p>
               <input
-                ref={fileInputRef}
+                ref={bgInputRef}
                 type="file"
                 accept={IMAGE_ACCEPT}
                 className="hidden"
-                onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
+                onChange={(e) => void onBackgroundSelected(e.target.files?.[0] ?? null)}
               />
               <div className="mt-2 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8F8]">
-                {thumbPreview ? (
+                {bgPreview ? (
                   <div className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element -- user upload preview */}
-                    <img src={thumbPreview} alt="" className="aspect-[2/1] w-full object-cover" />
+                    <img src={bgPreview} alt="" className="aspect-[2/1] w-full object-cover" />
                     <button
                       type="button"
                       className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white"
-                      onClick={removePhoto}
-                      disabled={thumbUploading}
+                      onClick={removeBackground}
+                      disabled={bgUploading}
                     >
                       {tx("削除", "Remove")}
                     </button>
@@ -321,40 +473,87 @@ export function ProjectSettingsModal({
                 ) : (
                   <div className="flex aspect-[2/1] flex-col items-center justify-center gap-1 text-[#6B7280]">
                     <ImagePlus className="h-8 w-8 opacity-50" />
-                    <span className="text-[12px]">{tx("まだ写真がありません", "No photo yet")}</span>
+                    <span className="text-[12px]">{tx("まだ背景がありません", "No background yet")}</span>
                   </div>
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={thumbUploading}
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  {thumbUploading ? tx("アップロード中…", "Uploading…") : tx("写真フォルダから選ぶ", "Choose from photos")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-[#1A1A1A]"
-                  onClick={() => setShowUrlField((v) => !v)}
-                >
-                  {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("URLで指定", "Use a URL")}
-                </button>
+              <button
+                type="button"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
+                onClick={() => bgInputRef.current?.click()}
+                disabled={bgUploading}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                {bgUploading ? tx("アップロード中…", "Uploading…") : tx("背景を選ぶ", "Choose background")}
+              </button>
+            </div>
+
+            <div>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("プロジェクト写真", "Project photo")}</span>
+              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
+                {tx("概要の正方形写真と、探すタブのカードに使われます。", "Used for the square photo on the overview and Discover cards.")}
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="hidden"
+                onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
+              />
+              <div className="mt-2 flex items-start gap-3">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F7F8F8]">
+                  {thumbPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- user upload preview
+                    <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-[#6B7280]">
+                      <ImagePlus className="h-6 w-6 opacity-50" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={thumbUploading}
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {thumbUploading ? tx("アップロード中…", "Uploading…") : tx("写真を選ぶ", "Choose photo")}
+                    </button>
+                    {thumbPreview ? (
+                      <button
+                        type="button"
+                        className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-rose-600"
+                        onClick={removePhoto}
+                        disabled={thumbUploading}
+                      >
+                        {tx("削除", "Remove")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-[#1A1A1A]"
+                      onClick={() => setShowUrlField((v) => !v)}
+                    >
+                      {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("URLで指定", "Use a URL")}
+                    </button>
+                  </div>
+                  {showUrlField ? (
+                    <input
+                      className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                      placeholder="https://..."
+                      value={editThumb}
+                      onChange={(e) => {
+                        setEditThumb(e.target.value);
+                        setThumbPreview(e.target.value.trim() || null);
+                        clearPreviewObjectUrl();
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
-              {showUrlField ? (
-                <input
-                  className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
-                  placeholder="https://..."
-                  value={editThumb}
-                  onChange={(e) => {
-                    setEditThumb(e.target.value);
-                    setThumbPreview(e.target.value.trim() || null);
-                    clearPreviewObjectUrl();
-                  }}
-                />
-              ) : null}
             </div>
 
             <div className="space-y-2 rounded-lg border border-[#E5E7EB] bg-[#F7F8F8] p-3">
@@ -426,13 +625,56 @@ export function ProjectSettingsModal({
           </div>
         )}
 
+        {!isOwner && userId ? (
+          <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
+            <p className="text-[12px] font-semibold text-rose-900">{tx("プロジェクトから脱退", "Leave project")}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
+              {tx(
+                "脱退するとメンバーではなくなり、このプロジェクトにアクセスできなくなります。",
+                "Leaving removes you from the project and you’ll lose access.",
+              )}
+            </p>
+            {!confirmLeave ? (
+              <button
+                type="button"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-[12px] font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => setConfirmLeave(true)}
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden />
+                {tx("脱退する…", "Leave…")}
+              </button>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => void handleLeave()}
+                >
+                  <LogOut className="h-3.5 w-3.5" aria-hidden />
+                  {leaving ? tx("脱退中…", "Leaving…") : tx("本当に脱退する", "Confirm leave")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#374151]"
+                  disabled={busy}
+                  onClick={() => setConfirmLeave(false)}
+                >
+                  {tx("キャンセル", "Cancel")}
+                </button>
+              </div>
+            )}
+          </section>
+        ) : null}
+
         {isOwner ? (
           <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
             <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
               {tx(
-                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上の「三」メニューから「プロジェクト削除…」を開いてください。",
-                "Deleting a project needs 2/3 member approval, then the owner confirms. Open “Delete project…” from the menu (☰) in the top right.",
+                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上の「三」メニューから「プロジェクト削除…」を開いてください。脱退したい場合は「メンバー」タブから権限を引き継いでください。",
+                "Deleting a project needs 2/3 member approval, then the owner confirms. Open “Delete project…” from the menu (☰) in the top right. To leave as owner, transfer ownership from the Members tab first.",
               )}
             </p>
           </section>

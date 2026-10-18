@@ -35,10 +35,8 @@ function mapRow(row: Record<string, unknown>): ProjectRecruitment {
     title: ((row.title as string | null) ?? "").trim(),
     message: ((row.message as string | null) ?? "").trim(),
     skillName: ((row.skill_name as string | null) ?? "").trim(),
-    duration: ((row.duration as string | null) ?? "1週間").trim() || "1週間",
-    compensation:
-      ((row.compensation as string | null) ?? "なし（経験・実績として）").trim() ||
-      "なし（経験・実績として）",
+    duration: ((row.duration as string | null) ?? "").trim(),
+    compensation: ((row.compensation as string | null) ?? "").trim(),
     skillRequestId: (row.skill_request_id as string | null) ?? null,
     status: (row.status as ProjectRecruitmentStatus) === "closed" ? "closed" : "open",
     createdAt: row.created_at as string,
@@ -79,10 +77,8 @@ function mapSkillRequestRow(row: Record<string, unknown>): ProjectRecruitment {
     title: title.trim() || skillName || "募集",
     message: SKILL_OPTION_SET.has(skillName) && message === title ? "" : message,
     skillName,
-    duration: ((row.duration as string | null) ?? "1週間").trim() || "1週間",
-    compensation:
-      ((row.compensation as string | null) ?? "なし（経験・実績として）").trim() ||
-      "なし（経験・実績として）",
+    duration: ((row.duration as string | null) ?? "").trim(),
+    compensation: ((row.compensation as string | null) ?? "").trim(),
     skillRequestId: row.id as string,
     status: statusRaw === "open" ? "open" : "closed",
     createdAt: row.created_at as string,
@@ -316,8 +312,8 @@ async function createViaSkillRequests(
   const title = input.title.trim();
   const skillName = (input.skillName ?? title).trim() || title;
   const description = [input.projectName, input.message?.trim() || title].filter(Boolean).join(" — ");
-  const duration = input.duration ?? "1週間";
-  const compensation = input.compensation ?? "なし（経験・実績として）";
+  const duration = (input.duration ?? "").trim();
+  const compensation = (input.compensation ?? "").trim();
 
   const { data, error } = await client
     .from("skill_requests")
@@ -390,6 +386,8 @@ export async function createProjectRecruitment(
   let skillRequestId: string | null = null;
   if (input.postToSkillBoard !== false) {
     const skillName = (input.skillName ?? title).trim() || title;
+    const duration = (input.duration ?? "").trim();
+    const compensation = (input.compensation ?? "").trim();
     const { data: skillRow, error: skillErr } = await client
       .from("skill_requests")
       .insert({
@@ -397,8 +395,8 @@ export async function createProjectRecruitment(
         project_id: input.projectId,
         skill_name: skillName,
         description: [input.projectName, input.message?.trim() || title].filter(Boolean).join(" — "),
-        duration: input.duration ?? "1週間",
-        compensation: input.compensation ?? "なし（経験・実績として）",
+        duration,
+        compensation,
         status: "open",
       })
       .select("id")
@@ -410,8 +408,8 @@ export async function createProjectRecruitment(
             skillName,
             description: [input.projectName, input.message?.trim() || title].filter(Boolean).join(" — "),
             projectId: input.projectId,
-            duration: input.duration ?? "1週間",
-            compensation: input.compensation ?? "なし（経験・実績として）",
+            duration,
+            compensation,
           });
         } catch {
           /* ignore board failure */
@@ -430,8 +428,8 @@ export async function createProjectRecruitment(
       title,
       message: input.message?.trim() || "",
       skill_name: (input.skillName ?? "").trim(),
-      duration: input.duration ?? "1週間",
-      compensation: input.compensation ?? "なし（経験・実績として）",
+      duration: (input.duration ?? "").trim(),
+      compensation: (input.compensation ?? "").trim(),
       skill_request_id: skillRequestId,
       status: "open",
     })

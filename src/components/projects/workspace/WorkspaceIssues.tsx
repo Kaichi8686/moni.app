@@ -1,12 +1,20 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Camera, Plus } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, ArrowRight, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
+import {
+  boardFromPlainText,
+  createEmptyBoard,
+  SHEET_COLORS,
+  type IssueWorkspaceBoard,
+} from "@/lib/workspace/issueWorkspaceBoard";
 import {
   createCustomTaskGenreId,
   CUSTOM_TASK_GENRE_LABEL_MAX,
@@ -22,7 +30,8 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type Screen =
   | { kind: "list" }
   | { kind: "genre"; genre: TaskGenre }
-  | { kind: "task"; genre: TaskGenre; issueId: string };
+  | { kind: "task"; genre: TaskGenre; issueId: string }
+  | { kind: "canvas"; genre: TaskGenre; issueId: string };
 
 export default function WorkspaceIssues() {
   const { tx, locale } = useI18n();
@@ -37,8 +46,10 @@ export default function WorkspaceIssues() {
     updateIssue,
     coachingContext,
     saveCoachingContext,
+    registerBackHandler,
   } = useProjectWorkspace();
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
+  const [portalReady, setPortalReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
   const [draftGenreLabel, setDraftGenreLabel] = useState("");
@@ -52,10 +63,11 @@ export default function WorkspaceIssues() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [savingGenre, setSavingGenre] = useState(false);
-  const [workspaceDraft, setWorkspaceDraft] = useState("");
+  const [boardDraft, setBoardDraft] = useState<IssueWorkspaceBoard>(() => createEmptyBoard());
   const fileRef = useRef<HTMLInputElement>(null);
+  const boardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openedFromQuery = useRef(false);
-  const taskId = screen.kind === "task" ? screen.issueId : "";
+  const taskId = screen.kind === "task" || screen.kind === "canvas" ? screen.issueId : "";
 
   const customGenres = useMemo(
     () => coachingContext.customTaskGenres ?? [],
@@ -67,13 +79,67 @@ export default function WorkspaceIssues() {
     [customGenres, issues],
   );
 
+  // 課題を開いたときだけボードを読み込む（保存後の issues 更新で編集中の下書きを潰さない）
   useEffect(() => {
     if (!taskId) return;
     const issue = issues.find((item) => item.id === taskId);
-    setWorkspaceDraft(issue?.workspaceText ?? "");
+    setBoardDraft(issue?.workspaceBoard ?? boardFromPlainText(issue?.workspaceText ?? ""));
     setBeginDraft(isoToDateInput(issue?.beginAt));
     setDueDraft(isoToDateInput(issue?.dueDate));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- task switch only
+  }, [taskId]);
+
+  useEffect(() => {
+    if (!taskId) return;
+    const issue = issues.find((item) => item.id === taskId);
+    if (!issue) return;
+    setBeginDraft(isoToDateInput(issue.beginAt));
+    setDueDraft(isoToDateInput(issue.dueDate));
   }, [taskId, issues]);
+
+  useEffect(() => {
+    return () => {
+      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (screen.kind !== "canvas") {
+      registerBackHandler(null);
+      return;
+    }
+    registerBackHandler(() => {
+      setScreen({ kind: "task", genre: screen.genre, issueId: screen.issueId });
+      return true;
+    });
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      registerBackHandler(null);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [registerBackHandler, screen]);
+
+  function persistBoard(issueId: string, board: IssueWorkspaceBoard) {
+    setBoardDraft(board);
+    if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+    boardSaveTimer.current = setTimeout(() => {
+      void saveIssueWork(issueId, { workspaceBoard: board });
+    }, 400);
+  }
+
+  function openCanvas(genre: TaskGenre, issueId: string) {
+    setScreen({ kind: "canvas", genre, issueId });
+  }
+
+  function closeCanvas() {
+    if (screen.kind !== "canvas") return;
+    setScreen({ kind: "task", genre: screen.genre, issueId: screen.issueId });
+  }
 
   useEffect(() => {
     if (openedFromQuery.current) return;
@@ -110,7 +176,10 @@ export default function WorkspaceIssues() {
   const openIssues = issues.filter((issue) => issue.status !== "cancelled");
   const genreIssues = (genre: TaskGenre) => openIssues.filter((issue) => issue.genre === genre);
   const activeGenre = screen.kind === "list" ? null : screen.genre;
-  const activeIssue = screen.kind === "task" ? issues.find((issue) => issue.id === screen.issueId) ?? null : null;
+  const activeIssue =
+    screen.kind === "task" || screen.kind === "canvas"
+      ? issues.find((issue) => issue.id === screen.issueId) ?? null
+      : null;
   const activePhase = activeIssue?.phaseId ? phases.find((phase) => phase.id === activeIssue.phaseId) : undefined;
   const phaseIndex = activePhase ? phases.findIndex((phase) => phase.id === activePhase.id) : -1;
 
@@ -188,12 +257,14 @@ export default function WorkspaceIssues() {
     try {
       const { supabase } = await import("@/lib/supabase");
       if (!supabase) throw new Error(tx("画像を保存できません", "Can’t save the photo"));
-      const uploaded: string[] = [];
+      let nextBoard = boardDraft;
       for (const file of Array.from(files)) {
         const result = await uploadProjectImage(supabase, uid, "issue-photo", activeIssue.id, file);
-        uploaded.push(result.publicUrl);
+        nextBoard = appendImageToBoard(nextBoard, result.publicUrl);
       }
-      await saveIssueWork(activeIssue.id, { attachments: [...activeIssue.attachments, ...uploaded] });
+      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+      setBoardDraft(nextBoard);
+      await saveIssueWork(activeIssue.id, { workspaceBoard: nextBoard });
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("画像を追加できませんでした", "Couldn’t add the photo"));
     } finally {
@@ -210,12 +281,58 @@ export default function WorkspaceIssues() {
     return tx(`期限を${Math.abs(days)}日過ぎています`, `${Math.abs(days)} days overdue`);
   }
 
+  if (screen.kind === "canvas" && activeIssue) {
+    if (!portalReady) return null;
+    return createPortal(
+      <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
+        <IssueWorkspaceCanvas
+          board={boardDraft}
+          canEdit={canEdit}
+          uploading={uploading}
+          fullscreen
+          onChange={(board) => persistBoard(activeIssue.id, board)}
+          onRequestPhoto={() => fileRef.current?.click()}
+          toolbarStart={
+            <button
+              type="button"
+              data-board-ui
+              onClick={closeCanvas}
+              className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+              <span>{tx("戻る", "Back")}</span>
+            </button>
+          }
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => void addPhotos(event.target.files)}
+        />
+        {error ? (
+          <p className="absolute bottom-4 left-1/2 z-10 max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
+            {error}
+          </p>
+        ) : null}
+        {uploading ? (
+          <p className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+            {tx("写真を追加中…", "Adding photo…")}
+          </p>
+        ) : null}
+      </div>,
+      document.body,
+    );
+  }
+
   if (screen.kind === "task" && activeIssue && activeGenre) {
     const meta = resolveGenreMeta(activeGenre, customGenres);
-    const Icon = meta.icon;
     const submitted = isIssueSubmitted(activeIssue);
     const assignee = assigneeNames(activeIssue, names).join("、");
     const due = dueLabel(activeIssue);
+    const previewSheets = boardDraft.items.filter((item) => item.kind === "sheet").slice(0, 4);
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <div className="flex items-center gap-2">
@@ -276,73 +393,64 @@ export default function WorkspaceIssues() {
             />
           </label>
         </div>
-        <section>
-          <h2 className="text-sm font-bold text-zinc-900">{tx("作業スペース", "Workspace")}</h2>
-          <textarea
-            value={workspaceDraft}
-            disabled={!canEdit}
-            onChange={(event) => setWorkspaceDraft(event.target.value)}
-            onBlur={() => {
-              if (workspaceDraft !== activeIssue.workspaceText) {
-                void saveIssueWork(activeIssue.id, { workspaceText: workspaceDraft });
-              }
+        <button
+          type="button"
+          onClick={() => openCanvas(activeGenre, activeIssue.id)}
+          className="group flex w-full items-stretch overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
+          aria-label={tx("移動", "Go")}
+        >
+          <div
+            className="relative min-h-[4.5rem] min-w-0 flex-1 overflow-hidden"
+            style={{
+              backgroundColor: "#F4F4F5",
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
+              backgroundSize: "16px 16px",
             }}
-            placeholder={tx("ここに作業内容を書こう", "Write your work here")}
-            className="mt-2 min-h-40 w-full rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm leading-relaxed outline-none focus:border-orange-400"
-          />
-        </section>
-        <section>
-          <h2 className="text-sm font-bold text-zinc-900">{tx("写真", "Photos")}</h2>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            {activeIssue.attachments.map((url) => (
-              <div key={url} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-zinc-200">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" className="h-full w-full object-cover" />
-                {canEdit ? (
-                  <button
-                    type="button"
-                    className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white"
-                    onClick={() => void saveIssueWork(activeIssue.id, { attachments: activeIssue.attachments.filter((item) => item !== url) })}
-                    aria-label={tx("写真を外す", "Remove photo")}
+          >
+            {previewSheets.length > 0 ? (
+              <div className="absolute inset-0 flex items-center gap-2 px-3">
+                {previewSheets.map((sheet) => (
+                  <span
+                    key={sheet.id}
+                    className="h-12 w-11 shrink-0 overflow-hidden rounded-sm border px-1 py-0.5 text-[8px] leading-tight text-zinc-800 shadow-sm"
+                    style={{
+                      backgroundColor: SHEET_COLORS[sheet.color].bg,
+                      borderColor: SHEET_COLORS[sheet.color].border,
+                    }}
                   >
-                    ×
-                  </button>
-                ) : null}
+                    {(sheet.text || " ").slice(0, 18)}
+                  </span>
+                ))}
               </div>
-            ))}
-            {canEdit ? (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading || !uid}
-                className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50 text-zinc-500 disabled:opacity-40"
-              >
-                <Camera className="h-5 w-5" />
-                <span className="mt-1 text-[11px] font-semibold">{uploading ? tx("追加中", "Adding") : tx("写真", "Photo")}</span>
-              </button>
-            ) : null}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(event) => void addPhotos(event.target.files)}
-            />
+            ) : (
+              <div className="flex h-full items-center justify-center text-zinc-400">
+                <StickyNote className="h-5 w-5" aria-hidden />
+              </div>
+            )}
           </div>
-          <p className="mt-1 flex items-center gap-1 text-[11px] text-zinc-400">
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {tx("写真フォルダから選べます", "Choose from your photo library")}
-          </p>
-        </section>
+          <span className="inline-flex shrink-0 items-center gap-1 bg-zinc-900 px-4 text-sm font-semibold text-white group-hover:bg-orange-500">
+            {tx("移動", "Go")}
+            <ArrowRight className="h-4 w-4" />
+          </span>
+        </button>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
         <button
           type="button"
           disabled={!canEdit || submitted}
-          onClick={() => void saveIssueWork(activeIssue.id, { submittedAt: new Date().toISOString() })}
+          onClick={() => {
+            if (boardSaveTimer.current) {
+              clearTimeout(boardSaveTimer.current);
+              boardSaveTimer.current = null;
+            }
+            void saveIssueWork(activeIssue.id, {
+              workspaceBoard: boardDraft,
+              submittedAt: new Date().toISOString(),
+            });
+          }}
           className="min-h-[52px] w-full rounded-full bg-orange-500 text-base font-bold text-white disabled:opacity-50"
         >
-          {submitted ? tx("提出済み", "Submitted") : tx("📤 提出する", "📤 Submit")}
+          {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
         </button>
       </div>
     );

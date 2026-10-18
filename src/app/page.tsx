@@ -4,8 +4,8 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail } from "lucide-react";
 import { MoniLanding } from "@/components/MoniLanding";
+import { AppBottomNav } from "@/components/AppBottomNav";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
@@ -237,43 +237,6 @@ const pageTaglines: Record<Language, Record<FeaturePage, string>> = {
     discovery: "Ideas Q&A",
     chat: "Find teammates and projects",
     account: "Manage profile and records",
-  },
-};
-
-type HomeBottomNavKey = FeaturePage | "idea" | "mail";
-
-const featureItems: Array<{ key: HomeBottomNavKey; icon: string }> = [
-  { key: "projects", icon: "▦" },
-  { key: "mail", icon: "mail" },
-  { key: "idea", icon: "✦" },
-  { key: "chat", icon: "⌕" },
-  { key: "account", icon: "◉" },
-];
-
-const navLabelKeys: Partial<Record<HomeBottomNavKey, MessageKey>> = {
-  projects: "navProjects",
-  mail: "navMail",
-  idea: "navIdea",
-  chat: "navSearch",
-  account: "navProfile",
-};
-
-const featureLabels: Record<Language, Record<FeaturePage, string>> = {
-  ja: {
-    projects: "プロジェクト",
-    articles: "記事",
-    mentor: "AI",
-    discovery: "知恵袋",
-    chat: "検索",
-    account: "プロフィール",
-  },
-  en: {
-    projects: "Projects",
-    articles: "Articles",
-    mentor: "AI",
-    discovery: "Ideas",
-    chat: "Search",
-    account: "Profile",
   },
 };
 
@@ -691,8 +654,6 @@ export default function Home() {
     "min-h-[44px] rounded-xl border border-zinc-900 bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 hover:border-zinc-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100";
   const secondaryButtonClass =
     "min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-100 active:bg-zinc-200";
-  const bottomNavButtonClass = (page: HomeBottomNavKey) =>
-    `app-bottom-nav-item keep-bottom-nav ${page !== "idea" && activePage === page ? "is-active" : ""}`;
   const [role, setRole] = useState<AppRole>("child");
   const [activePage, setActivePage] = useState<FeaturePage>("chat");
   const { locale: language, setLocale: setLanguage, t, tx } = useI18n();
@@ -5851,112 +5812,7 @@ export default function Home() {
         </div>
       </div>
 
-      <nav className="app-bottom-nav" aria-label="メイン機能の切り替え">
-        <div className="app-bottom-nav-inner">
-          {featureItems.map((item) => {
-            const label = navLabelKeys[item.key]
-              ? t(navLabelKeys[item.key]!)
-              : featureLabels[language][item.key as FeaturePage];
-            const className = bottomNavButtonClass(item.key);
-            if (item.key === "account") {
-              return (
-                <Link
-                  key={item.key}
-                  href="/profile"
-                  className={className}
-                  aria-label={label}
-                  title={label}
-                >
-                  <span className="app-bottom-nav-item-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                </Link>
-              );
-            }
-            if (item.key === "projects") {
-              return (
-                <Link
-                  key={item.key}
-                  href={HOME_PROJECTS_HREF}
-                  className={className}
-                  aria-label={label}
-                  title={label}
-                >
-                  <span className="app-bottom-nav-item-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                </Link>
-              );
-            }
-            if (item.key === "mail") {
-              return (
-                <Link
-                  key={item.key}
-                  href="/messages"
-                  className={className}
-                  aria-label={
-                    inboxUnreadCount > 0
-                      ? language === "ja"
-                        ? `${label}、未読${inboxUnreadCount}件`
-                        : `${label}, ${inboxUnreadCount} unread`
-                      : label
-                  }
-                  title={label}
-                >
-                  <span className="app-bottom-nav-item-icon" aria-hidden>
-                    <Mail className="app-bottom-nav-svg" strokeWidth={1.75} />
-                    {inboxUnreadCount > 0 ? (
-                      <span className="app-bottom-nav-badge">
-                        {inboxUnreadCount > 99 ? "99+" : inboxUnreadCount}
-                      </span>
-                    ) : null}
-                  </span>
-                </Link>
-              );
-            }
-            if (item.key === "idea") {
-              return (
-                <Link
-                  key={item.key}
-                  href="/idea"
-                  className={className}
-                  aria-label={label}
-                  title={label}
-                >
-                  <span className="app-bottom-nav-item-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                </Link>
-              );
-            }
-            const pageKey = item.key as FeaturePage;
-            return (
-              <button
-                key={item.key}
-                className={className}
-                type="button"
-                onClick={() => {
-                  if (pageKey === "chat") setChatSubView("list");
-                  setActivePage(pageKey);
-                }}
-                aria-label={label}
-                aria-current={activePage === pageKey ? "page" : undefined}
-                title={label}
-              >
-                <span className="app-bottom-nav-item-icon" aria-hidden>
-                  {item.icon}
-                </span>
-                {activePage === pageKey ? <span className="app-bottom-nav-indicator" aria-hidden /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-      <style jsx global>{`
-        button:not(.keep-bottom-nav) {
-          border-color: #111827;
-        }
-      `}</style>
+      <AppBottomNav />
 
       {groupDeleteTarget ? (
         <div

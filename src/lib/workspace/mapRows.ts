@@ -35,6 +35,7 @@ export type IssueRowDb = {
   workflow_json?: unknown | null;
   genre?: string | null;
   workspace_text?: string | null;
+  workspace_board_json?: unknown | null;
   attachment_urls?: string[] | null;
   submitted_at?: string | null;
   created_at: string;
@@ -87,6 +88,7 @@ export function mapIssueRow(row: IssueRowDb): Issue {
     labels: row.labels ?? [],
     genre: work.genre,
     workspaceText: work.workspaceText,
+    workspaceBoard: work.workspaceBoard,
     attachments: work.attachments,
     submittedAt: work.submittedAt ?? undefined,
     legacyWorkflow: work.legacyWorkflow,
