@@ -202,6 +202,14 @@ export default function WorkspaceMembers() {
           ? tx("参加申請を承認しました。", "Join request accepted.")
           : tx("参加申請を拒否しました。", "Join request rejected."),
       );
+      if (action === "accept") {
+        try {
+          const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+          await getOrCreateProjectConversation(supabase, projectId);
+        } catch {
+          /* 会話同期失敗は参加自体を妨げない */
+        }
+      }
       await loadJoinRequests();
       await refreshPendingJoinRequests();
       await reload();

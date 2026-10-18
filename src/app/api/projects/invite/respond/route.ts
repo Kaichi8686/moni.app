@@ -87,6 +87,59 @@ export async function POST(req: NextRequest) {
     if (mErr) {
       return NextResponse.json({ error: mErr.message || "参加に失敗しました" }, { status: 500 });
     }
+
+    // プロジェクト全員グループラインへ参加させる
+    try {
+      const { data: existingConv } = await admin
+        .from("conversations")
+        .select("id")
+        .eq("type", "project")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      let convId = (existingConv?.id as string | undefined) ?? null;
+      if (!convId) {
+        const { data: created } = await admin
+          .from("conversations")
+          .insert({
+            type: "project",
+            name: projectName,
+            icon_emoji: "📁",
+            project_id: projectId,
+            created_by: auth.userId,
+          })
+          .select("id")
+          .single();
+        convId = (created?.id as string | undefined) ?? null;
+      }
+
+      if (convId) {
+        const { data: projectRow } = await admin
+          .from("projects")
+          .select("owner_id")
+          .eq("id", projectId)
+          .maybeSingle();
+        const { data: memberRows } = await admin
+          .from("project_members")
+          .select("user_id")
+          .eq("project_id", projectId);
+        const memberIds = new Set<string>([auth.userId]);
+        if (projectRow?.owner_id) memberIds.add(projectRow.owner_id as string);
+        for (const row of memberRows ?? []) memberIds.add(row.user_id as string);
+        await admin.from("conversation_members").upsert(
+          [...memberIds].map((id) => ({
+            conversation_id: convId!,
+            user_id: id,
+            role: "member",
+          })),
+          { onConflict: "conversation_id,user_id", ignoreDuplicates: true },
+        );
+      }
+    } catch (e) {
+      console.warn("[invite/respond] project conversation sync skipped", e);
+    }
   }
 
   const nextStatus = action === "accept" ? "accepted" : "declined";

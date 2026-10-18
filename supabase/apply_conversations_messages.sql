@@ -102,7 +102,7 @@ begin
     raise exception 'invalid peer';
   end if;
 
-  -- 相互フォローのみ 1:1 メールを開始できる
+  -- 相互フォロー、または同じプロジェクト所属なら 1:1 を開始できる
   select exists (
     select 1 from public.follows f1
     where f1.follower_id = v_uid and f1.following_id = p_other_user_id
@@ -110,6 +110,27 @@ begin
     select 1 from public.follows f2
     where f2.follower_id = p_other_user_id and f2.following_id = v_uid
   ) into v_mutual;
+
+  if not coalesce(v_mutual, false) then
+    select exists (
+      select 1
+      from public.projects p
+      where (
+        p.owner_id = v_uid
+        or exists (
+          select 1 from public.project_members m
+          where m.project_id = p.id and m.user_id = v_uid
+        )
+      )
+      and (
+        p.owner_id = p_other_user_id
+        or exists (
+          select 1 from public.project_members m
+          where m.project_id = p.id and m.user_id = p_other_user_id
+        )
+      )
+    ) into v_mutual;
+  end if;
 
   if not coalesce(v_mutual, false) then
     raise exception 'mutual follow required';
