@@ -17,17 +17,32 @@ import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Spa
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
 import {
+  enterProjectListMode,
   isInsideProjectWorkspace,
   markProjectClusterUnlocked,
   openProjectCluster,
   readProjectClusterUnlocked,
+  readProjectListMode,
   readStoredProjectClusterOpen,
+  subscribeProjectCluster,
   writeStoredProjectClusterOpen,
 } from "@/lib/navigation/projectCluster";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
+
+function getClusterUnlockedSnapshot(): boolean {
+  return readProjectClusterUnlocked();
+}
+
+function getListModeSnapshot(): boolean {
+  return readProjectListMode();
+}
+
+function getServerFalseSnapshot(): boolean {
+  return false;
+}
 
 type NavMatch = (pathname: string, tab: string | null, segment: string | null) => boolean;
 
@@ -313,33 +328,48 @@ function AppBottomNavInner({ className }: { className?: string }) {
     getLastProjectIdSnapshot,
     getLastProjectIdServerSnapshot,
   );
+  const clusterUnlockedStored = useSyncExternalStore(
+    subscribeProjectCluster,
+    getClusterUnlockedSnapshot,
+    getServerFalseSnapshot,
+  );
+  const listMode = useSyncExternalStore(
+    subscribeProjectCluster,
+    getListModeSnapshot,
+    getServerFalseSnapshot,
+  );
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
   const insideProject = isInsideProjectWorkspace(pathname);
+  const onProjectsList = pathname === "/projects" || pathname === "/projects/";
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
   // 課題・募集は開いたクラスタ専用（閉じた側の AI / 探すとは別）
   const openOnlyActive = OPEN_TABS.some(
     (item) =>
       (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
   );
-  /** 一度でもプロジェクトを開くまでクラスタは開けない＝矢印なし */
+  /** 一覧モード中／未オープン時はクラスタ開けない＝矢印なし */
   const projectClusterUnlocked =
-    readProjectClusterUnlocked() || insideProject || openOnlyActive;
+    !listMode && (clusterUnlockedStored || insideProject || openOnlyActive);
 
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
   const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
   /** プロジェクトブロックのメールは、そのプロジェクトのメンバー／グループに絞る */
   const projectMailHref = lastProjectId ? `/messages?project=${lastProjectId}` : "/messages";
-  /** 一度開いたあとはホーム押下でキューブではなく最後のプロジェクトへ */
-  const projectsHomeHref = resolveHomeProjectsHref(lastProjectId);
-  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
+  /** 一覧モード中はキューブへ。そうでなければ最後のプロジェクトへ */
+  const projectsHomeHref = resolveHomeProjectsHref(lastProjectId, listMode);
+  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}`;
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
     if (openOnlyActive || insideProject) {
-      // 具体的なプロジェクト内にいるときだけホームブロックを伸ばす（/projects 一覧は閉じたまま）
+      // 具体的なプロジェクト内にいるときだけホームブロックを伸ばす
       openProjectCluster();
       setOpenPref(true);
+    } else if (onProjectsList || listMode) {
+      // キューブ一覧：ブロック閉じ＋矢印なしを維持
+      enterProjectListMode();
+      setOpenPref(false);
     } else if (profileActive) {
       // プロフィール側にいるときはプロフィールブロックを伸ばす
       setOpenPref(false);
@@ -378,7 +408,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }, []);
 
   const expandHomeBlock = useCallback(() => {
-    // プロジェクト未選択のときはホーム＝キューブ一覧のみ（クラスタは開けない）
+    // 一覧モード／未選択時はホーム＝キューブのみ（クラスタは開けない）
+    if (readProjectListMode()) return;
     if (!readProjectClusterUnlocked() && !isInsideProjectWorkspace(pathname)) return;
     setClusterOpen(true);
   }, [pathname, setClusterOpen]);
@@ -388,6 +419,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }, [setClusterOpen]);
 
   const toggleCluster = useCallback(() => {
+    if (readProjectListMode()) return;
     if (!readProjectClusterUnlocked() && !isInsideProjectWorkspace(pathname)) return;
     setOpenPref((prev) => {
       const next = !prev;

@@ -7,6 +7,7 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { ProjectTabGlide, type AppFeatureKey } from "@/components/projects/ProjectTabGlide";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { enterProjectListMode, readProjectListMode } from "@/lib/navigation/projectCluster";
 import { loadMemberProjects } from "@/lib/projects/loadMemberProjects";
 import { supabase } from "@/lib/supabase";
 import { readLastProject, rememberLastProject } from "@/lib/workspace/lastProject";
@@ -15,23 +16,29 @@ function ProjectsHomeViewInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { tx } = useI18n();
-  /** キューブ一覧を明示表示（スイッチャー「すべてのプロジェクト」など） */
+  /** キューブ一覧を明示表示（スイッチャー「一覧に戻る」など） */
   const forceList = searchParams.get("list") === "1";
   const startCreate = searchParams.get("create") === "1";
   const [hasSession, setHasSession] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   /**
-   * 一度プロジェクトを開いたあとは /projects に戻ってもキューブではなく
-   * 最後のプロジェクトへ飛ばす。?list=1 のときだけキューブ一覧。
+   * 一覧モード中／?list=1 はキューブのまま。
+   * それ以外で last があればプロジェクトへ（他タブから戻っても維持）。
    */
-  const [resolving, setResolving] = useState(!forceList);
+  const [resolving, setResolving] = useState(() => {
+    if (forceList) return false;
+    if (typeof window !== "undefined" && readProjectListMode()) return false;
+    return true;
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     const showList = () => {
-      if (!cancelled) setResolving(false);
+      if (cancelled) return;
+      enterProjectListMode();
+      setResolving(false);
     };
 
     const applySession = (session: { user: { id: string; email?: string | null } } | null) => {
@@ -84,18 +91,23 @@ function ProjectsHomeViewInner() {
       }
 
       try {
+        // 「一覧に戻る」後は、他タブからホームに戻ってもキューブのまま
+        if (readProjectListMode()) {
+          showList();
+          return;
+        }
+
         const last = readLastProject();
         const rows = await loadMemberProjects(uid);
         if (cancelled) return;
 
-        // 最後に開いたプロジェクトがまだ参加中ならそこへ（他タブから戻ってもキューブに戻さない）
+        // 最後に開いたプロジェクトがまだ参加中ならそこへ
         if (last?.id && rows.some((r) => r.id === last.id)) {
           router.replace(`/projects/${last.id}/overview`);
           return;
         }
 
         // まだ一度も開いていない／無効な last → キューブ一覧
-        // （参加プロジェクトがあっても、最初はキューブから選ばせる）
         if (!last?.id) {
           showList();
           return;

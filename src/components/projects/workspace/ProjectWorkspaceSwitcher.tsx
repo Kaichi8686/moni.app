@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
-import { openProjectCluster } from "@/lib/navigation/projectCluster";
+import { enterProjectListMode, openProjectCluster } from "@/lib/navigation/projectCluster";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { loadMemberProjects, type MemberProjectLite } from "@/lib/projects/loadMemberProjects";
 import { rememberLastProject } from "@/lib/workspace/lastProject";
@@ -213,7 +213,10 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
             <Link
               href={`${HOME_PROJECTS_HREF}?list=1`}
               className="flex w-full items-center gap-2.5 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                enterProjectListMode();
+                setOpen(false);
+              }}
             >
               <LayoutGrid className="h-4 w-4 text-zinc-500" aria-hidden />
               {tx("一覧に戻る", "Back to list")}
@@ -221,7 +224,10 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
             <Link
               href={`${HOME_PROJECTS_HREF}?list=1&create=1`}
               className="flex w-full items-center gap-2.5 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                enterProjectListMode();
+                setOpen(false);
+              }}
             >
               <Plus className="h-4 w-4 text-zinc-500" aria-hidden />
               {tx("新しいプロジェクト", "New project")}
