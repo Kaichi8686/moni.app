@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
-import { ContactShadows, Environment, Html, RoundedBox } from "@react-three/drei";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { ContactShadows, Environment, Html } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -15,6 +15,9 @@ import { rememberLastProject } from "@/lib/workspace/lastProject";
 
 /** Active cube Y rotation per frame (~60fps). Kept slow so faces stay readable. */
 const ACTIVE_SPIN_PER_FRAME = 0.003;
+const FACE_TEX_SIZE = 512;
+/** BoxGeometry keeps clean 0–1 UVs per face (RoundedBox extrude UVs smear photo edges). */
+const CUBE_SIZE = 1.75;
 
 type Props = {
   projects: ProjectRow[];
@@ -26,25 +29,21 @@ type Props = {
 
 type CubeItem = { kind: "project"; project: ProjectRow } | { kind: "create"; id: "__create__" };
 
+type FacePaintOpts = {
+  bg: string;
+  create?: boolean;
+  icon?: string;
+  letter?: string;
+  imageUrl?: string | null;
+};
+
 const NAV_BTN =
   "absolute top-1/2 z-30 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-md transition hover:bg-zinc-50 active:scale-95 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 sm:h-14 sm:w-14";
 
-const FACE_HEX = ["#f8fafc", "#f1f5f9", "#fafafa", "#f4f4f5", "#f8fafc", "#f5f5f4"] as const;
+const FACE_HEX = ["#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#f43f5e", "#06b6d4"] as const;
 
 function hexForProject(id: string) {
-  return FACE_HEX[projectHashIndex(id, FACE_HEX.length)] ?? "#f8fafc";
-}
-
-function paintFaceBase(ctx: CanvasRenderingContext2D, bg: string) {
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 512, 512);
-  const g = ctx.createRadialGradient(256, 220, 60, 256, 256, 340);
-  g.addColorStop(0, "rgba(255,255,255,0.55)");
-  g.addColorStop(0.55, "rgba(255,255,255,0.08)");
-  g.addColorStop(1, "rgba(15,23,42,0.08)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 512, 512);
-  return g;
+  return FACE_HEX[projectHashIndex(id, FACE_HEX.length)] ?? "#52525b";
 }
 
 function paintEmojiOrLetter(ctx: CanvasRenderingContext2D, label: string, isEmoji: boolean) {
@@ -52,29 +51,27 @@ function paintEmojiOrLetter(ctx: CanvasRenderingContext2D, label: string, isEmoj
   ctx.textBaseline = "middle";
   if (isEmoji) {
     ctx.font = "280px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
-    ctx.fillText(label, 256, 270);
+    ctx.fillText(label, FACE_TEX_SIZE / 2, FACE_TEX_SIZE / 2 + 14);
   } else {
-    ctx.fillStyle = "#18181b";
+    ctx.fillStyle = "#fff";
     ctx.font = "bold 220px system-ui, sans-serif";
-    ctx.fillText(label, 256, 272);
+    ctx.fillText(label, FACE_TEX_SIZE / 2, FACE_TEX_SIZE / 2 + 16);
   }
 }
 
-function makeFaceTexture(opts: {
-  bg: string;
-  icon?: string | null;
-  letter?: string;
-  imageUrl?: string | null;
-  create?: boolean;
-}): THREE.CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d")!;
-  const vignette = paintFaceBase(ctx, opts.bg);
+function paintFaceFallback(ctx: CanvasRenderingContext2D, opts: FacePaintOpts & { photoPending?: boolean }) {
+  ctx.fillStyle = opts.photoPending ? "#18181b" : opts.bg;
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  if (opts.photoPending) return;
+
+  const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
+  vignette.addColorStop(0, "rgba(255,255,255,0.18)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.22)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
 
   if (opts.create) {
-    ctx.strokeStyle = "rgba(24,24,27,0.88)";
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
     ctx.lineWidth = 36;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -83,60 +80,120 @@ function makeFaceTexture(opts: {
     ctx.moveTo(140, 256);
     ctx.lineTo(372, 256);
     ctx.stroke();
-  } else {
-    const icon = opts.icon?.trim() || "";
-    if (icon) paintEmojiOrLetter(ctx, icon, true);
-    else if (opts.letter) paintEmojiOrLetter(ctx, opts.letter, false);
+    return;
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  tex.needsUpdate = true;
+  const icon = opts.icon?.trim() || "";
+  if (icon) paintEmojiOrLetter(ctx, icon, true);
+  else if (opts.letter) paintEmojiOrLetter(ctx, opts.letter, false);
+}
 
-  if (opts.imageUrl) {
+/** object-fit: cover — fill the square face edge-to-edge with no letterbox / edge streak. */
+function paintFacePhotoCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (w <= 0 || h <= 0) return false;
+
+  ctx.fillStyle = "#18181b";
+  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  const scale = Math.max(FACE_TEX_SIZE / w, FACE_TEX_SIZE / h);
+  const drawW = w * scale;
+  const drawH = h * scale;
+  ctx.drawImage(img, (FACE_TEX_SIZE - drawW) / 2, (FACE_TEX_SIZE - drawH) / 2, drawW, drawH);
+  return true;
+}
+
+function createFaceTextureCanvas(opts: FacePaintOpts) {
+  const canvas = document.createElement("canvas");
+  canvas.width = FACE_TEX_SIZE;
+  canvas.height = FACE_TEX_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    paintFaceFallback(ctx, { ...opts, photoPending: Boolean(opts.imageUrl?.trim()) });
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function faceOptsForItem(item: CubeItem): FacePaintOpts {
+  if (item.kind === "create") {
+    return { bg: "#27272a", create: true };
+  }
+  const p = item.project;
+  return {
+    bg: hexForProject(p.id),
+    icon: p.icon?.trim() || undefined,
+    letter: (p.name.trim().charAt(0) || "P").toUpperCase(),
+    imageUrl: p.thumbnail_url?.trim() || null,
+  };
+}
+
+function useFaceTexture(item: CubeItem) {
+  const invalidate = useThree((state) => state.invalidate);
+  const opts = useMemo(() => faceOptsForItem(item), [item]);
+  const imageUrl = opts.imageUrl?.trim() || null;
+  const texture = useMemo(
+    () => createFaceTextureCanvas({ ...opts, imageUrl }),
+    // One texture per cube mount; carousel items are keyed by project id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable per instance
+    [],
+  );
+
+  useEffect(() => {
+    const canvas = texture.image;
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const markDirty = () => {
+      texture.needsUpdate = true;
+      invalidate();
+    };
+
+    if (!imageUrl) {
+      paintFaceFallback(ctx, opts);
+      markDirty();
+      return;
+    }
+
+    let cancelled = false;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      ctx.fillStyle = opts.bg;
-      ctx.fillRect(0, 0, 512, 512);
-      const scale = Math.max(512 / img.width, 512 / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      ctx.drawImage(img, (512 - w) / 2, (512 - h) / 2, w, h);
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, 512, 512);
-      tex.needsUpdate = true;
+      if (cancelled) return;
+      if (!paintFacePhotoCover(ctx, img)) {
+        paintFaceFallback(ctx, opts);
+      }
+      markDirty();
     };
     img.onerror = () => {
-      /* keep emoji / letter fallback */
+      if (cancelled) return;
+      paintFaceFallback(ctx, opts);
+      markDirty();
     };
-    img.src = opts.imageUrl;
-  }
+    img.src = imageUrl;
 
-  return tex;
-}
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+      img.src = "";
+    };
+  }, [texture, imageUrl, invalidate, opts]);
 
-function projectFaceIcon(p: ProjectRow): { icon?: string; letter?: string; imageUrl: string | null } {
-  const imageUrl = p.thumbnail_url?.trim() || null;
-  const icon = p.icon?.trim() || "";
-  const letter = (p.name.trim().charAt(0) || "P").toUpperCase();
-  return { icon: icon || undefined, letter, imageUrl };
-}
+  useEffect(
+    () => () => {
+      texture.dispose();
+    },
+    [texture],
+  );
 
-function useItemTexture(item: CubeItem) {
-  return useMemo(() => {
-    if (item.kind === "create") {
-      return makeFaceTexture({ bg: "#fafafa", create: true });
-    }
-    const face = projectFaceIcon(item.project);
-    return makeFaceTexture({
-      bg: hexForProject(item.project.id),
-      icon: face.icon,
-      letter: face.letter,
-      imageUrl: face.imageUrl,
-    });
-  }, [item]);
+  return texture;
 }
 
 function createFaceMaterials(tex: THREE.CanvasTexture) {
@@ -183,13 +240,10 @@ function ProjectCubeMesh({
   onOpen: () => void;
 }) {
   const group = useRef<THREE.Group>(null);
-  const mesh = useRef<THREE.Mesh>(null);
-  const tex = useItemTexture(item);
+  const tex = useFaceTexture(item);
   const materialsRef = useFaceMaterials(tex);
   const tapScale = useRef(1);
   const pressed = useRef(false);
-
-  useEffect(() => () => tex.dispose(), [tex]);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -257,11 +311,7 @@ function ProjectCubeMesh({
 
   return (
     <group ref={group} position={[side * 2.55, 0, active ? 0 : -1.25]}>
-      <RoundedBox
-        ref={mesh}
-        args={[1.65, 1.65, 1.65]}
-        radius={0.12}
-        smoothness={4}
+      <mesh
         castShadow
         receiveShadow
         material={materialsRef.current}
@@ -271,7 +321,9 @@ function ProjectCubeMesh({
           pressed.current = false;
         }}
         onClick={handleClick}
-      />
+      >
+        <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
+      </mesh>
     </group>
   );
 }
