@@ -16,6 +16,7 @@ import { countryLabel, sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
 import { parseInterestFields } from "@/lib/profile/interestFields";
+import { writeLocalOnboardingDone } from "@/lib/profile/onboardingStatus";
 import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -236,9 +237,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
       /* ignore metadata sync failure */
     }
 
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(`moni-onboarding-complete-${session.user.id}`, "1");
-    }
+    writeLocalOnboardingDone(session.user.id);
     setSaving(false);
     onComplete();
   }

@@ -17,7 +17,6 @@ import { DiscoverRecruitBoard } from "@/components/projects/DiscoverRecruitBoard
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppAdminDashboard } from "@/components/admin/AppAdminDashboard";
-import { SignupOnboardingWizard } from "@/components/onboarding/SignupOnboardingWizard";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import type { MentorClientContext } from "@/lib/ai/mentorContext";
 import { readLastProject } from "@/lib/workspace/lastProject";
@@ -701,7 +700,6 @@ export default function Home() {
   const [discoveryProblems, setDiscoveryProblems] = useState<string[]>([]);
   const [discoveryProblemText, setDiscoveryProblemText] = useState("");
   const [discoveryTarget, setDiscoveryTarget] = useState(DISCOVERY_NAV_TARGETS[0]);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [ideaDoneMap, setIdeaDoneMap] = useState<Record<string, boolean>>({});
   const [ideaMemoMap, setIdeaMemoMap] = useState<Record<string, string>>({});
   const [favoriteCards, setFavoriteCards] = useState<string[]>([]);
@@ -2423,45 +2421,6 @@ export default function Home() {
   }, [hasEnteredApp]);
 
   useEffect(() => {
-    if (!session || typeof window === "undefined") {
-      setOnboardingCompleted(true);
-      return;
-    }
-    let cancelled = false;
-    const key = `moni-onboarding-complete-${session.user.id}`;
-    const localDone = window.localStorage.getItem(key) === "1";
-
-    async function resolveOnboarding() {
-      if (localDone) {
-        if (!cancelled) setOnboardingCompleted(true);
-        return;
-      }
-      if (supabase) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("onboarding_completed_at")
-          .eq("id", session!.user.id)
-          .maybeSingle();
-        const dbDone = Boolean((data as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at);
-        if (dbDone) {
-          window.localStorage.setItem(key, "1");
-          if (!cancelled) setOnboardingCompleted(true);
-          return;
-        }
-      }
-      if (!cancelled) {
-        setOnboardingCompleted(false);
-        trackOpsEvent("onboarding_started");
-      }
-    }
-
-    void resolveOnboarding();
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
-
-  useEffect(() => {
     if (!session || typeof window === "undefined") return;
     const firstVisitKey = `moni-first-visit-at-${session.user.id}`;
     const returnVisitTrackedKey = `moni-return-visit-7d-${session.user.id}`;
@@ -3487,30 +3446,6 @@ export default function Home() {
     setter([...current, value]);
   }
 
-  function handleSignupOnboardingComplete() {
-    trackOpsEvent("onboarding_completed");
-    setOnboardingCompleted(true);
-    if (session) {
-      const meta = (session.user.user_metadata as { display_name?: string } | undefined)?.display_name;
-      // refresh display name from form save path via local state if needed
-      void (async () => {
-        if (!supabase) return;
-        const { data } = await supabase
-          .from("profiles")
-          .select("display_name,avatar_url")
-          .eq("id", session.user.id)
-          .maybeSingle();
-        if (data?.display_name) setDisplayName(data.display_name as string);
-        if (data?.avatar_url) setProfileAvatarUrl(data.avatar_url as string);
-        else if (meta) setDisplayName(meta);
-      })();
-    }
-    router.replace(HOME_PROJECTS_HREF);
-    setAuthMessage(
-      tx("オンボーディング完了。プロジェクトから始めましょう。", "Setup done. Start from Projects."),
-    );
-  }
-
   function generateIdeaBlueprint() {
     const weightedProblems: Array<{ text: string; weight: number }> = [
       comboProblem.trim() ? { text: comboProblem.trim(), weight: 5 } : null,
@@ -3971,20 +3906,6 @@ export default function Home() {
             setAuthMessage("");
           }
         }}
-      />
-    );
-  }
-
-  if (session && !onboardingCompleted) {
-    const metaName =
-      ((session.user.user_metadata as { display_name?: string } | undefined)?.display_name ?? "").trim() ||
-      displayName.trim() ||
-      "";
-    return (
-      <SignupOnboardingWizard
-        session={session}
-        initialNickname={metaName}
-        onComplete={handleSignupOnboardingComplete}
       />
     );
   }
