@@ -237,15 +237,20 @@ export function formatAssignmentsForLine(
   return lines.join("\n");
 }
 
-export function formatMemberLineInvite(title: string, memberUrl: string): string {
+export function formatMemberLineInvite(title: string, hopeUrl: string): string {
   return [
     `【${title}】シフト希望を教えて！`,
     "",
-    "下のリンクを開いて、名前と ○△× を入れてね。",
+    "下のリンクを開いて、名前と ○△× を入れて送ってね。",
     "○＝入りたい　△＝入れる　×＝無理",
+    "送るとオーナーに届きます。",
     "",
-    memberUrl,
+    hopeUrl,
   ].join("\n");
+}
+
+export function hopeUrlForCode(origin: string, code: string): string {
+  return `${origin.replace(/\/$/, "")}/shift/${code}/hope`;
 }
 
 export function formatScheduleViewInvite(title: string, viewUrl: string): string {

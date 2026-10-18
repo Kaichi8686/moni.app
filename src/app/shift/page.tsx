@@ -2,7 +2,11 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { formatScheduleViewInvite } from "@/lib/shift/assign";
+import {
+  formatMemberLineInvite,
+  formatScheduleViewInvite,
+  hopeUrlForCode,
+} from "@/lib/shift/assign";
 import { DEFAULT_SCHEDULE, type ShiftScheduleConfig } from "@/lib/shift/types";
 
 type DayDraft = { label: string; date: string };
@@ -11,8 +15,10 @@ type SlotDraft = { start: string; end: string; label: string; isBreak: boolean }
 
 type CreatedLinks = {
   memberUrl: string;
+  hopeUrl: string;
   adminUrl: string;
   lineText: string;
+  hopeInvite: string;
   viewInvite: string;
 };
 
@@ -137,9 +143,21 @@ function loadLastCreated(): CreatedLinks | null {
   try {
     const raw = localStorage.getItem(LAST_CREATED_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CreatedLinks;
+    const parsed = JSON.parse(raw) as Partial<CreatedLinks>;
     if (!parsed?.adminUrl || !parsed?.memberUrl) return null;
-    return parsed;
+    const hopeUrl =
+      parsed.hopeUrl ||
+      parsed.memberUrl.replace(/\/shift\/([^/?#]+).*$/, "/shift/$1/hope");
+    return {
+      memberUrl: parsed.memberUrl,
+      hopeUrl,
+      adminUrl: parsed.adminUrl,
+      lineText: parsed.lineText || "",
+      hopeInvite:
+        parsed.hopeInvite ||
+        formatMemberLineInvite("シフト", hopeUrl),
+      viewInvite: parsed.viewInvite || formatScheduleViewInvite("シフト", parsed.memberUrl),
+    };
   } catch {
     return null;
   }
@@ -400,11 +418,14 @@ export default function ShiftCreatePage() {
       }
       const origin = window.location.origin;
       const memberUrl = `${origin}/shift/${data.board.code}`;
+      const hopeUrl = hopeUrlForCode(origin, data.board.code);
       const adminUrl = `${origin}/shift/${data.board.code}/admin?key=${encodeURIComponent(data.board.adminKey)}`;
       const links: CreatedLinks = {
         memberUrl,
+        hopeUrl,
         adminUrl,
         lineText: data.lineText || formatScheduleViewInvite(data.board.title, memberUrl),
+        hopeInvite: formatMemberLineInvite(data.board.title, hopeUrl),
         viewInvite: formatScheduleViewInvite(data.board.title, memberUrl),
       };
       setCreated(links);
@@ -682,37 +703,48 @@ export default function ShiftCreatePage() {
         ) : (
           <motion.div key="done" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <section className="shift-panel">
-              <h2 className="shift-h2">できた！共有しよう</h2>
+              <h2 className="shift-h2">できた！まず希望を集めよう</h2>
               <p className="shift-muted" style={{ marginTop: 0 }}>
-                メンバー名簿から自動で割り振り済みです。手直しは管理画面からできます。
+                このURLは希望入力だけです。LINEグループに送ると、メンバーが○△×を入れてオーナーに送れます。
               </p>
-              <label className="shift-label">LINE用シフト表</label>
+              <label className="shift-label">希望入力URL（メンバー用）</label>
+              <div className="shift-link-box">{created.hopeUrl}</div>
+              <label className="shift-label" style={{ marginTop: 12 }}>
+                LINE用の文面
+              </label>
               <pre
                 className="shift-link-box"
                 style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}
               >
-                {created.lineText}
+                {created.hopeInvite}
               </pre>
               <div className="shift-actions">
                 <button
                   type="button"
                   className="shift-btn shift-btn-sun"
-                  onClick={() => shareLine(created.lineText)}
+                  onClick={() => shareLine(created.hopeInvite)}
                 >
-                  LINEで送る
+                  LINEで希望URLを送る
                 </button>
                 <button
                   type="button"
                   className="shift-btn shift-btn-primary"
-                  onClick={() => void copy(created.lineText, "line")}
+                  onClick={() => void copy(created.hopeInvite, "hope")}
                 >
                   文面をコピー
+                </button>
+                <button
+                  type="button"
+                  className="shift-btn shift-btn-ghost"
+                  onClick={() => void copy(created.hopeUrl, "hopeUrl")}
+                >
+                  URLだけコピー
                 </button>
               </div>
               {copied ? <p className="shift-success">コピーしました</p> : null}
             </section>
             <section className="shift-panel">
-              <h2 className="shift-h2">シフト表（閲覧URL）</h2>
+              <h2 className="shift-h2">シフト表（閲覧）</h2>
               <div className="shift-link-box">{created.memberUrl}</div>
               <div className="shift-actions">
                 <button
@@ -729,10 +761,13 @@ export default function ShiftCreatePage() {
             </section>
             <section className="shift-panel">
               <h2 className="shift-h2">管理者用（自分だけ）</h2>
+              <p className="shift-muted" style={{ marginTop: 0 }}>
+                届いた希望を見て、自動割り振りや手直しができます。
+              </p>
               <div className="shift-link-box">{created.adminUrl}</div>
               <div className="shift-actions">
                 <a className="shift-btn shift-btn-primary" href={created.adminUrl}>
-                  管理画面で手直し
+                  管理画面を開く
                 </a>
                 <button
                   type="button"

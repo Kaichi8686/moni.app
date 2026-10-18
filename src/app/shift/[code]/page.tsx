@@ -4,10 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import {
-  formatMemberLineInvite,
-  formatScheduleViewInvite,
-} from "@/lib/shift/assign";
+import { formatScheduleViewInvite } from "@/lib/shift/assign";
 import { buildPersonalIcs, downloadIcs, myAssignedCells } from "@/lib/shift/ical";
 import {
   cellKey,
@@ -204,7 +201,6 @@ function ShiftMemberInner() {
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const viewUrl = `${origin}/shift/${board.code}`;
-  const prefsUrl = `${origin}/shift/${board.code}?tab=prefs`;
 
   return (
     <main className="shift-shell">
@@ -454,7 +450,9 @@ function ShiftMemberInner() {
           </section>
 
           {error ? <p className="shift-error">{error}</p> : null}
-          {saved ? <p className="shift-success">保存しました。同じ端末ならあとから直せます。</p> : null}
+          {saved ? (
+            <p className="shift-success">オーナーに届きました。同じ端末ならあとから直せます。</p>
+          ) : null}
 
           <div className="shift-actions">
             <button
@@ -463,19 +461,12 @@ function ShiftMemberInner() {
               disabled={busy || !name.trim()}
               onClick={onSubmit}
             >
-              {busy ? "送信中…" : saved ? "更新する" : "希望を送る"}
+              {busy ? "送信中…" : saved ? "更新する" : "オーナーに希望を送る"}
             </button>
-            <button
-              type="button"
-              className="shift-btn shift-btn-ghost"
-              onClick={() =>
-                copy(formatMemberLineInvite(board.title, prefsUrl), "invite")
-              }
-            >
-              招待文をコピー
-            </button>
+            <a className="shift-btn shift-btn-ghost" href={`/shift/${board.code}/hope`}>
+              希望専用ページを開く
+            </a>
           </div>
-          {copied === "invite" ? <p className="shift-success">コピーしました</p> : null}
         </>
       )}
     </main>

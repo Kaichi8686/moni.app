@@ -5,7 +5,9 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   formatAssignmentsForLine,
+  formatMemberLineInvite,
   formatScheduleViewInvite,
+  hopeUrlForCode,
 } from "@/lib/shift/assign";
 import type {
   AssignedPerson,
@@ -443,10 +445,10 @@ function AdminInner() {
     );
   }
 
-  const memberUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/shift/${board.code}`
-      : `/shift/${board.code}`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const memberUrl = origin ? `${origin}/shift/${board.code}` : `/shift/${board.code}`;
+  const hopeUrl = origin ? hopeUrlForCode(origin, board.code) : `/shift/${board.code}/hope`;
+  const hopeInvite = formatMemberLineInvite(board.title, hopeUrl);
 
   const assignments: ShiftAssignmentResult | null = board.assignments;
 
@@ -470,37 +472,67 @@ function AdminInner() {
       </header>
 
       <section className="shift-panel">
-        <h2 className="shift-h2">共有リンク</h2>
-        <label className="shift-label">シフト表（閲覧）</label>
-        <div className="shift-link-box">{memberUrl}</div>
+        <h2 className="shift-h2">希望を集める（LINE用）</h2>
+        <p className="shift-muted" style={{ marginTop: 0 }}>
+          希望入力だけのURLです。グループLINEに送ってください。届いた希望は下の名簿・割り振りに反映されます。
+        </p>
+        <label className="shift-label">希望入力URL</label>
+        <div className="shift-link-box">{hopeUrl}</div>
         <div className="shift-actions">
           <button
             type="button"
             className="shift-btn shift-btn-sun"
             onClick={() => {
-              const text = formatScheduleViewInvite(board.title, memberUrl);
               window.open(
-                `https://line.me/R/msg/text/?${encodeURIComponent(text)}`,
+                `https://line.me/R/msg/text/?${encodeURIComponent(hopeInvite)}`,
                 "_blank",
                 "noopener,noreferrer",
               );
             }}
           >
-            LINEで送る
+            LINEで希望URLを送る
           </button>
           <button
             type="button"
             className="shift-btn shift-btn-primary"
             onClick={() => {
-              void navigator.clipboard.writeText(formatScheduleViewInvite(board.title, memberUrl));
+              void navigator.clipboard.writeText(hopeInvite);
               setCopied(true);
               window.setTimeout(() => setCopied(false), 1600);
             }}
           >
             文面をコピー
           </button>
+          <button
+            type="button"
+            className="shift-btn shift-btn-ghost"
+            onClick={() => {
+              void navigator.clipboard.writeText(hopeUrl);
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1600);
+            }}
+          >
+            URLだけコピー
+          </button>
           <button type="button" className="shift-btn shift-btn-ghost" onClick={() => void load()}>
-            再読み込み
+            回答を更新
+          </button>
+        </div>
+        {copied ? <p className="shift-success">コピーしました</p> : null}
+        <div style={{ height: 12 }} />
+        <label className="shift-label">シフト表（閲覧）</label>
+        <div className="shift-link-box">{memberUrl}</div>
+        <div className="shift-actions">
+          <button
+            type="button"
+            className="shift-btn shift-btn-ghost"
+            onClick={() => {
+              void navigator.clipboard.writeText(formatScheduleViewInvite(board.title, memberUrl));
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1600);
+            }}
+          >
+            閲覧用文面をコピー
           </button>
         </div>
       </section>
