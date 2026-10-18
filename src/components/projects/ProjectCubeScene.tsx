@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { ContactShadows, Environment, Html, RoundedBox } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
@@ -203,6 +203,50 @@ function itemHasPhoto(item: CubeItem) {
   return item.kind === "project" && Boolean(item.project.thumbnail_url?.trim());
 }
 
+/**
+ * RoundedBox default UVs smear photos across fillets.
+ * Remap to planar 0–1 projections per face so cover textures fit like a flat square,
+ * while keeping the soft rounded silhouette.
+ */
+function remapRoundedBoxPlanarUVs(geometry: THREE.BufferGeometry, size: number) {
+  const pos = geometry.getAttribute("position");
+  if (!pos) return;
+
+  let uvAttr = geometry.getAttribute("uv") as THREE.BufferAttribute | undefined;
+  if (!uvAttr || uvAttr.count !== pos.count) {
+    uvAttr = new THREE.BufferAttribute(new Float32Array(pos.count * 2), 2);
+    geometry.setAttribute("uv", uvAttr);
+  }
+
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const ax = Math.abs(x);
+    const ay = Math.abs(y);
+    const az = Math.abs(z);
+
+    let u: number;
+    let v: number;
+    if (ax >= ay && ax >= az) {
+      // ±X faces
+      u = 0.5 + (x >= 0 ? -z : z) / size;
+      v = 0.5 + y / size;
+    } else if (ay >= ax && ay >= az) {
+      // ±Y faces
+      u = 0.5 + x / size;
+      v = 0.5 + (y >= 0 ? z : -z) / size;
+    } else {
+      // ±Z faces
+      u = 0.5 + (z >= 0 ? x : -x) / size;
+      v = 0.5 + y / size;
+    }
+    uvAttr.setXY(i, THREE.MathUtils.clamp(u, 0, 1), THREE.MathUtils.clamp(v, 0, 1));
+  }
+  uvAttr.needsUpdate = true;
+  geometry.userData.planarUVs = true;
+}
+
 function createFaceMaterials(tex: THREE.CanvasTexture, hasPhoto: boolean) {
   return Array.from({ length: 6 }, () => {
     if (hasPhoto) {
@@ -254,11 +298,25 @@ function ProjectCubeMesh({
   onOpen: () => void;
 }) {
   const group = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
   const tex = useFaceTexture(item);
   const hasPhoto = itemHasPhoto(item);
   const materials = useFaceMaterials(tex, hasPhoto);
   const tapScale = useRef(1);
   const pressed = useRef(false);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh?.geometry) return;
+    if (mesh.geometry.userData.planarUVs) return;
+    // Clone so we never mutate a geometry instance shared across cubes.
+    const geo = mesh.geometry.clone();
+    remapRoundedBoxPlanarUVs(geo, CUBE_SIZE);
+    mesh.geometry = geo;
+    return () => {
+      geo.dispose();
+    };
+  }, []);
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -334,6 +392,7 @@ function ProjectCubeMesh({
   return (
     <group ref={group} position={[CUBE_SPACING * side, 0, active ? 0.15 : -1.35]}>
       <RoundedBox
+        ref={meshRef}
         args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]}
         radius={CUBE_RADIUS}
         smoothness={CUBE_SMOOTHNESS}
