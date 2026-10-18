@@ -1,0 +1,17 @@
+.bunkasai-shift-root {
+  --bs-ink: #102a43;
+  --bs-ink-soft: #334e68;
+  --bs-muted: #627d98;
+  --bs-line: rgba(16, 42, 67, 0.12);
+  --bs-soft: #eef4f8;
+  --bs-accent: #0e7c7b;
+  --bs-accent-deep: #0a5c5b;
+  --bs-glow-a: rgba(14, 124, 123, 0.22);
+  --bs-glow-b: rgba(244, 162, 97, 0.2);
+  position: relative;
+  color: var(--bs-ink);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #d9f3f2 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #ffe8d6 0%, transparent 50%),
+    linear-gradient(180deg, #f7fafc 0%, #eef2f6 100%);
+}
