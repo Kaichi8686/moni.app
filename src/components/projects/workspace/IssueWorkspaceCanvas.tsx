@@ -694,37 +694,49 @@ export function IssueWorkspaceCanvas({
                 >
                   <div className="h-2 shrink-0 opacity-40" style={{ background: colors.border }} />
                   {editingId === node.id && canEdit ? (
-                    <textarea
-                      data-board-ui
-                      autoFocus
-                      value={node.text}
-                      onChange={(event) => updateItem(node.id, { text: event.target.value })}
-                      onFocus={() => {
-                        window.setTimeout(resetScrollParents, 0);
-                      }}
-                      onBlur={() => {
-                        setEditingId(null);
-                        window.setTimeout(resetScrollParents, 50);
-                      }}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      placeholder={tx("ここに書く…", "Write here…")}
-                      className="min-h-0 w-full flex-1 resize-none bg-transparent px-2.5 py-2 leading-relaxed outline-none placeholder:text-zinc-400"
-                      style={{
-                        fontSize: style.fontSize,
-                        color: style.color,
-                        textAlign: style.textAlign,
-                      }}
-                    />
+                    <div className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 ${justify}`}>
+                      <textarea
+                        data-board-ui
+                        autoFocus
+                        value={node.text}
+                        onChange={(event) => {
+                          const el = event.target;
+                          updateItem(node.id, { text: el.value });
+                          el.style.height = "auto";
+                          el.style.height = `${el.scrollHeight}px`;
+                        }}
+                        onFocus={(event) => {
+                          const el = event.currentTarget;
+                          el.style.height = "auto";
+                          el.style.height = `${el.scrollHeight}px`;
+                          window.setTimeout(resetScrollParents, 0);
+                        }}
+                        onBlur={() => {
+                          setEditingId(null);
+                          window.setTimeout(resetScrollParents, 50);
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        placeholder={tx("ここに書く…", "Write here…")}
+                        rows={1}
+                        className="max-h-full w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-400"
+                        style={{
+                          fontSize: style.fontSize,
+                          color: style.color,
+                          textAlign: style.textAlign,
+                          height: "auto",
+                        }}
+                      />
+                    </div>
                   ) : (
                     <div
-                      className={`flex min-h-0 flex-1 overflow-hidden px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
+                      className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
                       style={{
                         fontSize: style.fontSize,
                         color: style.color,
                         textAlign: style.textAlign,
                       }}
                     >
-                      <span className="w-full">
+                      <span className="w-full shrink-0">
                         {node.text.trim() || (
                           <span className="text-zinc-400" style={{ fontSize: 12 }}>
                             {tx("ダブルタップで編集", "Double-tap to edit")}
