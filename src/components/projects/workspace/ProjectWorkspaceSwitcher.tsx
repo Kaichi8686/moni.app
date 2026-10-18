@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
+import { openProjectCluster } from "@/lib/navigation/projectCluster";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { loadMemberProjects, type MemberProjectLite } from "@/lib/projects/loadMemberProjects";
 import { rememberLastProject } from "@/lib/workspace/lastProject";
@@ -128,6 +129,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
 
   function switchTo(row: MemberProjectLite) {
     rememberLastProject(row.id, row.name);
+    openProjectCluster();
     setOpen(false);
     if (row.id === projectId) return;
     const segment = currentSegment(pathname, projectId);

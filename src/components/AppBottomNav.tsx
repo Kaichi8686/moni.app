@@ -16,12 +16,18 @@ import {
 import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
+import {
+  isInsideProjectWorkspace,
+  markProjectClusterUnlocked,
+  openProjectCluster,
+  readProjectClusterUnlocked,
+  readStoredProjectClusterOpen,
+  writeStoredProjectClusterOpen,
+} from "@/lib/navigation/projectCluster";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
-
-const CLUSTER_STORAGE_KEY = "moni.nav.projectClusterOpen";
 
 type NavMatch = (pathname: string, tab: string | null, segment: string | null) => boolean;
 
@@ -169,26 +175,6 @@ const PROFILE_ITEM: NavItem = {
   match: (p) => p.startsWith("/profile"),
 };
 
-function readStoredClusterOpen(): boolean | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(CLUSTER_STORAGE_KEY);
-    if (raw === "1") return true;
-    if (raw === "0") return false;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function writeStoredClusterOpen(open: boolean) {
-  try {
-    window.sessionStorage.setItem(CLUSTER_STORAGE_KEY, open ? "1" : "0");
-  } catch {
-    /* ignore */
-  }
-}
-
 function measureThumb(container: HTMLElement | null): ThumbState {
   if (!container) return { x: 0, y: 0, w: 0, h: 0, visible: false };
   const active = container.querySelector<HTMLElement>(".app-bottom-nav-item.is-active");
@@ -318,7 +304,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const segment = searchParams.get("segment");
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
-  const [openPref, setOpenPref] = useState(() => readStoredClusterOpen() ?? false);
+  const [openPref, setOpenPref] = useState(() => readStoredProjectClusterOpen() ?? false);
   const [seenRouteKey, setSeenRouteKey] = useState("");
   const projectPillRef = useRef<HTMLDivElement>(null);
   const profilePillRef = useRef<HTMLDivElement>(null);
@@ -329,12 +315,16 @@ function AppBottomNavInner({ className }: { className?: string }) {
   );
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
+  const insideProject = isInsideProjectWorkspace(pathname);
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
   // 課題・募集は開いたクラスタ専用（閉じた側の AI / 探すとは別）
   const openOnlyActive = OPEN_TABS.some(
     (item) =>
       (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
   );
+  /** 一度でもプロジェクトを開くまでクラスタは開けない＝矢印なし */
+  const projectClusterUnlocked =
+    readProjectClusterUnlocked() || insideProject || openOnlyActive;
 
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
   const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
@@ -342,21 +332,21 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
-    if (openOnlyActive || projectActive) {
-      // ホーム（プロジェクト）側にいるときはホームブロックを伸ばす
+    if (openOnlyActive || insideProject) {
+      // 具体的なプロジェクト内にいるときだけホームブロックを伸ばす（/projects 一覧は閉じたまま）
+      openProjectCluster();
       setOpenPref(true);
-      writeStoredClusterOpen(true);
     } else if (profileActive) {
       // プロフィール側にいるときはプロフィールブロックを伸ばす
       setOpenPref(false);
-      writeStoredClusterOpen(false);
+      writeStoredProjectClusterOpen(false);
     } else {
-      const stored = readStoredClusterOpen();
+      const stored = readStoredProjectClusterOpen();
       if (stored !== null) setOpenPref(stored);
     }
   }
 
-  const clusterOpen = openPref;
+  const clusterOpen = openPref && projectClusterUnlocked;
   const openSetActiveId =
     OPEN_TABS.find((item) => item.match(pathname, tab, segment))?.id ??
     (projectActive ? "projects" : null);
@@ -378,25 +368,30 @@ function AppBottomNavInner({ className }: { className?: string }) {
   );
 
   const setClusterOpen = useCallback((open: boolean) => {
+    if (open) markProjectClusterUnlocked();
     setOpenPref(open);
-    writeStoredClusterOpen(open);
+    writeStoredProjectClusterOpen(open);
   }, []);
 
   const expandHomeBlock = useCallback(() => {
+    // プロジェクト未選択のときはホーム＝キューブ一覧のみ（クラスタは開けない）
+    if (!readProjectClusterUnlocked() && !isInsideProjectWorkspace(pathname)) return;
     setClusterOpen(true);
-  }, [setClusterOpen]);
+  }, [pathname, setClusterOpen]);
 
   const expandProfileBlock = useCallback(() => {
     setClusterOpen(false);
   }, [setClusterOpen]);
 
   const toggleCluster = useCallback(() => {
+    if (!readProjectClusterUnlocked() && !isInsideProjectWorkspace(pathname)) return;
     setOpenPref((prev) => {
       const next = !prev;
-      writeStoredClusterOpen(next);
+      if (next) markProjectClusterUnlocked();
+      writeStoredProjectClusterOpen(next);
       return next;
     });
-  }, []);
+  }, [pathname]);
 
   const refreshMailUnread = useCallback(async () => {
     if (!supabase) {
@@ -505,7 +500,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
               className="app-bottom-nav-item--project"
               onNavigate={expandHomeBlock}
             />
-            {!clusterOpen ? (
+            {!clusterOpen && projectClusterUnlocked ? (
               <button
                 type="button"
                 className={`app-bottom-nav-cluster-toggle is-expand ${
