@@ -3,12 +3,16 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
-import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { countryLabel } from "@/lib/profile/countries";
 import { genderLabel } from "@/lib/profile/gender";
 import { loadProfileView } from "@/lib/profile/profileData";
+import {
+  SKILL_PRESETS,
+  TRAIT_PRESETS,
+  displayTagLabel,
+} from "@/lib/profile/skillsTraits";
 import type { ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 import { supabase } from "@/lib/supabase";
@@ -249,13 +253,50 @@ export function ExploreFriendProfilePreview({
                   .join(" · ")}
               </p>
             ) : null}
-            <ProfileSkillsTraits
-              skills={skills}
-              traits={traits}
-              interestFields={profile?.interestFields ?? []}
-              socialIssues={profile?.socialIssues ?? []}
-              className="pt-1"
-            />
+            <div className="space-y-3 pt-2">
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
+                  {tx("特技", "Skills")}
+                </p>
+                {skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {skills.slice(0, 8).map((tag) => (
+                      <span
+                        key={`skill-${tag}`}
+                        className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[12px] font-medium text-zinc-700"
+                      >
+                        {displayTagLabel(tag, SKILL_PRESETS, locale)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-zinc-400">
+                    {tx("まだ登録がありません", "Not set yet")}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
+                  {tx("性格", "Personality")}
+                </p>
+                {traits.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {traits.slice(0, 8).map((tag) => (
+                      <span
+                        key={`trait-${tag}`}
+                        className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[12px] font-medium text-violet-800"
+                      >
+                        {displayTagLabel(tag, TRAIT_PRESETS, locale)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-zinc-400">
+                    {tx("まだ登録がありません", "Not set yet")}
+                  </p>
+                )}
+              </div>
+            </div>
           </section>
 
           <section className="mt-6 space-y-3">

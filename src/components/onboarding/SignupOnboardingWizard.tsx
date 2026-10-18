@@ -213,9 +213,10 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
         { display_name: nickname, age, country: draft.country, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits, onboarding_completed_at: completedAt },
         { display_name: nickname, skills, traits },
-        { display_name: nickname },
       ];
       for (const payload of fallbacks) {
+        // Never complete onboarding without persisting skills + traits (those power Explore badges).
+        if (!("skills" in payload) || !("traits" in payload)) continue;
         const res = await supabase.from("profiles").update(payload).eq("id", session.user.id);
         if (!res.error) {
           upErr = null;
