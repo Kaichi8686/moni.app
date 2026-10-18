@@ -1,13 +1,34 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatScheduleViewInvite } from "@/lib/shift/assign";
 import { DEFAULT_SCHEDULE, type ShiftScheduleConfig } from "@/lib/shift/types";
 
 type DayDraft = { label: string; date: string };
 type RoleDraft = { name: string; needed: number };
 type SlotDraft = { start: string; end: string; label: string; isBreak: boolean };
+
+type CreatedLinks = {
+  memberUrl: string;
+  adminUrl: string;
+  lineText: string;
+  viewInvite: string;
+};
+
+type FormDraft = {
+  title: string;
+  note: string;
+  days: DayDraft[];
+  memberText: string;
+  roles: RoleDraft[];
+  day1Slots: SlotDraft[];
+  day2Slots: SlotDraft[];
+  maxConsecutive: number;
+};
+
+const DRAFT_KEY = "shift-maker:draft:v1";
+const LAST_CREATED_KEY = "shift-maker:last-created:v1";
 
 const DEFAULT_MEMBERS = "田中\n佐藤\n鈴木\n高橋\n伊藤\n渡辺";
 
@@ -18,8 +39,110 @@ const DEFAULT_SLOTS: SlotDraft[] = [
   { start: "15:00", end: "17:00", label: "", isBreak: false },
 ];
 
+const DEFAULT_FORM: FormDraft = {
+  title: "文化祭シフト",
+  note: "",
+  days: [
+    { label: "1日目", date: "" },
+    { label: "2日目", date: "" },
+  ],
+  memberText: DEFAULT_MEMBERS,
+  roles: [
+    { name: "受付", needed: 2 },
+    { name: "販売", needed: 3 },
+    { name: "呼び込み", needed: 2 },
+  ],
+  day1Slots: DEFAULT_SLOTS,
+  day2Slots: DEFAULT_SLOTS,
+  maxConsecutive: DEFAULT_SCHEDULE.maxConsecutive,
+};
+
 function cloneSlots(slots: SlotDraft[]): SlotDraft[] {
   return slots.map((s) => ({ ...s }));
+}
+
+function loadDraft(): FormDraft {
+  if (typeof window === "undefined") {
+    return {
+      ...DEFAULT_FORM,
+      day1Slots: cloneSlots(DEFAULT_SLOTS),
+      day2Slots: cloneSlots(DEFAULT_SLOTS),
+      days: DEFAULT_FORM.days.map((d) => ({ ...d })),
+      roles: DEFAULT_FORM.roles.map((r) => ({ ...r })),
+    };
+  }
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) {
+      return {
+        ...DEFAULT_FORM,
+        day1Slots: cloneSlots(DEFAULT_SLOTS),
+        day2Slots: cloneSlots(DEFAULT_SLOTS),
+        days: DEFAULT_FORM.days.map((d) => ({ ...d })),
+        roles: DEFAULT_FORM.roles.map((r) => ({ ...r })),
+      };
+    }
+    const parsed = JSON.parse(raw) as Partial<FormDraft>;
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : DEFAULT_FORM.title,
+      note: typeof parsed.note === "string" ? parsed.note : "",
+      days:
+        Array.isArray(parsed.days) && parsed.days.length >= 2
+          ? parsed.days.slice(0, 2).map((d) => ({
+              label: String(d?.label || ""),
+              date: String(d?.date || ""),
+            }))
+          : DEFAULT_FORM.days.map((d) => ({ ...d })),
+      memberText: typeof parsed.memberText === "string" ? parsed.memberText : DEFAULT_MEMBERS,
+      roles:
+        Array.isArray(parsed.roles) && parsed.roles.length > 0
+          ? parsed.roles.map((r) => ({
+              name: String(r?.name || "役割"),
+              needed: Math.max(1, Number(r?.needed) || 1),
+            }))
+          : DEFAULT_FORM.roles.map((r) => ({ ...r })),
+      day1Slots:
+        Array.isArray(parsed.day1Slots) && parsed.day1Slots.length > 0
+          ? parsed.day1Slots.map((s) => ({
+              start: String(s?.start || "09:00"),
+              end: String(s?.end || "10:00"),
+              label: String(s?.label || ""),
+              isBreak: Boolean(s?.isBreak),
+            }))
+          : cloneSlots(DEFAULT_SLOTS),
+      day2Slots:
+        Array.isArray(parsed.day2Slots) && parsed.day2Slots.length > 0
+          ? parsed.day2Slots.map((s) => ({
+              start: String(s?.start || "09:00"),
+              end: String(s?.end || "10:00"),
+              label: String(s?.label || ""),
+              isBreak: Boolean(s?.isBreak),
+            }))
+          : cloneSlots(DEFAULT_SLOTS),
+      maxConsecutive: Math.max(0, Number(parsed.maxConsecutive) || 0),
+    };
+  } catch {
+    return {
+      ...DEFAULT_FORM,
+      day1Slots: cloneSlots(DEFAULT_SLOTS),
+      day2Slots: cloneSlots(DEFAULT_SLOTS),
+      days: DEFAULT_FORM.days.map((d) => ({ ...d })),
+      roles: DEFAULT_FORM.roles.map((r) => ({ ...r })),
+    };
+  }
+}
+
+function loadLastCreated(): CreatedLinks | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LAST_CREATED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CreatedLinks;
+    if (!parsed?.adminUrl || !parsed?.memberUrl) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 function parseMembers(text: string): string[] {
@@ -153,30 +276,56 @@ function DaySlotsEditor({
 }
 
 export default function ShiftCreatePage() {
-  const [title, setTitle] = useState("文化祭シフト");
+  const [hydrated, setHydrated] = useState(false);
+  const [title, setTitle] = useState(DEFAULT_FORM.title);
   const [note, setNote] = useState("");
-  const [days, setDays] = useState<DayDraft[]>([
-    { label: "1日目", date: "" },
-    { label: "2日目", date: "" },
-  ]);
+  const [days, setDays] = useState<DayDraft[]>(() => DEFAULT_FORM.days.map((d) => ({ ...d })));
   const [memberText, setMemberText] = useState(DEFAULT_MEMBERS);
-  const [roles, setRoles] = useState<RoleDraft[]>([
-    { name: "受付", needed: 2 },
-    { name: "販売", needed: 3 },
-    { name: "呼び込み", needed: 2 },
-  ]);
+  const [roles, setRoles] = useState<RoleDraft[]>(() => DEFAULT_FORM.roles.map((r) => ({ ...r })));
   const [day1Slots, setDay1Slots] = useState(() => cloneSlots(DEFAULT_SLOTS));
   const [day2Slots, setDay2Slots] = useState(() => cloneSlots(DEFAULT_SLOTS));
   const [maxConsecutive, setMaxConsecutive] = useState(DEFAULT_SCHEDULE.maxConsecutive);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [created, setCreated] = useState<{
-    memberUrl: string;
-    adminUrl: string;
-    lineText: string;
-    viewInvite: string;
-  } | null>(null);
+  const [created, setCreated] = useState<CreatedLinks | null>(null);
   const [copied, setCopied] = useState("");
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  useEffect(() => {
+    const draft = loadDraft();
+    setTitle(draft.title);
+    setNote(draft.note);
+    setDays(draft.days);
+    setMemberText(draft.memberText);
+    setRoles(draft.roles);
+    setDay1Slots(draft.day1Slots);
+    setDay2Slots(draft.day2Slots);
+    setMaxConsecutive(draft.maxConsecutive);
+    setCreated(loadLastCreated());
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const draft: FormDraft = {
+      title,
+      note,
+      days,
+      memberText,
+      roles,
+      day1Slots,
+      day2Slots,
+      maxConsecutive,
+    };
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      setDraftSaved(true);
+      const t = window.setTimeout(() => setDraftSaved(false), 1200);
+      return () => window.clearTimeout(t);
+    } catch {
+      /* ignore quota */
+    }
+  }, [hydrated, title, note, days, memberText, roles, day1Slots, day2Slots, maxConsecutive]);
 
   const members = useMemo(() => parseMembers(memberText), [memberText]);
   const neededPerSlot = useMemo(
@@ -252,16 +401,41 @@ export default function ShiftCreatePage() {
       const origin = window.location.origin;
       const memberUrl = `${origin}/shift/${data.board.code}`;
       const adminUrl = `${origin}/shift/${data.board.code}/admin?key=${encodeURIComponent(data.board.adminKey)}`;
-      setCreated({
+      const links: CreatedLinks = {
         memberUrl,
         adminUrl,
         lineText: data.lineText || formatScheduleViewInvite(data.board.title, memberUrl),
         viewInvite: formatScheduleViewInvite(data.board.title, memberUrl),
-      });
+      };
+      setCreated(links);
+      try {
+        localStorage.setItem(LAST_CREATED_KEY, JSON.stringify(links));
+      } catch {
+        /* ignore */
+      }
     } catch {
       setError("通信に失敗しました");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function resetDraft() {
+    setTitle(DEFAULT_FORM.title);
+    setNote("");
+    setDays(DEFAULT_FORM.days.map((d) => ({ ...d })));
+    setMemberText(DEFAULT_MEMBERS);
+    setRoles(DEFAULT_FORM.roles.map((r) => ({ ...r })));
+    setDay1Slots(cloneSlots(DEFAULT_SLOTS));
+    setDay2Slots(cloneSlots(DEFAULT_SLOTS));
+    setMaxConsecutive(DEFAULT_SCHEDULE.maxConsecutive);
+    setCreated(null);
+    setError("");
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(LAST_CREATED_KEY);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -298,12 +472,27 @@ export default function ShiftCreatePage() {
         >
           オーナーがメンバー・時間帯・役割・人数を決めて、2日分のシフトをすぐ作れます。
         </motion.p>
+        {hydrated ? (
+          <p className="shift-muted" style={{ margin: "0.35rem 0 0" }}>
+            入力内容はこの端末に自動保存されます
+            {draftSaved ? "（保存済み）" : ""}
+          </p>
+        ) : null}
       </header>
 
       <AnimatePresence mode="wait">
-        {!created ? (
+        {!hydrated ? (
+          <motion.div key="boot" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <p className="shift-muted">読み込み中…</p>
+          </motion.div>
+        ) : !created ? (
           <motion.div key="form" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <section className="shift-panel">
+              <div className="shift-actions" style={{ marginTop: 0, marginBottom: "0.75rem" }}>
+                <button type="button" className="shift-btn shift-btn-ghost" onClick={resetDraft}>
+                  入力を初期状態に戻す
+                </button>
+              </div>
               <h2 className="shift-h2">1. 基本情報</h2>
               <label className="shift-label" htmlFor="title">
                 タイトル
@@ -554,6 +743,18 @@ export default function ShiftCreatePage() {
                 </button>
               </div>
             </section>
+            <div className="shift-actions">
+              <button
+                type="button"
+                className="shift-btn shift-btn-ghost"
+                onClick={() => setCreated(null)}
+              >
+                保存した設定で作り直す
+              </button>
+              <button type="button" className="shift-btn shift-btn-ghost" onClick={resetDraft}>
+                全部消して最初から
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
