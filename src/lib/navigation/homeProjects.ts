@@ -11,8 +11,15 @@ export function projectOverviewHref(projectId: string) {
   return `/projects/${projectId}/overview`;
 }
 
-/** ボトムナビ「ホーム」用：開いたプロジェクトがあればそこへ、なければキューブ一覧 */
-export function resolveHomeProjectsHref(lastProjectId?: string | null): string {
+/**
+ * ボトムナビ「ホーム」用。
+ * 一覧モード中はキューブ一覧へ。そうでなければ最後のプロジェクト、なければ一覧。
+ */
+export function resolveHomeProjectsHref(
+  lastProjectId?: string | null,
+  preferList = false,
+): string {
+  if (preferList) return `${HOME_PROJECTS_HREF}?list=1`;
   if (lastProjectId) return projectOverviewHref(lastProjectId);
   return HOME_PROJECTS_HREF;
 }
