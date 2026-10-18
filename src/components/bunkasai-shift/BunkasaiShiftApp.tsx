@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { ExportPanel } from "./ExportPanel";
 import { MemberManager } from "./MemberManager";
 import { ShiftTimetable } from "./ShiftTimetable";
-import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
+import {
+  hydrateFromServer,
+  useBunkasaiShiftStore,
+} from "@/lib/bunkasai-shift/store";
 
 const TABS = [
   { id: "members" as const, label: "メンバー" },
@@ -18,17 +21,41 @@ export function BunkasaiShiftApp() {
   const runAutoAssign = useBunkasaiShiftStore((s) => s.runAutoAssign);
   const clearAssignmentsOnly = useBunkasaiShiftStore((s) => s.clearAssignmentsOnly);
   const memberCount = useBunkasaiShiftStore((s) => s.members.length);
-  const [hydrated, setHydrated] = useState(false);
+  const syncStatus = useBunkasaiShiftStore((s) => s.syncStatus);
+  const syncError = useBunkasaiShiftStore((s) => s.syncError);
+  const hydratedFromServer = useBunkasaiShiftStore((s) => s.hydratedFromServer);
+  const [localReady, setLocalReady] = useState(false);
 
   useEffect(() => {
-    setHydrated(true);
+    const finish = () => setLocalReady(true);
+    const unsub = useBunkasaiShiftStore.persist.onFinishHydration(finish);
+    if (useBunkasaiShiftStore.persist.hasHydrated()) finish();
+    return unsub;
   }, []);
 
-  if (!hydrated) {
+  useEffect(() => {
+    if (!localReady) return;
+    void hydrateFromServer();
+  }, [localReady]);
+
+  if (!localReady || !hydratedFromServer) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-16 text-[var(--bs-muted)]">読み込み中…</div>
+      <div className="mx-auto max-w-5xl px-4 py-16 text-[var(--bs-muted)]">
+        名簿を読み込み中…
+      </div>
     );
   }
+
+  const syncLabel =
+    syncStatus === "loading"
+      ? "サーバー同期中…"
+      : syncStatus === "saving"
+        ? "サーバーに保存中…"
+        : syncStatus === "saved"
+          ? "サーバーに保存済み（URLが変わっても残ります）"
+          : syncStatus === "error"
+            ? syncError || "保存エラー"
+            : "";
 
   return (
     <div className="bunkasai-shift-root min-h-dvh">
@@ -54,8 +81,17 @@ export function BunkasaiShiftApp() {
             文化祭シフト
           </h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--bs-muted)] sm:text-base">
-            登録したメンバーは端末に保存され、自動割り当てでも名簿は変わりません。連続シフトなし・1日目と2日目の回数をなるべく均等にします。
+            メンバー名簿はサーバーに自動保存します。連続シフトなし・1日目と2日目の回数をなるべく均等にします。
           </p>
+          {syncLabel ? (
+            <p
+              className={`mt-2 text-xs font-medium ${
+                syncStatus === "error" ? "text-red-700" : "text-[var(--bs-accent-deep)]"
+              }`}
+            >
+              {syncLabel}
+            </p>
+          ) : null}
           <div className="mt-5 flex flex-wrap gap-2">
             <button
               type="button"

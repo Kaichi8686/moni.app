@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SLOTS, formatSlotTitle } from "@/lib/bunkasai-shift/schedule";
-import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
+import {
+  scheduleServerSave,
+  useBunkasaiShiftStore,
+} from "@/lib/bunkasai-shift/store";
+import type { Member } from "@/lib/bunkasai-shift/types";
 
 export function MemberManager() {
   const members = useBunkasaiShiftStore((s) => s.members);
@@ -10,8 +14,14 @@ export function MemberManager() {
   const removeMember = useBunkasaiShiftStore((s) => s.removeMember);
   const renameMember = useBunkasaiShiftStore((s) => s.renameMember);
   const toggleNg = useBunkasaiShiftStore((s) => s.toggleNg);
+  const replaceSnapshot = useBunkasaiShiftStore((s) => s.replaceSnapshot);
+  const assignments = useBunkasaiShiftStore((s) => s.assignments);
+  const warnings = useBunkasaiShiftStore((s) => s.warnings);
+  const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
   const [name, setName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [backupMsg, setBackupMsg] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <section className="space-y-5">
@@ -20,9 +30,83 @@ export function MemberManager() {
           メンバー管理
         </h2>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          名前を追加し、各人が参加できない時間帯にチェックを付けます。名簿はこの端末に保存され、自動割り当てでも消えません。
+          名前を追加し、参加できない時間帯にチェック。名簿はサーバー＋端末の両方に保存されます。
         </p>
       </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rounded-xl border border-[var(--bs-line)] bg-white px-3 py-2 text-xs font-semibold text-[var(--bs-ink-soft)]"
+          onClick={() => {
+            const payload = {
+              members,
+              exportedAt: new Date().toISOString(),
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], {
+              type: "application/json",
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "bunkasai-members.json";
+            a.click();
+            URL.revokeObjectURL(url);
+            setBackupMsg("名簿バックアップをダウンロードしました");
+          }}
+        >
+          名簿をバックアップ
+        </button>
+        <button
+          type="button"
+          className="rounded-xl border border-[var(--bs-line)] bg-white px-3 py-2 text-xs font-semibold text-[var(--bs-ink-soft)]"
+          onClick={() => fileRef.current?.click()}
+        >
+          バックアップから復元
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            try {
+              const text = await file.text();
+              const parsed = JSON.parse(text) as { members?: Member[] };
+              if (!Array.isArray(parsed.members) || parsed.members.length === 0) {
+                setBackupMsg("有効な名簿データがありません");
+                return;
+              }
+              if (
+                members.length > 0 &&
+                !confirm(
+                  `今の名簿（${members.length}人）を、バックアップの ${parsed.members.length}人で置き換えますか？`,
+                )
+              ) {
+                return;
+              }
+              replaceSnapshot({
+                members: parsed.members.map((m) => ({
+                  id: String(m.id || crypto.randomUUID()),
+                  name: String(m.name || "").trim(),
+                  ngSlotIds: Array.isArray(m.ngSlotIds) ? m.ngSlotIds : [],
+                })),
+                assignments,
+                warnings,
+                lastAssignedAt,
+              });
+              scheduleServerSave(0);
+              setBackupMsg(`${parsed.members.length}人を復元し、サーバーに保存しました`);
+            } catch {
+              setBackupMsg("ファイルの読み込みに失敗しました");
+            }
+          }}
+        />
+      </div>
+      {backupMsg ? <p className="text-xs text-[var(--bs-accent-deep)]">{backupMsg}</p> : null}
 
       <form
         className="flex flex-col gap-2 sm:flex-row"

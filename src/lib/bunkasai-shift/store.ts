@@ -15,13 +15,21 @@ function uid(): string {
 
 type Tab = "members" | "assign" | "export";
 
+export type SyncStatus = "idle" | "loading" | "saving" | "saved" | "error";
+
 type State = {
+  room: string;
   members: Member[];
   assignments: Assignments;
   warnings: AssignWarning[];
   tab: Tab;
   lastAssignedAt: string | null;
   placeError: string | null;
+  syncStatus: SyncStatus;
+  syncError: string | null;
+  serverUpdatedAt: string | null;
+  hydratedFromServer: boolean;
+
   addMember: (name: string) => void;
   removeMember: (id: string) => void;
   renameMember: (id: string, name: string) => void;
@@ -32,22 +40,80 @@ type State = {
   removeFromSlot: (slotId: SlotId, memberId: string) => void;
   moveMember: (fromSlot: SlotId, toSlot: SlotId, memberId: string) => boolean;
   clearAssignments: () => void;
+  clearAssignmentsOnly: () => void;
   setTab: (tab: Tab) => void;
   clearPlaceError: () => void;
-  /** シフト割当だけ消す（メンバー名簿は絶対に消さない） */
-  clearAssignmentsOnly: () => void;
+  replaceSnapshot: (snap: {
+    members: Member[];
+    assignments: Assignments;
+    warnings: AssignWarning[];
+    lastAssignedAt: string | null;
+    serverUpdatedAt?: string | null;
+  }) => void;
+  setSyncStatus: (status: SyncStatus, error?: string | null) => void;
+  markHydratedFromServer: () => void;
 };
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveSeq = 0;
+
+async function pushToServer(): Promise<void> {
+  const s = useBunkasaiShiftStore.getState();
+  const seq = ++saveSeq;
+  s.setSyncStatus("saving");
+  try {
+    const res = await fetch(`/api/bunkasai-shift?room=${encodeURIComponent(s.room)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        room: s.room,
+        members: s.members,
+        assignments: s.assignments,
+        warnings: s.warnings,
+        lastAssignedAt: s.lastAssignedAt,
+      }),
+    });
+    const data = await res.json();
+    if (seq !== saveSeq) return;
+    if (!res.ok || !data.ok) {
+      s.setSyncStatus("error", data.error || "サーバー保存に失敗しました");
+      return;
+    }
+    useBunkasaiShiftStore.setState({
+      syncStatus: "saved",
+      syncError: null,
+      serverUpdatedAt: data.snapshot.updatedAt,
+    });
+  } catch {
+    if (seq !== saveSeq) return;
+    s.setSyncStatus("error", "通信に失敗しました（名簿は端末にも残しています）");
+  }
+}
+
+/** 変更のたびサーバーへ保存（トンネルURLが変わっても残す） */
+export function scheduleServerSave(delayMs = 350): void {
+  if (typeof window === "undefined") return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void pushToServer();
+  }, delayMs);
+}
 
 export const useBunkasaiShiftStore = create<State>()(
   persist(
     (set, get) => ({
-      // 初期は空。localStorage に保存済みの名簿があればそのまま復元される
+      room: "main",
       members: [],
       assignments: emptyAssignments(),
       warnings: [],
       tab: "members",
       lastAssignedAt: null,
       placeError: null,
+      syncStatus: "idle",
+      syncError: null,
+      serverUpdatedAt: null,
+      hydratedFromServer: false,
 
       addMember: (name) => {
         const trimmed = name.trim();
@@ -55,6 +121,7 @@ export const useBunkasaiShiftStore = create<State>()(
         set((s) => ({
           members: [...s.members, { id: uid(), name: trimmed, ngSlotIds: [] }],
         }));
+        scheduleServerSave();
       },
 
       removeMember: (id) => {
@@ -68,6 +135,7 @@ export const useBunkasaiShiftStore = create<State>()(
             assignments: next,
           };
         });
+        scheduleServerSave();
       },
 
       renameMember: (id, name) => {
@@ -76,6 +144,7 @@ export const useBunkasaiShiftStore = create<State>()(
         set((s) => ({
           members: s.members.map((m) => (m.id === id ? { ...m, name: trimmed } : m)),
         }));
+        scheduleServerSave();
       },
 
       toggleNg: (memberId, slotId) => {
@@ -86,11 +155,12 @@ export const useBunkasaiShiftStore = create<State>()(
             return {
               ...m,
               ngSlotIds: has
-                ? m.ngSlotIds.filter((id) => id !== slotId)
+                ? m.ngSlotIds.filter((x) => x !== slotId)
                 : [...m.ngSlotIds, slotId],
             };
           }),
         }));
+        scheduleServerSave();
       },
 
       setNg: (memberId, slotIds) => {
@@ -99,11 +169,11 @@ export const useBunkasaiShiftStore = create<State>()(
             m.id === memberId ? { ...m, ngSlotIds: [...slotIds] } : m,
           ),
         }));
+        scheduleServerSave();
       },
 
       runAutoAssign: () => {
         const { members } = get();
-        // 名簿は触らず、割当結果だけ更新
         const result = autoAssign(members);
         set({
           assignments: result.assignments,
@@ -112,6 +182,7 @@ export const useBunkasaiShiftStore = create<State>()(
           tab: "assign",
           placeError: null,
         });
+        scheduleServerSave(100);
       },
 
       addToSlot: (slotId, memberId) => {
@@ -129,6 +200,7 @@ export const useBunkasaiShiftStore = create<State>()(
           warnings: s.warnings.filter((w) => w.slotId !== slotId),
           placeError: null,
         });
+        scheduleServerSave();
         return true;
       },
 
@@ -140,12 +212,12 @@ export const useBunkasaiShiftStore = create<State>()(
           },
           placeError: null,
         }));
+        scheduleServerSave();
       },
 
       moveMember: (fromSlot, toSlot, memberId) => {
         if (fromSlot === toSlot) return true;
         const s = get();
-        // 移動元から外した仮状態で連続判定
         const provisional: Assignments = {
           ...s.assignments,
           [fromSlot]: s.assignments[fromSlot].filter((id) => id !== memberId),
@@ -162,6 +234,7 @@ export const useBunkasaiShiftStore = create<State>()(
           },
           placeError: null,
         });
+        scheduleServerSave();
         return true;
       },
 
@@ -172,6 +245,7 @@ export const useBunkasaiShiftStore = create<State>()(
           lastAssignedAt: null,
           placeError: null,
         });
+        scheduleServerSave();
       },
 
       clearAssignmentsOnly: () => {
@@ -181,28 +255,128 @@ export const useBunkasaiShiftStore = create<State>()(
       setTab: (tab) => set({ tab, placeError: null }),
 
       clearPlaceError: () => set({ placeError: null }),
+
+      replaceSnapshot: (snap) => {
+        set({
+          members: snap.members,
+          assignments: snap.assignments,
+          warnings: snap.warnings,
+          lastAssignedAt: snap.lastAssignedAt,
+          serverUpdatedAt: snap.serverUpdatedAt ?? null,
+          placeError: null,
+        });
+      },
+
+      setSyncStatus: (status, error = null) => {
+        set({ syncStatus: status, syncError: error });
+      },
+
+      markHydratedFromServer: () => set({ hydratedFromServer: true }),
     }),
     {
-      // 名簿を長く保持するキー（サンプル初期化で上書きしない）
-      name: "bunkasai-shift-mock-v1",
+      name: "bunkasai-shift-mock-v2",
       partialize: (s) => ({
+        room: s.room,
         members: s.members,
         assignments: s.assignments,
         warnings: s.warnings,
         lastAssignedAt: s.lastAssignedAt,
+        serverUpdatedAt: s.serverUpdatedAt,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
-        // 保存済み名簿があれば必ずそれを使う（初期の空配列で消さない）
+        const members = Array.isArray(p.members) ? p.members : current.members;
         return {
           ...current,
           ...p,
-          members: Array.isArray(p.members) ? p.members : current.members,
+          members,
+          // 名簿があるローカル状態を空で潰さない
           assignments: p.assignments ?? current.assignments,
           warnings: Array.isArray(p.warnings) ? p.warnings : current.warnings,
           lastAssignedAt: p.lastAssignedAt ?? current.lastAssignedAt,
+          room: typeof p.room === "string" && p.room ? p.room : current.room,
         };
       },
     },
   ),
 );
+
+/** 旧キーからも名簿を拾う（バージョン移行） */
+export function readLegacyLocalMembers(): Member[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("bunkasai-shift-mock-v1");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { state?: { members?: Member[] } };
+    const members = parsed.state?.members;
+    return Array.isArray(members) && members.length > 0 ? members : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function hydrateFromServer(): Promise<void> {
+  const store = useBunkasaiShiftStore.getState();
+  store.setSyncStatus("loading");
+  try {
+    const res = await fetch(`/api/bunkasai-shift?room=${encodeURIComponent(store.room)}`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      store.setSyncStatus("error", data.error || "読み込み失敗");
+      store.markHydratedFromServer();
+      return;
+    }
+
+    const server = data.snapshot as {
+      members: Member[];
+      assignments: Assignments;
+      warnings: AssignWarning[];
+      lastAssignedAt: string | null;
+      updatedAt: string;
+    };
+
+    const local = useBunkasaiShiftStore.getState();
+    const legacy = readLegacyLocalMembers();
+
+    // 多い方・新しい方を優先（トンネル切替で空画面になるのを防ぐ）
+    let bestMembers = server.members;
+    let bestAssignments = server.assignments;
+    let bestWarnings = server.warnings;
+    let bestLast = server.lastAssignedAt;
+    let from = "server";
+
+    if (local.members.length > bestMembers.length) {
+      bestMembers = local.members;
+      bestAssignments = local.assignments;
+      bestWarnings = local.warnings;
+      bestLast = local.lastAssignedAt;
+      from = "local";
+    }
+    if (legacy && legacy.length > bestMembers.length) {
+      bestMembers = legacy;
+      from = "legacy";
+    }
+
+    store.replaceSnapshot({
+      members: bestMembers,
+      assignments: from === "local" ? bestAssignments : from === "server" ? server.assignments : emptyAssignments(),
+      warnings: from === "local" ? bestWarnings : from === "server" ? server.warnings : [],
+      lastAssignedAt: from === "local" ? bestLast : from === "server" ? server.lastAssignedAt : null,
+      serverUpdatedAt: server.updatedAt,
+    });
+
+    // サーバーが空で端末に名簿があるなら即アップロード
+    if (server.members.length === 0 && bestMembers.length > 0) {
+      scheduleServerSave(0);
+    } else if (from !== "server" && bestMembers.length >= server.members.length) {
+      scheduleServerSave(0);
+    } else {
+      store.setSyncStatus("saved");
+    }
+
+    store.markHydratedFromServer();
+  } catch {
+    store.setSyncStatus("error", "サーバーに接続できませんでした（端末の名簿は残しています）");
+    store.markHydratedFromServer();
+  }
+}
