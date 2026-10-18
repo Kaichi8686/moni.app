@@ -931,6 +931,42 @@ function SheetFullscreenEditor({
   const justify =
     valign === "top" ? "justify-start" : valign === "bottom" ? "justify-end" : "justify-center";
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  /** キャンバス上の紙と同じ縦横比を、縦・横画面どちらでも維持する */
+  const sheetRatio = useMemo(() => {
+    const w = sheet.w > 0 ? sheet.w : DEFAULT_SHEET_W;
+    const h = sheet.h > 0 ? sheet.h : DEFAULT_SHEET_H;
+    return Math.min(2.4, Math.max(0.45, w / h));
+  }, [sheet.w, sheet.h]);
+  const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const update = () => {
+      // padding 内の実コンテンツ幅（getBoundingClientRect だとパディング込みで大きすぎる）
+      const maxW = Math.max(0, stage.clientWidth - 2);
+      const maxH = Math.max(0, stage.clientHeight - 2);
+      if (maxW < 2 || maxH < 2) return;
+      let nextW = maxW;
+      let nextH = nextW / sheetRatio;
+      if (nextH > maxH) {
+        nextH = maxH;
+        nextW = nextH * sheetRatio;
+      }
+      const w = Math.floor(nextW);
+      const h = Math.round(w / sheetRatio);
+      setCardSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [sheetRatio]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -945,9 +981,95 @@ function SheetFullscreenEditor({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [fontSize, sheet.text, align]);
+  }, [fontSize, sheet.text, align, cardSize.h]);
 
-  const displayFontSize = Math.max(20, Math.round(fontSize * 1.6));
+  const displayFontSize = Math.max(
+    18,
+    Math.min(Math.round(fontSize * 1.6), Math.max(16, Math.floor(cardSize.h * 0.12))),
+  );
+
+  const stylePanel = canEdit ? (
+    <div className="flex w-full flex-col gap-2.5 rounded-2xl bg-white px-3 py-3 shadow-[0_8px_28px_rgba(0,0,0,0.12)] landscape:max-h-full landscape:overflow-y-auto">
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+          {FONT_SIZE_PRESETS.map((size) => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => onPatch({ fontSize: size })}
+              className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
+                fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+              }`}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {TEXT_COLOR_ORDER.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => onPatch({ textColor: color })}
+              className={`h-7 w-7 rounded-full border-2 ${
+                textColor.toLowerCase() === color.toLowerCase()
+                  ? "scale-110 border-zinc-900"
+                  : "border-zinc-200"
+              }`}
+              style={{ backgroundColor: color }}
+              aria-label={tx("文字色", "Text color")}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+          {(
+            [
+              ["left", AlignLeft, tx("左寄せ", "Left")],
+              ["center", AlignCenter, tx("中央", "Center")],
+              ["right", AlignRight, tx("右寄せ", "Right")],
+            ] as const
+          ).map(([value, Icon, label]) => (
+            <button
+              key={value}
+              type="button"
+              title={label}
+              onClick={() => onPatch({ align: value })}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+              }`}
+              aria-label={label}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+          {(
+            [
+              ["top", AlignVerticalJustifyStart, tx("上寄せ", "Top")],
+              ["middle", AlignVerticalJustifyCenter, tx("中央", "Middle")],
+              ["bottom", AlignVerticalJustifyEnd, tx("下寄せ", "Bottom")],
+            ] as const
+          ).map(([value, Icon, label]) => (
+            <button
+              key={value}
+              type="button"
+              title={label}
+              onClick={() => onPatch({ valign: value })}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                valign === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+              }`}
+              aria-label={label}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -990,139 +1112,72 @@ function SheetFullscreenEditor({
         )}
       </div>
 
-      {/* キャンバス上と同じ紙カード（上帯・枠・影）を大きく表示 */}
-      <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 py-2">
+      {/* 縦: 紙の下に操作 / 横: 紙の右に操作 → 紙の縦横比は常にキャンバスと同じ */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col landscape:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2">
         <div
-          className="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-sm"
-          style={{
-            aspectRatio: `${DEFAULT_SHEET_W} / ${DEFAULT_SHEET_H}`,
-            backgroundColor: colors.bg,
-            border: `1px solid ${colors.border}`,
-            boxShadow: "2px 3px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.14)",
-          }}
+          ref={stageRef}
+          className="flex h-full w-full min-h-0 min-w-0 items-center justify-center"
         >
-          <div className="h-2.5 shrink-0 opacity-40" style={{ background: colors.border }} />
-          <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 ${justify}`}>
-            {canEdit ? (
-              <textarea
-                ref={textareaRef}
-                value={sheet.text}
-                onChange={(event) => {
-                  const el = event.target;
-                  onPatch({ text: el.value });
-                  el.style.height = "auto";
-                  el.style.height = `${el.scrollHeight}px`;
-                }}
-                placeholder={tx("ここに書く…", "Write here…")}
-                rows={1}
-                className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
-                style={{
-                  fontSize: displayFontSize,
-                  color: textColor,
-                  textAlign: align,
-                  height: "auto",
-                }}
-              />
-            ) : (
-              <p
-                className="w-full whitespace-pre-wrap leading-relaxed"
-                style={{
-                  fontSize: displayFontSize,
-                  color: textColor,
-                  textAlign: align,
-                }}
-              >
-                {sheet.text.trim() || tx("（空の用紙）", "(Empty sheet)")}
-              </p>
-            )}
+          <div
+            data-sheet-card
+            className="flex flex-col overflow-hidden rounded-sm"
+            style={{
+              // ResizeObserver で収まるサイズを既に計算済み。maxWidth/Height を付けると片方だけ縮み形が崩れる
+              width: cardSize.w > 0 ? cardSize.w : undefined,
+              height: cardSize.h > 0 ? cardSize.h : undefined,
+              visibility: cardSize.w > 0 ? "visible" : "hidden",
+              boxSizing: "border-box",
+              backgroundColor: colors.bg,
+              border: `1px solid ${colors.border}`,
+              boxShadow: "2px 3px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.14)",
+            }}
+          >
+            <div className="h-2.5 shrink-0 opacity-40" style={{ background: colors.border }} />
+            <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 ${justify}`}>
+              {canEdit ? (
+                <textarea
+                  ref={textareaRef}
+                  value={sheet.text}
+                  onChange={(event) => {
+                    const el = event.target;
+                    onPatch({ text: el.value });
+                    el.style.height = "auto";
+                    el.style.height = `${el.scrollHeight}px`;
+                  }}
+                  placeholder={tx("ここに書く…", "Write here…")}
+                  rows={1}
+                  className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
+                  style={{
+                    fontSize: displayFontSize,
+                    color: textColor,
+                    textAlign: align,
+                    height: "auto",
+                  }}
+                />
+              ) : (
+                <p
+                  className="w-full whitespace-pre-wrap leading-relaxed"
+                  style={{
+                    fontSize: displayFontSize,
+                    color: textColor,
+                    textAlign: align,
+                  }}
+                >
+                  {sheet.text.trim() || tx("（空の用紙）", "(Empty sheet)")}
+                </p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+        </div>
 
-      {canEdit ? (
-        <div className="relative z-10 shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
-          <div className="mx-auto flex w-full max-w-lg flex-col gap-2.5 rounded-2xl bg-white px-3 py-3 shadow-[0_8px_28px_rgba(0,0,0,0.12)]">
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                {FONT_SIZE_PRESETS.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => onPatch({ fontSize: size })}
-                    className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
-                      fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5">
-                {TEXT_COLOR_ORDER.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => onPatch({ textColor: color })}
-                    className={`h-7 w-7 rounded-full border-2 ${
-                      textColor.toLowerCase() === color.toLowerCase()
-                        ? "scale-110 border-zinc-900"
-                        : "border-zinc-200"
-                    }`}
-                    style={{ backgroundColor: color }}
-                    aria-label={tx("文字色", "Text color")}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                {(
-                  [
-                    ["left", AlignLeft, tx("左寄せ", "Left")],
-                    ["center", AlignCenter, tx("中央", "Center")],
-                    ["right", AlignRight, tx("右寄せ", "Right")],
-                  ] as const
-                ).map(([value, Icon, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    title={label}
-                    onClick={() => onPatch({ align: value })}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                      align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                    }`}
-                    aria-label={label}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                {(
-                  [
-                    ["top", AlignVerticalJustifyStart, tx("上寄せ", "Top")],
-                    ["middle", AlignVerticalJustifyCenter, tx("中央", "Middle")],
-                    ["bottom", AlignVerticalJustifyEnd, tx("下寄せ", "Bottom")],
-                  ] as const
-                ).map(([value, Icon, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    title={label}
-                    onClick={() => onPatch({ valign: value })}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                      valign === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                    }`}
-                    aria-label={label}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
-                ))}
-              </div>
-            </div>
+        {canEdit ? (
+          <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 landscape:flex landscape:w-[min(42%,20rem)] landscape:items-center landscape:pb-3 landscape:pl-1 landscape:pr-[max(0.75rem,env(safe-area-inset-right))] landscape:pt-2">
+            {stylePanel}
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
