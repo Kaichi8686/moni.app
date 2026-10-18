@@ -17,6 +17,8 @@ export type ShiftSlot = {
   end?: string;
   /** 休み時間（誰も入れない） */
   isBreak?: boolean;
+  /** 特定日のみ。未指定なら全日共通（旧データ互換） */
+  dayId?: string;
 };
 
 export type ShiftBreak = {
@@ -109,8 +111,12 @@ export type CreateBoardInput = {
   days: Array<{ label: string; date?: string }>;
   roles: Array<{ name: string; needed: number }>;
   schedule: ShiftScheduleConfig;
-  /** 手動スロットを渡す場合（通常は schedule から生成） */
-  slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean }>;
+  /** オーナーが先に決めるメンバー名（希望未入力でも割り振り可能） */
+  members?: string[];
+  /** true のとき作成直後に自動割り振りする */
+  autoAssign?: boolean;
+  /** 手動スロットを渡す場合（通常は schedule から生成）。dayId で日ごとに分けられる */
+  slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean; dayId?: string }>;
 };
 
 export type UpdateBoardInput = {
@@ -119,6 +125,18 @@ export type UpdateBoardInput = {
   days?: Array<{ label: string; date?: string }>;
   roles?: Array<{ name: string; needed: number }>;
   schedule?: ShiftScheduleConfig;
+  /** オーナーが決めた時間帯（渡すと schedule からの自動生成より優先） */
+  slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean; dayId?: string }>;
+  /** メンバー名簿を置き換え（空の希望で再登録） */
+  members?: string[];
+};
+
+/** 手動割り振りの1セル分（管理画面から保存） */
+export type ManualCellInput = {
+  dayId: string;
+  slotId: string;
+  roleId: string;
+  people: Array<{ responseId: string; name: string }>;
 };
 
 export const DEFAULT_SCHEDULE: ShiftScheduleConfig = {
@@ -143,6 +161,28 @@ export function normalizeBoard(board: ShiftBoard): ShiftBoard {
   return {
     ...board,
     schedule: board.schedule ?? { ...DEFAULT_SCHEDULE, breaks: [], buddyPairs: [] },
-    slots: (board.slots ?? []).map((s) => ({ ...s, isBreak: Boolean(s.isBreak) })),
+    slots: (board.slots ?? []).map((s) => ({
+      ...s,
+      isBreak: Boolean(s.isBreak),
+      dayId: s.dayId?.trim() || undefined,
+    })),
   };
+}
+
+/** その日の時間帯。dayId 付きがあればそれだけ、なければ旧形式の共通枠 */
+export function slotsForDay(
+  board: Pick<ShiftBoard, "slots">,
+  dayId: string,
+): ShiftSlot[] {
+  const slots = board.slots ?? [];
+  const specific = slots.filter((s) => s.dayId === dayId);
+  if (specific.length > 0) return specific;
+  return slots.filter((s) => !s.dayId);
+}
+
+export function workSlotsForDay(
+  board: Pick<ShiftBoard, "slots">,
+  dayId: string,
+): ShiftSlot[] {
+  return slotsForDay(board, dayId).filter((s) => !s.isBreak);
 }

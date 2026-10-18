@@ -12,6 +12,8 @@ import { buildPersonalIcs, downloadIcs, myAssignedCells } from "@/lib/shift/ical
 import {
   cellKey,
   normalizeBoard,
+  slotsForDay,
+  workSlotsForDay,
   type Pref,
   type ShiftAssignmentResult,
   type ShiftBoard,
@@ -87,8 +89,7 @@ function ShiftMemberInner() {
         } else {
           const initial: Record<string, Pref> = {};
           for (const day of b.days) {
-            for (const slot of b.slots) {
-              if (slot.isBreak) continue;
+            for (const slot of workSlotsForDay(b, day.id)) {
               initial[cellKey(day.id, slot.id)] = "ok";
             }
           }
@@ -108,13 +109,11 @@ function ShiftMemberInner() {
   const workCells = useMemo(() => {
     if (!board) return [];
     return board.days.flatMap((day) =>
-      board.slots
-        .filter((slot) => !slot.isBreak)
-        .map((slot) => ({
-          key: cellKey(day.id, slot.id),
-          day,
-          slot,
-        })),
+      workSlotsForDay(board, day.id).map((slot) => ({
+        key: cellKey(day.id, slot.id),
+        day,
+        slot,
+      })),
     );
   }, [board]);
 
@@ -223,7 +222,8 @@ function ShiftMemberInner() {
         </motion.h1>
         {board.note ? <p className="shift-brand-sub">{board.note}</p> : null}
         <p className="shift-muted">
-          {board.schedule.dayStart}–{board.schedule.dayEnd} ／ {board.schedule.slotMinutes}分ごと ／ 回答
+          {board.days.map((d) => d.label).join("・")} ／ {board.schedule.dayStart}–
+          {board.schedule.dayEnd} ／ {board.schedule.slotMinutes}分ごと ／ メンバー
           {responseCount}人
         </p>
       </header>
@@ -271,7 +271,7 @@ function ShiftMemberInner() {
                       {day.label}
                       {day.date ? `（${day.date}）` : ""}
                     </h3>
-                    {board.slots.map((slot) => {
+                    {slotsForDay(board, day.id).map((slot) => {
                       if (slot.isBreak) {
                         return (
                           <div key={slot.id} className="shift-pref-card" style={{ opacity: 0.7 }}>

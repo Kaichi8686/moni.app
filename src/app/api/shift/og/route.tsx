@@ -43,7 +43,7 @@ export async function GET() {
           >
             ○
           </div>
-          希望を集めて、自動で割り振る
+          オーナーが決めて、すぐ共有
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div
@@ -57,11 +57,11 @@ export async function GET() {
             シフトメイキング
           </div>
           <div style={{ fontSize: 34, color: "#3d4a66", lineHeight: 1.4 }}>
-            文化祭のシフトを、みんなの○△×から決める
+            メンバー・時間帯・役割・人数で2日分を作る
           </div>
         </div>
         <div style={{ display: "flex", gap: 14 }}>
-          {["○ 入りたい", "△ 入れる", "× 無理"].map((label) => (
+          {["メンバー", "時間帯", "役割×人数"].map((label) => (
             <div
               key={label}
               style={{

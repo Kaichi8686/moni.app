@@ -132,7 +132,7 @@ function normalizeSchedule(input?: ShiftScheduleConfig): ShiftScheduleConfig {
   return {
     dayStart: base.dayStart || DEFAULT_SCHEDULE.dayStart,
     dayEnd: base.dayEnd || DEFAULT_SCHEDULE.dayEnd,
-    slotMinutes: Math.max(15, Math.min(240, Math.floor(base.slotMinutes || 60))),
+    slotMinutes: Math.max(5, Math.min(480, Math.floor(base.slotMinutes || 60))),
     breaks: (base.breaks ?? []).map((b, i) => ({
       id: b.id || `br${i + 1}`,
       label: (b.label || "休み時間").trim(),
@@ -148,15 +148,37 @@ function normalizeSchedule(input?: ShiftScheduleConfig): ShiftScheduleConfig {
   };
 }
 
+function normalizeSlots(
+  slots: Array<{ label: string; start?: string; end?: string; isBreak?: boolean; dayId?: string }>,
+): ShiftSlot[] {
+  const workCount = new Map<string, number>();
+  const breakCount = new Map<string, number>();
+  return slots.map((s) => {
+    const start = s.start?.trim() || undefined;
+    const end = s.end?.trim() || undefined;
+    const isBreak = Boolean(s.isBreak);
+    const dayId = s.dayId?.trim() || undefined;
+    const scope = dayId || "_";
+    if (isBreak) breakCount.set(scope, (breakCount.get(scope) ?? 0) + 1);
+    else workCount.set(scope, (workCount.get(scope) ?? 0) + 1);
+    const idx = isBreak ? breakCount.get(scope)! : workCount.get(scope)!;
+    const prefix = dayId ? `${dayId}-` : "";
+    const fallback =
+      start && end ? `${start}-${end}` : isBreak ? `休み時間${idx}` : `時間帯${idx}`;
+    return {
+      id: `${prefix}${isBreak ? "b" : "s"}${idx}`,
+      label: s.label.trim() || fallback,
+      start,
+      end,
+      isBreak,
+      dayId,
+    };
+  });
+}
+
 function slotsFromInput(input: CreateBoardInput): ShiftSlot[] {
   if (input.slots && input.slots.length > 0) {
-    return input.slots.map((s, i) => ({
-      id: s.isBreak ? `b${i + 1}` : `s${i + 1}`,
-      label: s.label.trim() || `時間帯${i + 1}`,
-      start: s.start?.trim() || undefined,
-      end: s.end?.trim() || undefined,
-      isBreak: Boolean(s.isBreak),
-    }));
+    return normalizeSlots(input.slots);
   }
   return generateSlotsFromSchedule(normalizeSchedule(input.schedule));
 }
@@ -177,6 +199,36 @@ async function persist(bundle: StoreBundle): Promise<void> {
   else await writeFileBundle(bundle);
 }
 
+function normalizeMemberNames(input?: string[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const raw of input ?? []) {
+    const name = raw.trim().slice(0, 40);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+    if (names.length >= 80) break;
+  }
+  return names;
+}
+
+function responsesFromMembers(
+  boardId: string,
+  names: string[],
+  now: string,
+): ShiftResponse[] {
+  return names.map((name) => ({
+    id: makeId(),
+    boardId,
+    name,
+    prefs: {},
+    preferredRoleIds: [],
+    note: "",
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> {
   const now = new Date().toISOString();
   const schedule = normalizeSchedule(input.schedule);
@@ -195,7 +247,9 @@ export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> 
     assignments: null,
   };
 
-  await persist({ board, responses: [] });
+  const members = normalizeMemberNames(input.members);
+  const responses = responsesFromMembers(board.id, members, now);
+  await persist({ board, responses });
   return board;
 }
 
@@ -224,10 +278,53 @@ export async function updateBoard(
   if (input.roles) next.roles = normalizeRoles(input.roles);
   if (input.schedule) {
     next.schedule = normalizeSchedule(input.schedule);
-    next.slots = generateSlotsFromSchedule(next.schedule);
+    if (!input.slots) {
+      next.slots = generateSlotsFromSchedule(next.schedule);
+    }
+  }
+  if (input.slots) {
+    if (input.slots.length === 0) throw new Error("SLOTS_REQUIRED");
+    next.slots = normalizeSlots(input.slots);
+    const work = next.slots.filter((s) => !s.isBreak);
+    const first = work[0] ?? next.slots[0];
+    const last = work[work.length - 1] ?? next.slots[next.slots.length - 1];
+    next.schedule = {
+      ...next.schedule,
+      dayStart: first?.start || next.schedule.dayStart,
+      dayEnd: last?.end || next.schedule.dayEnd,
+      breaks: next.slots
+        .filter((s) => s.isBreak && s.start && s.end)
+        .map((s, i) => ({
+          id: s.id || `br${i + 1}`,
+          label: s.label,
+          start: s.start!,
+          end: s.end!,
+        })),
+    };
   }
 
-  await persist({ board: next, responses: bundle.responses });
+  let responses = bundle.responses;
+  if (input.members) {
+    const names = normalizeMemberNames(input.members);
+    const byName = new Map(bundle.responses.map((r) => [r.name, r]));
+    responses = names.map((name) => {
+      const existing = byName.get(name);
+      if (existing) return existing;
+      return {
+        id: makeId(),
+        boardId: next.id,
+        name,
+        prefs: {},
+        preferredRoleIds: [],
+        note: "",
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    next.assignments = null;
+  }
+
+  await persist({ board: next, responses });
   return next;
 }
 
