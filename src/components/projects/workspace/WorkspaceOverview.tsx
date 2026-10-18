@@ -7,9 +7,6 @@ import {
   Check,
   FileText,
   ImagePlus,
-  ListChecks,
-  Megaphone,
-  MessageCircle,
   PenLine,
   PenTool,
   PlusCircle,
@@ -527,21 +524,13 @@ export default function WorkspaceOverview() {
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <ActionLink
-            href={`/projects/${projectId}/coach`}
-            icon={Sparkles}
-            label={tx("AI", "AI")}
-            detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
-            filled
-          />
-          <ActionLink
-            href={`/projects/${projectId}/issues`}
-            icon={ListChecks}
-            label={tx("課題", "Issues")}
-            detail={tx(`全${issues.length}件を見る・追加`, `View or add all ${issues.length}`)}
-          />
-        </div>
+        <ActionLink
+          href={`/projects/${projectId}/coach`}
+          icon={Sparkles}
+          label={tx("AI", "AI")}
+          detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
+          filled
+        />
       </section>
 
       <section>
@@ -554,11 +543,7 @@ export default function WorkspaceOverview() {
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
-          <CompactLink href={`/projects/${projectId}/chat`} icon={MessageCircle} label={tx("メール", "Mail")} />
-          <CompactLink href={`/projects/${projectId}/recruit`} icon={Megaphone} label={tx("募集", "Recruit")} />
-        </div>
+        <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
       </section>
       </div>
     </div>
