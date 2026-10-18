@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } from "@/lib/projects/roadmapTemplates";
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
+import { ProjectCubeCarousel } from "@/components/projects/ProjectCubeCarousel";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import {
@@ -15,6 +16,8 @@ import {
   emptyProjectBrief,
   type ProjectBrief,
 } from "@/lib/projects/projectBrief";
+import { openProjectCluster } from "@/lib/navigation/projectCluster";
+import { rememberLastProject } from "@/lib/workspace/lastProject";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
@@ -366,7 +369,11 @@ export function ProjectTabGlide({
     setShowAdvancedFields(false);
     setBusy(false);
     void load();
-    if (data?.id) router.push(`/projects/${data.id as string}/overview`);
+    if (data?.id) {
+      rememberLastProject(data.id, form.name.trim() || "プロジェクト");
+      openProjectCluster();
+      router.push(`/projects/${data.id as string}/overview`);
+    }
   }
 
   if (!hasSession) {
@@ -459,105 +466,146 @@ export function ProjectTabGlide({
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-6 sm:p-4">
-            {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                className="group flex flex-col overflow-hidden rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
-              >
-                <div className="flex aspect-[4/3] w-full items-center justify-center bg-zinc-100/90">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
-                    +
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
-                  <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
-                  <span className="text-[11px] text-zinc-500">作って仲間を集める</span>
-                </div>
-              </button>
-
-              {displayList.map((project) => {
-                const color =
-                  PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
-                const thumb = project.thumbnail_url?.trim();
-                return (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}/overview`}
-                    prefetch
-                    className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
-                  >
-                    <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
-                      {thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image
-                        <img
-                          src={thumb}
-                          alt=""
-                          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                        />
-                      ) : (
-                        <div
-                          className={`flex h-full w-full items-center justify-center ${color} text-4xl font-semibold text-white sm:text-5xl`}
-                          aria-hidden
-                        >
-                          {(project.icon?.trim() || project.name.trim().charAt(0) || "P").toUpperCase()}
-                        </div>
-                      )}
+          {fillViewport ? (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <ProjectCubeCarousel
+                projects={displayList}
+                currentUserId={currentUserId}
+                joinedIds={joinedIds}
+                loading={loading}
+                onCreate={() => setCreateOpen(true)}
+              />
+              {!loading && displayList.length === 0 ? (
+                <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
+                  <div className="pointer-events-auto max-w-sm rounded-2xl border border-dashed border-zinc-300 bg-white/95 px-4 py-5 text-center shadow-lg backdrop-blur-sm">
+                    <p className="text-sm font-semibold text-zinc-800">参加しているプロジェクトはまだありません。</p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                      キューブの「新規」をタップするか、「探す」タブから公開プロジェクトに応募してみましょう。
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
+                        onClick={() => setCreateOpen(true)}
+                      >
+                        プロジェクトを作る
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
+                        onClick={() => onNavigate("chat")}
+                      >
+                        探すタブで応募する
+                      </button>
                     </div>
-                    <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
-                      <p className="line-clamp-2 w-full text-sm font-semibold leading-snug text-zinc-900">
-                        {project.name}
-                      </p>
-                      <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
-                        {projectLineShortLabel(project.business_type)}
-                      </p>
-                      <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
-                        {project.visibility === "public" ? "公開" : "非公開"}
-                        {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
-                        {joinedIds.has(project.id) ? " ・ メンバー" : ""}
-                        {project.recruitment_target?.trim() || project.recruitment_message?.trim()
-                          ? " ・ 募集中"
-                          : ""}
-                      </p>
-                    </div>
-                    <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/45 px-1.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
-                      ⋯
-                    </span>
-                  </Link>
-                );
-              })}
+                  </div>
+                </div>
+              ) : null}
             </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-6 sm:p-4">
+              {loading ? <p className="text-sm text-zinc-500">読み込み中…</p> : null}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  className="group flex flex-col overflow-hidden rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50/80 transition hover:border-zinc-300 hover:bg-zinc-100/80"
+                >
+                  <div className="flex aspect-[4/3] w-full items-center justify-center bg-zinc-100/90">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-2xl font-light text-white shadow-sm transition group-hover:scale-105">
+                      +
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
+                    <span className="text-sm font-semibold text-zinc-800">新規プロジェクト</span>
+                    <span className="text-[11px] text-zinc-500">作って仲間を集める</span>
+                  </div>
+                </button>
 
-            {!loading && displayList.length === 0 ? (
-              <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
-                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
-                <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                  自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
-                </p>
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    プロジェクトを作る
-                  </button>
-                  <button
-                    type="button"
-                    className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
-                    onClick={() => {
-                      onNavigate("chat");
-                    }}
-                  >
-                    探すタブで応募する
-                  </button>
-                </div>
+                {displayList.map((project) => {
+                  const color =
+                    PROJECT_ICON_BG[projectHashIndex(project.id, PROJECT_ICON_BG.length)] ?? "bg-zinc-500";
+                  const thumb = project.thumbnail_url?.trim();
+                  return (
+                    <Link
+                      key={project.id}
+                      href={`/projects/${project.id}/overview`}
+                      prefetch
+                      onClick={() => {
+                        rememberLastProject(project.id, project.name);
+                        openProjectCluster();
+                      }}
+                      className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg active:opacity-90"
+                    >
+                      <div className="aspect-[4/3] w-full overflow-hidden bg-zinc-100">
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- user-configured Supabase project image
+                          <img
+                            src={thumb}
+                            alt=""
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-full w-full items-center justify-center ${color} text-4xl font-semibold text-white sm:text-5xl`}
+                            aria-hidden
+                          >
+                            {(project.icon?.trim() || project.name.trim().charAt(0) || "P").toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-0.5 px-2.5 py-2.5 text-left">
+                        <p className="line-clamp-2 w-full text-sm font-semibold leading-snug text-zinc-900">
+                          {project.name}
+                        </p>
+                        <p className="line-clamp-1 w-full text-[10px] font-semibold text-indigo-800">
+                          {projectLineShortLabel(project.business_type)}
+                        </p>
+                        <p className="line-clamp-1 w-full text-[11px] text-zinc-500">
+                          {project.visibility === "public" ? "公開" : "非公開"}
+                          {currentUserId && project.owner_id === currentUserId ? " ・ オーナー" : ""}
+                          {joinedIds.has(project.id) ? " ・ メンバー" : ""}
+                          {project.recruitment_target?.trim() || project.recruitment_message?.trim()
+                            ? " ・ 募集中"
+                            : ""}
+                        </p>
+                      </div>
+                      <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/45 px-1.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
+                        ⋯
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-            ) : null}
 
-          </div>
+              {!loading && displayList.length === 0 ? (
+                <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                    自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
+                      onClick={() => setCreateOpen(true)}
+                    >
+                      プロジェクトを作る
+                    </button>
+                    <button
+                      type="button"
+                      className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                      onClick={() => {
+                        onNavigate("chat");
+                      }}
+                    >
+                      探すタブで応募する
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
