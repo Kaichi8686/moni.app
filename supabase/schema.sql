@@ -54,11 +54,27 @@ create table if not exists public.chat_reads (
   primary key (user_id, room_id)
 );
 
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  target_type text not null,
+  target_id text not null,
+  reason text not null default '',
+  excerpt text,
+  reporter_id uuid references auth.users (id) on delete set null,
+  status text not null default 'new',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists reports_created_at_idx on public.reports (created_at desc);
+create index if not exists reports_target_idx on public.reports (target_type, target_id);
+create index if not exists reports_reporter_idx on public.reports (reporter_id);
+
 alter table public.profiles enable row level security;
 alter table public.articles enable row level security;
 alter table public.pitches enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.chat_reads enable row level security;
+alter table public.reports enable row level security;
 
 create policy "read profiles" on public.profiles for select using (true);
 create policy "insert own profile" on public.profiles for insert with check (auth.uid() = id);
@@ -78,6 +94,9 @@ create policy "insert chat auth users" on public.chat_messages for insert with c
 create policy "read own chat reads" on public.chat_reads for select using (auth.uid() = user_id);
 create policy "upsert own chat reads" on public.chat_reads for insert with check (auth.uid() = user_id);
 create policy "update own chat reads" on public.chat_reads for update using (auth.uid() = user_id);
+
+create policy "insert own report" on public.reports for insert with check (auth.uid() = reporter_id);
+create policy "read own reports" on public.reports for select using (auth.uid() = reporter_id);
 
 -- DM トーク（マッチングからつながった1対1）。room_id は dm|uuid|uuid（辞書順で2ユーザーを固定）
 create table if not exists public.chat_dm_rooms (
