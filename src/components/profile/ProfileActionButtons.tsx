@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
+import { shareProjectMembership } from "@/lib/messages/api";
 import { areMutualFollowers, toggleFollowRelation } from "@/lib/profile/followActions";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -59,7 +60,8 @@ export function ProfileActionButtons({
         return;
       }
       const mutual = await areMutualFollowers(supabase, uid, profileId);
-      if (!cancelled) setCanMessage(mutual);
+      const projectPeer = mutual ? true : await shareProjectMembership(supabase, uid, profileId);
+      if (!cancelled) setCanMessage(mutual || projectPeer);
     })();
     return () => {
       cancelled = true;
@@ -107,7 +109,12 @@ export function ProfileActionButtons({
     setActionError("");
     const result = await navigateToDirectMessage(supabase, router, profileId);
     if (!result.ok && result.reason === "not_mutual") {
-      setActionError(tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other"));
+      setActionError(
+        tx(
+          "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
+          "Mail unlocks for project teammates or mutual follows",
+        ),
+      );
     }
   }
 
@@ -151,12 +158,18 @@ export function ProfileActionButtons({
           aria-label={
             canMessage
               ? tx("メッセージ", "Message")
-              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+              : tx(
+                  "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
+                  "Mail unlocks for project teammates or mutual follows",
+                )
           }
           title={
             canMessage
               ? tx("メッセージ", "Message")
-              : tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+              : tx(
+                  "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
+                  "Mail unlocks for project teammates or mutual follows",
+                )
           }
         >
           <MessageCircle className="h-[18px] w-[18px]" />

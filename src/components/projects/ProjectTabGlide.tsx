@@ -354,6 +354,12 @@ export function ProjectTabGlide({
     } catch {
       /* テーブル未適用などは無視（作成自体は成功している） */
     }
+    try {
+      const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+      await getOrCreateProjectConversation(supabase, projectId);
+    } catch (e) {
+      console.warn("[projects] project group conversation seed skipped:", e);
+    }
     setCreateOpen(false);
     setForm({
       name: "",

@@ -7,7 +7,7 @@ export type OpenDirectMessageResult =
   | { ok: true; conversationId: string }
   | { ok: false; reason: "not_mutual" | "error" };
 
-/** 1対1 DM を開く（相互フォロー必須）。失敗時は理由を返す */
+/** 1対1 DM を開く（相互フォロー、または同じプロジェクト所属）。失敗時は理由を返す */
 export async function openDirectMessage(
   client: SupabaseClient,
   peerUserId: string,

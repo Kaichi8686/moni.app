@@ -13,6 +13,7 @@ import { NewConversationModal } from "@/app/messages/_components/NewConversation
 import {
   ensureMyMutualDirectConversations,
   ensureMyProjectConversations,
+  ensureMyProjectPeerDirectConversations,
   fetchInboxConversations,
 } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
@@ -45,6 +46,8 @@ function lastMessagePreview(conv: InboxConversation, locale: "ja" | "en"): strin
   return m.content?.trim() || "";
 }
 
+const PROJECT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function InboxList() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,10 +59,16 @@ export function InboxList() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [projectScopeName, setProjectScopeName] = useState<string | null>(null);
+  const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
   const peerHandledRef = useRef<string | null>(null);
-  const projectSyncRef = useRef(false);
 
-  const load = useCallback(async (opts?: { syncMutual?: boolean }) => {
+  const scopedProjectId = (() => {
+    const raw = searchParams.get("project")?.trim() ?? "";
+    return PROJECT_UUID_RE.test(raw) ? raw : null;
+  })();
+
+  const load = useCallback(async (opts?: { syncPeers?: boolean }) => {
     if (!supabase) return;
     setLoadError(null);
     try {
@@ -71,23 +80,56 @@ export function InboxList() {
         return;
       }
 
-      // 参加プロジェクトのグループラインを作成／参加してから一覧取得
-      if (!projectSyncRef.current) {
-        projectSyncRef.current = true;
+      // グループライン全員同期・プロジェクト仲間 DM・相互フォロー DM を揃えてから一覧取得
+      if (opts?.syncPeers !== false) {
         try {
           await ensureMyProjectConversations(supabase, uid);
         } catch (e) {
           console.warn("ensureMyProjectConversations", e);
         }
-      }
-
-      // 相互フォロー相手の 1:1 を自動で inbox に出す（未作成分のみ）
-      if (opts?.syncMutual !== false) {
+        try {
+          await ensureMyProjectPeerDirectConversations(supabase, uid);
+        } catch (e) {
+          console.warn("ensureMyProjectPeerDirectConversations", e);
+        }
         try {
           await ensureMyMutualDirectConversations(supabase, uid);
         } catch (e) {
           console.warn("ensureMyMutualDirectConversations", e);
         }
+      }
+
+      if (scopedProjectId) {
+        const [{ data: project }, { data: ownedCheck }, { data: memCheck }, { data: memberRows }] =
+          await Promise.all([
+            supabase.from("projects").select("id, name, owner_id").eq("id", scopedProjectId).maybeSingle(),
+            supabase.from("projects").select("id").eq("id", scopedProjectId).eq("owner_id", uid).maybeSingle(),
+            supabase
+              .from("project_members")
+              .select("project_id")
+              .eq("project_id", scopedProjectId)
+              .eq("user_id", uid)
+              .maybeSingle(),
+            supabase.from("project_members").select("user_id").eq("project_id", scopedProjectId),
+          ]);
+        const isMember = Boolean(ownedCheck || memCheck);
+        if (project && isMember) {
+          setProjectScopeName((project.name as string | null)?.trim() || tx("プロジェクト", "Project"));
+          const peers = new Set<string>();
+          const ownerId = project.owner_id as string | null;
+          if (ownerId && ownerId !== uid) peers.add(ownerId);
+          for (const row of memberRows ?? []) {
+            const mid = row.user_id as string;
+            if (mid && mid !== uid) peers.add(mid);
+          }
+          setProjectPeerIds(peers);
+        } else {
+          setProjectScopeName(null);
+          setProjectPeerIds(new Set());
+        }
+      } else {
+        setProjectScopeName(null);
+        setProjectPeerIds(new Set());
       }
 
       const rows = await fetchInboxConversations(supabase, uid);
@@ -98,10 +140,10 @@ export function InboxList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopedProjectId, tx]);
 
   useEffect(() => {
-    void load({ syncMutual: true });
+    void load({ syncPeers: true });
   }, [load]);
 
   useEffect(() => {
@@ -115,21 +157,21 @@ export function InboxList() {
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversation_members" },
         () => {
-          if (!cancelled) void load({ syncMutual: false });
+          if (!cancelled) void load({ syncPeers: false });
         },
       )
       .on(
@@ -137,7 +179,14 @@ export function InboxList() {
         { event: "*", schema: "public", table: "follows" },
         () => {
           // 相互フォロー成立で名前をメール一覧に出す
-          if (!cancelled) void load({ syncMutual: true });
+          if (!cancelled) void load({ syncPeers: true });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_members" },
+        () => {
+          if (!cancelled) void load({ syncPeers: true });
         },
       )
       .subscribe();
@@ -146,7 +195,7 @@ export function InboxList() {
 
     const poll = window.setInterval(() => {
       if (!cancelled && document.visibilityState === "visible") {
-        void load({ syncMutual: true });
+        void load({ syncPeers: true });
       }
     }, 8000);
 
@@ -168,6 +217,14 @@ export function InboxList() {
 
   const filtered = useMemo(() => {
     let list = [...conversations];
+    if (scopedProjectId && projectScopeName) {
+      // プロジェクトブロック: そのプロジェクトのグループ + メンバーとの 1:1 のみ
+      list = list.filter((c) => {
+        if (c.type === "project") return c.projectId === scopedProjectId;
+        if (c.type === "direct" && c.otherUser?.id) return projectPeerIds.has(c.otherUser.id);
+        return false;
+      });
+    }
     if (filter === "unread") list = list.filter((c) => c.unreadCount > 0);
     if (filter === "groups") list = list.filter((c) => c.type === "group");
     if (filter === "projects") list = list.filter((c) => c.type === "project");
@@ -179,17 +236,28 @@ export function InboxList() {
         return title.toLowerCase().includes(q) || lastMessagePreview(c, locale).toLowerCase().includes(q);
       });
     }
+    // 未読を最上段、その中・既読側は直近チャット順
     list.sort((a, b) => {
       const aUnread = a.unreadCount > 0 ? 1 : 0;
       const bUnread = b.unreadCount > 0 ? 1 : 0;
       if (aUnread !== bUnread) return bUnread - aUnread;
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      // プロジェクトスコープではグループラインを最上段付近に（未読帯の中では通常ソート）
+      if (scopedProjectId && aUnread === bUnread) {
+        if (a.type === "project" && b.type !== "project") return -1;
+        if (b.type === "project" && a.type !== "project") return 1;
+      }
       return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
     });
     return list;
-  }, [conversations, filter, searchQuery, locale]);
+  }, [conversations, filter, searchQuery, locale, scopedProjectId, projectScopeName, projectPeerIds]);
 
   const emptyHint = (() => {
+    if (scopedProjectId && projectScopeName) {
+      return tx(
+        "このプロジェクトのメンバーとのトークがここに表示されます。グループ全体と個別チャットが使えます。",
+        "Chats with this project’s members appear here — group line and direct messages.",
+      );
+    }
     if (filter === "projects") {
       return tx(
         "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。右上から手動でも開始できます。",
@@ -203,8 +271,8 @@ export function InboxList() {
       return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
     }
     return tx(
-      "まだトークがありません。相互フォローになると相手の名前がここに自動で表示されます。",
-      "No chats yet. Mutual follows appear here automatically.",
+      "まだトークがありません。参加中のプロジェクトや相互フォローの相手がここに自動で表示されます。",
+      "No chats yet. Project teammates and mutual follows appear here automatically.",
     );
   })();
 
@@ -236,11 +304,35 @@ export function InboxList() {
         />
       </div>
 
+      {scopedProjectId && projectScopeName ? (
+        <div className="border-b border-emerald-100 bg-emerald-50/80 px-4 py-2.5">
+          <p className="text-[13px] font-semibold text-emerald-900">
+            {tx(`${projectScopeName} のメール`, `Mail · ${projectScopeName}`)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-emerald-800/80">
+            {tx(
+              "メンバー全員のグループと、プロジェクト内の個別チャット",
+              "Group line for all members, plus DMs within this project",
+            )}
+          </p>
+          <Link
+            href="/messages"
+            className="mt-1 inline-block text-[11px] font-medium text-emerald-700 underline underline-offset-2"
+          >
+            {tx("すべてのメールを見る", "See all mail")}
+          </Link>
+        </div>
+      ) : null}
+
       <div className="border-b px-4 py-2">
         <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-zinc-400" />
           <input
-            placeholder={tx("検索", "Search")}
+            placeholder={
+              scopedProjectId
+                ? tx("メンバーを検索", "Search members")
+                : tx("検索", "Search")
+            }
             className="flex-1 bg-transparent text-sm outline-none"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -248,22 +340,24 @@ export function InboxList() {
         </div>
       </div>
 
-      <div className="border-b px-4 py-2">
-        <label className="sr-only" htmlFor="inbox-filter">
-          {tx("フィルタ", "Filter")}
-        </label>
-        <select
-          id="inbox-filter"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as InboxFilter)}
-          className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-[15px] text-zinc-800"
-        >
-          <option value="all">{tx("すべて", "All")}</option>
-          <option value="unread">{tx("未読", "Unread")}</option>
-          <option value="projects">{tx("プロジェクトグループ", "Project groups")}</option>
-          <option value="groups">{tx("グループ", "Groups")}</option>
-        </select>
-      </div>
+      {!scopedProjectId ? (
+        <div className="border-b px-4 py-2">
+          <label className="sr-only" htmlFor="inbox-filter">
+            {tx("フィルタ", "Filter")}
+          </label>
+          <select
+            id="inbox-filter"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as InboxFilter)}
+            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-[15px] text-zinc-800"
+          >
+            <option value="all">{tx("すべて", "All")}</option>
+            <option value="unread">{tx("未読", "Unread")}</option>
+            <option value="projects">{tx("プロジェクトグループ", "Project groups")}</option>
+            <option value="groups">{tx("グループ", "Groups")}</option>
+          </select>
+        </div>
+      ) : null}
 
       <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
         {!userId ? (
@@ -293,11 +387,11 @@ export function InboxList() {
       {showNew && userId ? (
         <NewConversationModal
           currentUserId={userId}
+          projectId={scopedProjectId ?? undefined}
           onClose={() => setShowNew(false)}
           onCreated={() => {
             setShowNew(false);
-            projectSyncRef.current = false;
-            void load();
+            void load({ syncPeers: true });
           }}
         />
       ) : null}
