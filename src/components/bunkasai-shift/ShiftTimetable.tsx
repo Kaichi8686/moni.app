@@ -18,6 +18,17 @@ export function ShiftTimetable() {
   const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
   const placeError = useBunkasaiShiftStore((s) => s.placeError);
   const clearPlaceError = useBunkasaiShiftStore((s) => s.clearPlaceError);
+  const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
+  const pairs = useBunkasaiShiftStore((s) => s.pairs);
+  const coreSet = useMemo(() => new Set(coreMemberIds), [coreMemberIds]);
+  const partnerOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of pairs) {
+      map.set(p.memberIds[0], p.memberIds[1]);
+      map.set(p.memberIds[1], p.memberIds[0]);
+    }
+    return map;
+  }, [pairs]);
   const [day, setDay] = useState<DayId>("d1");
   const [drag, setDrag] = useState<{ memberId: string; fromSlot: SlotId } | null>(null);
 
@@ -106,8 +117,14 @@ export function ShiftTimetable() {
         {daySlots.map((slot) => {
           const ids = assignments[slot.id];
           const short = slot.needed - ids.length;
+          const hasCore =
+            coreSet.size === 0 || ids.some((id) => coreSet.has(id));
           const available = members.filter(
-            (m) => canPlaceInSlot(members, assignments, slot.id, m.id).ok,
+            (m) =>
+              canPlaceInSlot(members, assignments, slot.id, m.id, {
+                coreMemberIds,
+                pairs,
+              }).ok,
           );
           return (
             <article
@@ -119,11 +136,13 @@ export function ShiftTimetable() {
                 setDrag(null);
               }}
               className={`rounded-2xl border bg-white/85 p-4 shadow-sm backdrop-blur ${
-                short > 0
-                  ? "border-amber-300"
-                  : short < 0
-                    ? "border-sky-300"
-                    : "border-[var(--bs-line)]"
+                !hasCore
+                  ? "border-red-300"
+                  : short > 0
+                    ? "border-amber-300"
+                    : short < 0
+                      ? "border-sky-300"
+                      : "border-[var(--bs-line)]"
               }`}
             >
               <header className="mb-3 flex items-start justify-between gap-2">
@@ -131,15 +150,20 @@ export function ShiftTimetable() {
                   <h3 className="font-semibold text-[var(--bs-ink)]">
                     {formatSlotTitle(slot)}
                   </h3>
-                  <p className="text-xs text-[var(--bs-muted)]">{slot.label}</p>
+                  <p className="text-xs text-[var(--bs-muted)]">
+                    {slot.label}
+                    {!hasCore ? " ／ コア不在" : ""}
+                  </p>
                 </div>
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                    short > 0
-                      ? "bg-amber-100 text-amber-900"
-                      : short < 0
-                        ? "bg-sky-100 text-sky-900"
-                        : "bg-emerald-100 text-emerald-900"
+                    !hasCore
+                      ? "bg-red-100 text-red-900"
+                      : short > 0
+                        ? "bg-amber-100 text-amber-900"
+                        : short < 0
+                          ? "bg-sky-100 text-sky-900"
+                          : "bg-emerald-100 text-emerald-900"
                   }`}
                 >
                   {ids.length}/{slot.needed}
@@ -162,10 +186,18 @@ export function ShiftTimetable() {
                           onDragStart={() => setDrag({ memberId: id, fromSlot: slot.id })}
                           onDragEnd={() => setDrag(null)}
                           onClick={() => removeFromSlot(slot.id, id)}
-                          title="ドラッグで移動 / クリックで外す"
-                          className="cursor-grab rounded-full bg-[var(--bs-soft)] px-3 py-1.5 text-sm font-medium text-[var(--bs-ink)] ring-1 ring-[var(--bs-line)] active:cursor-grabbing"
+                          title="ドラッグで移動 / クリックで外す（ペアは同時）"
+                          className={`cursor-grab rounded-full px-3 py-1.5 text-sm font-medium ring-1 active:cursor-grabbing ${
+                            coreSet.has(id)
+                              ? "bg-[var(--bs-accent)] text-white ring-[var(--bs-accent-deep)]"
+                              : partnerOf.has(id)
+                                ? "bg-amber-50 text-amber-950 ring-amber-200"
+                                : "bg-[var(--bs-soft)] text-[var(--bs-ink)] ring-[var(--bs-line)]"
+                          }`}
                         >
+                          {coreSet.has(id) ? "★" : ""}
                           {m.name}
+                          {partnerOf.has(id) ? " ⇔" : ""}
                         </button>
                       </li>
                     );

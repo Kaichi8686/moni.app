@@ -25,20 +25,44 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  let body: Partial<BunkasaiSnapshot> & { room?: string };
+  let body: Partial<BunkasaiSnapshot> & { room?: string; allowEmptyMembers?: boolean };
   try {
-    body = (await req.json()) as Partial<BunkasaiSnapshot> & { room?: string };
+    body = (await req.json()) as Partial<BunkasaiSnapshot> & {
+      room?: string;
+      allowEmptyMembers?: boolean;
+    };
   } catch {
     return bad("JSON が不正です");
   }
 
   try {
+    const room = body.room ?? new URL(req.url).searchParams.get("room");
+    const existing = await loadSnapshot(room);
+    const incomingMembers = Array.isArray(body.members) ? body.members : null;
+
+    // 名簿を空で上書きしない（誤同期で消える事故防止）
+    let members = existing.members;
+    if (incomingMembers && incomingMembers.length > 0) {
+      members = incomingMembers;
+    } else if (
+      incomingMembers &&
+      incomingMembers.length === 0 &&
+      body.allowEmptyMembers === true
+    ) {
+      members = [];
+    } else if (incomingMembers && incomingMembers.length === 0 && existing.members.length === 0) {
+      members = [];
+    }
+
     const snapshot = await saveSnapshot({
-      room: body.room ?? new URL(req.url).searchParams.get("room"),
-      members: body.members ?? [],
-      assignments: body.assignments ?? emptyAssignments(),
-      warnings: body.warnings ?? [],
-      lastAssignedAt: body.lastAssignedAt ?? null,
+      room,
+      members,
+      assignments: body.assignments ?? existing.assignments,
+      warnings: body.warnings ?? existing.warnings,
+      lastAssignedAt:
+        body.lastAssignedAt !== undefined ? body.lastAssignedAt : existing.lastAssignedAt,
+      coreMemberIds: body.coreMemberIds ?? existing.coreMemberIds,
+      pairs: body.pairs ?? existing.pairs,
     });
     return NextResponse.json({ ok: true, snapshot });
   } catch (e) {

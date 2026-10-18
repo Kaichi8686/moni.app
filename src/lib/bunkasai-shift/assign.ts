@@ -1,5 +1,14 @@
 import { SLOTS, emptyAssignments, slotsForDay } from "./schedule";
-import type { AssignResult, Assignments, DayId, Member, ShiftSlot, SlotId } from "./types";
+import type {
+  AssignOptions,
+  AssignResult,
+  Assignments,
+  DayId,
+  Member,
+  MemberPair,
+  ShiftSlot,
+  SlotId,
+} from "./types";
 
 function shuffleInPlace<T>(arr: T[], rng: () => number): void {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -66,24 +75,84 @@ function dayBalancePenalty(
 ): number {
   const thisDay = dayLoads[dayId].get(memberId) ?? 0;
   const otherDay = dayLoads[dayId === "d1" ? "d2" : "d1"].get(memberId) ?? 0;
-  // この日を1増やすと差がどうなるか
   const afterAbs = Math.abs(thisDay + 1 - otherDay);
   const beforeAbs = Math.abs(thisDay - otherDay);
-  // この日のコマ数が多い人は後回し、差が広がるのも後回し
   return thisDay * 1000 + afterAbs * 10 + (afterAbs > beforeAbs ? 5 : 0);
 }
 
+export function partnerMap(pairs: MemberPair[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const p of pairs) {
+    const [a, b] = p.memberIds;
+    if (!a || !b || a === b) continue;
+    map.set(a, b);
+    map.set(b, a);
+  }
+  return map;
+}
+
+/** 配置単位（単独 or ペア2人） */
+export function unitForMember(memberId: string, pairs: MemberPair[]): string[] {
+  const partner = partnerMap(pairs).get(memberId);
+  if (!partner) return [memberId];
+  return memberId < partner ? [memberId, partner] : [partner, memberId];
+}
+
+function unitLoadSum(loads: Map<string, number>, unit: string[]): number {
+  return unit.reduce((sum, id) => sum + (loads.get(id) ?? 0), 0);
+}
+
+function unitDayPenalty(
+  dayLoads: Record<DayId, Map<string, number>>,
+  unit: string[],
+  dayId: DayId,
+): number {
+  return Math.max(...unit.map((id) => dayBalancePenalty(dayLoads, id, dayId)));
+}
+
+function canPlaceUnit(
+  membersById: Map<string, Member>,
+  assignments: Assignments,
+  slot: ShiftSlot,
+  unit: string[],
+  alreadyPicked: string[],
+): boolean {
+  const roomLeft = slot.needed - alreadyPicked.length;
+  if (unit.length > roomLeft) return false;
+  for (const id of unit) {
+    if (alreadyPicked.includes(id)) return false;
+    if (assignments[slot.id]?.includes(id)) return false;
+    const m = membersById.get(id);
+    if (!m) return false;
+    if (m.ngSlotIds.includes(slot.id)) return false;
+    // 仮反映込みで連続判定
+    const provisional: Assignments = {
+      ...assignments,
+      [slot.id]: [...alreadyPicked],
+    };
+    if (hasAdjacentAssignment(provisional, id, slot)) return false;
+  }
+  return true;
+}
+
 /**
- * NG時間帯を避け、2連続シフトを禁止しつつ各コマを必要人数で埋める。
- * 総負担と「1日目 / 2日目の回数差」が小さくなるよう優先する。
- * メンバー一覧自体は変更しない。
+ * NG・連続禁止・コア必ず1人・ペア同時配置を守りつつ各コマを埋める。
+ * メンバー名簿自体は変更しない。
  */
-export function autoAssign(members: Member[], seed = Date.now()): AssignResult {
+export function autoAssign(
+  members: Member[],
+  seed = Date.now(),
+  options: AssignOptions = {},
+): AssignResult {
   const assignments = emptyAssignments();
   const warnings: AssignResult["warnings"] = [];
   const rng = mulberry32(seed >>> 0);
   const memberIds = members.map((m) => m.id);
   const byId = new Map(members.map((m) => [m.id, m]));
+  const coreSet = new Set((options.coreMemberIds ?? []).filter((id) => byId.has(id)));
+  const pairs = (options.pairs ?? []).filter(
+    (p) => byId.has(p.memberIds[0]) && byId.has(p.memberIds[1]),
+  );
 
   const availableCount = (slot: ShiftSlot) =>
     members.filter(
@@ -92,7 +161,6 @@ export function autoAssign(members: Member[], seed = Date.now()): AssignResult {
         !hasAdjacentAssignment(assignments, m.id, slot),
     ).length;
 
-  // 埋まりにくいコマから（ただし日をまたいで偏りすぎないよう日程内順も考慮）
   const orderedSlots = [...SLOTS].sort((a, b) => {
     const da = availableCount(a) - a.needed;
     const db = availableCount(b) - b.needed;
@@ -102,58 +170,113 @@ export function autoAssign(members: Member[], seed = Date.now()): AssignResult {
   });
 
   for (const slot of orderedSlots) {
-    const candidates = members.filter(
-      (m) =>
-        !m.ngSlotIds.includes(slot.id) &&
-        !hasAdjacentAssignment(assignments, m.id, slot),
-    );
-    const loads = countLoads(assignments, memberIds);
-    const dayLoads = countDayLoads(assignments, memberIds);
-
-    const ranked = [...candidates].sort((a, b) => {
-      const la = loads.get(a.id) ?? 0;
-      const lb = loads.get(b.id) ?? 0;
-      if (la !== lb) return la - lb;
-      const ba = dayBalancePenalty(dayLoads, a.id, slot.dayId);
-      const bb = dayBalancePenalty(dayLoads, b.id, slot.dayId);
-      if (ba !== bb) return ba - bb;
-      return a.name.localeCompare(b.name, "ja");
-    });
-
     const picked: string[] = [];
+    const loads = () => countLoads(assignments, memberIds);
+    const dayLoads = () => countDayLoads(assignments, memberIds);
+
+    const rankUnits = (units: string[][]) => {
+      const L = loads();
+      const D = dayLoads();
+      return [...units].sort((ua, ub) => {
+        const la = unitLoadSum(L, ua);
+        const lb = unitLoadSum(L, ub);
+        if (la !== lb) return la - lb;
+        const ba = unitDayPenalty(D, ua, slot.dayId);
+        const bb = unitDayPenalty(D, ub, slot.dayId);
+        if (ba !== bb) return ba - bb;
+        const na = byId.get(ua[0])?.name ?? "";
+        const nb = byId.get(ub[0])?.name ?? "";
+        return na.localeCompare(nb, "ja");
+      });
+    };
+
+    const tryAddUnit = (unit: string[]): boolean => {
+      if (!canPlaceUnit(byId, assignments, slot, unit, picked)) return false;
+      picked.push(...unit);
+      assignments[slot.id] = [...picked];
+      return true;
+    };
+
+    // 1) コアメンバーを先に1単位確保（ペアなら2人まとめて）
+    if (coreSet.size > 0) {
+      const coreUnits = new Map<string, string[]>();
+      for (const id of coreSet) {
+        const unit = unitForMember(id, pairs);
+        coreUnits.set(unit.join("|"), unit);
+      }
+      const orderedCore = rankUnits([...coreUnits.values()]);
+      let placedCore = false;
+      for (const unit of orderedCore) {
+        if (tryAddUnit(unit)) {
+          placedCore = true;
+          break;
+        }
+      }
+      if (!placedCore) {
+        warnings.push({
+          slotId: slot.id,
+          shortfall: 0,
+          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーを入れられませんでした（NGまたは連続回避）`,
+        });
+      }
+    }
+
+    // 2) 残りを埋める（ペアは必ず同時）
+    const seenUnit = new Set<string>();
+    const fillUnits: string[][] = [];
+    for (const m of members) {
+      const unit = unitForMember(m.id, pairs);
+      const key = unit.join("|");
+      if (seenUnit.has(key)) continue;
+      seenUnit.add(key);
+      fillUnits.push(unit);
+    }
+
+    const ranked = rankUnits(fillUnits);
     let i = 0;
     while (picked.length < slot.needed && i < ranked.length) {
-      const load = loads.get(ranked[i].id) ?? 0;
-      const bal = dayBalancePenalty(dayLoads, ranked[i].id, slot.dayId);
+      const L = loads();
+      const D = dayLoads();
+      const load0 = unitLoadSum(L, ranked[i]);
+      const bal0 = unitDayPenalty(D, ranked[i], slot.dayId);
       let j = i;
       while (
         j < ranked.length &&
-        (loads.get(ranked[j].id) ?? 0) === load &&
-        dayBalancePenalty(dayLoads, ranked[j].id, slot.dayId) === bal
+        unitLoadSum(L, ranked[j]) === load0 &&
+        unitDayPenalty(D, ranked[j], slot.dayId) === bal0
       ) {
         j++;
       }
       const band = ranked.slice(i, j);
       shuffleInPlace(band, rng);
-      for (const m of band) {
+      for (const unit of band) {
         if (picked.length >= slot.needed) break;
-        // 同コマ内で連続判定は不要だが、念のため二重追加防止
-        if (picked.includes(m.id)) continue;
-        picked.push(m.id);
-        // 直後の候補判定用に仮反映
-        assignments[slot.id] = picked;
+        if (unit.some((id) => picked.includes(id))) continue;
+        tryAddUnit(unit);
       }
       i = j;
     }
 
     assignments[slot.id] = picked;
 
+    const hasCore =
+      coreSet.size === 0 || picked.some((id) => coreSet.has(id));
+    if (!hasCore) {
+      // すでに警告済みでなければ追加
+      if (!warnings.some((w) => w.slotId === slot.id && w.message.includes("コア"))) {
+        warnings.push({
+          slotId: slot.id,
+          shortfall: 0,
+          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーがいません`,
+        });
+      }
+    }
+
     if (picked.length < slot.needed) {
-      const ngBlocked = members.filter((m) => m.ngSlotIds.includes(slot.id)).length;
       warnings.push({
         slotId: slot.id,
         shortfall: slot.needed - picked.length,
-        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人（NG ${ngBlocked}人・連続シフト回避あり）。あと ${slot.needed - picked.length}人不足`,
+        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人。あと ${slot.needed - picked.length}人不足（連続・ペア同時・NGの影響）`,
       });
     }
   }
@@ -191,12 +314,13 @@ export function loadStats(members: Member[], assignments: Assignments) {
     );
 }
 
-/** 手動配置がルール違反か */
+/** 手動配置がルール違反か（ペアは呼び出し側でまとめて判定） */
 export function canPlaceInSlot(
   members: Member[],
   assignments: Assignments,
   slotId: SlotId,
   memberId: string,
+  options: AssignOptions = {},
 ): { ok: true } | { ok: false; reason: string } {
   const member = members.find((m) => m.id === memberId);
   if (!member) return { ok: false, reason: "メンバーが見つかりません" };
@@ -210,6 +334,20 @@ export function canPlaceInSlot(
   if (!slot) return { ok: false, reason: "不明なコマです" };
   if (hasAdjacentAssignment(assignments, memberId, slot)) {
     return { ok: false, reason: "前後のコマと連続になるため入れられません" };
+  }
+
+  const pairs = options.pairs ?? [];
+  const unit = unitForMember(memberId, pairs);
+  if (unit.length > 1) {
+    const byId = new Map(members.map((m) => [m.id, m]));
+    if (!canPlaceUnit(byId, assignments, slot, unit, assignments[slotId])) {
+      const partnerId = unit.find((id) => id !== memberId)!;
+      const partner = byId.get(partnerId);
+      return {
+        ok: false,
+        reason: `ペアの${partner?.name ?? "相手"}と同時に入れられません（NG・連続・枠不足）`,
+      };
+    }
   }
   return { ok: true };
 }

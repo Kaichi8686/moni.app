@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CorePairPanel } from "./CorePairPanel";
 import { SLOTS, formatSlotTitle } from "@/lib/bunkasai-shift/schedule";
 import {
   scheduleServerSave,
@@ -18,6 +19,8 @@ export function MemberManager() {
   const assignments = useBunkasaiShiftStore((s) => s.assignments);
   const warnings = useBunkasaiShiftStore((s) => s.warnings);
   const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
+  const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
+  const pairs = useBunkasaiShiftStore((s) => s.pairs);
   const [name, setName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState("");
@@ -41,6 +44,8 @@ export function MemberManager() {
           onClick={() => {
             const payload = {
               members,
+              coreMemberIds,
+              pairs,
               exportedAt: new Date().toISOString(),
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -75,7 +80,11 @@ export function MemberManager() {
             if (!file) return;
             try {
               const text = await file.text();
-              const parsed = JSON.parse(text) as { members?: Member[] };
+              const parsed = JSON.parse(text) as {
+                members?: Member[];
+                coreMemberIds?: string[];
+                pairs?: { id: string; memberIds: [string, string] }[];
+              };
               if (!Array.isArray(parsed.members) || parsed.members.length === 0) {
                 setBackupMsg("有効な名簿データがありません");
                 return;
@@ -97,6 +106,10 @@ export function MemberManager() {
                 assignments,
                 warnings,
                 lastAssignedAt,
+                coreMemberIds: Array.isArray(parsed.coreMemberIds)
+                  ? parsed.coreMemberIds
+                  : [],
+                pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
               });
               scheduleServerSave(0);
               setBackupMsg(`${parsed.members.length}人を復元し、サーバーに保存しました`);
@@ -133,6 +146,8 @@ export function MemberManager() {
       <p className="text-sm font-medium text-[var(--bs-ink-soft)]">
         登録 {members.length} 人 ／ 必要人数は各コマ 9人（合計 63 枠）
       </p>
+
+      <CorePairPanel />
 
       <ul className="space-y-3">
         {members.map((m) => {

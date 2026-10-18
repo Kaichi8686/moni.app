@@ -26,6 +26,19 @@ export type Member = {
   ngSlotIds: SlotId[];
 };
 
+/** 同じシフトに入るペア（2人） */
+export type MemberPair = {
+  id: string;
+  memberIds: [string, string];
+};
+
+export type AssignOptions = {
+  /** 各時間帯にこの中のだれか1人以上入れる */
+  coreMemberIds?: string[];
+  /** 同じコマに同時に入れるペア */
+  pairs?: MemberPair[];
+};
+
 /** slotId → 割り当てられた memberId 一覧 */
 export type Assignments = Record<SlotId, string[]>;
 
