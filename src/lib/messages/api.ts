@@ -91,8 +91,11 @@ export async function ensureMyProjectConversations(
 export async function ensureMyProjectPeerDirectConversations(
   client: SupabaseClient,
   userId: string,
+  onlyProjectId?: string,
 ): Promise<string[]> {
-  const projectIds = await loadMyProjectIds(client, userId);
+  const projectIds = onlyProjectId
+    ? [onlyProjectId]
+    : await loadMyProjectIds(client, userId);
   if (projectIds.length === 0) return [];
 
   const peerIds = new Set<string>();
@@ -120,6 +123,16 @@ export async function ensureMyProjectPeerDirectConversations(
     if (result.ok) convIds.push(result.conversationId);
   }
   return convIds;
+}
+
+/** 1プロジェクト分のグループライン＋メンバー 1:1 を inbox に揃える */
+export async function ensureProjectScopedMail(
+  client: SupabaseClient,
+  userId: string,
+  projectId: string,
+): Promise<void> {
+  await getOrCreateProjectConversation(client, projectId);
+  await ensureMyProjectPeerDirectConversations(client, userId, projectId);
 }
 
 /** 既存の 1:1 相手 userId 一覧（すでに inbox にある人） */

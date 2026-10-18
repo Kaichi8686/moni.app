@@ -14,6 +14,7 @@ import {
   ensureMyMutualDirectConversations,
   ensureMyProjectConversations,
   ensureMyProjectPeerDirectConversations,
+  ensureProjectScopedMail,
   fetchInboxConversations,
 } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
@@ -59,8 +60,8 @@ export function InboxList() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
-  const [projectScopeName, setProjectScopeName] = useState<string | null>(null);
   const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
+  const [scopedMemberOk, setScopedMemberOk] = useState(false);
   const peerHandledRef = useRef<string | null>(null);
 
   const scopedProjectId = (() => {
@@ -82,15 +83,24 @@ export function InboxList() {
 
       // グループライン全員同期・プロジェクト仲間 DM・相互フォロー DM を揃えてから一覧取得
       if (opts?.syncPeers !== false) {
-        try {
-          await ensureMyProjectConversations(supabase, uid);
-        } catch (e) {
-          console.warn("ensureMyProjectConversations", e);
-        }
-        try {
-          await ensureMyProjectPeerDirectConversations(supabase, uid);
-        } catch (e) {
-          console.warn("ensureMyProjectPeerDirectConversations", e);
+        if (scopedProjectId) {
+          // プロジェクトブロックのメール: そのプロジェクトのグループ＋メンバー1:1を先に揃える
+          try {
+            await ensureProjectScopedMail(supabase, uid, scopedProjectId);
+          } catch (e) {
+            console.warn("ensureProjectScopedMail", e);
+          }
+        } else {
+          try {
+            await ensureMyProjectConversations(supabase, uid);
+          } catch (e) {
+            console.warn("ensureMyProjectConversations", e);
+          }
+          try {
+            await ensureMyProjectPeerDirectConversations(supabase, uid);
+          } catch (e) {
+            console.warn("ensureMyProjectPeerDirectConversations", e);
+          }
         }
         try {
           await ensureMyMutualDirectConversations(supabase, uid);
@@ -113,8 +123,8 @@ export function InboxList() {
             supabase.from("project_members").select("user_id").eq("project_id", scopedProjectId),
           ]);
         const isMember = Boolean(ownedCheck || memCheck);
+        setScopedMemberOk(Boolean(project && isMember));
         if (project && isMember) {
-          setProjectScopeName((project.name as string | null)?.trim() || tx("プロジェクト", "Project"));
           const peers = new Set<string>();
           const ownerId = project.owner_id as string | null;
           if (ownerId && ownerId !== uid) peers.add(ownerId);
@@ -124,11 +134,10 @@ export function InboxList() {
           }
           setProjectPeerIds(peers);
         } else {
-          setProjectScopeName(null);
           setProjectPeerIds(new Set());
         }
       } else {
-        setProjectScopeName(null);
+        setScopedMemberOk(false);
         setProjectPeerIds(new Set());
       }
 
@@ -140,7 +149,7 @@ export function InboxList() {
     } finally {
       setLoading(false);
     }
-  }, [scopedProjectId, tx]);
+  }, [scopedProjectId]);
 
   useEffect(() => {
     void load({ syncPeers: true });
@@ -217,7 +226,7 @@ export function InboxList() {
 
   const filtered = useMemo(() => {
     let list = [...conversations];
-    if (scopedProjectId && projectScopeName) {
+    if (scopedProjectId && scopedMemberOk) {
       // プロジェクトブロック: そのプロジェクトのグループ + メンバーとの 1:1 のみ
       list = list.filter((c) => {
         if (c.type === "project") return c.projectId === scopedProjectId;
@@ -236,26 +245,25 @@ export function InboxList() {
         return title.toLowerCase().includes(q) || lastMessagePreview(c, locale).toLowerCase().includes(q);
       });
     }
-    // 未読を最上段、その中・既読側は直近チャット順
+    // プロジェクトスコープではグループを常に最上段。そのほかは未読優先→直近順
     list.sort((a, b) => {
-      const aUnread = a.unreadCount > 0 ? 1 : 0;
-      const bUnread = b.unreadCount > 0 ? 1 : 0;
-      if (aUnread !== bUnread) return bUnread - aUnread;
-      // プロジェクトスコープではグループラインを最上段付近に（未読帯の中では通常ソート）
-      if (scopedProjectId && aUnread === bUnread) {
+      if (scopedProjectId) {
         if (a.type === "project" && b.type !== "project") return -1;
         if (b.type === "project" && a.type !== "project") return 1;
       }
+      const aUnread = a.unreadCount > 0 ? 1 : 0;
+      const bUnread = b.unreadCount > 0 ? 1 : 0;
+      if (aUnread !== bUnread) return bUnread - aUnread;
       return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
     });
     return list;
-  }, [conversations, filter, searchQuery, locale, scopedProjectId, projectScopeName, projectPeerIds]);
+  }, [conversations, filter, searchQuery, locale, scopedProjectId, scopedMemberOk, projectPeerIds]);
 
   const emptyHint = (() => {
-    if (scopedProjectId && projectScopeName) {
+    if (scopedProjectId && scopedMemberOk) {
       return tx(
-        "このプロジェクトのメンバーとのトークがここに表示されます。グループ全体と個別チャットが使えます。",
-        "Chats with this project’s members appear here — group line and direct messages.",
+        "グループチャットとメンバーとの個別チャットがここに表示されます。",
+        "Group chat and member DMs appear here.",
       );
     }
     if (filter === "projects") {
@@ -304,33 +312,13 @@ export function InboxList() {
         />
       </div>
 
-      {scopedProjectId && projectScopeName ? (
-        <div className="border-b border-emerald-100 bg-emerald-50/80 px-4 py-2.5">
-          <p className="text-[13px] font-semibold text-emerald-900">
-            {tx(`${projectScopeName} のメール`, `Mail · ${projectScopeName}`)}
-          </p>
-          <p className="mt-0.5 text-[11px] text-emerald-800/80">
-            {tx(
-              "メンバー全員のグループと、プロジェクト内の個別チャット",
-              "Group line for all members, plus DMs within this project",
-            )}
-          </p>
-          <Link
-            href="/messages"
-            className="mt-1 inline-block text-[11px] font-medium text-emerald-700 underline underline-offset-2"
-          >
-            {tx("すべてのメールを見る", "See all mail")}
-          </Link>
-        </div>
-      ) : null}
-
       <div className="border-b px-4 py-2">
         <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-zinc-400" />
           <input
             placeholder={
               scopedProjectId
-                ? tx("メンバーを検索", "Search members")
+                ? tx("メンバー・グループを検索", "Search members or group")
                 : tx("検索", "Search")
             }
             className="flex-1 bg-transparent text-sm outline-none"
