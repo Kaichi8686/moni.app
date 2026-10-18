@@ -11,9 +11,11 @@ npm install
 npm run dev
 ```
 
-## 文化祭シフト（ログイン不要・同じURL）
+## シフトメイキング（2日分・オーナー作成）
 
-クラス向けのシンプル版は `/bunkasai` です。設定手順は [`docs/BUNKASAI_SHIFT.md`](docs/BUNKASAI_SHIFT.md)。
+オーナーがメンバー名・時間帯・役割・人数を決めて作るシフトは `/shift` です。ログイン不要で、作成後にURLをLINEで共有できます。
+
+クラス向けの超シンプル版（定員制・自己申告）は `/bunkasai` です。設定手順は [`docs/BUNKASAI_SHIFT.md`](docs/BUNKASAI_SHIFT.md)。
 
 ## 他のPC・スマホから編集する
 

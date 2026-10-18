@@ -11,7 +11,7 @@ const zenMaru = Zen_Maru_Gothic({
 
 const title = "シフトメイキング";
 const description =
-  "文化祭のシフトを、みんなの希望（○△×）から自動で割り振るツール。グループLINEにリンクを送って集められます。";
+  "オーナーがメンバー名・時間帯・役割・人数を決めて、2日分のシフトをすぐ作れるツール。LINEで共有できます。";
 
 export const metadata: Metadata = {
   title: {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { assignShifts } from "@/lib/shift/assign";
+import { assignShifts, buildManualAssignments } from "@/lib/shift/assign";
 import type { ShiftBoard, ShiftResponse } from "@/lib/shift/types";
 import { cellKey, DEFAULT_SCHEDULE } from "@/lib/shift/types";
 
@@ -94,5 +94,36 @@ for (const slotId of ["s1", "s2", "s3"]) {
     .flatMap((c) => c.people.map((p) => p.responseId));
   assert.equal(names.length, new Set(names).size);
 }
+
+const manual = buildManualAssignments(board, responses, [
+  {
+    dayId: "d1",
+    slotId: "s1",
+    roleId: "r1",
+    people: [{ responseId: "p1", name: "あ" }],
+  },
+  {
+    dayId: "d1",
+    slotId: "s1",
+    roleId: "r2",
+    people: [{ responseId: "p2", name: "い" }],
+  },
+]);
+assert.equal(manual.cells.find((c) => c.roleId === "r1")?.people[0]?.name, "あ");
+assert.equal(manual.cells.find((c) => c.roleId === "r2")?.people[0]?.name, "い");
+
+assert.throws(() =>
+  buildManualAssignments(board, responses, [
+    {
+      dayId: "d1",
+      slotId: "s1",
+      roleId: "r1",
+      people: [
+        { responseId: "p1", name: "あ" },
+        { responseId: "p1", name: "あ" },
+      ],
+    },
+  ]),
+);
 
 console.log("assign.test.ts: ok");

@@ -109,6 +109,10 @@ export type CreateBoardInput = {
   days: Array<{ label: string; date?: string }>;
   roles: Array<{ name: string; needed: number }>;
   schedule: ShiftScheduleConfig;
+  /** オーナーが先に決めるメンバー名（希望未入力でも割り振り可能） */
+  members?: string[];
+  /** true のとき作成直後に自動割り振りする */
+  autoAssign?: boolean;
   /** 手動スロットを渡す場合（通常は schedule から生成） */
   slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean }>;
 };
@@ -119,6 +123,16 @@ export type UpdateBoardInput = {
   days?: Array<{ label: string; date?: string }>;
   roles?: Array<{ name: string; needed: number }>;
   schedule?: ShiftScheduleConfig;
+  /** メンバー名簿を置き換え（空の希望で再登録） */
+  members?: string[];
+};
+
+/** 手動割り振りの1セル分（管理画面から保存） */
+export type ManualCellInput = {
+  dayId: string;
+  slotId: string;
+  roleId: string;
+  people: Array<{ responseId: string; name: string }>;
 };
 
 export const DEFAULT_SCHEDULE: ShiftScheduleConfig = {

@@ -1,6 +1,7 @@
 import type {
   AssignedPerson,
   CellAssignment,
+  ManualCellInput,
   Pref,
   ShiftAssignmentResult,
   ShiftBoard,
@@ -230,7 +231,7 @@ export function formatAssignmentsForLine(
   }
 
   lines.push("");
-  lines.push("※希望を優先して自動で割り振っています");
+  lines.push("※オーナーが作成したシフト表です");
   return lines.join("\n");
 }
 
@@ -247,4 +248,74 @@ export function formatMemberLineInvite(title: string, memberUrl: string): string
 
 export function formatScheduleViewInvite(title: string, viewUrl: string): string {
   return [`【${title}】シフト表はこちら`, "", viewUrl].join("\n");
+}
+
+/**
+ * 管理画面の手動割り振りを ShiftAssignmentResult に正規化する。
+ * 同じ時間帯に同一メンバーを二重配置した場合はエラー。
+ */
+export function buildManualAssignments(
+  boardIn: ShiftBoard,
+  responses: ShiftResponse[],
+  cellsIn: ManualCellInput[],
+): ShiftAssignmentResult {
+  const board = normalizeBoard(boardIn);
+  const responseById = new Map(responses.map((r) => [r.id, r]));
+  const roleMap = new Map(board.roles.map((r) => [r.id, r]));
+  const dayIds = new Set(board.days.map((d) => d.id));
+  const workSlots = new Set(board.slots.filter((s) => !s.isBreak).map((s) => s.id));
+  const loadByResponseId: Record<string, number> = {};
+  for (const r of responses) loadByResponseId[r.id] = 0;
+
+  const busy = new Map<string, Set<string>>();
+  const cells: CellAssignment[] = [];
+
+  for (const day of board.days) {
+    for (const slot of board.slots) {
+      if (slot.isBreak) continue;
+      for (const role of board.roles) {
+        const incoming =
+          cellsIn.find(
+            (c) => c.dayId === day.id && c.slotId === slot.id && c.roleId === role.id,
+          ) ?? null;
+        const key = cellKey(day.id, slot.id);
+        if (!busy.has(key)) busy.set(key, new Set());
+        const taken = busy.get(key)!;
+        const people: AssignedPerson[] = [];
+        for (const p of incoming?.people ?? []) {
+          const res = responseById.get(p.responseId);
+          if (!res) throw new Error("UNKNOWN_MEMBER");
+          if (taken.has(res.id)) throw new Error("DOUBLE_BOOKED");
+          taken.add(res.id);
+          people.push({ responseId: res.id, name: res.name, pref: "ok" });
+          loadByResponseId[res.id] = (loadByResponseId[res.id] ?? 0) + 1;
+        }
+        const needed = Math.max(0, Math.floor(role.needed));
+        cells.push({
+          dayId: day.id,
+          slotId: slot.id,
+          roleId: role.id,
+          needed,
+          people,
+          shortfall: Math.max(0, needed - people.length),
+        });
+      }
+    }
+  }
+
+  for (const c of cellsIn) {
+    if (!dayIds.has(c.dayId) || !workSlots.has(c.slotId) || !roleMap.has(c.roleId)) {
+      throw new Error("INVALID_CELL");
+    }
+  }
+
+  const assignedIds = new Set(cells.flatMap((c) => c.people.map((p) => p.responseId)));
+  const unassignedNames = responses.filter((r) => !assignedIds.has(r.id)).map((r) => r.name);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    cells,
+    loadByResponseId,
+    unassignedNames,
+  };
 }

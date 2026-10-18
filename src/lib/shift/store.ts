@@ -177,6 +177,36 @@ async function persist(bundle: StoreBundle): Promise<void> {
   else await writeFileBundle(bundle);
 }
 
+function normalizeMemberNames(input?: string[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const raw of input ?? []) {
+    const name = raw.trim().slice(0, 40);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+    if (names.length >= 80) break;
+  }
+  return names;
+}
+
+function responsesFromMembers(
+  boardId: string,
+  names: string[],
+  now: string,
+): ShiftResponse[] {
+  return names.map((name) => ({
+    id: makeId(),
+    boardId,
+    name,
+    prefs: {},
+    preferredRoleIds: [],
+    note: "",
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> {
   const now = new Date().toISOString();
   const schedule = normalizeSchedule(input.schedule);
@@ -195,7 +225,9 @@ export async function createBoard(input: CreateBoardInput): Promise<ShiftBoard> 
     assignments: null,
   };
 
-  await persist({ board, responses: [] });
+  const members = normalizeMemberNames(input.members);
+  const responses = responsesFromMembers(board.id, members, now);
+  await persist({ board, responses });
   return board;
 }
 
@@ -227,7 +259,28 @@ export async function updateBoard(
     next.slots = generateSlotsFromSchedule(next.schedule);
   }
 
-  await persist({ board: next, responses: bundle.responses });
+  let responses = bundle.responses;
+  if (input.members) {
+    const names = normalizeMemberNames(input.members);
+    const byName = new Map(bundle.responses.map((r) => [r.name, r]));
+    responses = names.map((name) => {
+      const existing = byName.get(name);
+      if (existing) return existing;
+      return {
+        id: makeId(),
+        boardId: next.id,
+        name,
+        prefs: {},
+        preferredRoleIds: [],
+        note: "",
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    next.assignments = null;
+  }
+
+  await persist({ board: next, responses });
   return next;
 }
 

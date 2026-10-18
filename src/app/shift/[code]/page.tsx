@@ -223,7 +223,8 @@ function ShiftMemberInner() {
         </motion.h1>
         {board.note ? <p className="shift-brand-sub">{board.note}</p> : null}
         <p className="shift-muted">
-          {board.schedule.dayStart}–{board.schedule.dayEnd} ／ {board.schedule.slotMinutes}分ごと ／ 回答
+          {board.days.map((d) => d.label).join("・")} ／ {board.schedule.dayStart}–
+          {board.schedule.dayEnd} ／ {board.schedule.slotMinutes}分ごと ／ メンバー
           {responseCount}人
         </p>
       </header>
