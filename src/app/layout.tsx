@@ -87,7 +87,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "moni",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
   },
   formatDetection: {
     telephone: false,
