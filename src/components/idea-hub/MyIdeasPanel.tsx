@@ -234,7 +234,7 @@ export function MyIdeasPanel() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={tx("例: 学校の提出を自動化するアプリ", "e.g. An app that automates school submissions")}
-                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-base text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white sm:text-sm"
                 autoFocus
               />
             </label>
@@ -245,7 +245,7 @@ export function MyIdeasPanel() {
                 onChange={(e) => setMemo(e.target.value)}
                 rows={4}
                 placeholder={tx("なぜ気になったか、誰の困りごとかなど", "Why it stood out, whose problem it is, etc.")}
-                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[14px] text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white"
+                className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-base text-zinc-900 outline-none focus:border-zinc-400 focus:bg-white sm:text-sm"
               />
             </label>
             <div className="mt-4 flex gap-2">
