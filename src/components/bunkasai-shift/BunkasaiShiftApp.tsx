@@ -16,7 +16,7 @@ export function BunkasaiShiftApp() {
   const tab = useBunkasaiShiftStore((s) => s.tab);
   const setTab = useBunkasaiShiftStore((s) => s.setTab);
   const runAutoAssign = useBunkasaiShiftStore((s) => s.runAutoAssign);
-  const resetAll = useBunkasaiShiftStore((s) => s.resetAll);
+  const clearAssignmentsOnly = useBunkasaiShiftStore((s) => s.clearAssignmentsOnly);
   const memberCount = useBunkasaiShiftStore((s) => s.members.length);
   const [hydrated, setHydrated] = useState(false);
 
@@ -54,7 +54,7 @@ export function BunkasaiShiftApp() {
             文化祭シフト
           </h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--bs-muted)] sm:text-base">
-            NG時間帯を避けて、各コマ9人を自動割り振り。ローカル保存のモックアップです。
+            登録したメンバーは端末に保存され、自動割り当てでも名簿は変わりません。連続シフトなし・1日目と2日目の回数をなるべく均等にします。
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -74,13 +74,13 @@ export function BunkasaiShiftApp() {
             <button
               type="button"
               onClick={() => {
-                if (confirm("サンプルデータに戻しますか？（保存内容は消えます）")) {
-                  resetAll();
+                if (confirm("シフトの割り当てだけ消します。メンバー名簿はそのまま残ります。")) {
+                  clearAssignmentsOnly();
                 }
               }}
               className="rounded-xl px-3 py-2.5 text-sm text-[var(--bs-muted)] hover:text-[var(--bs-ink)]"
             >
-              リセット
+              割当だけクリア
             </button>
           </div>
         </header>

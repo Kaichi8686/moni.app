@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { loadStats } from "@/lib/bunkasai-shift/assign";
+import { canPlaceInSlot, loadStats } from "@/lib/bunkasai-shift/assign";
 import { SLOTS, formatSlotTitle, slotsForDay } from "@/lib/bunkasai-shift/schedule";
 import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
 import type { DayId, SlotId } from "@/lib/bunkasai-shift/types";
@@ -16,6 +16,8 @@ export function ShiftTimetable() {
   const removeFromSlot = useBunkasaiShiftStore((s) => s.removeFromSlot);
   const moveMember = useBunkasaiShiftStore((s) => s.moveMember);
   const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
+  const placeError = useBunkasaiShiftStore((s) => s.placeError);
+  const clearPlaceError = useBunkasaiShiftStore((s) => s.clearPlaceError);
   const [day, setDay] = useState<DayId>("d1");
   const [drag, setDrag] = useState<{ memberId: string; fromSlot: SlotId } | null>(null);
 
@@ -31,7 +33,7 @@ export function ShiftTimetable() {
             シフト表
           </h2>
           <p className="mt-1 text-sm text-[var(--bs-muted)]">
-            自動割り当て後、ドラッグまたはプルダウンで手直しできます。
+            連続コマ禁止・日ごとの均等を優先。ドラッグまたはプルダウンで手直しできます（名簿は変わりません）。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -56,6 +58,15 @@ export function ShiftTimetable() {
         <p className="text-xs text-[var(--bs-muted)]">
           最終自動割り当て: {new Date(lastAssignedAt).toLocaleString("ja-JP")}
         </p>
+      ) : null}
+
+      {placeError ? (
+        <div className="flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          <p>{placeError}</p>
+          <button type="button" className="shrink-0 text-xs underline" onClick={() => clearPlaceError()}>
+            閉じる
+          </button>
+        </div>
       ) : null}
 
       {warnings.length > 0 ? (
@@ -96,7 +107,7 @@ export function ShiftTimetable() {
           const ids = assignments[slot.id];
           const short = slot.needed - ids.length;
           const available = members.filter(
-            (m) => !m.ngSlotIds.includes(slot.id) && !ids.includes(m.id),
+            (m) => canPlaceInSlot(members, assignments, slot.id, m.id).ok,
           );
           return (
             <article
@@ -185,20 +196,26 @@ export function ShiftTimetable() {
       </div>
 
       <div className="rounded-2xl border border-[var(--bs-line)] bg-white/70 p-4">
-        <h3 className="mb-2 text-sm font-semibold text-[var(--bs-ink)]">負担の目安（担当コマ数）</h3>
+        <h3 className="mb-2 text-sm font-semibold text-[var(--bs-ink)]">
+          負担の目安（合計 / 1日目・2日目）
+        </h3>
         <div className="flex flex-wrap gap-2">
-          {stats.map(({ member, count }) => (
+          {stats.map(({ member, count, d1, d2 }) => (
             <span
               key={member.id}
               className="rounded-lg bg-[var(--bs-soft)] px-2.5 py-1 text-xs text-[var(--bs-ink-soft)]"
             >
               {member.name}{" "}
               <strong className="text-[var(--bs-ink)]">{count}</strong>
+              <span className="text-[var(--bs-muted)]">
+                {" "}
+                （{d1}・{d2}）
+              </span>
             </span>
           ))}
         </div>
         <p className="mt-2 text-xs text-[var(--bs-muted)]">
-          全 {SLOTS.length} コマ × 9人 = 63 枠 / メンバー {members.length} 人
+          全 {SLOTS.length} コマ × 9人 = 63 枠 / メンバー {members.length} 人 ／ 連続コマは入れません
         </p>
       </div>
     </section>

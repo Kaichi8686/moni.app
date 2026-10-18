@@ -20,7 +20,7 @@ export function MemberManager() {
           メンバー管理
         </h2>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          名前を追加し、各人が参加できない時間帯にチェックを付けます。
+          名前を追加し、各人が参加できない時間帯にチェックを付けます。名簿はこの端末に保存され、自動割り当てでも消えません。
         </p>
       </div>
 
