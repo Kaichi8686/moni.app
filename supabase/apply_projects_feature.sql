@@ -9,6 +9,7 @@ create table if not exists public.projects (
   category text not null default 'general',
   tags text[] not null default '{}',
   thumbnail_url text,
+  background_url text,
   visibility text not null default 'public' check (visibility in ('public', 'private')),
   recruitment_target text not null default '',
   recruitment_message text not null default '',

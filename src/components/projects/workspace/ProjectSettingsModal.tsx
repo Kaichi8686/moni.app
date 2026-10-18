@@ -17,7 +17,13 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type ProjectSettingsMeta = Pick<
   ProjectRow,
-  "thumbnail_url" | "category" | "business_type" | "recruitment_target" | "recruitment_message" | "visibility"
+  | "thumbnail_url"
+  | "background_url"
+  | "category"
+  | "business_type"
+  | "recruitment_target"
+  | "recruitment_message"
+  | "visibility"
 >;
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
@@ -55,13 +61,18 @@ export function ProjectSettingsModal({
 }: Props) {
   const { tx } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
   const previewObjectUrl = useRef<string | null>(null);
+  const bgPreviewObjectUrl = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [thumbUploading, setThumbUploading] = useState(false);
+  const [bgUploading, setBgUploading] = useState(false);
   const [err, setErr] = useState("");
   const [editName, setEditName] = useState("");
   const [editThumb, setEditThumb] = useState("");
+  const [editBg, setEditBg] = useState("");
   const [thumbPreview, setThumbPreview] = useState<string | null>(null);
+  const [bgPreview, setBgPreview] = useState<string | null>(null);
   const [showUrlField, setShowUrlField] = useState(false);
   const [editBrief, setEditBrief] = useState<ProjectBrief>(() => emptyProjectBrief());
   const [editCategory, setEditCategory] = useState("");
@@ -79,10 +90,19 @@ export function ProjectSettingsModal({
     }
   }
 
+  function clearBgPreviewObjectUrl() {
+    if (bgPreviewObjectUrl.current) {
+      URL.revokeObjectURL(bgPreviewObjectUrl.current);
+      bgPreviewObjectUrl.current = null;
+    }
+  }
+
   useEffect(() => {
     if (!open) {
       clearPreviewObjectUrl();
+      clearBgPreviewObjectUrl();
       setThumbPreview(null);
+      setBgPreview(null);
       setConfirmDelete(false);
       return;
     }
@@ -91,8 +111,11 @@ export function ProjectSettingsModal({
     setEditName(name);
     setEditBrief(resolveProjectBrief({ coachingContext, description }));
     const thumb = meta?.thumbnail_url?.trim() ?? "";
+    const bg = meta?.background_url?.trim() ?? "";
     setEditThumb(thumb);
     setThumbPreview(thumb || null);
+    setEditBg(bg);
+    setBgPreview(bg || null);
     setShowUrlField(Boolean(thumb && !thumb.includes("post-images")));
     setEditCategory(meta?.category ?? "");
     setEditBusinessType(
@@ -103,7 +126,13 @@ export function ProjectSettingsModal({
     setEditVisibility(meta?.visibility === "private" ? "private" : "public");
   }, [open, name, description, coachingContext, meta]);
 
-  useEffect(() => () => clearPreviewObjectUrl(), []);
+  useEffect(
+    () => () => {
+      clearPreviewObjectUrl();
+      clearBgPreviewObjectUrl();
+    },
+    [],
+  );
 
   if (!open) return null;
 
@@ -170,6 +199,75 @@ export function ProjectSettingsModal({
       });
   }
 
+  async function onBackgroundSelected(file: File | null) {
+    if (!file || !canEdit) return;
+    const validationErr = validateProjectImageFile(file);
+    if (validationErr) {
+      setErr(validationErr);
+      return;
+    }
+    if (!supabase || !userId) {
+      setErr(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
+      return;
+    }
+    setBgUploading(true);
+    setErr("");
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+      const body = new FormData();
+      body.append("file", file);
+      body.append("projectId", projectId);
+      const res = await fetch("/api/upload-project-background", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      const json = (await res.json()) as { backgroundUrl?: string; publicUrl?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+      const publicUrl = json.backgroundUrl ?? json.publicUrl ?? "";
+      clearBgPreviewObjectUrl();
+      bgPreviewObjectUrl.current = URL.createObjectURL(file);
+      setBgPreview(publicUrl || bgPreviewObjectUrl.current);
+      setEditBg(publicUrl);
+      onNotice(tx("背景写真を更新しました", "Background photo updated"));
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : tx("背景のアップロードに失敗しました", "Failed to upload background"));
+    } finally {
+      setBgUploading(false);
+      if (bgInputRef.current) bgInputRef.current.value = "";
+    }
+  }
+
+  function removeBackground() {
+    clearBgPreviewObjectUrl();
+    setBgPreview(null);
+    setEditBg("");
+    if (bgInputRef.current) bgInputRef.current.value = "";
+    if (!canEdit || !supabase) return;
+    void (async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session.session?.access_token;
+      if (!token) {
+        setErr(tx("ログインが必要です", "Login required"));
+        return;
+      }
+      const res = await fetch(`/api/upload-project-background?projectId=${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(json.error ?? tx("背景の削除に失敗しました", "Failed to remove background"));
+        return;
+      }
+      onNotice(tx("背景写真を削除しました", "Background photo removed"));
+      onSaved();
+    })();
+  }
+
   async function save() {
     if (!canEdit || !supabase) return;
     const trimmedName = editName.trim();
@@ -185,6 +283,7 @@ export function ProjectSettingsModal({
       const payload: Record<string, unknown> = {
           name: trimmedName,
           thumbnail_url: editThumb.trim() || null,
+          background_url: editBg.trim() || null,
           description: descriptionText,
           coaching_context: nextCoaching,
           category: editCategory.trim() || tx("探究", "Inquiry"),
@@ -202,10 +301,22 @@ export function ProjectSettingsModal({
           error.message.includes("does not exist") ||
           error.message.includes("schema cache");
         if (schemaMismatch) {
-          const { coaching_context: _drop, ...withoutCoaching } = payload;
+          const { coaching_context: _drop, background_url: _bg, ...withoutOptional } = payload;
           void _drop;
-          const retry = await supabase.from("projects").update(withoutCoaching).eq("id", projectId);
+          void _bg;
+          const retry = await supabase.from("projects").update(withoutOptional).eq("id", projectId);
           error = retry.error;
+          if (!error && editBg.trim()) {
+            onSaved();
+            onNotice(tx("プロジェクト設定を保存しました", "Project settings saved"));
+            setErr(
+              tx(
+                "背景の保存には Supabase で apply_project_background_url.sql の実行が必要です。",
+                "To save the background, run apply_project_background_url.sql in Supabase.",
+              ),
+            );
+            return;
+          }
         }
       }
       if (error) {
@@ -220,7 +331,7 @@ export function ProjectSettingsModal({
     }
   }
 
-  const busy = saving || thumbUploading || deleting;
+  const busy = saving || thumbUploading || bgUploading || deleting;
 
   async function handleDelete() {
     if (!isOwner) return;
@@ -296,12 +407,53 @@ export function ProjectSettingsModal({
             ) : null}
 
             <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真・背景", "Photo & background")}</span>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("背景写真", "Background photo")}</span>
               <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
-                {tx(
-                  "プロジェクト概要の背景と正方形写真、探すタブのカードに使われます。",
-                  "Used as the project overview background and square photo, and on Discover cards.",
+                {tx("プロジェクト概要の上に横長で表示されます（正方形写真とは別）。", "Shown wide at the top of the overview (separate from the square photo).")}
+              </p>
+              <input
+                ref={bgInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="hidden"
+                onChange={(e) => void onBackgroundSelected(e.target.files?.[0] ?? null)}
+              />
+              <div className="mt-2 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8F8]">
+                {bgPreview ? (
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- user upload preview */}
+                    <img src={bgPreview} alt="" className="aspect-[2/1] w-full object-cover" />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white"
+                      onClick={removeBackground}
+                      disabled={bgUploading}
+                    >
+                      {tx("削除", "Remove")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex aspect-[2/1] flex-col items-center justify-center gap-1 text-[#6B7280]">
+                    <ImagePlus className="h-8 w-8 opacity-50" />
+                    <span className="text-[12px]">{tx("まだ背景がありません", "No background yet")}</span>
+                  </div>
                 )}
+              </div>
+              <button
+                type="button"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
+                onClick={() => bgInputRef.current?.click()}
+                disabled={bgUploading}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                {bgUploading ? tx("アップロード中…", "Uploading…") : tx("背景を選ぶ", "Choose background")}
+              </button>
+            </div>
+
+            <div>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("プロジェクト写真", "Project photo")}</span>
+              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
+                {tx("概要の正方形写真と、探すタブのカードに使われます。", "Used for the square photo on the overview and Discover cards.")}
               </p>
               <input
                 ref={fileInputRef}
@@ -310,57 +462,60 @@ export function ProjectSettingsModal({
                 className="hidden"
                 onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
               />
-              <div className="mt-2 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8F8]">
-                {thumbPreview ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- user upload preview */}
-                    <img src={thumbPreview} alt="" className="aspect-[2/1] w-full object-cover" />
+              <div className="mt-2 flex items-start gap-3">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F7F8F8]">
+                  {thumbPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- user upload preview
+                    <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-[#6B7280]">
+                      <ImagePlus className="h-6 w-6 opacity-50" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white"
-                      onClick={removePhoto}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
+                      onClick={() => fileInputRef.current?.click()}
                       disabled={thumbUploading}
                     >
-                      {tx("削除", "Remove")}
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {thumbUploading ? tx("アップロード中…", "Uploading…") : tx("写真を選ぶ", "Choose photo")}
+                    </button>
+                    {thumbPreview ? (
+                      <button
+                        type="button"
+                        className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-rose-600"
+                        onClick={removePhoto}
+                        disabled={thumbUploading}
+                      >
+                        {tx("削除", "Remove")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-[#1A1A1A]"
+                      onClick={() => setShowUrlField((v) => !v)}
+                    >
+                      {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("URLで指定", "Use a URL")}
                     </button>
                   </div>
-                ) : (
-                  <div className="flex aspect-[2/1] flex-col items-center justify-center gap-1 text-[#6B7280]">
-                    <ImagePlus className="h-8 w-8 opacity-50" />
-                    <span className="text-[12px]">{tx("まだ写真がありません", "No photo yet")}</span>
-                  </div>
-                )}
+                  {showUrlField ? (
+                    <input
+                      className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                      placeholder="https://..."
+                      value={editThumb}
+                      onChange={(e) => {
+                        setEditThumb(e.target.value);
+                        setThumbPreview(e.target.value.trim() || null);
+                        clearPreviewObjectUrl();
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={thumbUploading}
-                >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  {thumbUploading ? tx("アップロード中…", "Uploading…") : tx("写真フォルダから選ぶ", "Choose from photos")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-[#1A1A1A]"
-                  onClick={() => setShowUrlField((v) => !v)}
-                >
-                  {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("URLで指定", "Use a URL")}
-                </button>
-              </div>
-              {showUrlField ? (
-                <input
-                  className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
-                  placeholder="https://..."
-                  value={editThumb}
-                  onChange={(e) => {
-                    setEditThumb(e.target.value);
-                    setThumbPreview(e.target.value.trim() || null);
-                    clearPreviewObjectUrl();
-                  }}
-                />
-              ) : null}
             </div>
 
             <div className="space-y-2 rounded-lg border border-[#E5E7EB] bg-[#F7F8F8] p-3">

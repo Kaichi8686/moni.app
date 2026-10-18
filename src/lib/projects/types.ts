@@ -46,6 +46,8 @@ export type ProjectRow = {
   business_type?: "maker" | "software" | "social" | null;
   tags: string[];
   thumbnail_url: string | null;
+  /** 概要の背景（カバー）。未適用時は欠落しうる。正方形の thumbnail_url とは別 */
+  background_url?: string | null;
   /** プロジェクト絵文字アイコン（カラム未適用時は欠落しうる） */
   icon?: string | null;
   visibility: ProjectVisibility;
