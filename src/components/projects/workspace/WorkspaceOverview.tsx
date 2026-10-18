@@ -13,6 +13,7 @@ import {
   Sparkles,
   Vote,
 } from "lucide-react";
+import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -353,6 +354,7 @@ export default function WorkspaceOverview() {
       </section>
 
       <div className="mx-auto max-w-3xl space-y-7 pt-7">
+      <ProjectDeletionVoteBanner />
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>

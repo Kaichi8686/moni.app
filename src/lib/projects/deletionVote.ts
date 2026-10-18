@@ -21,6 +21,7 @@ export type DeletionState = {
   votes: DeletionVote[];
   memberCount: number;
   approveCount: number;
+  rejectCount: number;
   /** 賛成がメンバーの2/3以上 */
   thresholdMet: boolean;
   myVote: boolean | null;
@@ -74,6 +75,7 @@ export async function fetchDeletionState(projectId: string, uid: string | null):
     }));
 
   const approveCount = votes.filter((v) => v.approve).length;
+  const rejectCount = votes.filter((v) => !v.approve).length;
   const threshold = Math.ceil((memberCount * 2) / 3);
   const myVote = uid ? (votes.find((v) => v.userId === uid)?.approve ?? null) : null;
 
@@ -82,6 +84,7 @@ export async function fetchDeletionState(projectId: string, uid: string | null):
     votes,
     memberCount,
     approveCount,
+    rejectCount,
     thresholdMet: Boolean(proposal) && approveCount >= threshold,
     myVote,
   };
