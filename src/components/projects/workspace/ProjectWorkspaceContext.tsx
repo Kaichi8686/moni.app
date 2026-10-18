@@ -367,6 +367,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       const wsProject = projectRowToWorkspace(row, nested, mappedIssues, members);
       const meta = {
         thumbnail_url: row.thumbnail_url ?? null,
+        background_url: row.background_url ?? null,
         category: row.category ?? "",
         business_type: row.business_type ?? null,
         recruitment_target: row.recruitment_target ?? "",

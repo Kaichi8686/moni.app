@@ -91,16 +91,21 @@ export default function WorkspaceOverview() {
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [bgPreview, setBgPreview] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [bgUploading, setBgUploading] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [bgError, setBgError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
   const photoUrl = (photoPreview ?? projectMeta?.thumbnail_url)?.trim() || "";
+  const backgroundUrl = (bgPreview ?? projectMeta?.background_url)?.trim() || "";
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -136,8 +141,29 @@ export default function WorkspaceOverview() {
     [issues, uid],
   );
 
+  async function uploadWithToken(
+    endpoint: "/api/upload-project-image" | "/api/upload-project-background",
+    file: File,
+  ): Promise<string> {
+    if (!supabase) throw new Error(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
+    const { data: session } = await supabase.auth.getSession();
+    const token = session.session?.access_token;
+    if (!token) throw new Error(tx("ログインが必要です", "Login required"));
+    const body = new FormData();
+    body.append("file", file);
+    body.append("projectId", projectId);
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+    });
+    const json = (await res.json()) as { publicUrl?: string; backgroundUrl?: string; error?: string };
+    if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
+    return json.backgroundUrl ?? json.publicUrl ?? "";
+  }
+
   async function handlePhotoUpload(file: File | null) {
-    if (!file || !canEdit || !supabase) return;
+    if (!file || !canEdit) return;
     const validationErr = validateProjectImageFile(file);
     if (validationErr) {
       setPhotoError(validationErr);
@@ -146,26 +172,35 @@ export default function WorkspaceOverview() {
     setPhotoUploading(true);
     setPhotoError("");
     try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
-      const body = new FormData();
-      body.append("file", file);
-      body.append("projectId", projectId);
-      const res = await fetch("/api/upload-project-image", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body,
-      });
-      const json = (await res.json()) as { publicUrl?: string; error?: string };
-      if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
-      setPhotoPreview(json.publicUrl ?? null);
+      const url = await uploadWithToken("/api/upload-project-image", file);
+      setPhotoPreview(url || null);
       await wsReload();
     } catch (e) {
       setPhotoError(e instanceof Error ? e.message : tx("写真の変更に失敗しました", "Couldn’t change photo"));
     } finally {
       setPhotoUploading(false);
       if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
+  async function handleBackgroundUpload(file: File | null) {
+    if (!file || !canEdit) return;
+    const validationErr = validateProjectImageFile(file);
+    if (validationErr) {
+      setBgError(validationErr);
+      return;
+    }
+    setBgUploading(true);
+    setBgError("");
+    try {
+      const url = await uploadWithToken("/api/upload-project-background", file);
+      setBgPreview(url || null);
+      await wsReload();
+    } catch (e) {
+      setBgError(e instanceof Error ? e.message : tx("背景の変更に失敗しました", "Couldn’t change background"));
+    } finally {
+      setBgUploading(false);
+      if (bgInputRef.current) bgInputRef.current.value = "";
     }
   }
 
@@ -185,12 +220,12 @@ export default function WorkspaceOverview() {
 
   return (
     <div className="pb-8">
-      {/* プロフィール同様のフル幅背景 + 従来形の正方形写真 */}
+      {/* 背景（background_url）と正方形写真（thumbnail_url）は別画像 */}
       <section className="-mx-4 -mt-4 border-b border-zinc-200 bg-white md:-mx-6 md:-mt-5">
         <div className="relative h-44 w-full overflow-hidden bg-zinc-100 sm:h-52">
-          {photoUrl ? (
+          {backgroundUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-            <img src={photoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <img src={backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <div
               className="absolute inset-0"
@@ -207,26 +242,28 @@ export default function WorkspaceOverview() {
           {canEdit ? (
             <>
               <input
-                ref={photoInputRef}
+                ref={bgInputRef}
                 type="file"
                 accept={IMAGE_ACCEPT}
                 className="hidden"
-                onChange={(e) => void handlePhotoUpload(e.target.files?.[0] ?? null)}
+                onChange={(e) => void handleBackgroundUpload(e.target.files?.[0] ?? null)}
               />
               <button
                 type="button"
-                disabled={photoUploading}
-                onClick={() => photoInputRef.current?.click()}
+                disabled={bgUploading}
+                onClick={() => bgInputRef.current?.click()}
                 className="absolute bottom-3 right-3 z-10 inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-white/30 bg-black/45 px-3 text-[12px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/55 disabled:opacity-50"
                 aria-label={
-                  photoUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")
+                  backgroundUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")
                 }
-                title={photoUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")}
+                title={
+                  backgroundUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")
+                }
               >
-                {photoUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
-                {photoUploading
+                {backgroundUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                {bgUploading
                   ? tx("アップロード中…", "Uploading…")
-                  : photoUrl
+                  : backgroundUrl
                     ? tx("背景を変更", "Change")
                     : tx("背景を追加", "Add")}
               </button>
@@ -237,15 +274,46 @@ export default function WorkspaceOverview() {
         <div className="px-4 pb-5 sm:px-5 md:px-6">
           <div className="relative z-10 mx-auto max-w-3xl">
             <div className="-mt-9 flex items-end gap-4">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
-                {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-                  <img src={photoUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">
-                    {project.icon ?? "📁"}
-                  </div>
-                )}
+              <div className="relative shrink-0">
+                <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                    <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">
+                      {project.icon ?? "📁"}
+                    </div>
+                  )}
+                </div>
+                {canEdit ? (
+                  <>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept={IMAGE_ACCEPT}
+                      className="hidden"
+                      onChange={(e) => void handlePhotoUpload(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      type="button"
+                      disabled={photoUploading}
+                      onClick={() => photoInputRef.current?.click()}
+                      className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
+                      aria-label={
+                        photoUrl
+                          ? tx("プロジェクト写真を変更", "Change project photo")
+                          : tx("プロジェクト写真を追加", "Add project photo")
+                      }
+                      title={
+                        photoUrl
+                          ? tx("プロジェクト写真を変更", "Change project photo")
+                          : tx("プロジェクト写真を追加", "Add project photo")
+                      }
+                    >
+                      {photoUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                    </button>
+                  </>
+                ) : null}
               </div>
               <div className="min-w-0 flex-1 pb-0.5 pt-10">
                 <div className="flex items-start justify-between gap-3">
@@ -281,6 +349,7 @@ export default function WorkspaceOverview() {
                 aria-valuenow={progress}
               />
             </div>
+            {bgError ? <p className="mt-2 text-xs text-rose-600">{bgError}</p> : null}
             {photoError ? <p className="mt-2 text-xs text-rose-600">{photoError}</p> : null}
           </div>
         </div>
