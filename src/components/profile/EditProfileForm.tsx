@@ -1,40 +1,50 @@
 "use client";
 
-import { Camera, ImagePlus } from "lucide-react";
+import { Camera, ImagePlus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SkillsTraitsEditor } from "@/components/profile/SkillsTraitsEditor";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { resolveProfileBio } from "@/lib/profile/resolveBio";
+import {
+  ageFromBirthday,
+  birthdayInputMax,
+  birthdayInputMin,
+  parseBirthday,
+} from "@/lib/profile/birthday";
+import { sortedCountries } from "@/lib/profile/countries";
+import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
-import { profileUsername } from "@/lib/profile/username";
+import { parseInterestFields } from "@/lib/profile/interestFields";
+import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 
-const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
+const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 export function EditProfileForm() {
   const router = useRouter();
-  const { tx } = useI18n();
+  const { locale, tx } = useI18n();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({
     displayName: "",
-    username: "",
-    bio: "",
-    website: "",
-    school: "",
-    location: "",
+    birthday: "",
+    gender: "" as ProfileGender | "",
+    country: "",
     avatarUrl: null as string | null,
-    backgroundUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
+    interestFields: [] as string[],
+    socialIssues: [] as string[],
     isPrivate: false,
   });
   const [initialForm, setInitialForm] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [backgroundUploading, setBackgroundUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const countries = useMemo(() => sortedCountries(locale), [locale]);
+  const derivedAge = ageFromBirthday(form.birthday);
 
   useEffect(() => {
     const client = supabase;
@@ -48,13 +58,17 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
-        "display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,is_private",
-        "display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
-        "display_name,goal,avatar_url,bio,website,school,location,skills,traits",
-        "display_name,goal,avatar_url,bio,website,school,location,skills",
-        "display_name,goal,avatar_url,bio,website,school,location",
-        "display_name,goal,avatar_url,bio,website",
-        "display_name,goal,avatar_url",
+        "display_name,avatar_url,skills,traits,interest_fields,social_issues,birthday,age,gender,country,is_private",
+        "display_name,avatar_url,skills,traits,social_issues,birthday,age,gender,country,is_private",
+        "display_name,avatar_url,skills,traits,birthday,age,gender,country,is_private",
+        "display_name,avatar_url,skills,traits,birthday,age,gender,country",
+        "display_name,avatar_url,skills,traits,age,gender,country,is_private",
+        "display_name,avatar_url,skills,traits,age,gender,country",
+        "display_name,avatar_url,skills,traits,interest_fields,social_issues,is_private",
+        "display_name,avatar_url,skills,traits,social_issues,is_private",
+        "display_name,avatar_url,skills,traits,is_private",
+        "display_name,avatar_url,skills,traits",
+        "display_name,avatar_url",
       ]) {
         const res = await client.from("profiles").select(sel).eq("id", uid).maybeSingle();
         if (!res.error && res.data) {
@@ -63,17 +77,17 @@ export function EditProfileForm() {
         }
       }
       const name = ((data?.display_name as string) || "").trim() || "ユーザー";
+      const birthdayRaw = typeof data?.birthday === "string" ? data.birthday.slice(0, 10) : "";
       const next = {
         displayName: name,
-        username: profileUsername(name, uid),
-        bio: data ? resolveProfileBio(data as { bio?: string | null; goal?: string | null }) : "",
-        website: (data?.website as string | null) ?? "",
-        school: (data?.school as string | null) ?? "",
-        location: (data?.location as string | null) ?? "",
+        birthday: birthdayRaw,
+        gender: isProfileGender(data?.gender) ? data.gender : ("" as const),
+        country: ((data?.country as string | null) ?? "").toUpperCase(),
         avatarUrl: (data?.avatar_url as string | null) ?? null,
-        backgroundUrl: (data?.background_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
+        interestFields: parseInterestFields(data?.interest_fields),
+        socialIssues: parseSocialIssues(data?.social_issues),
         isPrivate: Boolean(data?.is_private),
       };
       setForm(next);
@@ -106,55 +120,8 @@ export function EditProfileForm() {
       setMessage(e instanceof Error ? e.message : tx("アップロードに失敗しました", "Upload failed"));
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function handleBackgroundUpload(file: File) {
-    if (!supabase || !userId) return;
-    setBackgroundUploading(true);
-    setMessage("");
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/upload-background", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body,
-      });
-      const json = (await res.json()) as { backgroundUrl?: string; error?: string };
-      if (!res.ok) throw new Error(json.error ?? tx("アップロード失敗", "Upload failed"));
-      setForm((f) => ({ ...f, backgroundUrl: json.backgroundUrl ?? f.backgroundUrl }));
-      setMessage(tx("背景を更新しました", "Background updated"));
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : tx("アップロードに失敗しました", "Upload failed"));
-    } finally {
-      setBackgroundUploading(false);
-    }
-  }
-
-  async function handleBackgroundRemove() {
-    if (!supabase || !userId) return;
-    setBackgroundUploading(true);
-    setMessage("");
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) throw new Error(tx("ログインが必要です", "Login required"));
-      const res = await fetch("/api/upload-background", {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? tx("削除に失敗しました", "Couldn’t remove"));
-      setForm((f) => ({ ...f, backgroundUrl: null }));
-      setMessage(tx("背景を削除しました", "Background removed"));
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : tx("削除に失敗しました", "Couldn’t remove"));
-    } finally {
-      setBackgroundUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
     }
   }
 
@@ -162,42 +129,47 @@ export function EditProfileForm() {
     if (!supabase || !userId) return;
     setSaving(true);
     setMessage("");
-    const skills = normalizeTagList(form.skills);
-    const traits = normalizeTagList(form.traits);
-    const payload: Record<string, string | string[] | boolean> = {
+    const skills = normalizeTagList(form.skills, 3);
+    const traits = normalizeTagList(form.traits, 3);
+    const interestFields = parseInterestFields(form.interestFields);
+    const socialIssues = parseSocialIssues(form.socialIssues);
+    const birthday = parseBirthday(form.birthday);
+    const ageNum = birthday ? ageFromBirthday(birthday) : null;
+    const payload: Record<string, string | number | string[] | boolean | null> = {
       display_name: form.displayName.trim() || "ユーザー",
-      goal: form.bio.trim(),
-      bio: form.bio.trim(),
       skills,
       traits,
+      interest_fields: interestFields,
+      social_issues: socialIssues,
       is_private: form.isPrivate,
     };
-    if (form.website.trim()) payload.website = form.website.trim();
-    if (form.school.trim()) payload.school = form.school.trim();
-    if (form.location.trim()) payload.location = form.location.trim();
+    if (birthday) payload.birthday = birthday;
+    if (ageNum != null) payload.age = ageNum;
+    if (isProfileGender(form.gender)) payload.gender = form.gender;
+    if (form.country.trim().length === 2) payload.country = form.country.trim().toUpperCase();
 
     const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
     setSaving(false);
     if (error) {
-      // Drop newer columns one by one for older DBs.
-      const withoutPrivate = { ...payload };
-      delete withoutPrivate.is_private;
-      let fallback = await supabase.from("profiles").update(withoutPrivate).eq("id", userId);
+      const withoutExtra = { ...payload };
+      delete withoutExtra.birthday;
+      delete withoutExtra.age;
+      delete withoutExtra.gender;
+      delete withoutExtra.country;
+      delete withoutExtra.traits;
+      delete withoutExtra.interest_fields;
+      delete withoutExtra.social_issues;
+      delete withoutExtra.is_private;
+      let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
       if (fallback.error) {
-        const withoutTraits = { ...withoutPrivate };
-        delete withoutTraits.traits;
-        fallback = await supabase.from("profiles").update(withoutTraits).eq("id", userId);
-      }
-      if (fallback.error) {
-        const withoutSkills = { ...withoutPrivate };
-        delete withoutSkills.traits;
+        const withoutSkills = { ...withoutExtra };
         delete withoutSkills.skills;
         fallback = await supabase.from("profiles").update(withoutSkills).eq("id", userId);
       }
       if (fallback.error) {
         const minimal = await supabase
           .from("profiles")
-          .update({ display_name: payload.display_name, goal: payload.goal })
+          .update({ display_name: payload.display_name })
           .eq("id", userId);
         if (minimal.error) {
           setMessage(minimal.error.message);
@@ -205,8 +177,8 @@ export function EditProfileForm() {
         }
         setMessage(
           tx(
-            "一部の項目の保存には Supabase で apply_profile_instagram.sql などを実行してください（基本項目は保存済み）。",
-            "Run apply_profile_instagram.sql in Supabase to save all fields (basic fields were saved).",
+            "一部項目の保存には Supabase で apply_profile_onboarding.sql / apply_profile_skills_traits.sql を実行してください（基本項目は保存済み）。",
+            "Run apply_profile_onboarding.sql / apply_profile_skills_traits.sql in Supabase for full saves (basic fields were saved).",
           ),
         );
         return;
@@ -221,23 +193,20 @@ export function EditProfileForm() {
         return;
       }
     }
+    try {
+      await supabase.auth.updateUser({ data: { display_name: payload.display_name } });
+    } catch {
+      /* ignore */
+    }
     router.push("/profile");
   }
 
-  const fields: Array<{
-    label: string;
-    field: "displayName" | "username" | "bio" | "school" | "location" | "website";
-    placeholder: string;
-    multiline: boolean;
-    readOnly?: boolean;
-  }> = [
-    { label: tx("表示名", "Display name"), field: "displayName", placeholder: tx("例：カイチ", "e.g. Kaichi"), multiline: false },
-    { label: tx("ユーザーID", "Username"), field: "username", placeholder: tx("表示のみ", "Display only"), multiline: false, readOnly: true },
-    { label: tx("自己紹介", "Bio"), field: "bio", placeholder: tx("いま挑戦していることを一言で", "What you’re working on, in a sentence"), multiline: true },
-    { label: tx("学校", "School"), field: "school", placeholder: tx("例：○○大学 2年", "e.g. University, 2nd year"), multiline: false },
-    { label: tx("場所", "Location"), field: "location", placeholder: tx("例：東京", "e.g. Tokyo"), multiline: false },
-    { label: tx("リンク", "Link"), field: "website", placeholder: "https://", multiline: false },
-  ];
+  const fieldCard =
+    "overflow-hidden rounded-xl border border-zinc-200/90 bg-white";
+  const fieldRow = "flex flex-col gap-1.5 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3";
+  const fieldLabel = "shrink-0 text-[12px] font-medium text-zinc-500 sm:w-20";
+  const fieldInput =
+    "w-full bg-transparent text-[14px] text-zinc-900 outline-none placeholder:text-zinc-400";
 
   return (
     <div className="account-shell w-full">
@@ -245,216 +214,249 @@ export function EditProfileForm() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="inline-flex min-h-[44px] touch-manipulation items-center text-[14px] transition-opacity hover:opacity-70 active:opacity-50"
+          className="inline-flex min-h-[40px] touch-manipulation items-center text-[13px] transition-opacity hover:opacity-70 active:opacity-50"
           style={{ color: "var(--color-text-secondary)" }}
         >
           {tx("キャンセル", "Cancel")}
         </button>
-        <h1 className="moni-wordmark text-[1.65rem] leading-none" style={{ color: "var(--color-text-primary)" }}>
+        <h1 className="text-[14px] font-semibold" style={{ color: "var(--color-text-primary)" }}>
           moni
         </h1>
         <button
           type="button"
           onClick={() => void handleSave()}
           disabled={!isDirty || saving}
-          className="inline-flex min-h-[44px] touch-manipulation items-center text-[14px] font-semibold transition-opacity disabled:opacity-40 active:opacity-70"
+          className="inline-flex min-h-[40px] touch-manipulation items-center text-[13px] font-semibold transition-opacity disabled:opacity-40 active:opacity-70"
           style={{ color: "var(--color-accent)" }}
         >
           {saving ? tx("保存中...", "Saving...") : tx("完了", "Done")}
         </button>
       </header>
 
-      <div className="profile-inset space-y-6 py-5">
-        <div className="account-card overflow-hidden">
-          <div className="relative h-36 w-full bg-zinc-100 sm:h-40">
-            {form.backgroundUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : (
-              <div
-                className="absolute inset-0"
-                style={{
-                  background: "linear-gradient(145deg, #e4e4e7 0%, #d4d4d8 42%, #a1a1aa 100%)",
-                }}
-                aria-hidden
-              />
-            )}
-            <label className="absolute bottom-3 right-3 inline-flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg border border-white/30 bg-black/45 px-3 text-[12px] font-semibold text-white backdrop-blur-sm">
-              {form.backgroundUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
-              {backgroundUploading
-                ? tx("アップロード中…", "Uploading…")
-                : form.backgroundUrl
-                  ? tx("背景を変更", "Change background")
-                  : tx("背景を追加", "Add background")}
-              <input
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                disabled={backgroundUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleBackgroundUpload(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+      <div className="profile-inset space-y-3 py-4">
+        <div className={`${fieldCard} flex flex-col items-center px-3.5 py-4`}>
+          <div className="relative mb-2.5">
+            <ProfileAvatar displayName={form.displayName} avatarUrl={form.avatarUrl} size="lg" />
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full shadow-md disabled:opacity-50"
+              style={{ background: "var(--color-accent)" }}
+              aria-label={tx("写真を変更", "Change photo")}
+            >
+              <Camera className="h-3.5 w-3.5 text-white" aria-hidden />
+            </button>
           </div>
-          {form.backgroundUrl ? (
-            <div className="flex justify-end px-4 py-2">
-              <button
-                type="button"
-                disabled={backgroundUploading}
-                onClick={() => void handleBackgroundRemove()}
-                className="text-[12px] font-medium transition-opacity disabled:opacity-40"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                {tx("背景を削除", "Remove background")}
-              </button>
-            </div>
+          <div className="grid w-full grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-1.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-50"
+            >
+              <ImagePlus className="h-3 w-3" aria-hidden />
+              {tx("写真", "Photos")}
+            </button>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => cameraRef.current?.click()}
+              className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-1.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-50"
+            >
+              <Camera className="h-3 w-3" aria-hidden />
+              {tx("カメラ", "Camera")}
+            </button>
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-1.5 text-[11px] font-semibold text-zinc-700 disabled:opacity-50"
+            >
+              <Upload className="h-3 w-3" aria-hidden />
+              {tx("ファイル", "Files")}
+            </button>
+          </div>
+          <p className="mt-2 text-center text-[11px] text-zinc-400">
+            {uploading
+              ? tx("アップロード中…", "Uploading…")
+              : tx("あとからいつでも変更できます", "You can change this anytime")}
+          </p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={AVATAR_ACCEPT}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleAvatarUpload(file);
+            }}
+          />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept={AVATAR_ACCEPT}
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleAvatarUpload(file);
+            }}
+          />
+        </div>
+
+        <div className={fieldCard}>
+          <div className={fieldRow}>
+            <label className={fieldLabel} htmlFor="edit-nickname">
+              {tx("ニックネーム", "Nickname")}
+            </label>
+            <input
+              id="edit-nickname"
+              autoComplete="nickname"
+              className={fieldInput}
+              placeholder={tx("例：カイチ", "e.g. Kaichi")}
+              value={form.displayName}
+              maxLength={32}
+              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+            />
+          </div>
+          <p className="border-t border-zinc-100 px-3.5 py-2 text-[11px] leading-relaxed text-zinc-400">
+            {tx(
+              "あとからいつでも変えられます。まずは気軽に決めましょう。",
+              "You can change this anytime — pick something for now.",
+            )}
+          </p>
+        </div>
+
+        <div className={fieldCard}>
+          <div className={fieldRow}>
+            <label className={fieldLabel} htmlFor="edit-birthday">
+              {tx("誕生日", "Birthday")}
+            </label>
+            <input
+              id="edit-birthday"
+              type="date"
+              autoComplete="bday"
+              min={birthdayInputMin()}
+              max={birthdayInputMax()}
+              className={fieldInput}
+              value={form.birthday}
+              onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))}
+            />
+          </div>
+          {derivedAge != null ? (
+            <p className="border-t border-zinc-100 px-3.5 py-2 text-[11px] text-zinc-400">
+              {tx(`現在 ${derivedAge}歳`, `Currently ${derivedAge} years old`)}
+            </p>
           ) : null}
         </div>
 
-        <div className="account-card flex flex-col items-center py-6">
-          <div className="relative mb-3">
-            <ProfileAvatar displayName={form.displayName} avatarUrl={form.avatarUrl} size="lg" />
-            <label
-              className="absolute -bottom-1 -right-1 flex h-11 w-11 cursor-pointer touch-manipulation items-center justify-center rounded-full shadow-md"
-              style={{ background: "var(--color-accent)" }}
-            >
-              <Camera className="h-4 w-4 text-white" aria-hidden />
-              <input
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                disabled={uploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleAvatarUpload(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-          <label className="cursor-pointer text-[13px] font-semibold" style={{ color: "var(--color-accent)" }}>
-            {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を変更", "Change photo")}
-            <input
-              type="file"
-              accept={IMAGE_ACCEPT}
-              className="hidden"
-              disabled={uploading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleAvatarUpload(file);
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </div>
-
-        {fields.map(({ label, field, placeholder, multiline, readOnly }) => (
-          <div key={field} className="account-card overflow-hidden">
-            <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4">
-              <label
-                className="shrink-0 text-[13px] font-medium sm:w-24 sm:pt-0.5"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                {label}
-              </label>
-              {multiline ? (
-                <textarea
-                  rows={3}
-                  className="flex-1 resize-none bg-transparent text-[14px] outline-none"
-                  style={{ color: "var(--color-text-primary)" }}
-                  placeholder={placeholder}
-                  value={String(form[field] ?? "")}
-                  onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-                />
-              ) : (
-                <input
-                  className="flex-1 bg-transparent text-[14px] outline-none disabled:opacity-60"
-                  style={{ color: "var(--color-text-primary)" }}
-                  placeholder={placeholder}
-                  value={String(form[field] ?? "")}
-                  readOnly={readOnly}
-                  onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-                />
-              )}
+        <div className={fieldCard}>
+          <div className="space-y-2 px-3.5 py-2.5">
+            <p className="text-[12px] font-medium text-zinc-500">{tx("性別", "Gender")}</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {GENDER_OPTIONS.map((opt) => {
+                const on = form.gender === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setForm((f) => ({ ...f, gender: opt.id }))}
+                    className={`min-h-[36px] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+                      on
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {locale === "en" ? opt.en : opt.ja}
+                  </button>
+                );
+              })}
             </div>
           </div>
-        ))}
+        </div>
 
-        <div className="account-card overflow-hidden px-4 py-4">
-          <p className="text-[13px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
-            {tx("アカウントの公開範囲", "Account privacy")}
-          </p>
-          <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
+        <div className={fieldCard}>
+          <div className={fieldRow}>
+            <label className={fieldLabel} htmlFor="edit-country">
+              {tx("国", "Country")}
+            </label>
+            <select
+              id="edit-country"
+              className={`${fieldInput} appearance-none`}
+              value={form.country}
+              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+            >
+              <option value="">{tx("選択してください", "Select…")}</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {locale === "en" ? c.en : c.ja}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+
+        <div className={`${fieldCard} px-3.5 py-3`}>
+          <p className="text-[12px] font-medium text-zinc-500">{tx("アカウントの公開範囲", "Account privacy")}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
             {form.isPrivate
               ? tx(
-                  "非公開：フォローにはあなたの承認が必要です。申請中と表示されます。",
-                  "Private: others must request to follow you. Their button shows Requested.",
+                  "非公開：フォローにはあなたの承認が必要です。",
+                  "Private: others must request to follow you.",
                 )
               : tx(
                   "公開：フォローボタンを押すとそのままフォローできます。",
                   "Public: anyone can follow you immediately.",
                 )}
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5">
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, isPrivate: false }))}
-              className="min-h-[44px] touch-manipulation rounded-lg border text-[13px] font-semibold transition active:scale-[0.98]"
-              style={
+              className={`min-h-[36px] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
                 !form.isPrivate
-                  ? {
-                      borderColor: "var(--color-text-primary)",
-                      background: "var(--color-text-primary)",
-                      color: "#fff",
-                    }
-                  : {
-                      borderColor: "var(--color-border, #e4e4e7)",
-                      background: "transparent",
-                      color: "var(--color-text-primary)",
-                    }
-              }
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              }`}
             >
               {tx("公開", "Public")}
             </button>
             <button
               type="button"
               onClick={() => setForm((f) => ({ ...f, isPrivate: true }))}
-              className="min-h-[44px] touch-manipulation rounded-lg border text-[13px] font-semibold transition active:scale-[0.98]"
-              style={
+              className={`min-h-[36px] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
                 form.isPrivate
-                  ? {
-                      borderColor: "var(--color-text-primary)",
-                      background: "var(--color-text-primary)",
-                      color: "#fff",
-                    }
-                  : {
-                      borderColor: "var(--color-border, #e4e4e7)",
-                      background: "transparent",
-                      color: "var(--color-text-primary)",
-                    }
-              }
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              }`}
             >
               {tx("非公開", "Private")}
             </button>
           </div>
         </div>
 
-        <div className="account-card px-4 py-4">
+        <div className={`${fieldCard} px-3.5 py-3`}>
           <SkillsTraitsEditor
             compact
+            onboardingStyle
+            maxPerSection={3}
             skills={form.skills}
             traits={form.traits}
+            interestFields={form.interestFields}
+            socialIssues={form.socialIssues}
             onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
             onTraitsChange={(traits) => setForm((f) => ({ ...f, traits }))}
+            onInterestFieldsChange={(interestFields) => setForm((f) => ({ ...f, interestFields }))}
+            onSocialIssuesChange={(socialIssues) => setForm((f) => ({ ...f, socialIssues }))}
           />
         </div>
       </div>
 
       {message ? (
-        <p className="px-4 pb-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+        <p className="px-4 pb-6 text-center text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
           {message}
         </p>
       ) : null}

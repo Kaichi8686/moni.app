@@ -1,13 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isAppAdminEmail } from "@/lib/auth/appAdmin";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
+import { ageFromBirthday } from "@/lib/profile/birthday";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
+import { parseInterestFields } from "@/lib/profile/interestFields";
+import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues,interest_fields,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues,interest_fields",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues",
   "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,social_issues,interest_fields,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,social_issues,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills",
   "id,display_name,goal,avatar_url,bio,website,school,location",
@@ -70,6 +84,25 @@ export async function loadProfileView(
   const location = (row.location as string | null | undefined)?.trim() || null;
   const skills = parseStringTagArray(row.skills);
   const traits = parseStringTagArray(row.traits);
+  const socialIssues = parseSocialIssues(row.social_issues);
+  const interestFields = parseInterestFields(row.interest_fields);
+  const birthdayRaw = (row.birthday as string | null | undefined)?.trim()?.slice(0, 10) || null;
+  const birthday = birthdayRaw && /^\d{4}-\d{2}-\d{2}$/.test(birthdayRaw) ? birthdayRaw : null;
+  const ageFromDob = ageFromBirthday(birthday);
+  const ageRaw = row.age;
+  const ageLegacy =
+    typeof ageRaw === "number" && Number.isFinite(ageRaw)
+      ? ageRaw
+      : typeof ageRaw === "string" && /^\d+$/.test(ageRaw)
+        ? Number(ageRaw)
+        : null;
+  const age = ageFromDob ?? ageLegacy;
+  const country = (row.country as string | null | undefined)?.trim()?.toUpperCase() || null;
+  const genderRaw = (row.gender as string | null | undefined)?.trim() || null;
+  const gender =
+    genderRaw === "male" || genderRaw === "female" || genderRaw === "other" || genderRaw === "prefer_not"
+      ? genderRaw
+      : null;
 
   return {
     id: userId,
@@ -81,8 +114,14 @@ export async function loadProfileView(
     website: (row.website as string | null)?.trim() || null,
     ...(school ? { school } : {}),
     ...(location ? { location } : {}),
+    ...(birthday ? { birthday } : {}),
+    ...(age != null ? { age } : {}),
+    ...(gender ? { gender } : {}),
+    ...(country ? { country } : {}),
     ...(skills.length ? { skills } : {}),
     ...(traits.length ? { traits } : {}),
+    ...(socialIssues.length ? { socialIssues } : {}),
+    ...(interestFields.length ? { interestFields } : {}),
     followerCount: followerCount ?? 0,
     followingCount: followingCount ?? 0,
   };
