@@ -8,6 +8,7 @@ function members(n: number, maxShifts = 7): Member[] {
     id: `m${i}`,
     name: `メンバー${String(i + 1).padStart(2, "0")}`,
     ngSlotIds: [],
+    mustSlotIds: [],
     maxShifts,
   }));
 }
@@ -76,6 +77,15 @@ function members(n: number, maxShifts = 7): Member[] {
   for (const [id, c] of counts) {
     assert.ok(c <= 2, `${id} has ${c} > 2`);
   }
+}
+
+// 必ず入るコマ
+{
+  const ms = members(40, 7);
+  ms[0].mustSlotIds = ["d1-s2", "d2-s1"];
+  const result = autoAssign(ms, 66);
+  assert.ok(result.assignments["d1-s2"].includes("m0"));
+  assert.ok(result.assignments["d2-s1"].includes("m0"));
 }
 
 {

@@ -29,6 +29,8 @@ export type Member = {
   name: string;
   /** 参加できない時間帯 */
   ngSlotIds: SlotId[];
+  /** 必ず入らなければならない時間帯 */
+  mustSlotIds: SlotId[];
   /** 担当できるコマ数の上限（1〜7） */
   maxShifts: number;
 };
@@ -39,11 +41,35 @@ export function clampMaxShifts(value: unknown): number {
   return Math.min(MAX_MAX_SHIFTS, Math.max(MIN_MAX_SHIFTS, Math.floor(n)));
 }
 
+function normalizeSlotIds(raw: unknown): SlotId[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed = new Set<string>([
+    "d1-s1",
+    "d1-s2",
+    "d1-s3",
+    "d1-s4",
+    "d2-s1",
+    "d2-s2",
+    "d2-s3",
+  ]);
+  const out: SlotId[] = [];
+  for (const id of raw) {
+    const s = String(id);
+    if (allowed.has(s) && !out.includes(s as SlotId)) out.push(s as SlotId);
+  }
+  return out;
+}
+
 export function normalizeMember(raw: Partial<Member> & { id: string; name: string }): Member {
+  let ngSlotIds = normalizeSlotIds(raw.ngSlotIds);
+  let mustSlotIds = normalizeSlotIds(raw.mustSlotIds);
+  // NG と必須が両方あるコマは必須を優先
+  ngSlotIds = ngSlotIds.filter((id) => !mustSlotIds.includes(id));
   return {
     id: String(raw.id),
     name: String(raw.name ?? "").trim().slice(0, 40),
-    ngSlotIds: Array.isArray(raw.ngSlotIds) ? (raw.ngSlotIds as Member["ngSlotIds"]) : [],
+    ngSlotIds,
+    mustSlotIds,
     maxShifts: clampMaxShifts(raw.maxShifts),
   };
 }

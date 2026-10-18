@@ -64,6 +64,7 @@ type State = {
   setMaxShifts: (id: string, maxShifts: number) => void;
   setAllMaxShifts: (maxShifts: number) => void;
   toggleNg: (memberId: string, slotId: SlotId) => void;
+  toggleMust: (memberId: string, slotId: SlotId) => void;
   toggleCore: (memberId: string) => void;
   /** who には required がいないとダメ */
   addDependency: (who: string, required: string) => void;
@@ -171,6 +172,7 @@ export const useBunkasaiShiftStore = create<State>()(
               id: uid(),
               name: trimmed,
               ngSlotIds: [],
+              mustSlotIds: [],
               maxShifts: DEFAULT_MAX_SHIFTS,
             }),
           ],
@@ -226,12 +228,33 @@ export const useBunkasaiShiftStore = create<State>()(
           members: s.members.map((m) => {
             if (m.id !== memberId) return m;
             const has = m.ngSlotIds.includes(slotId);
-            return {
+            if (has) {
+              return { ...m, ngSlotIds: m.ngSlotIds.filter((x) => x !== slotId) };
+            }
+            return normalizeMember({
               ...m,
-              ngSlotIds: has
-                ? m.ngSlotIds.filter((x) => x !== slotId)
-                : [...m.ngSlotIds, slotId],
-            };
+              ngSlotIds: [...m.ngSlotIds, slotId],
+              // 必須と両立しないので外す
+              mustSlotIds: m.mustSlotIds.filter((x) => x !== slotId),
+            });
+          }),
+        }));
+        scheduleServerSave();
+      },
+
+      toggleMust: (memberId, slotId) => {
+        set((s) => ({
+          members: s.members.map((m) => {
+            if (m.id !== memberId) return m;
+            const has = m.mustSlotIds.includes(slotId);
+            if (has) {
+              return { ...m, mustSlotIds: m.mustSlotIds.filter((x) => x !== slotId) };
+            }
+            return normalizeMember({
+              ...m,
+              mustSlotIds: [...m.mustSlotIds, slotId],
+              ngSlotIds: m.ngSlotIds.filter((x) => x !== slotId),
+            });
           }),
         }));
         scheduleServerSave();
@@ -313,11 +336,22 @@ export const useBunkasaiShiftStore = create<State>()(
 
       removeFromSlot: (slotId, memberId) => {
         const s = get();
-        // 本人 + この人を必要としている人も外す
+        const member = s.members.find((m) => m.id === memberId);
+        if (member?.mustSlotIds.includes(slotId)) {
+          set({
+            placeError: `${member.name} はこの時間帯が「必ず入る」設定のため外せません`,
+          });
+          return;
+        }
+        // 本人 + この人を必要としている人も外す（必須の人は外さない）
         const removeIds = new Set<string>([
           memberId,
           ...dependentsOf(memberId, s.dependencies),
         ]);
+        for (const id of [...removeIds]) {
+          const m = s.members.find((x) => x.id === id);
+          if (m?.mustSlotIds.includes(slotId)) removeIds.delete(id);
+        }
         set({
           assignments: {
             ...s.assignments,
@@ -331,6 +365,13 @@ export const useBunkasaiShiftStore = create<State>()(
       moveMember: (fromSlot, toSlot, memberId) => {
         if (fromSlot === toSlot) return true;
         const s = get();
+        const member = s.members.find((m) => m.id === memberId);
+        if (member?.mustSlotIds.includes(fromSlot)) {
+          set({
+            placeError: `${member.name} はこの時間帯が「必ず入る」設定のため移動できません`,
+          });
+          return false;
+        }
         const unit = requiredUnit(memberId, s.dependencies);
         const alsoRemove = new Set<string>([
           ...unit,
@@ -392,6 +433,7 @@ export const useBunkasaiShiftStore = create<State>()(
               id: m.id,
               name: m.name,
               ngSlotIds: m.ngSlotIds,
+              mustSlotIds: m.mustSlotIds,
               maxShifts: m.maxShifts,
             }),
           );

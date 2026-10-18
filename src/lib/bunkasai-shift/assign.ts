@@ -162,6 +162,7 @@ function canPlaceUnit(
   slot: ShiftSlot,
   unit: string[],
   alreadyPicked: string[],
+  opts?: { ignoreAdjacent?: boolean; ignoreMax?: boolean },
 ): boolean {
   const needNew = unit.filter((id) => !alreadyPicked.includes(id));
   const roomLeft = slot.needed - alreadyPicked.length;
@@ -170,14 +171,20 @@ function canPlaceUnit(
     const m = membersById.get(id);
     if (!m) return false;
     if (m.ngSlotIds.includes(slot.id)) return false;
+    const isMust = m.mustSlotIds.includes(slot.id);
     const provisional: Assignments = {
       ...assignments,
       [slot.id]: [...alreadyPicked],
     };
-    if (hasAdjacentAssignment(provisional, id, slot)) return false;
-    const max = clampMaxShifts(m.maxShifts);
-    const cur = loadInAssignments(assignments, slot.id, alreadyPicked, id);
-    if (cur + 1 > max) return false;
+    if (!opts?.ignoreAdjacent && !isMust && hasAdjacentAssignment(provisional, id, slot)) {
+      return false;
+    }
+    if (!opts?.ignoreMax) {
+      const max = clampMaxShifts(m.maxShifts);
+      const cur = loadInAssignments(assignments, slot.id, alreadyPicked, id);
+      // 必須コマは上限より優先（入れられないと困る）
+      if (!isMust && cur + 1 > max) return false;
+    }
   }
   return true;
 }
@@ -237,14 +244,31 @@ export function autoAssign(
       });
     };
 
-    const tryAddUnit = (unit: string[]): boolean => {
-      if (!canPlaceUnit(byId, assignments, slot, unit, picked)) return false;
+    const tryAddUnit = (
+      unit: string[],
+      placeOpts?: { ignoreAdjacent?: boolean; ignoreMax?: boolean },
+    ): boolean => {
+      if (!canPlaceUnit(byId, assignments, slot, unit, picked, placeOpts)) return false;
       for (const id of unit) {
         if (!picked.includes(id)) picked.push(id);
       }
       assignments[slot.id] = [...picked];
       return true;
     };
+
+    // 0) 「この時間は必ず」の人を最優先で入れる
+    const mustMembers = members.filter((m) => m.mustSlotIds.includes(slot.id));
+    for (const m of mustMembers) {
+      const unit = requiredUnit(m.id, deps);
+      if (picked.includes(m.id)) continue;
+      if (!tryAddUnit(unit, { ignoreAdjacent: true, ignoreMax: true })) {
+        warnings.push({
+          slotId: slot.id,
+          shortfall: 0,
+          message: `${slot.dayLabel} ${slot.start}–${slot.end} に必須の ${m.name} を入れられませんでした（枠不足・同伴のNGなど）`,
+        });
+      }
+    }
 
     // 1) コアを先に確保（コア本人が誰かを必要とするなら同伴も）
     if (coreSet.size > 0) {
@@ -373,14 +397,20 @@ export function canPlaceInSlot(
   }
   const slot = SLOTS.find((s) => s.id === slotId);
   if (!slot) return { ok: false, reason: "不明なコマです" };
-  if (hasAdjacentAssignment(assignments, memberId, slot)) {
+  const isMust = member.mustSlotIds.includes(slotId);
+  if (!isMust && hasAdjacentAssignment(assignments, memberId, slot)) {
     return { ok: false, reason: "前後のコマと連続になるため入れられません" };
   }
 
   const deps = options.dependencies ?? [];
   const unit = requiredUnit(memberId, deps);
   const byId = new Map(members.map((m) => [m.id, m]));
-  if (!canPlaceUnit(byId, assignments, slot, unit, assignments[slotId])) {
+  if (
+    !canPlaceUnit(byId, assignments, slot, unit, assignments[slotId], {
+      ignoreAdjacent: isMust,
+      ignoreMax: isMust,
+    })
+  ) {
     for (const id of unit) {
       if (assignments[slotId].includes(id)) continue;
       const m = byId.get(id);

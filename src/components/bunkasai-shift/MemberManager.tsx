@@ -22,6 +22,7 @@ export function MemberManager() {
   const setMaxShifts = useBunkasaiShiftStore((s) => s.setMaxShifts);
   const setAllMaxShifts = useBunkasaiShiftStore((s) => s.setAllMaxShifts);
   const toggleNg = useBunkasaiShiftStore((s) => s.toggleNg);
+  const toggleMust = useBunkasaiShiftStore((s) => s.toggleMust);
   const replaceSnapshot = useBunkasaiShiftStore((s) => s.replaceSnapshot);
   const assignments = useBunkasaiShiftStore((s) => s.assignments);
   const warnings = useBunkasaiShiftStore((s) => s.warnings);
@@ -126,6 +127,7 @@ export function MemberManager() {
                   name: String(m.name || "").trim(),
                   ngSlotIds: Array.isArray(m.ngSlotIds) ? m.ngSlotIds : [],
                   maxShifts: m.maxShifts ?? DEFAULT_MAX_SHIFTS,
+                  mustSlotIds: Array.isArray(m.mustSlotIds) ? m.mustSlotIds : [],
                 })),
                 assignments,
                 warnings,
@@ -238,14 +240,14 @@ export function MemberManager() {
                   </select>
                 </label>
                 <span className="shrink-0 text-xs text-[var(--bs-muted)]">
-                  NG {m.ngSlotIds.length}
+                  必{(m.mustSlotIds ?? []).length} / NG {m.ngSlotIds.length}
                 </span>
                 <button
                   type="button"
                   onClick={() => setOpenId(open ? null : m.id)}
                   className="rounded-lg border border-[var(--bs-line)] px-2.5 py-1.5 text-xs font-medium text-[var(--bs-ink-soft)] hover:bg-[var(--bs-soft)]"
                 >
-                  {open ? "閉じる" : "NG設定"}
+                  {open ? "閉じる" : "時間設定"}
                 </button>
                 <button
                   type="button"
@@ -257,31 +259,50 @@ export function MemberManager() {
               </div>
 
               {open ? (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {SLOTS.map((slot) => {
-                    const checked = m.ngSlotIds.includes(slot.id);
-                    return (
-                      <label
-                        key={slot.id}
-                        className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-                          checked
-                            ? "border-red-200 bg-red-50 text-red-800"
-                            : "border-[var(--bs-line)] bg-[var(--bs-soft)] text-[var(--bs-ink-soft)]"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleNg(m.id, slot.id)}
-                          className="size-4 accent-red-600"
-                        />
-                        <span>
-                          <span className="font-medium">{formatSlotTitle(slot)}</span>
-                          <span className="ml-1 text-xs opacity-70">参加不可</span>
-                        </span>
-                      </label>
-                    );
-                  })}
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-[var(--bs-muted)]">
+                    各コマで「必ず入る」か「参加不可」を選べます（同時には選べません）。
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {SLOTS.map((slot) => {
+                      const isNg = m.ngSlotIds.includes(slot.id);
+                      const isMust = (m.mustSlotIds ?? []).includes(slot.id);
+                      return (
+                        <div
+                          key={slot.id}
+                          className={`rounded-xl border px-3 py-2 text-sm ${
+                            isMust
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                              : isNg
+                                ? "border-red-200 bg-red-50 text-red-800"
+                                : "border-[var(--bs-line)] bg-[var(--bs-soft)] text-[var(--bs-ink-soft)]"
+                          }`}
+                        >
+                          <p className="mb-2 font-medium">{formatSlotTitle(slot)}</p>
+                          <div className="flex flex-wrap gap-3">
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isMust}
+                                onChange={() => toggleMust(m.id, slot.id)}
+                                className="size-4 accent-emerald-600"
+                              />
+                              必ず入る
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isNg}
+                                onChange={() => toggleNg(m.id, slot.id)}
+                                className="size-4 accent-red-600"
+                              />
+                              参加不可
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </li>

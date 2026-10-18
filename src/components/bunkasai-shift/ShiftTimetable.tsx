@@ -185,13 +185,16 @@ export function ShiftTimetable() {
                           onClick={() => removeFromSlot(slot.id, id)}
                           title="ドラッグで移動 / クリックで外す（同伴必須あり）"
                           className={`cursor-grab rounded-full px-3 py-1.5 text-sm font-medium ring-1 active:cursor-grabbing ${
-                            coreSet.has(id)
-                              ? "bg-[var(--bs-accent)] text-white ring-[var(--bs-accent-deep)]"
-                              : needsSomeone.has(id)
-                                ? "bg-amber-50 text-amber-950 ring-amber-200"
-                                : "bg-[var(--bs-soft)] text-[var(--bs-ink)] ring-[var(--bs-line)]"
+                            m.mustSlotIds?.includes(slot.id)
+                              ? "bg-emerald-600 text-white ring-emerald-800"
+                              : coreSet.has(id)
+                                ? "bg-[var(--bs-accent)] text-white ring-[var(--bs-accent-deep)]"
+                                : needsSomeone.has(id)
+                                  ? "bg-amber-50 text-amber-950 ring-amber-200"
+                                  : "bg-[var(--bs-soft)] text-[var(--bs-ink)] ring-[var(--bs-line)]"
                           }`}
                         >
+                          {m.mustSlotIds?.includes(slot.id) ? "必" : ""}
                           {coreSet.has(id) ? "★" : ""}
                           {m.name}
                           {needsSomeone.has(id) ? " +" : ""}
