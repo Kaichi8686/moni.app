@@ -15,21 +15,24 @@ import { supabase } from "@/lib/supabase";
 
 type Props = {
   currentUserId: string;
+  /** プロジェクトブロックから開いたとき: そのメンバーとの個別チャットを優先表示 */
+  projectId?: string;
   onClose: () => void;
   onCreated: () => void;
 };
 
-type Mode = "mutual" | "projects" | "group";
+type Mode = "members" | "mutual" | "projects" | "group";
 
 type UserRow = { id: string; display_name: string; avatar_url: string | null };
 type ProjectRow = { id: string; name: string; icon?: string | null };
 
-export function NewConversationModal({ currentUserId, onClose, onCreated }: Props) {
+export function NewConversationModal({ currentUserId, projectId, onClose, onCreated }: Props) {
   const { tx } = useI18n();
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("mutual");
+  const [mode, setMode] = useState<Mode>(projectId ? "members" : "mutual");
   const [query, setQuery] = useState("");
   const [mutualPeers, setMutualPeers] = useState<UserRow[]>([]);
+  const [projectMembers, setProjectMembers] = useState<UserRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
@@ -62,14 +65,51 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
       const map = new Map<string, ProjectRow>();
       for (const p of [...((owned ?? []) as ProjectRow[]), ...joined]) map.set(p.id, p);
       setProjects([...map.values()].sort((a, b) => a.name.localeCompare(b.name, "ja")));
+
+      if (projectId) {
+        const [{ data: project }, { data: mems }] = await Promise.all([
+          client.from("projects").select("owner_id").eq("id", projectId).maybeSingle(),
+          client.from("project_members").select("user_id").eq("project_id", projectId),
+        ]);
+        const ids = new Set<string>();
+        const ownerId = project?.owner_id as string | undefined;
+        if (ownerId && ownerId !== currentUserId) ids.add(ownerId);
+        for (const row of mems ?? []) {
+          const id = row.user_id as string;
+          if (id && id !== currentUserId) ids.add(id);
+        }
+        if (ids.size > 0) {
+          const { data: profiles } = await client
+            .from("profiles")
+            .select("id, display_name, avatar_url")
+            .in("id", [...ids]);
+          setProjectMembers(
+            (profiles ?? []).map((p) => ({
+              id: p.id as string,
+              display_name: ((p.display_name as string | null)?.trim() || "ユーザー") as string,
+              avatar_url: (p.avatar_url as string | null) ?? null,
+            })),
+          );
+        } else {
+          setProjectMembers([]);
+        }
+      } else {
+        setProjectMembers([]);
+      }
     })();
-  }, [currentUserId]);
+  }, [currentUserId, projectId]);
 
   const filteredMutual = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return mutualPeers;
     return mutualPeers.filter((u) => u.display_name.toLowerCase().includes(q));
   }, [mutualPeers, query]);
+
+  const filteredMembers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return projectMembers;
+    return projectMembers.filter((u) => u.display_name.toLowerCase().includes(q));
+  }, [projectMembers, query]);
 
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -90,7 +130,10 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
     }
     setError(
       result.reason === "not_mutual"
-        ? tx("相互フォローになるとメールできます", "Mail unlocks after you follow each other")
+        ? tx(
+            "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
+            "Mail unlocks for project teammates or mutual follows",
+          )
         : tx("トークを開けませんでした", "Could not open chat"),
     );
   };
@@ -137,10 +180,38 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
   };
 
   const modes: Array<{ key: Mode; label: string }> = [
+    ...(projectId ? [{ key: "members" as const, label: tx("メンバー", "Members") }] : []),
     { key: "mutual", label: tx("相互フォロー", "Friends") },
-    { key: "projects", label: tx("プロジェクト", "Projects") },
+    { key: "projects", label: tx("グループライン", "Group line") },
     { key: "group", label: tx("グループ作成", "New group") },
   ];
+
+  const renderUserList = (rows: UserRow[], empty: string) => (
+    <ul className="max-h-[50dvh] overflow-y-auto">
+      {rows.length === 0 ? (
+        <li className="px-4 py-8 text-center text-sm text-zinc-500">{empty}</li>
+      ) : (
+        rows.map((u) => (
+          <li key={u.id}>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void startDm(u.id)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50"
+            >
+              <MemberAvatarBubble
+                userId={u.id}
+                name={u.display_name}
+                avatarUrl={u.avatar_url}
+                size="sm"
+              />
+              <span className="text-sm font-medium text-zinc-900">{u.display_name}</span>
+            </button>
+          </li>
+        ))
+      )}
+    </ul>
+  );
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
@@ -198,37 +269,46 @@ export function NewConversationModal({ currentUserId, onClose, onCreated }: Prop
 
         {error ? <p className="px-4 pt-2 text-xs text-rose-600">{error}</p> : null}
 
-        {mode === "mutual" ? (
-          <ul className="max-h-[50dvh] overflow-y-auto">
-            {filteredMutual.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-zinc-500">
-                {tx(
-                  "相互フォローの人がいません。通知からフォローバックするとメールできます。",
-                  "No mutual follows yet. Follow back from notifications to unlock mail.",
-                )}
-              </li>
-            ) : (
-              filteredMutual.map((u) => (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => void startDm(u.id)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50"
-                  >
-                    <MemberAvatarBubble
-                      userId={u.id}
-                      name={u.display_name}
-                      avatarUrl={u.avatar_url}
-                      size="sm"
-                    />
-                    <span className="text-sm font-medium text-zinc-900">{u.display_name}</span>
-                  </button>
-                </li>
-              ))
+        {mode === "members" ? (
+          <>
+            {projectId ? (
+              <div className="border-b px-4 py-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void openProjectLine(projectId)}
+                  className="flex w-full items-center gap-3 rounded-xl bg-emerald-50 px-3 py-3 text-left hover:bg-emerald-100/80"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600">
+                    <Users className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-zinc-900">
+                      {tx("メンバー全員のグループ", "Group with all members")}
+                    </span>
+                    <span className="block text-[11px] text-zinc-500">
+                      {tx("プロジェクト全員が参加するトーク", "Everyone on this project")}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
+            {renderUserList(
+              filteredMembers,
+              tx("まだ他のメンバーがいません", "No other members yet"),
             )}
-          </ul>
+          </>
         ) : null}
+
+        {mode === "mutual"
+          ? renderUserList(
+              filteredMutual,
+              tx(
+                "相互フォローの人がいません。同じプロジェクトのメンバーとはメンバータブからメールできます。",
+                "No mutual follows yet. Project teammates are under the Members tab.",
+              ),
+            )
+          : null}
 
         {mode === "projects" ? (
           <ul className="max-h-[50dvh] overflow-y-auto">

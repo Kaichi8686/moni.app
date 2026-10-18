@@ -328,6 +328,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
   const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
+  /** プロジェクトブロックのメールは、そのプロジェクトのメンバー／グループに絞る */
+  const projectMailHref = lastProjectId ? `/messages?project=${lastProjectId}` : "/messages";
   /** 一度開いたあとはホーム押下でキューブではなく最後のプロジェクトへ */
   const projectsHomeHref = resolveHomeProjectsHref(lastProjectId);
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
@@ -475,7 +477,13 @@ function AppBottomNavInner({ className }: { className?: string }) {
         locale={locale}
         className={className}
         href={
-          item.id === "issues" ? issuesHref : item.id === "recruit" ? recruitHref : undefined
+          item.id === "issues"
+            ? issuesHref
+            : item.id === "recruit"
+              ? recruitHref
+              : item.id === "mail" && clusterOpen
+                ? projectMailHref
+                : undefined
         }
       />
     );
