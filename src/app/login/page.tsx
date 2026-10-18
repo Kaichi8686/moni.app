@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect } from "react";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { resolveAppEntryHref } from "@/lib/navigation/homeProjects";
+import { resolveOnboardingCompleted } from "@/lib/profile/onboardingStatus";
 
 function safeNextPath(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return resolveAppEntryHref();
@@ -22,16 +23,30 @@ function LoginPageContent() {
     router.push("/");
   }, [router]);
 
+  /** 未オンボーディングなら / へ（OnboardingGate が即ウィザード表示）。完了済みなら本来の遷移先へ。 */
   const goApp = useCallback(() => {
-    router.replace(afterAuth);
+    void (async () => {
+      if (!supabase) {
+        router.replace(afterAuth);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) {
+        router.replace(afterAuth);
+        return;
+      }
+      const done = await resolveOnboardingCompleted(supabase, uid);
+      router.replace(done ? afterAuth : "/");
+    })();
   }, [afterAuth, router]);
 
   useEffect(() => {
     if (!supabase || !supabaseEnabled) return;
     void supabase.auth.getSession().then(({ data }) => {
-      if (data.session) router.replace(afterAuth);
+      if (data.session) goApp();
     });
-  }, [afterAuth, router]);
+  }, [goApp]);
 
   if (!supabaseEnabled || !supabase) {
     return (

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveAppEntryHref } from "@/lib/navigation/homeProjects";
+import { resolveOnboardingCompleted } from "@/lib/profile/onboardingStatus";
 
 /**
  * OAuth / メールマジックリンクの戻り先。Supabase の Redirect URLs に
@@ -80,7 +81,9 @@ export default function AuthCallbackPage() {
         );
         return;
       }
-      router.replace(resolveAppEntryHref());
+      const onboarded = await resolveOnboardingCompleted(supabase, data.session.user.id);
+      // 未完了なら / へ → OnboardingGate がすぐウィザードを出す
+      router.replace(onboarded ? resolveAppEntryHref() : "/");
     })();
   }, [router]);
 
