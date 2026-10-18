@@ -8,7 +8,7 @@ import type {
   ShiftResponse,
   ShiftSlot,
 } from "@/lib/shift/types";
-import { cellKey, normalizeBoard } from "@/lib/shift/types";
+import { cellKey, normalizeBoard, slotsForDay, workSlotsForDay } from "@/lib/shift/types";
 
 const PREF_SCORE: Record<Pref, number> = {
   prefer: 100,
@@ -76,7 +76,9 @@ export function assignShifts(boardIn: ShiftBoard, responses: ShiftResponse[]): S
   const busy = new Map<string, Set<string>>();
   const assignedByDay = new Map<string, Set<string>>(); // `${dayId}:${responseId}` → slotIds
   const cells: CellAssignment[] = [];
-  const workOrder = workSlotIds(board.slots);
+  const workOrderByDay = new Map(
+    board.days.map((d) => [d.id, workSlotIds(slotsForDay(board, d.id))]),
+  );
   const maxConsec = Math.max(0, board.schedule.maxConsecutive || 0);
 
   const nameToId = new Map(responses.map((r) => [r.name.trim(), r.id]));
@@ -92,8 +94,7 @@ export function assignShifts(boardIn: ShiftBoard, responses: ShiftResponse[]): S
   const roles = seededShuffle(board.roles, `${board.code}:roles`);
   const daySlotPairs: Array<{ dayId: string; slotId: string }> = [];
   for (const day of board.days) {
-    for (const slot of board.slots) {
-      if (slot.isBreak) continue;
+    for (const slot of workSlotsForDay(board, day.id)) {
       daySlotPairs.push({ dayId: day.id, slotId: slot.id });
     }
   }
@@ -102,6 +103,7 @@ export function assignShifts(boardIn: ShiftBoard, responses: ShiftResponse[]): S
   for (const { dayId, slotId } of orderedPairs) {
     const key = cellKey(dayId, slotId);
     if (!busy.has(key)) busy.set(key, new Set());
+    const workOrder = workOrderByDay.get(dayId) ?? [];
 
     for (const role of roles) {
       const needed = Math.max(0, Math.floor(role.needed));
@@ -263,7 +265,9 @@ export function buildManualAssignments(
   const responseById = new Map(responses.map((r) => [r.id, r]));
   const roleMap = new Map(board.roles.map((r) => [r.id, r]));
   const dayIds = new Set(board.days.map((d) => d.id));
-  const workSlots = new Set(board.slots.filter((s) => !s.isBreak).map((s) => s.id));
+  const validWork = new Set(
+    board.days.flatMap((d) => workSlotsForDay(board, d.id).map((s) => `${d.id}:${s.id}`)),
+  );
   const loadByResponseId: Record<string, number> = {};
   for (const r of responses) loadByResponseId[r.id] = 0;
 
@@ -271,8 +275,7 @@ export function buildManualAssignments(
   const cells: CellAssignment[] = [];
 
   for (const day of board.days) {
-    for (const slot of board.slots) {
-      if (slot.isBreak) continue;
+    for (const slot of workSlotsForDay(board, day.id)) {
       for (const role of board.roles) {
         const incoming =
           cellsIn.find(
@@ -304,7 +307,7 @@ export function buildManualAssignments(
   }
 
   for (const c of cellsIn) {
-    if (!dayIds.has(c.dayId) || !workSlots.has(c.slotId) || !roleMap.has(c.roleId)) {
+    if (!dayIds.has(c.dayId) || !validWork.has(`${c.dayId}:${c.slotId}`) || !roleMap.has(c.roleId)) {
       throw new Error("INVALID_CELL");
     }
   }

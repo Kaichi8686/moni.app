@@ -15,7 +15,13 @@ import type {
   ShiftBoard,
   ShiftResponse,
 } from "@/lib/shift/types";
-import { cellKey, DEFAULT_SCHEDULE, normalizeBoard } from "@/lib/shift/types";
+import {
+  cellKey,
+  DEFAULT_SCHEDULE,
+  normalizeBoard,
+  slotsForDay,
+  workSlotsForDay,
+} from "@/lib/shift/types";
 
 type SlotDraft = { start: string; end: string; label: string; isBreak: boolean };
 
@@ -28,8 +34,7 @@ const PREF_LABEL: Record<Pref, string> = {
 function emptyCells(board: ShiftBoard): CellAssignment[] {
   const cells: CellAssignment[] = [];
   for (const day of board.days) {
-    for (const slot of board.slots) {
-      if (slot.isBreak) continue;
+    for (const slot of workSlotsForDay(board, day.id)) {
       for (const role of board.roles) {
         cells.push({
           dayId: day.id,
@@ -43,6 +48,15 @@ function emptyCells(board: ShiftBoard): CellAssignment[] {
     }
   }
   return cells;
+}
+
+function draftsForDay(board: ShiftBoard, dayId: string): SlotDraft[] {
+  return slotsForDay(board, dayId).map((s) => ({
+    start: s.start || "09:00",
+    end: s.end || "10:00",
+    label: s.label,
+    isBreak: Boolean(s.isBreak),
+  }));
 }
 
 function AdminInner() {
@@ -65,7 +79,8 @@ function AdminInner() {
   const [copied, setCopied] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
 
-  const [slotDrafts, setSlotDrafts] = useState<SlotDraft[]>([]);
+  const [day1Slots, setDay1Slots] = useState<SlotDraft[]>([]);
+  const [day2Slots, setDay2Slots] = useState<SlotDraft[]>([]);
   const [maxConsecutive, setMaxConsecutive] = useState(DEFAULT_SCHEDULE.maxConsecutive);
 
   const applyAssignmentState = useCallback((b: ShiftBoard, nextResponses: ShiftResponse[]) => {
@@ -98,14 +113,10 @@ function AdminInner() {
       }
       const b = normalizeBoard(data.board);
       setMaxConsecutive(b.schedule.maxConsecutive);
-      setSlotDrafts(
-        b.slots.map((s) => ({
-          start: s.start || "09:00",
-          end: s.end || "10:00",
-          label: s.label,
-          isBreak: Boolean(s.isBreak),
-        })),
-      );
+      const d1 = b.days[0]?.id ?? "d1";
+      const d2 = b.days[1]?.id ?? "d2";
+      setDay1Slots(draftsForDay(b, d1));
+      setDay2Slots(b.days[1] ? draftsForDay(b, d2) : []);
       applyAssignmentState(b, data.responses);
     } catch {
       setError("通信に失敗しました");
@@ -157,13 +168,28 @@ function AdminInner() {
     setError("");
     setSavedMsg("");
     try {
-      const work = slotDrafts.filter((s) => !s.isBreak);
-      if (work.length === 0) {
-        setError("シフト用の時間帯を1つ以上追加してください");
+      const d1 = board.days[0]?.id ?? "d1";
+      const d2 = board.days[1]?.id ?? "d2";
+      const work1 = day1Slots.filter((s) => !s.isBreak);
+      const work2 = board.days[1] ? day2Slots.filter((s) => !s.isBreak) : work1;
+      if (work1.length === 0 || (board.days[1] && work2.length === 0)) {
+        setError("各日にシフト用の時間帯を1つ以上追加してください");
         return;
       }
-      const first = work[0]!;
-      const last = work[work.length - 1]!;
+      const first = work1[0]!;
+      const last = (work2[work2.length - 1] ?? work1[work1.length - 1])!;
+      const toPayload = (list: SlotDraft[], dayId: string) =>
+        list.map((s) => ({
+          start: s.start,
+          end: s.end,
+          label: s.label.trim() || `${s.start}-${s.end}`,
+          isBreak: s.isBreak,
+          dayId,
+        }));
+      const slots = board.days[1]
+        ? [...toPayload(day1Slots, d1), ...toPayload(day2Slots, d2)]
+        : toPayload(day1Slots, d1);
+
       const res = await fetch(`/api/shift/${encodeURIComponent(code)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -174,22 +200,10 @@ function AdminInner() {
             dayStart: first.start,
             dayEnd: last.end,
             maxConsecutive,
-            breaks: slotDrafts
-              .filter((s) => s.isBreak)
-              .map((s, i) => ({
-                id: `br${i + 1}`,
-                label: s.label.trim() || `${s.start}-${s.end}`,
-                start: s.start,
-                end: s.end,
-              })),
+            breaks: [],
             buddyPairs: board.schedule.buddyPairs ?? [],
           },
-          slots: slotDrafts.map((s) => ({
-            start: s.start,
-            end: s.end,
-            label: s.label.trim() || `${s.start}-${s.end}`,
-            isBreak: s.isBreak,
-          })),
+          slots,
         }),
       });
       const data = await res.json();
@@ -198,14 +212,8 @@ function AdminInner() {
         return;
       }
       const b = normalizeBoard(data.board);
-      setSlotDrafts(
-        b.slots.map((s) => ({
-          start: s.start || "09:00",
-          end: s.end || "10:00",
-          label: s.label,
-          isBreak: Boolean(s.isBreak),
-        })),
-      );
+      setDay1Slots(draftsForDay(b, b.days[0]?.id ?? "d1"));
+      setDay2Slots(b.days[1] ? draftsForDay(b, b.days[1].id) : []);
       applyAssignmentState(b, responses);
       setLineText("");
       setSavedMsg("時間帯を保存しました。割り振りはやり直しが必要です");
@@ -214,6 +222,108 @@ function AdminInner() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function renderSlotEditor(
+    title: string,
+    list: SlotDraft[],
+    setList: (next: SlotDraft[]) => void,
+  ) {
+    const work = list.filter((s) => !s.isBreak);
+    return (
+      <div style={{ marginBottom: "1rem" }}>
+        <h3 className="shift-h2" style={{ fontSize: "0.95rem" }}>
+          {title}
+        </h3>
+        <div className="shift-item-list">
+          {list.map((s, i) => (
+            <div className="shift-item" key={`${title}-${i}`}>
+              <div style={{ width: "100%", display: "grid", gap: 8 }}>
+                <div className="shift-row" style={{ gridTemplateColumns: "1fr 1fr auto", gap: 6 }}>
+                  <input
+                    className="shift-input"
+                    type="time"
+                    value={s.start}
+                    onChange={(e) => {
+                      const next = [...list];
+                      next[i] = { ...s, start: e.target.value };
+                      setList(next);
+                    }}
+                  />
+                  <input
+                    className="shift-input"
+                    type="time"
+                    value={s.end}
+                    onChange={(e) => {
+                      const next = [...list];
+                      next[i] = { ...s, end: e.target.value };
+                      setList(next);
+                    }}
+                  />
+                  <label
+                    className="shift-muted"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={s.isBreak}
+                      onChange={(e) => {
+                        const next = [...list];
+                        next[i] = { ...s, isBreak: e.target.checked };
+                        setList(next);
+                      }}
+                    />
+                    休
+                  </label>
+                </div>
+                <input
+                  className="shift-input"
+                  value={s.label}
+                  onChange={(e) => {
+                    const next = [...list];
+                    next[i] = { ...s, label: e.target.value };
+                    setList(next);
+                  }}
+                  placeholder={`${s.start}-${s.end}`}
+                />
+              </div>
+              <button
+                type="button"
+                className="shift-x"
+                onClick={() => setList(list.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="shift-actions">
+          <button
+            type="button"
+            className="shift-btn shift-btn-ghost"
+            onClick={() =>
+              setList([
+                ...list,
+                {
+                  start: work[work.length - 1]?.end || "15:00",
+                  end: "17:00",
+                  label: "",
+                  isBreak: false,
+                },
+              ])
+            }
+          >
+            時間帯を追加
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function saveMembers() {
@@ -558,103 +668,26 @@ function AdminInner() {
       </section>
 
       <section className="shift-panel">
-        <h2 className="shift-h2">時間帯</h2>
+        <h2 className="shift-h2">時間帯（日ごと）</h2>
         <p className="shift-muted" style={{ marginTop: 0 }}>
-          開始・終了を自分で決めて追加してください。休み時間は「休」にチェック。
+          1日目と2日目で別々に時間帯を決められます。休み時間は「休」にチェック。
         </p>
-        <div className="shift-item-list">
-          {slotDrafts.map((s, i) => (
-            <div className="shift-item" key={`slot-${i}`}>
-              <div style={{ width: "100%", display: "grid", gap: 8 }}>
-                <div className="shift-row" style={{ gridTemplateColumns: "1fr 1fr auto", gap: 6 }}>
-                  <input
-                    className="shift-input"
-                    type="time"
-                    value={s.start}
-                    onChange={(e) => {
-                      const next = [...slotDrafts];
-                      next[i] = { ...s, start: e.target.value };
-                      setSlotDrafts(next);
-                    }}
-                    aria-label="開始"
-                  />
-                  <input
-                    className="shift-input"
-                    type="time"
-                    value={s.end}
-                    onChange={(e) => {
-                      const next = [...slotDrafts];
-                      next[i] = { ...s, end: e.target.value };
-                      setSlotDrafts(next);
-                    }}
-                    aria-label="終了"
-                  />
-                  <label
-                    className="shift-muted"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      whiteSpace: "nowrap",
-                      fontWeight: 700,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={s.isBreak}
-                      onChange={(e) => {
-                        const next = [...slotDrafts];
-                        next[i] = { ...s, isBreak: e.target.checked };
-                        setSlotDrafts(next);
-                      }}
-                    />
-                    休
-                  </label>
-                </div>
-                <input
-                  className="shift-input"
-                  value={s.label}
-                  onChange={(e) => {
-                    const next = [...slotDrafts];
-                    next[i] = { ...s, label: e.target.value };
-                    setSlotDrafts(next);
-                  }}
-                  placeholder={`${s.start}-${s.end}`}
-                  aria-label="時間帯の名前（任意）"
-                />
-              </div>
+        {renderSlotEditor(board.days[0]?.label || "1日目", day1Slots, setDay1Slots)}
+        {board.days[1] ? (
+          <>
+            <div className="shift-actions" style={{ marginTop: 0, marginBottom: "0.75rem" }}>
               <button
                 type="button"
-                className="shift-x"
-                onClick={() => setSlotDrafts(slotDrafts.filter((_, j) => j !== i))}
+                className="shift-btn shift-btn-ghost"
+                onClick={() => setDay2Slots(day1Slots.map((s) => ({ ...s })))}
               >
-                ×
+                1日目の時間帯を2日目にコピー
               </button>
             </div>
-          ))}
-        </div>
-        <div className="shift-actions">
-          <button
-            type="button"
-            className="shift-btn shift-btn-ghost"
-            onClick={() => {
-              const work = slotDrafts.filter((x) => !x.isBreak);
-              setSlotDrafts([
-                ...slotDrafts,
-                {
-                  start: work[work.length - 1]?.end || "15:00",
-                  end: "17:00",
-                  label: "",
-                  isBreak: false,
-                },
-              ]);
-            }}
-          >
-            時間帯を追加
-          </button>
-        </div>
+            {renderSlotEditor(board.days[1].label || "2日目", day2Slots, setDay2Slots)}
+          </>
+        ) : null}
 
-        <div style={{ height: 12 }} />
         <label className="shift-label">連続シフト上限</label>
         <select
           className="shift-input"
@@ -690,15 +723,13 @@ function AdminInner() {
                 <tr>
                   <th>名前</th>
                   {board.days.flatMap((day) =>
-                    board.slots
-                      .filter((s) => !s.isBreak)
-                      .map((slot) => (
-                        <th key={`${day.id}:${slot.id}`}>
-                          {day.label}
-                          <br />
-                          {slot.label}
-                        </th>
-                      )),
+                    workSlotsForDay(board, day.id).map((slot) => (
+                      <th key={`${day.id}:${slot.id}`}>
+                        {day.label}
+                        <br />
+                        {slot.label}
+                      </th>
+                    )),
                   )}
                 </tr>
               </thead>
@@ -707,13 +738,11 @@ function AdminInner() {
                   <tr key={r.id}>
                     <td>{r.name}</td>
                     {board.days.flatMap((day) =>
-                      board.slots
-                        .filter((s) => !s.isBreak)
-                        .map((slot) => {
-                          const key = cellKey(day.id, slot.id);
-                          const pref = r.prefs[key];
-                          return <td key={`${r.id}:${key}`}>{pref ? PREF_LABEL[pref] : "—"}</td>;
-                        }),
+                      workSlotsForDay(board, day.id).map((slot) => {
+                        const key = cellKey(day.id, slot.id);
+                        const pref = r.prefs[key];
+                        return <td key={`${r.id}:${key}`}>{pref ? PREF_LABEL[pref] : "—"}</td>;
+                      }),
                     )}
                   </tr>
                 ))}

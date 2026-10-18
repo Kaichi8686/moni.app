@@ -149,24 +149,29 @@ function normalizeSchedule(input?: ShiftScheduleConfig): ShiftScheduleConfig {
 }
 
 function normalizeSlots(
-  slots: Array<{ label: string; start?: string; end?: string; isBreak?: boolean }>,
+  slots: Array<{ label: string; start?: string; end?: string; isBreak?: boolean; dayId?: string }>,
 ): ShiftSlot[] {
-  let workIndex = 0;
-  let breakIndex = 0;
+  const workCount = new Map<string, number>();
+  const breakCount = new Map<string, number>();
   return slots.map((s) => {
     const start = s.start?.trim() || undefined;
     const end = s.end?.trim() || undefined;
     const isBreak = Boolean(s.isBreak);
-    if (isBreak) breakIndex += 1;
-    else workIndex += 1;
+    const dayId = s.dayId?.trim() || undefined;
+    const scope = dayId || "_";
+    if (isBreak) breakCount.set(scope, (breakCount.get(scope) ?? 0) + 1);
+    else workCount.set(scope, (workCount.get(scope) ?? 0) + 1);
+    const idx = isBreak ? breakCount.get(scope)! : workCount.get(scope)!;
+    const prefix = dayId ? `${dayId}-` : "";
     const fallback =
-      start && end ? `${start}-${end}` : isBreak ? `休み時間${breakIndex}` : `時間帯${workIndex}`;
+      start && end ? `${start}-${end}` : isBreak ? `休み時間${idx}` : `時間帯${idx}`;
     return {
-      id: isBreak ? `b${breakIndex}` : `s${workIndex}`,
+      id: `${prefix}${isBreak ? "b" : "s"}${idx}`,
       label: s.label.trim() || fallback,
       start,
       end,
       isBreak,
+      dayId,
     };
   });
 }

@@ -29,8 +29,18 @@ export async function POST(req: Request) {
   if (Array.isArray(body.slots)) {
     if (body.slots.length === 0) return bad("時間帯を1つ以上追加してください");
     if (body.slots.length > 40) return bad("時間帯は40までです");
-    const hasWork = body.slots.some((s) => !s.isBreak);
-    if (!hasWork) return bad("シフト用の時間帯を1つ以上追加してください");
+    const tagged = body.slots.some((s) => Boolean(s.dayId));
+    if (tagged) {
+      for (let i = 0; i < body.days.length; i++) {
+        const dayId = `d${i + 1}`;
+        const daySlots = body.slots.filter((s) => s.dayId === dayId);
+        if (!daySlots.some((s) => !s.isBreak)) {
+          return bad("各日にシフト用の時間帯を1つ以上追加してください");
+        }
+      }
+    } else if (!body.slots.some((s) => !s.isBreak)) {
+      return bad("シフト用の時間帯を1つ以上追加してください");
+    }
   }
 
   const schedule = body.schedule ?? DEFAULT_SCHEDULE;

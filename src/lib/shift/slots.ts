@@ -1,5 +1,7 @@
 import type { ShiftScheduleConfig, ShiftSlot } from "@/lib/shift/types";
 
+export { slotsForDay, workSlotsForDay } from "@/lib/shift/types";
+
 function toMinutes(hhmm: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
   if (!m) return NaN;
