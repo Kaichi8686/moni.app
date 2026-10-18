@@ -20,7 +20,7 @@ export function MemberManager() {
   const warnings = useBunkasaiShiftStore((s) => s.warnings);
   const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
   const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
-  const pairs = useBunkasaiShiftStore((s) => s.pairs);
+  const dependencies = useBunkasaiShiftStore((s) => s.dependencies);
   const [name, setName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState("");
@@ -45,7 +45,7 @@ export function MemberManager() {
             const payload = {
               members,
               coreMemberIds,
-              pairs,
+              dependencies,
               exportedAt: new Date().toISOString(),
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -83,6 +83,11 @@ export function MemberManager() {
               const parsed = JSON.parse(text) as {
                 members?: Member[];
                 coreMemberIds?: string[];
+                dependencies?: {
+                  id: string;
+                  memberId: string;
+                  requiresId: string;
+                }[];
                 pairs?: { id: string; memberIds: [string, string] }[];
               };
               if (!Array.isArray(parsed.members) || parsed.members.length === 0) {
@@ -97,6 +102,16 @@ export function MemberManager() {
               ) {
                 return;
               }
+              const deps =
+                Array.isArray(parsed.dependencies) && parsed.dependencies.length > 0
+                  ? parsed.dependencies
+                  : Array.isArray(parsed.pairs)
+                    ? parsed.pairs.map((p) => ({
+                        id: p.id,
+                        memberId: p.memberIds[0],
+                        requiresId: p.memberIds[1],
+                      }))
+                    : [];
               replaceSnapshot({
                 members: parsed.members.map((m) => ({
                   id: String(m.id || crypto.randomUUID()),
@@ -109,7 +124,7 @@ export function MemberManager() {
                 coreMemberIds: Array.isArray(parsed.coreMemberIds)
                   ? parsed.coreMemberIds
                   : [],
-                pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
+                dependencies: deps,
               });
               scheduleServerSave(0);
               setBackupMsg(`${parsed.members.length}人を復元し、サーバーに保存しました`);

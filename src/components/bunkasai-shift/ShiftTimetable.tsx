@@ -19,16 +19,13 @@ export function ShiftTimetable() {
   const placeError = useBunkasaiShiftStore((s) => s.placeError);
   const clearPlaceError = useBunkasaiShiftStore((s) => s.clearPlaceError);
   const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
-  const pairs = useBunkasaiShiftStore((s) => s.pairs);
+  const dependencies = useBunkasaiShiftStore((s) => s.dependencies);
   const coreSet = useMemo(() => new Set(coreMemberIds), [coreMemberIds]);
-  const partnerOf = useMemo(() => {
+  const needsSomeone = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of pairs) {
-      map.set(p.memberIds[0], p.memberIds[1]);
-      map.set(p.memberIds[1], p.memberIds[0]);
-    }
+    for (const d of dependencies) map.set(d.memberId, d.requiresId);
     return map;
-  }, [pairs]);
+  }, [dependencies]);
   const [day, setDay] = useState<DayId>("d1");
   const [drag, setDrag] = useState<{ memberId: string; fromSlot: SlotId } | null>(null);
 
@@ -123,7 +120,7 @@ export function ShiftTimetable() {
             (m) =>
               canPlaceInSlot(members, assignments, slot.id, m.id, {
                 coreMemberIds,
-                pairs,
+                dependencies,
               }).ok,
           );
           return (
@@ -186,18 +183,18 @@ export function ShiftTimetable() {
                           onDragStart={() => setDrag({ memberId: id, fromSlot: slot.id })}
                           onDragEnd={() => setDrag(null)}
                           onClick={() => removeFromSlot(slot.id, id)}
-                          title="ドラッグで移動 / クリックで外す（ペアは同時）"
+                          title="ドラッグで移動 / クリックで外す（同伴必須あり）"
                           className={`cursor-grab rounded-full px-3 py-1.5 text-sm font-medium ring-1 active:cursor-grabbing ${
                             coreSet.has(id)
                               ? "bg-[var(--bs-accent)] text-white ring-[var(--bs-accent-deep)]"
-                              : partnerOf.has(id)
+                              : needsSomeone.has(id)
                                 ? "bg-amber-50 text-amber-950 ring-amber-200"
                                 : "bg-[var(--bs-soft)] text-[var(--bs-ink)] ring-[var(--bs-line)]"
                           }`}
                         >
                           {coreSet.has(id) ? "★" : ""}
                           {m.name}
-                          {partnerOf.has(id) ? " ⇔" : ""}
+                          {needsSomeone.has(id) ? " +" : ""}
                         </button>
                       </li>
                     );

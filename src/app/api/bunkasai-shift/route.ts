@@ -62,7 +62,7 @@ export async function PUT(req: Request) {
       lastAssignedAt:
         body.lastAssignedAt !== undefined ? body.lastAssignedAt : existing.lastAssignedAt,
       coreMemberIds: body.coreMemberIds ?? existing.coreMemberIds,
-      pairs: body.pairs ?? existing.pairs,
+      dependencies: body.dependencies ?? existing.dependencies,
     });
     return NextResponse.json({ ok: true, snapshot });
   } catch (e) {

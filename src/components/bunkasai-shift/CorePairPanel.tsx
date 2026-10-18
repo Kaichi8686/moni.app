@@ -6,27 +6,21 @@ import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
 export function CorePairPanel() {
   const members = useBunkasaiShiftStore((s) => s.members);
   const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
-  const pairs = useBunkasaiShiftStore((s) => s.pairs);
+  const dependencies = useBunkasaiShiftStore((s) => s.dependencies);
   const toggleCore = useBunkasaiShiftStore((s) => s.toggleCore);
-  const addPair = useBunkasaiShiftStore((s) => s.addPair);
-  const removePair = useBunkasaiShiftStore((s) => s.removePair);
+  const addDependency = useBunkasaiShiftStore((s) => s.addDependency);
+  const removeDependency = useBunkasaiShiftStore((s) => s.removeDependency);
   const placeError = useBunkasaiShiftStore((s) => s.placeError);
   const clearPlaceError = useBunkasaiShiftStore((s) => s.clearPlaceError);
 
-  const [pairA, setPairA] = useState("");
-  const [pairB, setPairB] = useState("");
+  const [who, setWho] = useState("");
+  const [required, setRequired] = useState("");
 
   const byId = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const pairedIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of pairs) {
-      set.add(p.memberIds[0]);
-      set.add(p.memberIds[1]);
-    }
-    return set;
-  }, [pairs]);
-
-  const unpaired = members.filter((m) => !pairedIds.has(m.id));
+  const alreadyWho = useMemo(
+    () => new Set(dependencies.map((d) => d.memberId)),
+    [dependencies],
+  );
 
   return (
     <section className="space-y-5 rounded-2xl border border-[var(--bs-line)] bg-[var(--bs-soft)]/60 p-4">
@@ -60,38 +54,43 @@ export function CorePairPanel() {
       <p className="text-xs text-[var(--bs-muted)]">コア {coreMemberIds.length} 人</p>
 
       <div className="border-t border-[var(--bs-line)] pt-4">
-        <h3 className="text-lg font-semibold text-[var(--bs-ink)]">ペアメンバー</h3>
+        <h3 className="text-lg font-semibold text-[var(--bs-ink)]">同伴必須</h3>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          選んだ2人は<strong>同じコマに同時</strong>に入ります（片方だけにはなりません）。
+          「この人」を入れるコマには、<strong>「いないとダメな人」も必ず</strong>入ります。
+          逆は不要です（いないとダメな人だけならOK）。
         </p>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="block flex-1 text-xs font-medium text-[var(--bs-muted)]">
-          メンバーA
+          この人
           <select
             className="mt-1 w-full rounded-xl border border-[var(--bs-line)] bg-white px-3 py-2 text-sm text-[var(--bs-ink)]"
-            value={pairA}
-            onChange={(e) => setPairA(e.target.value)}
+            value={who}
+            onChange={(e) => setWho(e.target.value)}
           >
             <option value="">選択…</option>
-            {unpaired.map((m) => (
-              <option key={m.id} value={m.id} disabled={m.id === pairB}>
+            {members.map((m) => (
+              <option
+                key={m.id}
+                value={m.id}
+                disabled={m.id === required || alreadyWho.has(m.id)}
+              >
                 {m.name}
               </option>
             ))}
           </select>
         </label>
         <label className="block flex-1 text-xs font-medium text-[var(--bs-muted)]">
-          メンバーB
+          いないとダメな人
           <select
             className="mt-1 w-full rounded-xl border border-[var(--bs-line)] bg-white px-3 py-2 text-sm text-[var(--bs-ink)]"
-            value={pairB}
-            onChange={(e) => setPairB(e.target.value)}
+            value={required}
+            onChange={(e) => setRequired(e.target.value)}
           >
             <option value="">選択…</option>
-            {unpaired.map((m) => (
-              <option key={m.id} value={m.id} disabled={m.id === pairA}>
+            {members.map((m) => (
+              <option key={m.id} value={m.id} disabled={m.id === who}>
                 {m.name}
               </option>
             ))}
@@ -99,15 +98,15 @@ export function CorePairPanel() {
         </label>
         <button
           type="button"
-          disabled={!pairA || !pairB || pairA === pairB}
+          disabled={!who || !required || who === required}
           onClick={() => {
-            addPair(pairA, pairB);
-            setPairA("");
-            setPairB("");
+            addDependency(who, required);
+            setWho("");
+            setRequired("");
           }}
           className="rounded-xl bg-[var(--bs-ink)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
         >
-          ペアにする
+          設定する
         </button>
       </div>
 
@@ -121,23 +120,28 @@ export function CorePairPanel() {
       ) : null}
 
       <ul className="space-y-2">
-        {pairs.length === 0 ? (
-          <li className="text-sm text-[var(--bs-muted)]">ペアはまだありません</li>
+        {dependencies.length === 0 ? (
+          <li className="text-sm text-[var(--bs-muted)]">同伴必須はまだありません</li>
         ) : (
-          pairs.map((p) => (
+          dependencies.map((d) => (
             <li
-              key={p.id}
+              key={d.id}
               className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-[var(--bs-line)]"
             >
               <span className="font-medium text-[var(--bs-ink)]">
-                {byId.get(p.memberIds[0])?.name ?? "?"}
-                <span className="mx-2 text-[var(--bs-muted)]">×</span>
-                {byId.get(p.memberIds[1])?.name ?? "?"}
+                {byId.get(d.memberId)?.name ?? "?"}
+                <span className="mx-2 font-normal text-[var(--bs-muted)]">
+                  には
+                </span>
+                {byId.get(d.requiresId)?.name ?? "?"}
+                <span className="ml-1 font-normal text-[var(--bs-muted)]">
+                  がいないとダメ
+                </span>
               </span>
               <button
                 type="button"
-                onClick={() => removePair(p.id)}
-                className="text-xs font-medium text-red-700 hover:underline"
+                onClick={() => removeDependency(d.id)}
+                className="shrink-0 text-xs font-medium text-red-700 hover:underline"
               >
                 解除
               </button>

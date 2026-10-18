@@ -1,7 +1,13 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { emptyAssignments } from "./schedule";
-import type { AssignWarning, Assignments, Member, MemberPair } from "./types";
+import type {
+  AssignWarning,
+  Assignments,
+  Member,
+  MemberDependency,
+  MemberPair,
+} from "./types";
 
 export type BunkasaiSnapshot = {
   room: string;
@@ -10,7 +16,7 @@ export type BunkasaiSnapshot = {
   warnings: AssignWarning[];
   lastAssignedAt: string | null;
   coreMemberIds: string[];
-  pairs: MemberPair[];
+  dependencies: MemberDependency[];
   updatedAt: string;
 };
 
@@ -43,37 +49,61 @@ function emptySnapshot(room: string): BunkasaiSnapshot {
     warnings: [],
     lastAssignedAt: null,
     coreMemberIds: [],
-    pairs: [],
+    dependencies: [],
     updatedAt: new Date().toISOString(),
   };
 }
 
-function normalizePairs(raw: unknown, memberIds: Set<string>): MemberPair[] {
-  if (!Array.isArray(raw)) return [];
-  const out: MemberPair[] = [];
-  const used = new Set<string>();
-  for (const item of raw) {
-    const p = item as Partial<MemberPair>;
-    const ids = Array.isArray(p.memberIds) ? p.memberIds.map(String) : [];
-    if (ids.length !== 2) continue;
-    const [a, b] = ids;
-    if (!memberIds.has(a) || !memberIds.has(b) || a === b) continue;
-    if (used.has(a) || used.has(b)) continue;
-    used.add(a);
-    used.add(b);
-    out.push({
-      id: String(p.id || `pair-${a}-${b}`),
-      memberIds: [a, b],
-    });
+function normalizeDependencies(
+  rawDeps: unknown,
+  rawPairs: unknown,
+  memberIds: Set<string>,
+): MemberDependency[] {
+  const out: MemberDependency[] = [];
+  const seen = new Set<string>(); // memberId that already has a requires
+
+  if (Array.isArray(rawDeps)) {
+    for (const item of rawDeps) {
+      const d = item as Partial<MemberDependency>;
+      const memberId = String(d.memberId ?? "");
+      const requiresId = String(d.requiresId ?? "");
+      if (!memberIds.has(memberId) || !memberIds.has(requiresId) || memberId === requiresId) {
+        continue;
+      }
+      if (seen.has(memberId)) continue;
+      seen.add(memberId);
+      out.push({
+        id: String(d.id || `dep-${memberId}-${requiresId}`),
+        memberId,
+        requiresId,
+      });
+    }
   }
-  return out.slice(0, 40);
+
+  // 旧相互ペア → 「先頭が末尾を必要とする」片方向に移行
+  if (out.length === 0 && Array.isArray(rawPairs)) {
+    for (const item of rawPairs as MemberPair[]) {
+      const ids = Array.isArray(item.memberIds) ? item.memberIds.map(String) : [];
+      if (ids.length !== 2) continue;
+      const [a, b] = ids;
+      if (!memberIds.has(a) || !memberIds.has(b) || a === b || seen.has(a)) continue;
+      seen.add(a);
+      out.push({
+        id: String(item.id || `dep-${a}-${b}`),
+        memberId: a,
+        requiresId: b,
+      });
+    }
+  }
+
+  return out.slice(0, 80);
 }
 
 export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiSnapshot> {
   const room = sanitizeRoom(roomInput);
   try {
     const raw = await fs.readFile(filePath(room), "utf8");
-    const parsed = JSON.parse(raw) as Partial<BunkasaiSnapshot>;
+    const parsed = JSON.parse(raw) as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] };
     const members = Array.isArray(parsed.members) ? parsed.members : [];
     const memberIds = new Set(members.map((m) => m.id));
     return {
@@ -85,7 +115,7 @@ export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiS
       coreMemberIds: Array.isArray(parsed.coreMemberIds)
         ? parsed.coreMemberIds.map(String).filter((id) => memberIds.has(id))
         : [],
-      pairs: normalizePairs(parsed.pairs, memberIds),
+      dependencies: normalizeDependencies(parsed.dependencies, parsed.pairs, memberIds),
       updatedAt: parsed.updatedAt ?? new Date().toISOString(),
     };
   } catch {
@@ -120,7 +150,7 @@ export async function saveSnapshot(
     coreMemberIds: Array.isArray(input.coreMemberIds)
       ? input.coreMemberIds.map(String).filter((id) => memberIds.has(id)).slice(0, 80)
       : [],
-    pairs: normalizePairs(input.pairs, memberIds),
+    dependencies: normalizeDependencies(input.dependencies, null, memberIds),
     updatedAt: new Date().toISOString(),
   };
 

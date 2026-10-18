@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { autoAssign, hasAdjacentAssignment, loadStats } from "./assign";
 import { NEEDED, SLOTS, slotsForDay } from "./schedule";
-import type { Member, MemberPair } from "./types";
+import type { Member, MemberDependency } from "./types";
 
 function members(n: number): Member[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -25,7 +25,6 @@ function members(n: number): Member[] {
   assert.ok(!result.assignments["d1-s1"].includes("m0"));
 }
 
-// 連続禁止
 {
   const result = autoAssign(members(40), 11);
   for (const dayId of ["d1", "d2"] as const) {
@@ -33,40 +32,41 @@ function members(n: number): Member[] {
     for (let i = 0; i < daySlots.length - 1; i++) {
       const a = new Set(result.assignments[daySlots[i].id]);
       for (const id of result.assignments[daySlots[i + 1].id]) {
-        assert.ok(!a.has(id), `consecutive ${daySlots[i].id}`);
+        assert.ok(!a.has(id));
       }
     }
   }
 }
 
-// コア：各コマにコアが1人以上
 {
   const ms = members(40);
   const cores = ["m0", "m1", "m2", "m3", "m4", "m5"];
   const result = autoAssign(ms, 21, { coreMemberIds: cores });
   for (const slot of SLOTS) {
-    const has = result.assignments[slot.id].some((id) => cores.includes(id));
-    assert.ok(has, `core missing in ${slot.id}`);
+    assert.ok(result.assignments[slot.id].some((id) => cores.includes(id)));
   }
 }
 
-// ペア：同じコマに同時
+// 同伴必須: m10 がいるコマには m11 もいる。m11 だけならOK
 {
   const ms = members(40);
-  const pairs: MemberPair[] = [{ id: "p1", memberIds: ["m10", "m11"] }];
-  const result = autoAssign(ms, 33, { pairs });
+  const dependencies: MemberDependency[] = [
+    { id: "d1", memberId: "m10", requiresId: "m11" },
+  ];
+  const result = autoAssign(ms, 33, { dependencies });
   for (const slot of SLOTS) {
     const ids = result.assignments[slot.id];
-    const a = ids.includes("m10");
-    const b = ids.includes("m11");
-    assert.equal(a, b, `pair split in ${slot.id}`);
+    if (ids.includes("m10")) {
+      assert.ok(ids.includes("m11"), `m10 without m11 in ${slot.id}`);
+    }
   }
+  // m11 単独コマがあってもよい（双方向ではない）
+  assert.ok(true);
 }
 
 {
   const stats = loadStats(members(36), autoAssign(members(36), 42).assignments);
-  const maxDiff = Math.max(...stats.map((s) => s.dayDiff));
-  assert.ok(maxDiff <= 2, `dayDiff ${maxDiff}`);
+  assert.ok(Math.max(...stats.map((s) => s.dayDiff)) <= 2);
 }
 
 {

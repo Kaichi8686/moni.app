@@ -26,7 +26,18 @@ export type Member = {
   ngSlotIds: SlotId[];
 };
 
-/** 同じシフトに入るペア（2人） */
+/**
+ * 片方向の同伴必須。
+ * memberId を入れるコマには、requiresId も必ず入れる。
+ * requiresId だけなら memberId は不要。
+ */
+export type MemberDependency = {
+  id: string;
+  memberId: string;
+  requiresId: string;
+};
+
+/** @deprecated 旧相互ペア。読み込み時に dependency へ移行 */
 export type MemberPair = {
   id: string;
   memberIds: [string, string];
@@ -35,8 +46,8 @@ export type MemberPair = {
 export type AssignOptions = {
   /** 各時間帯にこの中のだれか1人以上入れる */
   coreMemberIds?: string[];
-  /** 同じコマに同時に入れるペア */
-  pairs?: MemberPair[];
+  /** 「この人にはこの人がいないとダメ」 */
+  dependencies?: MemberDependency[];
 };
 
 /** slotId → 割り当てられた memberId 一覧 */
