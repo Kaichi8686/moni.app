@@ -15,7 +15,7 @@ import {
 } from "react";
 import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
+import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
 import {
   isInsideProjectWorkspace,
   markProjectClusterUnlocked,
@@ -328,6 +328,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
   const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
+  /** 一度開いたあとはホーム押下でキューブではなく最後のプロジェクトへ */
+  const projectsHomeHref = resolveHomeProjectsHref(lastProjectId);
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}`;
 
   if (routeKey !== seenRouteKey) {
@@ -498,6 +500,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
               label={projectLabel}
               locale={locale}
               className="app-bottom-nav-item--project"
+              href={projectsHomeHref}
               onNavigate={expandHomeBlock}
             />
             {!clusterOpen && projectClusterUnlocked ? (
