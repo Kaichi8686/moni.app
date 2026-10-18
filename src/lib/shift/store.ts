@@ -132,7 +132,7 @@ function normalizeSchedule(input?: ShiftScheduleConfig): ShiftScheduleConfig {
   return {
     dayStart: base.dayStart || DEFAULT_SCHEDULE.dayStart,
     dayEnd: base.dayEnd || DEFAULT_SCHEDULE.dayEnd,
-    slotMinutes: Math.max(15, Math.min(240, Math.floor(base.slotMinutes || 60))),
+    slotMinutes: Math.max(5, Math.min(480, Math.floor(base.slotMinutes || 60))),
     breaks: (base.breaks ?? []).map((b, i) => ({
       id: b.id || `br${i + 1}`,
       label: (b.label || "休み時間").trim(),

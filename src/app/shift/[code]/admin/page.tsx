@@ -573,17 +573,25 @@ function AdminInner() {
         <div className="shift-row shift-row-2">
           <div>
             <label className="shift-label">何分ごとに変えるか</label>
-            <select
-              className="shift-input"
-              value={slotMinutes}
-              onChange={(e) => setSlotMinutes(Number(e.target.value))}
-            >
-              {[30, 45, 60, 90, 120].map((m) => (
-                <option key={m} value={m}>
-                  {m}分
-                </option>
-              ))}
-            </select>
+            <div className="shift-row" style={{ gridTemplateColumns: "1fr auto", alignItems: "center" }}>
+              <input
+                className="shift-input"
+                type="number"
+                inputMode="numeric"
+                min={5}
+                max={480}
+                step={5}
+                value={slotMinutes}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (!Number.isFinite(n)) return;
+                  setSlotMinutes(Math.max(5, Math.min(480, Math.floor(n) || 5)));
+                }}
+              />
+              <span className="shift-muted" style={{ paddingRight: 4 }}>
+                分
+              </span>
+            </div>
           </div>
           <div>
             <label className="shift-label">連続シフト上限</label>

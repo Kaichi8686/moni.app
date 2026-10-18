@@ -16,7 +16,7 @@ function toHHMM(total: number): string {
 export function generateSlotsFromSchedule(schedule: ShiftScheduleConfig): ShiftSlot[] {
   const start = toMinutes(schedule.dayStart);
   const end = toMinutes(schedule.dayEnd);
-  const step = Math.max(15, Math.min(240, Math.floor(schedule.slotMinutes || 60)));
+  const step = Math.max(5, Math.min(480, Math.floor(schedule.slotMinutes || 60)));
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     return [{ id: "s1", label: "終日", start: schedule.dayStart, end: schedule.dayEnd }];
   }

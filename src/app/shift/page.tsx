@@ -262,18 +262,26 @@ export default function ShiftCreatePage() {
                   <label className="shift-label" htmlFor="mins">
                     何分ごとに変えるか
                   </label>
-                  <select
-                    id="mins"
-                    className="shift-input"
-                    value={slotMinutes}
-                    onChange={(e) => setSlotMinutes(Number(e.target.value))}
-                  >
-                    {[30, 45, 60, 90, 120].map((m) => (
-                      <option key={m} value={m}>
-                        {m}分
-                      </option>
-                    ))}
-                  </select>
+                  <div className="shift-row" style={{ gridTemplateColumns: "1fr auto", alignItems: "center" }}>
+                    <input
+                      id="mins"
+                      className="shift-input"
+                      type="number"
+                      inputMode="numeric"
+                      min={5}
+                      max={480}
+                      step={5}
+                      value={slotMinutes}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setSlotMinutes(Math.max(5, Math.min(480, Math.floor(n) || 5)));
+                      }}
+                    />
+                    <span className="shift-muted" style={{ paddingRight: 4 }}>
+                      分
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="shift-label" htmlFor="consec">
