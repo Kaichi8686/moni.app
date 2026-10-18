@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, FolderKanban, Plus } from "lucide-react";
+import { Check, ChevronDown, LayoutGrid, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -215,8 +215,8 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
               className="flex w-full items-center gap-2.5 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
               onClick={() => setOpen(false)}
             >
-              <FolderKanban className="h-4 w-4 text-zinc-500" aria-hidden />
-              {tx("すべてのプロジェクト", "All projects")}
+              <LayoutGrid className="h-4 w-4 text-zinc-500" aria-hidden />
+              {tx("一覧に戻る", "Back to list")}
             </Link>
             <Link
               href={`${HOME_PROJECTS_HREF}?list=1&create=1`}
