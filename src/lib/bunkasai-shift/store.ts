@@ -16,6 +16,11 @@ import type {
   MemberDependency,
   SlotId,
 } from "./types";
+import {
+  DEFAULT_MAX_SHIFTS,
+  clampMaxShifts,
+  normalizeMember,
+} from "./types";
 
 function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -56,6 +61,8 @@ type State = {
   addMember: (name: string) => void;
   removeMember: (id: string) => void;
   renameMember: (id: string, name: string) => void;
+  setMaxShifts: (id: string, maxShifts: number) => void;
+  setAllMaxShifts: (maxShifts: number) => void;
   toggleNg: (memberId: string, slotId: SlotId) => void;
   toggleCore: (memberId: string) => void;
   /** who には required がいないとダメ */
@@ -104,7 +111,7 @@ async function pushToServer(): Promise<void> {
     const snap = data.snapshot as SnapshotFields & { updatedAt: string };
     if (Array.isArray(snap.members) && snap.members.length > 0) {
       useBunkasaiShiftStore.setState({
-        members: snap.members,
+        members: snap.members.map((m) => normalizeMember(m)),
         coreMemberIds: snap.coreMemberIds ?? s.coreMemberIds,
         dependencies: snap.dependencies ?? s.dependencies,
         syncStatus: "saved",
@@ -158,7 +165,15 @@ export const useBunkasaiShiftStore = create<State>()(
         const trimmed = name.trim();
         if (!trimmed) return;
         set((s) => ({
-          members: [...s.members, { id: uid(), name: trimmed, ngSlotIds: [] }],
+          members: [
+            ...s.members,
+            normalizeMember({
+              id: uid(),
+              name: trimmed,
+              ngSlotIds: [],
+              maxShifts: DEFAULT_MAX_SHIFTS,
+            }),
+          ],
         }));
         scheduleServerSave();
       },
@@ -186,6 +201,22 @@ export const useBunkasaiShiftStore = create<State>()(
         if (!trimmed) return;
         set((s) => ({
           members: s.members.map((m) => (m.id === id ? { ...m, name: trimmed } : m)),
+        }));
+        scheduleServerSave();
+      },
+
+      setMaxShifts: (id, maxShifts) => {
+        const next = clampMaxShifts(maxShifts);
+        set((s) => ({
+          members: s.members.map((m) => (m.id === id ? { ...m, maxShifts: next } : m)),
+        }));
+        scheduleServerSave();
+      },
+
+      setAllMaxShifts: (maxShifts) => {
+        const next = clampMaxShifts(maxShifts);
+        set((s) => ({
+          members: s.members.map((m) => ({ ...m, maxShifts: next })),
         }));
         scheduleServerSave();
       },
@@ -352,10 +383,18 @@ export const useBunkasaiShiftStore = create<State>()(
 
       replaceSnapshot: (snap) => {
         set((s) => {
-          const members =
+          const raw =
             Array.isArray(snap.members) && snap.members.length > 0
               ? snap.members
               : s.members;
+          const members = raw.map((m) =>
+            normalizeMember({
+              id: m.id,
+              name: m.name,
+              ngSlotIds: m.ngSlotIds,
+              maxShifts: m.maxShifts,
+            }),
+          );
           const memberIds = new Set(members.map((m) => m.id));
           return {
             members,
@@ -396,8 +435,9 @@ export const useBunkasaiShiftStore = create<State>()(
         const p = (persisted ?? {}) as Partial<State> & {
           pairs?: { id: string; memberIds: [string, string] }[];
         };
-        const members =
-          Array.isArray(p.members) && p.members.length > 0 ? p.members : current.members;
+        const members = (
+          Array.isArray(p.members) && p.members.length > 0 ? p.members : current.members
+        ).map((m) => normalizeMember(m));
         let dependencies = Array.isArray(p.dependencies)
           ? p.dependencies
           : current.dependencies;

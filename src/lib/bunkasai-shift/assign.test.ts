@@ -3,11 +3,12 @@ import { autoAssign, hasAdjacentAssignment, loadStats } from "./assign";
 import { NEEDED, SLOTS, slotsForDay } from "./schedule";
 import type { Member, MemberDependency } from "./types";
 
-function members(n: number): Member[] {
+function members(n: number, maxShifts = 7): Member[] {
   return Array.from({ length: n }, (_, i) => ({
     id: `m${i}`,
     name: `メンバー${String(i + 1).padStart(2, "0")}`,
     ngSlotIds: [],
+    maxShifts,
   }));
 }
 
@@ -60,8 +61,21 @@ function members(n: number): Member[] {
       assert.ok(ids.includes("m11"), `m10 without m11 in ${slot.id}`);
     }
   }
-  // m11 単独コマがあってもよい（双方向ではない）
-  assert.ok(true);
+}
+
+// シフト上限
+{
+  const ms = members(40, 2);
+  const result = autoAssign(ms, 55);
+  const counts = new Map<string, number>();
+  for (const slot of SLOTS) {
+    for (const id of result.assignments[slot.id]) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  for (const [id, c] of counts) {
+    assert.ok(c <= 2, `${id} has ${c} > 2`);
+  }
 }
 
 {

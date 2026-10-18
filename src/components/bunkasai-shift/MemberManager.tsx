@@ -7,13 +7,20 @@ import {
   scheduleServerSave,
   useBunkasaiShiftStore,
 } from "@/lib/bunkasai-shift/store";
-import type { Member } from "@/lib/bunkasai-shift/types";
+import {
+  DEFAULT_MAX_SHIFTS,
+  MAX_MAX_SHIFTS,
+  MIN_MAX_SHIFTS,
+  type Member,
+} from "@/lib/bunkasai-shift/types";
 
 export function MemberManager() {
   const members = useBunkasaiShiftStore((s) => s.members);
   const addMember = useBunkasaiShiftStore((s) => s.addMember);
   const removeMember = useBunkasaiShiftStore((s) => s.removeMember);
   const renameMember = useBunkasaiShiftStore((s) => s.renameMember);
+  const setMaxShifts = useBunkasaiShiftStore((s) => s.setMaxShifts);
+  const setAllMaxShifts = useBunkasaiShiftStore((s) => s.setAllMaxShifts);
   const toggleNg = useBunkasaiShiftStore((s) => s.toggleNg);
   const replaceSnapshot = useBunkasaiShiftStore((s) => s.replaceSnapshot);
   const assignments = useBunkasaiShiftStore((s) => s.assignments);
@@ -24,6 +31,7 @@ export function MemberManager() {
   const [name, setName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState("");
+  const [bulkMax, setBulkMax] = useState(DEFAULT_MAX_SHIFTS);
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -33,7 +41,7 @@ export function MemberManager() {
           メンバー管理
         </h2>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          名前を追加し、参加できない時間帯にチェック。名簿はサーバー＋端末の両方に保存されます。
+          名前・シフト上限・NGを設定。名簿はサーバー＋端末に保存され、自動割り当てでも消えません。
         </p>
       </div>
 
@@ -117,6 +125,7 @@ export function MemberManager() {
                   id: String(m.id || crypto.randomUUID()),
                   name: String(m.name || "").trim(),
                   ngSlotIds: Array.isArray(m.ngSlotIds) ? m.ngSlotIds : [],
+                  maxShifts: m.maxShifts ?? DEFAULT_MAX_SHIFTS,
                 })),
                 assignments,
                 warnings,
@@ -159,8 +168,40 @@ export function MemberManager() {
       </form>
 
       <p className="text-sm font-medium text-[var(--bs-ink-soft)]">
-        登録 {members.length} 人 ／ 必要人数は各コマ 9人（合計 63 枠）
+        登録 {members.length} 人 ／ 必要人数は各コマ 9人（合計 63 枠） ／ 上限デフォルト{" "}
+        {DEFAULT_MAX_SHIFTS}コマ
       </p>
+
+      <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-[var(--bs-line)] bg-white/70 p-3">
+        <label className="text-xs font-medium text-[var(--bs-muted)]">
+          全員の上限を一括
+          <select
+            className="mt-1 block rounded-lg border border-[var(--bs-line)] bg-white px-2 py-1.5 text-sm text-[var(--bs-ink)]"
+            value={bulkMax}
+            onChange={(e) => setBulkMax(Number(e.target.value))}
+          >
+            {Array.from({ length: MAX_MAX_SHIFTS - MIN_MAX_SHIFTS + 1 }, (_, i) => {
+              const n = MIN_MAX_SHIFTS + i;
+              return (
+                <option key={n} value={n}>
+                  {n}コマまで
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="rounded-xl bg-[var(--bs-ink)] px-3 py-2 text-xs font-semibold text-white"
+          onClick={() => {
+            if (confirm(`全員のシフト上限を ${bulkMax} コマにしますか？`)) {
+              setAllMaxShifts(bulkMax);
+            }
+          }}
+        >
+          全員に適用
+        </button>
+      </div>
 
       <CorePairPanel />
 
@@ -172,12 +213,30 @@ export function MemberManager() {
               key={m.id}
               className="rounded-2xl border border-[var(--bs-line)] bg-white/80 p-3 shadow-sm backdrop-blur"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   value={m.name}
                   onChange={(e) => renameMember(m.id, e.target.value)}
                   className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 font-semibold text-[var(--bs-ink)] outline-none focus:border-[var(--bs-line)] focus:bg-white"
                 />
+                <label className="flex shrink-0 items-center gap-1 text-xs text-[var(--bs-muted)]">
+                  上限
+                  <select
+                    value={m.maxShifts ?? DEFAULT_MAX_SHIFTS}
+                    onChange={(e) => setMaxShifts(m.id, Number(e.target.value))}
+                    className="rounded-lg border border-[var(--bs-line)] bg-white px-1.5 py-1 text-sm font-semibold text-[var(--bs-ink)]"
+                    aria-label={`${m.name}のシフト上限`}
+                  >
+                    {Array.from({ length: MAX_MAX_SHIFTS - MIN_MAX_SHIFTS + 1 }, (_, i) => {
+                      const n = MIN_MAX_SHIFTS + i;
+                      return (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
                 <span className="shrink-0 text-xs text-[var(--bs-muted)]">
                   NG {m.ngSlotIds.length}
                 </span>

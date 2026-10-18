@@ -9,6 +9,7 @@ import type {
   ShiftSlot,
   SlotId,
 } from "./types";
+import { clampMaxShifts } from "./types";
 
 function shuffleInPlace<T>(arr: T[], rng: () => number): void {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -140,6 +141,21 @@ function unitDayPenalty(
   return Math.max(...unit.map((id) => dayBalancePenalty(dayLoads, id, dayId)));
 }
 
+function loadInAssignments(
+  assignments: Assignments,
+  slotId: SlotId,
+  alreadyPicked: string[],
+  memberId: string,
+): number {
+  let n = 0;
+  for (const [sid, ids] of Object.entries(assignments) as [SlotId, string[]][]) {
+    if (sid === slotId) continue;
+    if (ids.includes(memberId)) n += 1;
+  }
+  if (alreadyPicked.includes(memberId)) n += 1;
+  return n;
+}
+
 function canPlaceUnit(
   membersById: Map<string, Member>,
   assignments: Assignments,
@@ -159,6 +175,9 @@ function canPlaceUnit(
       [slot.id]: [...alreadyPicked],
     };
     if (hasAdjacentAssignment(provisional, id, slot)) return false;
+    const max = clampMaxShifts(m.maxShifts);
+    const cur = loadInAssignments(assignments, slot.id, alreadyPicked, id);
+    if (cur + 1 > max) return false;
   }
   return true;
 }
@@ -245,7 +264,7 @@ export function autoAssign(
         warnings.push({
           slotId: slot.id,
           shortfall: 0,
-          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーを入れられませんでした（NG・連続・同伴必須）`,
+          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーを入れられませんでした（NG・連続・同伴必須・上限）`,
         });
       }
     }
@@ -299,7 +318,7 @@ export function autoAssign(
       warnings.push({
         slotId: slot.id,
         shortfall: slot.needed - picked.length,
-        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人。あと ${slot.needed - picked.length}人不足（連続・同伴必須・NGの影響）`,
+        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人。あと ${slot.needed - picked.length}人不足（連続・同伴必須・NG・上限の影響）`,
       });
     }
   }
@@ -362,6 +381,19 @@ export function canPlaceInSlot(
   const unit = requiredUnit(memberId, deps);
   const byId = new Map(members.map((m) => [m.id, m]));
   if (!canPlaceUnit(byId, assignments, slot, unit, assignments[slotId])) {
+    for (const id of unit) {
+      if (assignments[slotId].includes(id)) continue;
+      const m = byId.get(id);
+      if (!m) continue;
+      const max = clampMaxShifts(m.maxShifts);
+      const cur = loadInAssignments(assignments, slotId, assignments[slotId], id);
+      if (cur + 1 > max) {
+        return {
+          ok: false,
+          reason: `${m.name} は上限 ${max} コマのため入れられません`,
+        };
+      }
+    }
     const missing = unit.filter((id) => id !== memberId && !assignments[slotId].includes(id));
     const names = missing.map((id) => byId.get(id)?.name ?? "?").join("・");
     return {

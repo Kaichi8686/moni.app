@@ -226,16 +226,22 @@ export function ShiftTimetable() {
 
       <div className="rounded-2xl border border-[var(--bs-line)] bg-white/70 p-4">
         <h3 className="mb-2 text-sm font-semibold text-[var(--bs-ink)]">
-          負担の目安（合計 / 1日目・2日目）
+          負担の目安（担当/上限 ・ 1日目・2日目）
         </h3>
         <div className="flex flex-wrap gap-2">
           {stats.map(({ member, count, d1, d2 }) => (
             <span
               key={member.id}
-              className="rounded-lg bg-[var(--bs-soft)] px-2.5 py-1 text-xs text-[var(--bs-ink-soft)]"
+              className={`rounded-lg px-2.5 py-1 text-xs ${
+                count >= member.maxShifts
+                  ? "bg-amber-50 text-amber-950"
+                  : "bg-[var(--bs-soft)] text-[var(--bs-ink-soft)]"
+              }`}
             >
               {member.name}{" "}
-              <strong className="text-[var(--bs-ink)]">{count}</strong>
+              <strong className="text-[var(--bs-ink)]">
+                {count}/{member.maxShifts}
+              </strong>
               <span className="text-[var(--bs-muted)]">
                 {" "}
                 （{d1}・{d2}）

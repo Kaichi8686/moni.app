@@ -8,6 +8,7 @@ import type {
   MemberDependency,
   MemberPair,
 } from "./types";
+import { normalizeMember } from "./types";
 
 export type BunkasaiSnapshot = {
   room: string;
@@ -104,7 +105,9 @@ export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiS
   try {
     const raw = await fs.readFile(filePath(room), "utf8");
     const parsed = JSON.parse(raw) as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] };
-    const members = Array.isArray(parsed.members) ? parsed.members : [];
+    const members = (Array.isArray(parsed.members) ? parsed.members : []).map((m) =>
+      normalizeMember(m),
+    );
     const memberIds = new Set(members.map((m) => m.id));
     return {
       room,
@@ -134,11 +137,7 @@ export async function saveSnapshot(
     throw new Error("MEMBERS_TOO_MANY");
   }
 
-  const members = input.members.map((m) => ({
-    id: String(m.id),
-    name: String(m.name ?? "").trim().slice(0, 40),
-    ngSlotIds: Array.isArray(m.ngSlotIds) ? m.ngSlotIds : [],
-  }));
+  const members = input.members.map((m) => normalizeMember(m));
   const memberIds = new Set(members.map((m) => m.id));
 
   const snapshot: BunkasaiSnapshot = {
