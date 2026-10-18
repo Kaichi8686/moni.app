@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { ContactShadows, Environment, Html } from "@react-three/drei";
+import { ContactShadows, Environment, Html, RoundedBox } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -16,8 +16,13 @@ import { rememberLastProject } from "@/lib/workspace/lastProject";
 /** Active cube Y rotation per frame (~60fps). Kept slow so faces stay readable. */
 const ACTIVE_SPIN_PER_FRAME = 0.003;
 const FACE_TEX_SIZE = 512;
-/** BoxGeometry keeps clean 0–1 UVs per face (RoundedBox extrude UVs smear photo edges). */
+/**
+ * Photo faces use planar rounded-rect geometry (clean 0–1 UVs).
+ * A solid rounded core fills corner gaps so the cube still reads as rounded.
+ */
 const CUBE_SIZE = 1.75;
+const FACE_CORNER_RADIUS = 0.2;
+const FACE_PLANE_EPS = 0.004;
 
 type Props = {
   projects: ProjectRow[];
@@ -196,35 +201,88 @@ function useFaceTexture(item: CubeItem) {
   return texture;
 }
 
-function createFaceMaterials(tex: THREE.CanvasTexture) {
-  return Array.from({ length: 6 }, () => {
-    return new THREE.MeshPhysicalMaterial({
-      map: tex,
-      roughness: 0.38,
-      metalness: 0.12,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.4,
-      transparent: true,
-      opacity: 1,
-    });
+function createPhotoMaterial(tex: THREE.CanvasTexture) {
+  return new THREE.MeshPhysicalMaterial({
+    map: tex,
+    roughness: 0.38,
+    metalness: 0.12,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.4,
+    transparent: true,
+    opacity: 1,
+    side: THREE.FrontSide,
   });
 }
 
-function useFaceMaterials(tex: THREE.CanvasTexture) {
-  const matsRef = useRef<THREE.MeshPhysicalMaterial[]>(createFaceMaterials(tex));
-
-  useEffect(() => {
-    const next = createFaceMaterials(tex);
-    const prev = matsRef.current;
-    matsRef.current = next;
-    for (const m of prev) m.dispose();
-    return () => {
-      for (const m of next) m.dispose();
-    };
-  }, [tex]);
-
-  return matsRef;
+function createCoreMaterial(hex: string) {
+  return new THREE.MeshPhysicalMaterial({
+    color: hex,
+    roughness: 0.42,
+    metalness: 0.1,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.45,
+    transparent: true,
+    opacity: 1,
+  });
 }
+
+function useCubeMaterials(tex: THREE.CanvasTexture, coreHex: string) {
+  const photoMat = useMemo(() => createPhotoMaterial(tex), [tex]);
+  const coreMat = useMemo(() => createCoreMaterial(coreHex), [coreHex]);
+
+  useEffect(
+    () => () => {
+      photoMat.dispose();
+    },
+    [photoMat],
+  );
+  useEffect(
+    () => () => {
+      coreMat.dispose();
+    },
+    [coreMat],
+  );
+
+  return { photoMat, coreMat };
+}
+
+/** Rounded square in XY, centered, with planar 0–1 UVs (no edge smear). */
+function createRoundedFaceGeometry(size: number, radius: number) {
+  const r = Math.min(radius, size / 2 - 0.001);
+  const half = size / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-half + r, -half);
+  shape.lineTo(half - r, -half);
+  shape.quadraticCurveTo(half, -half, half, -half + r);
+  shape.lineTo(half, half - r);
+  shape.quadraticCurveTo(half, half, half - r, half);
+  shape.lineTo(-half + r, half);
+  shape.quadraticCurveTo(-half, half, -half, half - r);
+  shape.lineTo(-half, -half + r);
+  shape.quadraticCurveTo(-half, -half, -half + r, -half);
+
+  const geo = new THREE.ShapeGeometry(shape, 12);
+  const pos = geo.attributes.position;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    uv[i * 2] = (x + half) / size;
+    uv[i * 2 + 1] = (y + half) / size;
+  }
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+const CUBE_FACE_LAYOUT: { position: [number, number, number]; rotation: [number, number, number] }[] = [
+  { position: [0, 0, CUBE_SIZE / 2 + FACE_PLANE_EPS], rotation: [0, 0, 0] },
+  { position: [0, 0, -(CUBE_SIZE / 2 + FACE_PLANE_EPS)], rotation: [0, Math.PI, 0] },
+  { position: [CUBE_SIZE / 2 + FACE_PLANE_EPS, 0, 0], rotation: [0, Math.PI / 2, 0] },
+  { position: [-(CUBE_SIZE / 2 + FACE_PLANE_EPS), 0, 0], rotation: [0, -Math.PI / 2, 0] },
+  { position: [0, CUBE_SIZE / 2 + FACE_PLANE_EPS, 0], rotation: [-Math.PI / 2, 0, 0] },
+  { position: [0, -(CUBE_SIZE / 2 + FACE_PLANE_EPS), 0], rotation: [Math.PI / 2, 0, 0] },
+];
 
 function ProjectCubeMesh({
   item,
@@ -241,9 +299,21 @@ function ProjectCubeMesh({
 }) {
   const group = useRef<THREE.Group>(null);
   const tex = useFaceTexture(item);
-  const materialsRef = useFaceMaterials(tex);
+  const coreHex = item.kind === "create" ? "#27272a" : hexForProject(item.project.id);
+  const { photoMat, coreMat } = useCubeMaterials(tex, coreHex);
+  const faceGeo = useMemo(
+    () => createRoundedFaceGeometry(CUBE_SIZE, FACE_CORNER_RADIUS),
+    [],
+  );
   const tapScale = useRef(1);
   const pressed = useRef(false);
+
+  useEffect(
+    () => () => {
+      faceGeo.dispose();
+    },
+    [faceGeo],
+  );
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -284,10 +354,10 @@ function ProjectCubeMesh({
     /* eslint-disable react-hooks/immutability -- R3F mesh materials */
     const targetOpacity = active ? 1 : 0.48;
     const targetColor = active ? "#ffffff" : "#c4c4c4";
-    for (const mat of materialsRef.current) {
-      mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.1);
-      mat.color.lerp(new THREE.Color(targetColor), 0.08);
-    }
+    photoMat.opacity = THREE.MathUtils.lerp(photoMat.opacity, targetOpacity, 0.1);
+    photoMat.color.lerp(new THREE.Color(targetColor), 0.08);
+    coreMat.opacity = THREE.MathUtils.lerp(coreMat.opacity, targetOpacity, 0.1);
+    coreMat.color.lerp(new THREE.Color(active ? coreHex : "#a1a1aa"), 0.08);
     /* eslint-enable react-hooks/immutability */
   });
 
@@ -309,21 +379,40 @@ function ProjectCubeMesh({
     onOpen();
   }
 
+  const pointerProps = {
+    onPointerDown: handlePointerDown,
+    onPointerUp: handlePointerUp,
+    onPointerLeave: () => {
+      pressed.current = false;
+    },
+    onClick: handleClick,
+  };
+
   return (
     <group ref={group} position={[side * 2.55, 0, active ? 0 : -1.25]}>
-      <mesh
+      {/* Solid rounded core — volume + corner fill (no photo map → no UV smear) */}
+      <RoundedBox
+        args={[CUBE_SIZE - 0.02, CUBE_SIZE - 0.02, CUBE_SIZE - 0.02]}
+        radius={FACE_CORNER_RADIUS}
+        smoothness={4}
         castShadow
         receiveShadow
-        material={materialsRef.current}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={() => {
-          pressed.current = false;
-        }}
-        onClick={handleClick}
-      >
-        <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
-      </mesh>
+        material={coreMat}
+        {...pointerProps}
+      />
+      {/* Photo faces: rounded rects with planar UVs so images fit cleanly */}
+      {CUBE_FACE_LAYOUT.map((face, i) => (
+        <mesh
+          key={i}
+          geometry={faceGeo}
+          position={face.position}
+          rotation={face.rotation}
+          material={photoMat}
+          castShadow
+          receiveShadow
+          {...pointerProps}
+        />
+      ))}
     </group>
   );
 }
