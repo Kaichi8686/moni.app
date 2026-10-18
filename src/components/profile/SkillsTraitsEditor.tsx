@@ -3,6 +3,10 @@
 import { TagChipPicker } from "@/components/profile/TagChipPicker";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
+  INTEREST_FIELDS_MAX,
+  interestFieldPresetOptions,
+} from "@/lib/profile/interestFields";
+import {
   SKILL_PRESETS,
   TRAIT_PRESETS,
   labelForPreset,
@@ -17,16 +21,19 @@ type Props = {
   traits: string[];
   onSkillsChange: (next: string[]) => void;
   onTraitsChange: (next: string[]) => void;
-  /** 気になる社会問題（最大3・任意）。渡したときだけ表示 */
+  /** 興味のある分野（最大3・任意） */
+  interestFields?: string[];
+  onInterestFieldsChange?: (next: string[]) => void;
+  /** 気になる社会問題（最大3・任意） */
   socialIssues?: string[];
   onSocialIssuesChange?: (next: string[]) => void;
-  /** 導入文を出す（オンボーディング向け） */
   showIntro?: boolean;
   compact?: boolean;
-  /** オンボーディング: カードUI + 各3つまで */
   onboardingStyle?: boolean;
   maxPerSection?: number;
-  /** 社会問題のみ表示（オンボーディング専用ステップ） */
+  /** 興味のある分野のみ（オンボーディング専用ステップ） */
+  interestFieldsOnly?: boolean;
+  /** 社会問題のみ（オンボーディング専用ステップ） */
   socialIssuesOnly?: boolean;
 };
 
@@ -35,12 +42,15 @@ export function SkillsTraitsEditor({
   traits,
   onSkillsChange,
   onTraitsChange,
+  interestFields,
+  onInterestFieldsChange,
   socialIssues,
   onSocialIssuesChange,
   showIntro = false,
   compact = false,
   onboardingStyle = false,
   maxPerSection,
+  interestFieldsOnly = false,
   socialIssuesOnly = false,
 }: Props) {
   const { locale, tx } = useI18n();
@@ -52,10 +62,40 @@ export function SkillsTraitsEditor({
     id: p.ja,
     label: labelForPreset(p, locale),
   }));
+  const fieldPresets = interestFieldPresetOptions(locale);
   const issuePresets = socialIssuePresetOptions(locale);
   const max = maxPerSection ?? (onboardingStyle ? 3 : 12);
   const variant = onboardingStyle ? "cards" : "chips";
+  const showInterestFields = Boolean(onInterestFieldsChange) && interestFields != null;
   const showSocialIssues = Boolean(onSocialIssuesChange) && socialIssues != null;
+
+  const interestFieldsSection = showInterestFields ? (
+    <section>
+      <div className="mb-0.5 flex items-baseline justify-between gap-2">
+        <h3 className="text-[13px] font-semibold text-zinc-900">
+          {tx("興味のある分野", "Fields of interest")}
+        </h3>
+        <span className="text-[10px] font-medium text-zinc-400">
+          {tx("最大3つ・スキップ可", "Up to 3 · optional")}
+        </span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-500">
+        {tx(
+          "AIや音楽など、いまワクワクする分野を選びましょう",
+          "Pick areas that excite you — AI, music, and more",
+        )}
+      </p>
+      <TagChipPicker
+        className="mt-2"
+        presets={fieldPresets}
+        value={interestFields ?? []}
+        onChange={onInterestFieldsChange!}
+        max={INTEREST_FIELDS_MAX}
+        variant={variant}
+        allowCustom={!onboardingStyle}
+      />
+    </section>
+  ) : null;
 
   const socialIssuesSection = showSocialIssues ? (
     <section>
@@ -85,22 +125,17 @@ export function SkillsTraitsEditor({
     </section>
   ) : null;
 
+  if (interestFieldsOnly) {
+    return (
+      <div className={onboardingStyle ? "space-y-4" : compact ? "space-y-5" : "space-y-6"}>
+        {interestFieldsSection}
+      </div>
+    );
+  }
+
   if (socialIssuesOnly) {
     return (
       <div className={onboardingStyle ? "space-y-4" : compact ? "space-y-5" : "space-y-6"}>
-        {showIntro ? (
-          <div className="space-y-1">
-            <p className="text-[15px] font-semibold leading-snug tracking-tight text-zinc-900">
-              {tx("気になる社会問題はありますか？", "Any social issues you care about?")}
-            </p>
-            <p className="text-[12px] leading-relaxed text-zinc-500">
-              {tx(
-                "最大3つまで選べます。スキップしてもあとからプロフィール編集で追加できます。",
-                "Pick up to 3. You can skip and add them later in Edit profile.",
-              )}
-            </p>
-          </div>
-        ) : null}
         {socialIssuesSection}
       </div>
     );
@@ -188,6 +223,7 @@ export function SkillsTraitsEditor({
         />
       </section>
 
+      {interestFieldsSection}
       {socialIssuesSection}
     </div>
   );

@@ -18,6 +18,7 @@ alter table public.profiles add column if not exists gender text;
 alter table public.profiles add column if not exists country text;
 alter table public.profiles add column if not exists onboarding_completed_at timestamptz;
 alter table public.profiles add column if not exists social_issues jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists interest_fields jsonb not null default '[]'::jsonb;
 
 create table if not exists public.articles (
   id uuid primary key default gen_random_uuid(),

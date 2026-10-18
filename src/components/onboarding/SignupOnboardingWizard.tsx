@@ -15,6 +15,7 @@ import {
 import { countryLabel, sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import { parseInterestFields } from "@/lib/profile/interestFields";
 import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -27,10 +28,11 @@ export type OnboardingDraft = {
   avatarUrl: string | null;
   skills: string[];
   traits: string[];
+  interestFields: string[];
   socialIssues: string[];
 };
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 type Props = {
   session: Session;
@@ -38,7 +40,7 @@ type Props = {
   onComplete: () => void;
 };
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 export function SignupOnboardingWizard({ session, initialNickname = "", onComplete }: Props) {
@@ -58,6 +60,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     avatarUrl: null,
     skills: [],
     traits: [],
+    interestFields: [],
     socialIssues: [],
   });
 
@@ -65,7 +68,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     if (!supabase) return;
     void supabase
       .from("profiles")
-      .select("display_name,avatar_url,birthday,gender,country,skills,traits,social_issues")
+      .select("display_name,avatar_url,birthday,gender,country,skills,traits,interest_fields,social_issues")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -82,6 +85,10 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
           birthday: prev.birthday || (typeof birthdayRaw === "string" ? birthdayRaw.slice(0, 10) : ""),
           gender: prev.gender || (isProfileGender(genderRaw) ? genderRaw : ""),
           country: prev.country || ((data.country as string | null) ?? ""),
+          interestFields:
+            prev.interestFields.length > 0
+              ? prev.interestFields
+              : parseInterestFields((data as { interest_fields?: unknown }).interest_fields),
           socialIssues:
             prev.socialIssues.length > 0
               ? prev.socialIssues
@@ -114,7 +121,8 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     if (step === 3) return nicknameValid;
     if (step === 4) return true; // avatar optional
     if (step === 5) return interestsValid;
-    if (step === 6) return true; // social issues optional (0–3)
+    if (step === 6) return true; // interest fields optional (0–3)
+    if (step === 7) return true; // social issues optional (0–3)
     return false;
   }
 
@@ -145,7 +153,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     }
   }
 
-  async function persistAndFinish(opts?: { socialIssues?: string[] }) {
+  async function persistAndFinish(opts?: { interestFields?: string[]; socialIssues?: string[] }) {
     if (!supabase || saving) return;
     const birthday = parseBirthday(draft.birthday);
     const age = birthday ? ageFromBirthday(birthday) : null;
@@ -158,6 +166,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     const nickname = draft.nickname.trim();
     const skills = normalizeTagList(draft.skills, 3);
     const traits = normalizeTagList(draft.traits, 3);
+    const interestFields = parseInterestFields(opts?.interestFields ?? draft.interestFields);
     const socialIssues = parseSocialIssues(opts?.socialIssues ?? draft.socialIssues);
     const completedAt = new Date().toISOString();
 
@@ -169,6 +178,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
       country: draft.country,
       skills,
       traits,
+      interest_fields: interestFields,
       social_issues: socialIssues,
       onboarding_completed_at: completedAt,
     };
@@ -177,6 +187,17 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     let { error: upErr } = await supabase.from("profiles").update(fullPayload).eq("id", session.user.id);
     if (upErr) {
       const fallbacks: Array<Record<string, unknown>> = [
+        {
+          display_name: nickname,
+          birthday,
+          age,
+          country: draft.country,
+          skills,
+          traits,
+          interest_fields: interestFields,
+          social_issues: socialIssues,
+          onboarding_completed_at: completedAt,
+        },
         {
           display_name: nickname,
           birthday,
@@ -253,7 +274,8 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     3: tx("ニックネームを決めよう", "Choose a nickname"),
     4: tx("アイコンを選ぼう", "Pick a profile photo"),
     5: tx("興味と性格", "Interests & personality"),
-    6: tx("気になる社会問題", "Social issues you care about"),
+    6: tx("興味のある分野", "Fields of interest"),
+    7: tx("気になる社会問題", "Social issues you care about"),
   };
 
   const stepHint: Record<Step, string> = {
@@ -263,6 +285,7 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
     4: tx("写真・カメラ・ファイルから選べます。あとから変更もできます", "Use a photo, camera, or file. You can change it later"),
     5: tx("探すタブで相手があなたのプロフィールを見るときに反映されます", "These appear when others view your profile in Search"),
     6: tx("最大3つまで。スキップしてもOKです", "Up to 3 — skipping is fine"),
+    7: tx("最大3つまで。スキップしてもOKです", "Up to 3 — skipping is fine"),
   };
 
   const derivedAge = ageFromBirthday(draft.birthday);
@@ -529,6 +552,20 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                   <SkillsTraitsEditor
                     showIntro={false}
                     onboardingStyle
+                    interestFieldsOnly
+                    skills={draft.skills}
+                    traits={draft.traits}
+                    interestFields={draft.interestFields}
+                    onSkillsChange={(skills) => setDraft((d) => ({ ...d, skills }))}
+                    onTraitsChange={(traits) => setDraft((d) => ({ ...d, traits }))}
+                    onInterestFieldsChange={(interestFields) => setDraft((d) => ({ ...d, interestFields }))}
+                  />
+                ) : null}
+
+                {step === 7 ? (
+                  <SkillsTraitsEditor
+                    showIntro={false}
+                    onboardingStyle
                     socialIssuesOnly
                     skills={draft.skills}
                     traits={draft.traits}
@@ -575,10 +612,25 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
                   ? draft.socialIssues.length > 0
                     ? tx("完了してはじめる", "Finish and start")
                     : tx("スキップしてはじめる", "Skip and start")
-                  : tx("次へ", "Next")}
+                  : step === 6 && draft.interestFields.length === 0
+                    ? tx("スキップ", "Skip")
+                    : tx("次へ", "Next")}
             </button>
           </div>
-          {step === 6 && draft.socialIssues.length > 0 ? (
+          {step === 6 && draft.interestFields.length > 0 ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setDraft((d) => ({ ...d, interestFields: [] }));
+                setStep(7);
+              }}
+              className="text-center text-[12px] font-medium text-zinc-500 underline-offset-2 hover:underline disabled:opacity-40"
+            >
+              {tx("選択せずにスキップ", "Skip without selecting")}
+            </button>
+          ) : null}
+          {step === 7 && draft.socialIssues.length > 0 ? (
             <button
               type="button"
               disabled={saving}

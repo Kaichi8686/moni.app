@@ -252,6 +252,7 @@ export function ExploreFriendProfilePreview({
             <ProfileSkillsTraits
               skills={skills}
               traits={traits}
+              interestFields={profile?.interestFields ?? []}
               socialIssues={profile?.socialIssues ?? []}
               className="pt-1"
             />

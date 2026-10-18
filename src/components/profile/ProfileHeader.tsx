@@ -304,6 +304,7 @@ export function ProfileHeader({
           <ProfileSkillsTraits
             skills={profile.skills ?? []}
             traits={profile.traits ?? []}
+            interestFields={profile.interestFields ?? []}
             socialIssues={profile.socialIssues ?? []}
           />
 

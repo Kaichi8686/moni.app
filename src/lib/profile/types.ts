@@ -23,6 +23,8 @@ export type ProfileView = {
   traits?: string[];
   /** 気になる社会問題（最大3・任意） */
   socialIssues?: string[];
+  /** 興味のある分野（最大3・任意） */
+  interestFields?: string[];
   followerCount: number;
   followingCount: number;
 };

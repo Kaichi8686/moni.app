@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { interestFieldLabel } from "@/lib/profile/interestFields";
 import {
   SKILL_PRESETS,
   TRAIT_PRESETS,
@@ -11,6 +12,7 @@ import { socialIssueLabel } from "@/lib/profile/socialIssues";
 type Props = {
   skills: string[];
   traits: string[];
+  interestFields?: string[];
   socialIssues?: string[];
   className?: string;
 };
@@ -18,11 +20,19 @@ type Props = {
 export function ProfileSkillsTraits({
   skills,
   traits,
+  interestFields = [],
   socialIssues = [],
   className = "",
 }: Props) {
   const { locale, tx } = useI18n();
-  if (skills.length === 0 && traits.length === 0 && socialIssues.length === 0) return null;
+  if (
+    skills.length === 0 &&
+    traits.length === 0 &&
+    interestFields.length === 0 &&
+    socialIssues.length === 0
+  ) {
+    return null;
+  }
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -38,6 +48,23 @@ export function ProfileSkillsTraits({
                 className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
               >
                 {displayTagLabel(tag, SKILL_PRESETS, locale)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {interestFields.length > 0 ? (
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
+            {tx("興味のある分野", "Fields of interest")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {interestFields.map((tag) => (
+              <span
+                key={`field-${tag}`}
+                className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {interestFieldLabel(tag, locale)}
               </span>
             ))}
           </div>
