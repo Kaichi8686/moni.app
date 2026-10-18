@@ -22,6 +22,7 @@ import {
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
   ArrowUpRight,
+  ChevronLeft,
   Paperclip,
   StickyNote,
   Trash2,
@@ -69,7 +70,6 @@ const DEFAULT_SHEET_W = 200;
 const DEFAULT_SHEET_H = 160;
 const DEFAULT_IMAGE_W = 200;
 const DEFAULT_IMAGE_H = 150;
-const DOUBLE_TAP_MS = 380;
 /** 画面内に必ず残すコンテンツの最低ピクセル */
 const KEEP_VISIBLE_PX = 96;
 const EMPTY_WORLD = { minX: 40, minY: 40, maxX: 520, maxY: 420 };
@@ -190,17 +190,17 @@ export function IssueWorkspaceCanvas({
   const [sheetColor, setSheetColor] = useState<SheetColor>("yellow");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  /** ロイロノート風：紙をタップで全画面編集 */
+  const [openSheetId, setOpenSheetId] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 24, y: 24 });
   const [zoom, setZoom] = useState(1);
   const [viewport, setViewport] = useState({ w: 1, h: 1 });
   const dragRef = useRef<DragState | null>(null);
-  const lastTapRef = useRef<{ id: string; at: number } | null>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<PinchState | null>(null);
   const [dragTick, setDragTick] = useState(0);
   const toolbarMounted = useSyncExternalStore(subscribeNever, () => true, () => false);
-  const toolbarHidden = editingId !== null;
+  const toolbarHidden = openSheetId !== null;
 
   function resetScrollParents() {
     let node: HTMLElement | null = shellRef.current;
@@ -244,11 +244,25 @@ export function IssueWorkspaceCanvas({
 
   // キーボード閉じたあと操作バーが画面外に残らないようスクロールを戻す
   useEffect(() => {
-    if (editingId) return;
+    if (openSheetId) return;
     resetScrollParents();
     const timer = window.setTimeout(resetScrollParents, 120);
     return () => window.clearTimeout(timer);
-  }, [editingId]);
+  }, [openSheetId]);
+
+  useEffect(() => {
+    if (!openSheetId) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenSheetId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [openSheetId]);
 
   const viewPan = useMemo(
     () => clampPan(pan, zoom, viewport, bounds),
@@ -308,26 +322,28 @@ export function IssueWorkspaceCanvas({
     setSheetColor(color);
     commit([...board.items, sheet]);
     setSelectedId(sheet.id);
-    setEditingId(null);
+    setOpenSheetId(sheet.id);
     selectTool("navigate");
   }
 
-  const selectedSheet =
-    selectedId && !editingId
-      ? (() => {
-          const item = board.items.find((entry) => entry.id === selectedId);
-          return item?.kind === "sheet" ? item : null;
-        })()
-      : null;
+  const openSheet = useMemo(() => {
+    if (!openSheetId) return null;
+    const item = board.items.find((entry) => entry.id === openSheetId);
+    return item?.kind === "sheet" ? item : null;
+  }, [board.items, openSheetId]);
 
-  function patchSelectedSheet(patch: Partial<BoardSheet>) {
-    if (!selectedSheet || !canEdit) return;
-    updateItem(selectedSheet.id, patch);
+  function patchOpenSheet(patch: Partial<BoardSheet>) {
+    if (!openSheet || !canEdit) return;
+    updateItem(openSheet.id, patch);
   }
 
-  function deleteSelected() {
-    if (!canEdit || !selectedId) return;
-    const id = selectedId;
+  function closeOpenSheet() {
+    setOpenSheetId(null);
+    window.setTimeout(resetScrollParents, 50);
+  }
+
+  function deleteItemById(id: string) {
+    if (!canEdit) return;
     commit(
       board.items.filter((item) => {
         if (item.id === id) return false;
@@ -335,8 +351,13 @@ export function IssueWorkspaceCanvas({
         return true;
       }),
     );
-    setSelectedId(null);
-    setEditingId(null);
+    if (selectedId === id) setSelectedId(null);
+    if (openSheetId === id) setOpenSheetId(null);
+  }
+
+  function deleteSelected() {
+    if (!selectedId) return;
+    deleteItemById(selectedId);
   }
 
   function bringToFront(id: string) {
@@ -398,7 +419,6 @@ export function IssueWorkspaceCanvas({
     if (tool === "sheet") {
       selectTool("navigate");
       setSelectedId(null);
-      setEditingId(null);
       dragRef.current = {
         kind: "pan",
         startX: event.clientX,
@@ -410,7 +430,6 @@ export function IssueWorkspaceCanvas({
     }
 
     setSelectedId(null);
-    setEditingId(null);
     if (tool === "arrow") setConnectFromId(null);
     dragRef.current = {
       kind: "pan",
@@ -473,7 +492,6 @@ export function IssueWorkspaceCanvas({
     if (tool === "sheet") selectTool("navigate");
 
     setSelectedId(node.id);
-    setEditingId(null);
     bringToFront(node.id);
     dragRef.current = {
       kind: "move",
@@ -558,17 +576,12 @@ export function IssueWorkspaceCanvas({
 
     const drag = dragRef.current;
     dragRef.current = null;
+    // ドラッグせずタップしたら紙を全画面で開く（矢印接続中は除く）
     if (!drag || drag.kind !== "move" || drag.moved) return;
+    if (tool === "arrow") return;
     const node = nodeMap.get(drag.id);
-    if (!node || node.kind !== "sheet" || !canEdit) return;
-    const now = event.timeStamp;
-    const prev = lastTapRef.current;
-    if (prev && prev.id === drag.id && now - prev.at <= DOUBLE_TAP_MS) {
-      setEditingId(node.id);
-      lastTapRef.current = null;
-      return;
-    }
-    lastTapRef.current = { id: drag.id, at: now };
+    if (!node || node.kind !== "sheet") return;
+    setOpenSheetId(node.id);
   }
 
   function onWheel(event: React.WheelEvent<HTMLDivElement>) {
@@ -667,7 +680,6 @@ export function IssueWorkspaceCanvas({
                     onPointerDown={(event) => {
                       event.stopPropagation();
                       setSelectedId(arrow.id);
-                      setEditingId(null);
                     }}
                   />
                 </g>
@@ -711,58 +723,22 @@ export function IssueWorkspaceCanvas({
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                 >
                   <div className="h-2 shrink-0 opacity-40" style={{ background: colors.border }} />
-                  {editingId === node.id && canEdit ? (
-                    <div className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 ${justify}`}>
-                      <textarea
-                        data-board-ui
-                        autoFocus
-                        value={node.text}
-                        onChange={(event) => {
-                          const el = event.target;
-                          updateItem(node.id, { text: el.value });
-                          el.style.height = "auto";
-                          el.style.height = `${el.scrollHeight}px`;
-                        }}
-                        onFocus={(event) => {
-                          const el = event.currentTarget;
-                          el.style.height = "auto";
-                          el.style.height = `${el.scrollHeight}px`;
-                          window.setTimeout(resetScrollParents, 0);
-                        }}
-                        onBlur={() => {
-                          setEditingId(null);
-                          window.setTimeout(resetScrollParents, 50);
-                        }}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        placeholder={tx("ここに書く…", "Write here…")}
-                        rows={1}
-                        className="max-h-full w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-400"
-                        style={{
-                          fontSize: style.fontSize,
-                          color: style.color,
-                          textAlign: style.textAlign,
-                          height: "auto",
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
-                      style={{
-                        fontSize: style.fontSize,
-                        color: style.color,
-                        textAlign: style.textAlign,
-                      }}
-                    >
-                      <span className="w-full shrink-0">
-                        {node.text.trim() || (
-                          <span className="text-zinc-400" style={{ fontSize: 12 }}>
-                            {tx("ダブルタップで編集", "Double-tap to edit")}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  )}
+                  <div
+                    className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
+                    style={{
+                      fontSize: style.fontSize,
+                      color: style.color,
+                      textAlign: style.textAlign,
+                    }}
+                  >
+                    <span className="w-full shrink-0">
+                      {node.text.trim() || (
+                        <span className="text-zinc-400" style={{ fontSize: 12 }}>
+                          {tx("タップして開く", "Tap to open")}
+                        </span>
+                      )}
+                    </span>
+                  </div>
                   {selected && canEdit ? (
                     <button
                       type="button"
@@ -855,94 +831,6 @@ export function IssueWorkspaceCanvas({
                   </div>
                 ) : null}
 
-                {selectedSheet && canEdit && tool !== "sheet" ? (
-                  <div
-                    data-board-ui
-                    className="pointer-events-auto flex max-w-[min(100%,28rem)] flex-wrap items-center justify-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
-                  >
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {FONT_SIZE_PRESETS.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => patchSelectedSheet({ fontSize: size })}
-                          className={`min-w-[1.75rem] rounded-full px-1.5 py-1 text-[11px] font-bold ${
-                            (selectedSheet.fontSize ?? 14) === size
-                              ? "bg-white text-zinc-900 shadow-sm"
-                              : "text-zinc-500"
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {TEXT_COLOR_ORDER.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => patchSelectedSheet({ textColor: color })}
-                          className={`h-6 w-6 rounded-full border-2 ${
-                            (selectedSheet.textColor ?? "#1A1A1A").toLowerCase() === color.toLowerCase()
-                              ? "scale-110 border-zinc-900"
-                              : "border-zinc-200"
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label={tx("文字色", "Text color")}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {(
-                        [
-                          ["left", AlignLeft, tx("左寄せ", "Left")],
-                          ["center", AlignCenter, tx("中央", "Center")],
-                          ["right", AlignRight, tx("右寄せ", "Right")],
-                        ] as const
-                      ).map(([align, Icon, label]) => (
-                        <button
-                          key={align}
-                          type="button"
-                          title={label}
-                          onClick={() => patchSelectedSheet({ align: align as TextAlign })}
-                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
-                            (selectedSheet.align ?? "center") === align
-                              ? "bg-white text-zinc-900 shadow-sm"
-                              : "text-zinc-500"
-                          }`}
-                          aria-label={label}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {(
-                        [
-                          ["top", AlignVerticalJustifyStart, tx("上寄せ", "Top")],
-                          ["middle", AlignVerticalJustifyCenter, tx("中央", "Middle")],
-                          ["bottom", AlignVerticalJustifyEnd, tx("下寄せ", "Bottom")],
-                        ] as const
-                      ).map(([valign, Icon, label]) => (
-                        <button
-                          key={valign}
-                          type="button"
-                          title={label}
-                          onClick={() => patchSelectedSheet({ valign: valign as TextVAlign })}
-                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
-                            (selectedSheet.valign ?? "middle") === valign
-                              ? "bg-white text-zinc-900 shadow-sm"
-                              : "text-zinc-500"
-                          }`}
-                          aria-label={label}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="pointer-events-auto flex items-center gap-2">
                   <div
                     data-board-ui
@@ -1000,6 +888,221 @@ export function IssueWorkspaceCanvas({
             document.body,
           )
         : null}
+
+      {toolbarMounted && openSheet
+        ? createPortal(
+            <SheetFullscreenEditor
+              sheet={openSheet}
+              canEdit={canEdit}
+              tx={tx}
+              onClose={closeOpenSheet}
+              onPatch={patchOpenSheet}
+              onDelete={() => {
+                deleteItemById(openSheet.id);
+              }}
+            />,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+function SheetFullscreenEditor({
+  sheet,
+  canEdit,
+  tx,
+  onClose,
+  onPatch,
+  onDelete,
+}: {
+  sheet: BoardSheet;
+  canEdit: boolean;
+  tx: (ja: string, en: string) => string;
+  onClose: () => void;
+  onPatch: (patch: Partial<BoardSheet>) => void;
+  onDelete: () => void;
+}) {
+  const colors = SHEET_COLORS[sheet.color];
+  const fontSize = sheet.fontSize ?? 14;
+  const textColor = sheet.textColor ?? "#1A1A1A";
+  const align = (sheet.align ?? "center") as TextAlign;
+  const valign = sheet.valign ?? "middle";
+  const justify =
+    valign === "top" ? "justify-start" : valign === "bottom" ? "justify-end" : "justify-center";
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || !canEdit) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }, [canEdit, sheet.id]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [fontSize, sheet.text, align]);
+
+  return (
+    <div
+      data-board-ui
+      className="fixed inset-0 z-[600] flex flex-col"
+      style={{ backgroundColor: colors.bg }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={tx("用紙を編集", "Edit sheet")}
+    >
+      <div
+        className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]"
+        style={{ borderBottom: `1px solid ${colors.border}` }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white/80 px-3 text-sm font-semibold text-zinc-900 shadow-sm backdrop-blur active:scale-95"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+          {tx("完了", "Done")}
+        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-rose-600 shadow-sm backdrop-blur active:scale-95"
+            aria-label={tx("削除", "Delete")}
+          >
+            <Trash2 className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+        ) : (
+          <span className="w-11" />
+        )}
+      </div>
+
+      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8 ${justify}`}>
+        {canEdit ? (
+          <textarea
+            ref={textareaRef}
+            value={sheet.text}
+            onChange={(event) => {
+              const el = event.target;
+              onPatch({ text: el.value });
+              el.style.height = "auto";
+              el.style.height = `${el.scrollHeight}px`;
+            }}
+            placeholder={tx("ここに書く…", "Write here…")}
+            rows={1}
+            className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
+            style={{
+              fontSize: Math.max(22, Math.round(fontSize * 1.75)),
+              color: textColor,
+              textAlign: align,
+              height: "auto",
+            }}
+          />
+        ) : (
+          <p
+            className="w-full whitespace-pre-wrap leading-relaxed"
+            style={{
+              fontSize: Math.max(22, Math.round(fontSize * 1.75)),
+              color: textColor,
+              textAlign: align,
+            }}
+          >
+            {sheet.text.trim() || tx("（空の用紙）", "(Empty sheet)")}
+          </p>
+        )}
+      </div>
+
+      {canEdit ? (
+        <div
+          className="shrink-0 border-t border-black/5 bg-white/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_28px_rgba(0,0,0,0.08)] backdrop-blur"
+        >
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-2.5">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+                {FONT_SIZE_PRESETS.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => onPatch({ fontSize: size })}
+                    className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
+                      fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {TEXT_COLOR_ORDER.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => onPatch({ textColor: color })}
+                    className={`h-7 w-7 rounded-full border-2 ${
+                      textColor.toLowerCase() === color.toLowerCase()
+                        ? "scale-110 border-zinc-900"
+                        : "border-zinc-200"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    aria-label={tx("文字色", "Text color")}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+                {(
+                  [
+                    ["left", AlignLeft, tx("左寄せ", "Left")],
+                    ["center", AlignCenter, tx("中央", "Center")],
+                    ["right", AlignRight, tx("右寄せ", "Right")],
+                  ] as const
+                ).map(([value, Icon, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    title={label}
+                    onClick={() => onPatch({ align: value })}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                      align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                    }`}
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+                {(
+                  [
+                    ["top", AlignVerticalJustifyStart, tx("上寄せ", "Top")],
+                    ["middle", AlignVerticalJustifyCenter, tx("中央", "Middle")],
+                    ["bottom", AlignVerticalJustifyEnd, tx("下寄せ", "Bottom")],
+                  ] as const
+                ).map(([value, Icon, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    title={label}
+                    onClick={() => onPatch({ valign: value })}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                      valign === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                    }`}
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
