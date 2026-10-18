@@ -179,7 +179,7 @@ export function ProfileHeader({
       <div className="px-4 pb-5 sm:px-5">
         <div className="relative z-10 -mt-9 flex items-end gap-4">
           <div className="relative shrink-0">
-            <div className="rounded-[14px] bg-white p-0.5 shadow-sm ring-1 ring-zinc-200/80">
+            <div className="rounded-[14px] shadow-sm ring-2 ring-white">
               <ProfileAvatar
                 displayName={profile.displayName}
                 avatarUrl={avatarPreview ?? profile.avatarUrl}

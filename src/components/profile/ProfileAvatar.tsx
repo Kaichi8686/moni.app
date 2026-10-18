@@ -19,10 +19,16 @@ export function ProfileAvatar({ displayName, avatarUrl, size = "md" }: Props) {
   const initial = (displayName.trim().charAt(0) || "?").toUpperCase();
 
   return (
-    <div className={`${box} ${radius} shrink-0 overflow-hidden border border-zinc-200 bg-zinc-100 shadow-[0_1px_0_rgba(24,24,27,0.04)]`}>
+    <div
+      className={`relative ${box} ${radius} shrink-0 overflow-hidden border border-zinc-200 bg-zinc-100 shadow-[0_1px_0_rgba(24,24,27,0.04)]`}
+    >
       {avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+        <img
+          src={avatarUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
       ) : (
         <div
           className="flex h-full w-full items-center justify-center font-bold tracking-tight text-white"
