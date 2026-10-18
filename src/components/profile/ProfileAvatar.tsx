@@ -17,17 +17,20 @@ const SIZES = {
 export function ProfileAvatar({ displayName, avatarUrl, size = "md" }: Props) {
   const { box, radius } = SIZES[size];
   const initial = (displayName.trim().charAt(0) || "?").toUpperCase();
+  const photo = avatarUrl?.trim() || null;
 
   return (
     <div
       className={`relative ${box} ${radius} shrink-0 overflow-hidden border border-zinc-200 bg-zinc-100 shadow-[0_1px_0_rgba(24,24,27,0.04)]`}
     >
-      {avatarUrl ? (
+      {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={avatarUrl}
+          src={photo}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover object-center"
+          draggable={false}
+          className="pointer-events-none absolute inset-0 block h-full w-full max-h-none max-w-none"
+          style={{ objectFit: "cover", objectPosition: "center" }}
         />
       ) : (
         <div
