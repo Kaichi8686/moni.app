@@ -296,11 +296,11 @@ export function ProjectSettingsModal({
             ) : null}
 
             <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真", "Photo")}</span>
+              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("写真・背景", "Photo & background")}</span>
               <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
                 {tx(
-                  "プロジェクト概要の正方形写真と、探すタブのカードに使われます。",
-                  "Used for the square photo on the project overview and Discover cards.",
+                  "プロジェクト概要の背景と正方形写真、探すタブのカードに使われます。",
+                  "Used as the project overview background and square photo, and on Discover cards.",
                 )}
               </p>
               <input
