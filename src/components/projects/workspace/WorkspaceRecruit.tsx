@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Megaphone } from "lucide-react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { Megaphone, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { createProjectRecruitment } from "@/lib/projects/projectRecruitments";
+import {
+  closeProjectRecruitment,
+  createProjectRecruitment,
+  ensureLegacyRecruitmentMigrated,
+  listProjectRecruitments,
+  type ProjectRecruitment,
+} from "@/lib/projects/projectRecruitments";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
 
@@ -22,11 +28,19 @@ function workFormatLabel(format: WorkFormat, tx: (ja: string, en: string) => str
   return tx("その他", "Other");
 }
 
+function metaLine(row: ProjectRecruitment): string {
+  return [row.skillName, row.duration, row.compensation].filter(Boolean).join(" · ");
+}
+
 export default function WorkspaceRecruit() {
   const { tx } = useI18n();
-  const { project, projectMeta, projectId, loading, uid, canEdit, reload } = useProjectWorkspace();
+  const { project, projectMeta, projectId, loading, uid, canEdit, isOwner, reload } = useProjectWorkspace();
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [rows, setRows] = useState<ProjectRecruitment[]>([]);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ProjectRecruitment | null>(null);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [role, setRole] = useState("");
@@ -39,6 +53,37 @@ export default function WorkspaceRecruit() {
     setNotice(text);
     window.setTimeout(() => setNotice(""), 4200);
   }, []);
+
+  const loadList = useCallback(async () => {
+    if (!supabase || !project) {
+      setListLoading(false);
+      return;
+    }
+    setListLoading(true);
+    try {
+      const ownerId =
+        project.members.find((m) => m.role === "owner")?.id ?? (isOwner ? uid : null) ?? uid ?? "";
+      if (ownerId) {
+        await ensureLegacyRecruitmentMigrated(supabase, {
+          projectId,
+          ownerId,
+          recruitmentTarget: projectMeta?.recruitment_target ?? "",
+          recruitmentMessage: projectMeta?.recruitment_message ?? "",
+        });
+      }
+      const list = await listProjectRecruitments(supabase, projectId);
+      setRows(list.filter((r) => r.projectId === projectId));
+    } catch (e) {
+      showNotice(e instanceof Error ? e.message : tx("募集の取得に失敗しました", "Failed to load recruitments"));
+    } finally {
+      setListLoading(false);
+    }
+  }, [project, projectId, projectMeta, uid, isOwner, showNotice, tx]);
+
+  useEffect(() => {
+    if (loading || !project) return;
+    void loadList();
+  }, [loading, project, loadList]);
 
   async function onCreate() {
     if (!supabase || !uid || !project || !canEdit) return;
@@ -70,12 +115,31 @@ export default function WorkspaceRecruit() {
       setCompensation("");
       setWeeklyHours("");
       setWorkFormat("online");
+      await loadList();
       await reload();
       showNotice(tx("募集を公開しました", "Recruitment published"));
     } catch (e) {
       showNotice(e instanceof Error ? e.message : tx("公開に失敗しました", "Failed to publish"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onClose(id: string, e?: MouseEvent) {
+    e?.stopPropagation();
+    e?.preventDefault();
+    if (!supabase || !canEdit) return;
+    setClosingId(id);
+    try {
+      await closeProjectRecruitment(supabase, id, projectId);
+      if (detail?.id === id) setDetail(null);
+      await loadList();
+      await reload();
+      showNotice(tx("募集を締め切りました", "Recruitment closed"));
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : tx("締切に失敗しました", "Failed to close"));
+    } finally {
+      setClosingId(null);
     }
   }
 
@@ -100,9 +164,12 @@ export default function WorkspaceRecruit() {
     { id: "other", label: tx("その他", "Other") },
   ];
 
+  const openRows = rows.filter((r) => r.status === "open");
+  const closedRows = rows.filter((r) => r.status === "closed");
+
   return (
     <div className="flex min-h-full flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-5 pb-6 sm:px-6 sm:py-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-5 pb-6 sm:px-6 sm:py-6">
         {notice ? (
           <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
             {notice}
@@ -120,8 +187,8 @@ export default function WorkspaceRecruit() {
               </h2>
               <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
                 {tx(
-                  "欲しい人材・役割・報酬・参加時間を書いて仲間を募れます。",
-                  "Post the talent, role, pay, and weekly hours you need.",
+                  "募集を追加できます。出した募集は下の一覧から確認・締切できます。",
+                  "You can post more openings. Review and close them in the list below.",
                 )}
               </p>
             </div>
@@ -245,7 +312,153 @@ export default function WorkspaceRecruit() {
             </div>
           )}
         </section>
+
+        <section className="space-y-3">
+          <h3 className="text-base font-semibold text-zinc-950">
+            {tx(`公開中の募集（${openRows.length}）`, `Open recruitments (${openRows.length})`)}
+          </h3>
+          {listLoading ? (
+            <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+          ) : openRows.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+              {tx(
+                "まだ公開中の募集はありません。上のフォームから追加できます。",
+                "No open recruitments yet. Add one with the form above.",
+              )}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {openRows.map((r) => (
+                <li key={r.id}>
+                  <div className="flex items-stretch overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 px-4 py-3.5 text-left transition hover:bg-zinc-50"
+                      onClick={() => setDetail(r)}
+                    >
+                      <p className="truncate text-sm font-semibold text-zinc-950">{r.title}</p>
+                      {r.message ? (
+                        <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-zinc-600">{r.message}</p>
+                      ) : null}
+                      {metaLine(r) ? (
+                        <p className="mt-1.5 text-[11px] text-zinc-400">{metaLine(r)}</p>
+                      ) : null}
+                      <p className="mt-2 text-[11px] font-medium text-zinc-500">
+                        {tx("タップして詳細を見る", "Tap for details")}
+                      </p>
+                    </button>
+                    {canEdit ? (
+                      <div className="flex shrink-0 items-center border-l border-zinc-100 px-2">
+                        <button
+                          type="button"
+                          disabled={closingId === r.id}
+                          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-700 disabled:opacity-50"
+                          onClick={(e) => void onClose(r.id, e)}
+                        >
+                          {closingId === r.id ? "…" : tx("締め切る", "Close")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {closedRows.length > 0 ? (
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-zinc-500">
+              {tx(`締め切り済み（${closedRows.length}）`, `Closed (${closedRows.length})`)}
+            </h3>
+            <ul className="space-y-2">
+              {closedRows.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-left"
+                    onClick={() => setDetail(r)}
+                  >
+                    <p className="truncate text-sm font-medium text-zinc-500 line-through decoration-zinc-300">
+                      {r.title}
+                    </p>
+                    {metaLine(r) ? (
+                      <p className="mt-1 text-[11px] text-zinc-400">{metaLine(r)}</p>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
+
+      {detail ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 flex items-center justify-between border-b border-zinc-100 bg-white px-4 py-3">
+              <h3 className="text-sm font-semibold text-zinc-900">{tx("募集詳細", "Recruitment details")}</h3>
+              <button
+                type="button"
+                className="rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100"
+                aria-label={tx("閉じる", "Close")}
+                onClick={() => setDetail(null)}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <div className="space-y-4 px-4 py-4">
+              <div>
+                <p className="text-xl font-bold leading-snug tracking-tight text-zinc-950">{detail.title}</p>
+                <p className="mt-1 text-[12px] font-medium text-zinc-500">
+                  {detail.status === "open"
+                    ? tx("公開中（閲覧のみ・編集不可）", "Open (view only · not editable)")
+                    : tx("締め切り済み（閲覧のみ）", "Closed (view only)")}
+                </p>
+              </div>
+              {detail.message ? (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{detail.message}</p>
+              ) : (
+                <p className="text-sm text-zinc-400">{tx("募集文はありません。", "No message.")}</p>
+              )}
+              <dl className="grid gap-3 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm">
+                <div>
+                  <dt className="text-[11px] font-semibold text-zinc-500">{tx("役割", "Role")}</dt>
+                  <dd className="mt-0.5 text-zinc-900">{detail.skillName || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold text-zinc-500">
+                    {tx("週の参加時間・形式", "Hours / format")}
+                  </dt>
+                  <dd className="mt-0.5 text-zinc-900">{detail.duration || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold text-zinc-500">{tx("報酬", "Compensation")}</dt>
+                  <dd className="mt-0.5 text-zinc-900">{detail.compensation || "—"}</dd>
+                </div>
+              </dl>
+              {detail.status === "open" && canEdit ? (
+                <button
+                  type="button"
+                  disabled={closingId === detail.id}
+                  className="w-full min-h-[44px] rounded-xl border border-zinc-300 bg-white text-sm font-semibold text-zinc-800 disabled:opacity-50"
+                  onClick={() => void onClose(detail.id)}
+                >
+                  {closingId === detail.id ? "…" : tx("この募集を締め切る", "Close this recruitment")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
