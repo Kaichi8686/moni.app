@@ -947,23 +947,31 @@ function SheetFullscreenEditor({
     el.style.height = `${el.scrollHeight}px`;
   }, [fontSize, sheet.text, align]);
 
+  const displayFontSize = Math.max(20, Math.round(fontSize * 1.6));
+
   return (
     <div
       data-board-ui
-      className="fixed inset-0 z-[600] flex flex-col"
-      style={{ backgroundColor: colors.bg }}
+      className="fixed inset-0 z-[600] flex flex-col bg-zinc-200"
       role="dialog"
       aria-modal="true"
       aria-label={tx("用紙を編集", "Edit sheet")}
     >
+      {/* キャンバスと同じドット地 */}
       <div
-        className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]"
-        style={{ borderBottom: `1px solid ${colors.border}` }}
-      >
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      />
+
+      <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white/80 px-3 text-sm font-semibold text-zinc-900 shadow-sm backdrop-blur active:scale-95"
+          className="inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
         >
           <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
           {tx("完了", "Done")}
@@ -972,7 +980,7 @@ function SheetFullscreenEditor({
           <button
             type="button"
             onClick={onDelete}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-rose-600 shadow-sm backdrop-blur active:scale-95"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
             aria-label={tx("削除", "Delete")}
           >
             <Trash2 className="h-5 w-5" strokeWidth={2.25} />
@@ -982,46 +990,58 @@ function SheetFullscreenEditor({
         )}
       </div>
 
-      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8 ${justify}`}>
-        {canEdit ? (
-          <textarea
-            ref={textareaRef}
-            value={sheet.text}
-            onChange={(event) => {
-              const el = event.target;
-              onPatch({ text: el.value });
-              el.style.height = "auto";
-              el.style.height = `${el.scrollHeight}px`;
-            }}
-            placeholder={tx("ここに書く…", "Write here…")}
-            rows={1}
-            className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
-            style={{
-              fontSize: Math.max(22, Math.round(fontSize * 1.75)),
-              color: textColor,
-              textAlign: align,
-              height: "auto",
-            }}
-          />
-        ) : (
-          <p
-            className="w-full whitespace-pre-wrap leading-relaxed"
-            style={{
-              fontSize: Math.max(22, Math.round(fontSize * 1.75)),
-              color: textColor,
-              textAlign: align,
-            }}
-          >
-            {sheet.text.trim() || tx("（空の用紙）", "(Empty sheet)")}
-          </p>
-        )}
+      {/* キャンバス上と同じ紙カード（上帯・枠・影）を大きく表示 */}
+      <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 py-2">
+        <div
+          className="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-sm"
+          style={{
+            aspectRatio: `${DEFAULT_SHEET_W} / ${DEFAULT_SHEET_H}`,
+            backgroundColor: colors.bg,
+            border: `1px solid ${colors.border}`,
+            boxShadow: "2px 3px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.14)",
+          }}
+        >
+          <div className="h-2.5 shrink-0 opacity-40" style={{ background: colors.border }} />
+          <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 ${justify}`}>
+            {canEdit ? (
+              <textarea
+                ref={textareaRef}
+                value={sheet.text}
+                onChange={(event) => {
+                  const el = event.target;
+                  onPatch({ text: el.value });
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
+                placeholder={tx("ここに書く…", "Write here…")}
+                rows={1}
+                className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
+                style={{
+                  fontSize: displayFontSize,
+                  color: textColor,
+                  textAlign: align,
+                  height: "auto",
+                }}
+              />
+            ) : (
+              <p
+                className="w-full whitespace-pre-wrap leading-relaxed"
+                style={{
+                  fontSize: displayFontSize,
+                  color: textColor,
+                  textAlign: align,
+                }}
+              >
+                {sheet.text.trim() || tx("（空の用紙）", "(Empty sheet)")}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {canEdit ? (
-        <div
-          className="shrink-0 border-t border-black/5 bg-white/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_28px_rgba(0,0,0,0.08)] backdrop-blur"
-        >
-          <div className="mx-auto flex w-full max-w-lg flex-col gap-2.5">
+        <div className="relative z-10 shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-2.5 rounded-2xl bg-white px-3 py-3 shadow-[0_8px_28px_rgba(0,0,0,0.12)]">
             <div className="flex flex-wrap items-center justify-center gap-2">
               <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
                 {FONT_SIZE_PRESETS.map((size) => (
