@@ -127,8 +127,10 @@ export function ProjectDeleteVotePanel({
           <div className="mt-4 space-y-3">
             <div className="rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3 py-3">
               <p className="text-[13px] font-semibold text-[#1A1A1A]">
-                賛成 {state.approveCount} / {state.memberCount}人
-                <span className="ml-2 text-[11px] font-medium text-[#6B7280]">（必要: {threshold}人）</span>
+                賛成 {state.approveCount}人 · 反対 {state.rejectCount}人
+                <span className="ml-2 text-[11px] font-medium text-[#6B7280]">
+                  （メンバー {state.memberCount}人 / 必要: {threshold}人）
+                </span>
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E5E7EB]">
                 <div
@@ -139,7 +141,7 @@ export function ProjectDeleteVotePanel({
               <p className="mt-2 text-[11px] text-[#6B7280]">
                 {state.thresholdMet
                   ? "基準を満たしました。オーナーが最終削除できます。"
-                  : "まだ基準に達していません。"}
+                  : "まだ基準に達していません。投票状況はプロジェクト詳細とロードマップの間にも表示されます。"}
               </p>
             </div>
 
