@@ -21,6 +21,8 @@ export type ProfileView = {
   skills?: string[];
   /** 性格タグ */
   traits?: string[];
+  /** 気になる社会問題（最大3・任意） */
+  socialIssues?: string[];
   followerCount: number;
   followingCount: number;
 };

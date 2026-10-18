@@ -249,7 +249,12 @@ export function ExploreFriendProfilePreview({
                   .join(" · ")}
               </p>
             ) : null}
-            <ProfileSkillsTraits skills={skills} traits={traits} className="pt-1" />
+            <ProfileSkillsTraits
+              skills={skills}
+              traits={traits}
+              socialIssues={profile?.socialIssues ?? []}
+              className="pt-1"
+            />
           </section>
 
           <section className="mt-6 space-y-3">

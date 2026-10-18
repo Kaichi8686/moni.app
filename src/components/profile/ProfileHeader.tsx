@@ -301,7 +301,11 @@ export function ProfileHeader({
             </div>
           ) : null}
 
-          <ProfileSkillsTraits skills={profile.skills ?? []} traits={profile.traits ?? []} />
+          <ProfileSkillsTraits
+            skills={profile.skills ?? []}
+            traits={profile.traits ?? []}
+            socialIssues={profile.socialIssues ?? []}
+          />
 
           {avatarError ? <p className="text-xs text-rose-600">{avatarError}</p> : null}
           {backgroundError ? <p className="text-xs text-rose-600">{backgroundError}</p> : null}

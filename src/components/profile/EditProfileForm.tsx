@@ -15,6 +15,7 @@ import {
 import { sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
+import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
@@ -33,6 +34,7 @@ export function EditProfileForm() {
     avatarUrl: null as string | null,
     skills: [] as string[],
     traits: [] as string[],
+    socialIssues: [] as string[],
     isPrivate: false,
   });
   const [initialForm, setInitialForm] = useState("");
@@ -54,10 +56,12 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
+        "display_name,avatar_url,skills,traits,social_issues,birthday,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,birthday,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,birthday,age,gender,country",
         "display_name,avatar_url,skills,traits,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,age,gender,country",
+        "display_name,avatar_url,skills,traits,social_issues,is_private",
         "display_name,avatar_url,skills,traits,is_private",
         "display_name,avatar_url,skills,traits",
         "display_name,avatar_url",
@@ -78,6 +82,7 @@ export function EditProfileForm() {
         avatarUrl: (data?.avatar_url as string | null) ?? null,
         skills: parseStringTagArray(data?.skills),
         traits: parseStringTagArray(data?.traits),
+        socialIssues: parseSocialIssues(data?.social_issues),
         isPrivate: Boolean(data?.is_private),
       };
       setForm(next);
@@ -121,12 +126,14 @@ export function EditProfileForm() {
     setMessage("");
     const skills = normalizeTagList(form.skills, 3);
     const traits = normalizeTagList(form.traits, 3);
+    const socialIssues = parseSocialIssues(form.socialIssues);
     const birthday = parseBirthday(form.birthday);
     const ageNum = birthday ? ageFromBirthday(birthday) : null;
     const payload: Record<string, string | number | string[] | boolean | null> = {
       display_name: form.displayName.trim() || "ユーザー",
       skills,
       traits,
+      social_issues: socialIssues,
       is_private: form.isPrivate,
     };
     if (birthday) payload.birthday = birthday;
@@ -143,6 +150,7 @@ export function EditProfileForm() {
       delete withoutExtra.gender;
       delete withoutExtra.country;
       delete withoutExtra.traits;
+      delete withoutExtra.social_issues;
       delete withoutExtra.is_private;
       let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
       if (fallback.error) {
@@ -429,8 +437,10 @@ export function EditProfileForm() {
             maxPerSection={3}
             skills={form.skills}
             traits={form.traits}
+            socialIssues={form.socialIssues}
             onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
             onTraitsChange={(traits) => setForm((f) => ({ ...f, traits }))}
+            onSocialIssuesChange={(socialIssues) => setForm((f) => ({ ...f, socialIssues }))}
           />
         </div>
       </div>

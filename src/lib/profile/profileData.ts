@@ -4,13 +4,17 @@ import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { ageFromBirthday } from "@/lib/profile/birthday";
 import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
+import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import type { FollowListUser, ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 
 const PROFILE_SELECTS = [
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues,birthday,age,gender,country",
   "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
   "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,age,gender,country",
+  "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits,social_issues",
   "id,display_name,goal,avatar_url,background_url,bio,website,school,location,skills,traits",
+  "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,social_issues,birthday,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,birthday,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,gender,country",
   "id,display_name,goal,avatar_url,bio,website,school,location,skills,traits,age,country",
@@ -76,6 +80,7 @@ export async function loadProfileView(
   const location = (row.location as string | null | undefined)?.trim() || null;
   const skills = parseStringTagArray(row.skills);
   const traits = parseStringTagArray(row.traits);
+  const socialIssues = parseSocialIssues(row.social_issues);
   const birthdayRaw = (row.birthday as string | null | undefined)?.trim()?.slice(0, 10) || null;
   const birthday = birthdayRaw && /^\d{4}-\d{2}-\d{2}$/.test(birthdayRaw) ? birthdayRaw : null;
   const ageFromDob = ageFromBirthday(birthday);
@@ -110,6 +115,7 @@ export async function loadProfileView(
     ...(country ? { country } : {}),
     ...(skills.length ? { skills } : {}),
     ...(traits.length ? { traits } : {}),
+    ...(socialIssues.length ? { socialIssues } : {}),
     followerCount: followerCount ?? 0,
     followingCount: followingCount ?? 0,
   };
