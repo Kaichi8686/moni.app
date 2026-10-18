@@ -7,18 +7,17 @@ import {
   formatAssignmentsForLine,
   formatScheduleViewInvite,
 } from "@/lib/shift/assign";
-import { generateSlotsFromSchedule } from "@/lib/shift/slots";
 import type {
   AssignedPerson,
   CellAssignment,
   Pref,
   ShiftAssignmentResult,
   ShiftBoard,
-  ShiftBreak,
   ShiftResponse,
-  ShiftScheduleConfig,
 } from "@/lib/shift/types";
 import { cellKey, DEFAULT_SCHEDULE, normalizeBoard } from "@/lib/shift/types";
+
+type SlotDraft = { start: string; end: string; label: string; isBreak: boolean };
 
 const PREF_LABEL: Record<Pref, string> = {
   prefer: "○",
@@ -66,14 +65,8 @@ function AdminInner() {
   const [copied, setCopied] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
 
-  const [dayStart, setDayStart] = useState(DEFAULT_SCHEDULE.dayStart);
-  const [dayEnd, setDayEnd] = useState(DEFAULT_SCHEDULE.dayEnd);
-  const [slotMinutes, setSlotMinutes] = useState(DEFAULT_SCHEDULE.slotMinutes);
+  const [slotDrafts, setSlotDrafts] = useState<SlotDraft[]>([]);
   const [maxConsecutive, setMaxConsecutive] = useState(DEFAULT_SCHEDULE.maxConsecutive);
-  const [breaks, setBreaks] = useState<ShiftBreak[]>([]);
-  const [buddyA, setBuddyA] = useState("");
-  const [buddyB, setBuddyB] = useState("");
-  const [buddyPairs, setBuddyPairs] = useState<ShiftScheduleConfig["buddyPairs"]>([]);
 
   const applyAssignmentState = useCallback((b: ShiftBoard, nextResponses: ShiftResponse[]) => {
     setBoard(b);
@@ -104,12 +97,15 @@ function AdminInner() {
         return;
       }
       const b = normalizeBoard(data.board);
-      setDayStart(b.schedule.dayStart);
-      setDayEnd(b.schedule.dayEnd);
-      setSlotMinutes(b.schedule.slotMinutes);
       setMaxConsecutive(b.schedule.maxConsecutive);
-      setBreaks(b.schedule.breaks);
-      setBuddyPairs(b.schedule.buddyPairs);
+      setSlotDrafts(
+        b.slots.map((s) => ({
+          start: s.start || "09:00",
+          end: s.end || "10:00",
+          label: s.label,
+          isBreak: Boolean(s.isBreak),
+        })),
+      );
       applyAssignmentState(b, data.responses);
     } catch {
       setError("通信に失敗しました");
@@ -121,19 +117,6 @@ function AdminInner() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const previewSlots = useMemo(
-    () =>
-      generateSlotsFromSchedule({
-        dayStart,
-        dayEnd,
-        slotMinutes,
-        breaks,
-        maxConsecutive,
-        buddyPairs,
-      }),
-    [breaks, buddyPairs, dayEnd, dayStart, maxConsecutive, slotMinutes],
-  );
 
   const dayMap = useMemo(() => new Map(board?.days.map((d) => [d.id, d]) ?? []), [board]);
   const slotMap = useMemo(() => new Map(board?.slots.map((s) => [s.id, s]) ?? []), [board]);
@@ -174,18 +157,40 @@ function AdminInner() {
     setError("");
     setSavedMsg("");
     try {
-      const schedule: ShiftScheduleConfig = {
-        dayStart,
-        dayEnd,
-        slotMinutes,
-        breaks,
-        maxConsecutive,
-        buddyPairs,
-      };
+      const work = slotDrafts.filter((s) => !s.isBreak);
+      if (work.length === 0) {
+        setError("シフト用の時間帯を1つ以上追加してください");
+        return;
+      }
+      const first = work[0]!;
+      const last = work[work.length - 1]!;
       const res = await fetch(`/api/shift/${encodeURIComponent(code)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminKey, schedule }),
+        body: JSON.stringify({
+          adminKey,
+          schedule: {
+            ...board.schedule,
+            dayStart: first.start,
+            dayEnd: last.end,
+            maxConsecutive,
+            breaks: slotDrafts
+              .filter((s) => s.isBreak)
+              .map((s, i) => ({
+                id: `br${i + 1}`,
+                label: s.label.trim() || `${s.start}-${s.end}`,
+                start: s.start,
+                end: s.end,
+              })),
+            buddyPairs: board.schedule.buddyPairs ?? [],
+          },
+          slots: slotDrafts.map((s) => ({
+            start: s.start,
+            end: s.end,
+            label: s.label.trim() || `${s.start}-${s.end}`,
+            isBreak: s.isBreak,
+          })),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -193,9 +198,17 @@ function AdminInner() {
         return;
       }
       const b = normalizeBoard(data.board);
+      setSlotDrafts(
+        b.slots.map((s) => ({
+          start: s.start || "09:00",
+          end: s.end || "10:00",
+          label: s.label,
+          isBreak: Boolean(s.isBreak),
+        })),
+      );
       applyAssignmentState(b, responses);
       setLineText("");
-      setSavedMsg("時間設定を保存しました（コマを再生成。割り振りはやり直しが必要です）");
+      setSavedMsg("時間帯を保存しました。割り振りはやり直しが必要です");
     } catch {
       setError("通信に失敗しました");
     } finally {
@@ -545,113 +558,75 @@ function AdminInner() {
       </section>
 
       <section className="shift-panel">
-        <h2 className="shift-h2">時間・コマ設定</h2>
+        <h2 className="shift-h2">時間帯</h2>
         <p className="shift-muted" style={{ marginTop: 0 }}>
-          開始・終了・何分ごと・休み時間を変更できます。保存するとコマが作り直されます。
+          開始・終了を自分で決めて追加してください。休み時間は「休」にチェック。
         </p>
-        <div className="shift-row shift-row-2">
-          <div>
-            <label className="shift-label">開始</label>
-            <input
-              className="shift-input"
-              type="time"
-              value={dayStart}
-              onChange={(e) => setDayStart(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="shift-label">終了</label>
-            <input
-              className="shift-input"
-              type="time"
-              value={dayEnd}
-              onChange={(e) => setDayEnd(e.target.value)}
-            />
-          </div>
-        </div>
-        <div style={{ height: 10 }} />
-        <div className="shift-row shift-row-2">
-          <div>
-            <label className="shift-label">何分ごとに変えるか</label>
-            <div className="shift-row" style={{ gridTemplateColumns: "1fr auto", alignItems: "center" }}>
-              <input
-                className="shift-input"
-                type="number"
-                inputMode="numeric"
-                min={5}
-                max={480}
-                step={5}
-                value={slotMinutes}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  if (!Number.isFinite(n)) return;
-                  setSlotMinutes(Math.max(5, Math.min(480, Math.floor(n) || 5)));
-                }}
-              />
-              <span className="shift-muted" style={{ paddingRight: 4 }}>
-                分
-              </span>
-            </div>
-          </div>
-          <div>
-            <label className="shift-label">連続シフト上限</label>
-            <select
-              className="shift-input"
-              value={maxConsecutive}
-              onChange={(e) => setMaxConsecutive(Number(e.target.value))}
-            >
-              <option value={0}>制限なし</option>
-              {[1, 2, 3, 4].map((n) => (
-                <option key={n} value={n}>
-                  最大{n}コマ連続
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ height: 12 }} />
-        <h3 className="shift-h2" style={{ fontSize: "0.95rem" }}>
-          休み時間（シフトなし）
-        </h3>
         <div className="shift-item-list">
-          {breaks.map((b, i) => (
-            <div className="shift-item" key={b.id}>
-              <div className="shift-row" style={{ width: "100%", gap: 6 }}>
+          {slotDrafts.map((s, i) => (
+            <div className="shift-item" key={`slot-${i}`}>
+              <div style={{ width: "100%", display: "grid", gap: 8 }}>
+                <div className="shift-row" style={{ gridTemplateColumns: "1fr 1fr auto", gap: 6 }}>
+                  <input
+                    className="shift-input"
+                    type="time"
+                    value={s.start}
+                    onChange={(e) => {
+                      const next = [...slotDrafts];
+                      next[i] = { ...s, start: e.target.value };
+                      setSlotDrafts(next);
+                    }}
+                    aria-label="開始"
+                  />
+                  <input
+                    className="shift-input"
+                    type="time"
+                    value={s.end}
+                    onChange={(e) => {
+                      const next = [...slotDrafts];
+                      next[i] = { ...s, end: e.target.value };
+                      setSlotDrafts(next);
+                    }}
+                    aria-label="終了"
+                  />
+                  <label
+                    className="shift-muted"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      whiteSpace: "nowrap",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={s.isBreak}
+                      onChange={(e) => {
+                        const next = [...slotDrafts];
+                        next[i] = { ...s, isBreak: e.target.checked };
+                        setSlotDrafts(next);
+                      }}
+                    />
+                    休
+                  </label>
+                </div>
                 <input
                   className="shift-input"
-                  value={b.label}
+                  value={s.label}
                   onChange={(e) => {
-                    const next = [...breaks];
-                    next[i] = { ...b, label: e.target.value };
-                    setBreaks(next);
+                    const next = [...slotDrafts];
+                    next[i] = { ...s, label: e.target.value };
+                    setSlotDrafts(next);
                   }}
-                />
-                <input
-                  className="shift-input"
-                  type="time"
-                  value={b.start}
-                  onChange={(e) => {
-                    const next = [...breaks];
-                    next[i] = { ...b, start: e.target.value };
-                    setBreaks(next);
-                  }}
-                />
-                <input
-                  className="shift-input"
-                  type="time"
-                  value={b.end}
-                  onChange={(e) => {
-                    const next = [...breaks];
-                    next[i] = { ...b, end: e.target.value };
-                    setBreaks(next);
-                  }}
+                  placeholder={`${s.start}-${s.end}`}
+                  aria-label="時間帯の名前（任意）"
                 />
               </div>
               <button
                 type="button"
                 className="shift-x"
-                onClick={() => setBreaks(breaks.filter((_, j) => j !== i))}
+                onClick={() => setSlotDrafts(slotDrafts.filter((_, j) => j !== i))}
               >
                 ×
               </button>
@@ -662,76 +637,37 @@ function AdminInner() {
           <button
             type="button"
             className="shift-btn shift-btn-ghost"
-            onClick={() =>
-              setBreaks([
-                ...breaks,
-                { id: `br${Date.now()}`, label: "休み時間", start: "15:00", end: "15:30" },
-              ])
-            }
+            onClick={() => {
+              const work = slotDrafts.filter((x) => !x.isBreak);
+              setSlotDrafts([
+                ...slotDrafts,
+                {
+                  start: work[work.length - 1]?.end || "15:00",
+                  end: "17:00",
+                  label: "",
+                  isBreak: false,
+                },
+              ]);
+            }}
           >
-            休み時間を追加
+            時間帯を追加
           </button>
         </div>
 
         <div style={{ height: 12 }} />
-        <h3 className="shift-h2" style={{ fontSize: "0.95rem" }}>
-          バディ（なるべく同じコマ）
-        </h3>
-        <div className="shift-row shift-row-2">
-          <input
-            className="shift-input"
-            placeholder="名前A"
-            value={buddyA}
-            onChange={(e) => setBuddyA(e.target.value)}
-          />
-          <input
-            className="shift-input"
-            placeholder="名前B"
-            value={buddyB}
-            onChange={(e) => setBuddyB(e.target.value)}
-          />
-        </div>
-        <div className="shift-actions">
-          <button
-            type="button"
-            className="shift-btn shift-btn-ghost"
-            onClick={() => {
-              if (!buddyA.trim() || !buddyB.trim()) return;
-              setBuddyPairs([
-                ...buddyPairs,
-                { id: `bp${Date.now()}`, nameA: buddyA.trim(), nameB: buddyB.trim() },
-              ]);
-              setBuddyA("");
-              setBuddyB("");
-            }}
-          >
-            バディを追加
-          </button>
-        </div>
-        <div className="shift-chip-row" style={{ marginTop: 8 }}>
-          {buddyPairs.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="shift-chip"
-              onClick={() => setBuddyPairs(buddyPairs.filter((x) => x.id !== p.id))}
-            >
-              {p.nameA}×{p.nameB} ×
-            </button>
+        <label className="shift-label">連続シフト上限</label>
+        <select
+          className="shift-input"
+          value={maxConsecutive}
+          onChange={(e) => setMaxConsecutive(Number(e.target.value))}
+        >
+          <option value={0}>制限なし</option>
+          {[1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              最大{n}コマ連続
+            </option>
           ))}
-        </div>
-
-        <p className="shift-muted" style={{ marginTop: 12 }}>
-          プレビュー: {previewSlots.length}コマ
-        </p>
-        <div className="shift-chip-row">
-          {previewSlots.map((s) => (
-            <span key={s.id} className="shift-chip" data-on={!s.isBreak}>
-              {s.label}
-              {s.isBreak ? "（休）" : ""}
-            </span>
-          ))}
-        </div>
+        </select>
 
         <div className="shift-actions">
           <button
@@ -740,7 +676,7 @@ function AdminInner() {
             disabled={saving}
             onClick={() => void saveSchedule()}
           >
-            {saving ? "保存中…" : "時間設定を保存"}
+            {saving ? "保存中…" : "時間帯を保存"}
           </button>
         </div>
       </section>

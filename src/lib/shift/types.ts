@@ -123,6 +123,8 @@ export type UpdateBoardInput = {
   days?: Array<{ label: string; date?: string }>;
   roles?: Array<{ name: string; needed: number }>;
   schedule?: ShiftScheduleConfig;
+  /** オーナーが決めた時間帯（渡すと schedule からの自動生成より優先） */
+  slots?: Array<{ label: string; start?: string; end?: string; isBreak?: boolean }>;
   /** メンバー名簿を置き換え（空の希望で再登録） */
   members?: string[];
 };

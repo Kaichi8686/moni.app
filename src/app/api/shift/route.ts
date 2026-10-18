@@ -26,6 +26,12 @@ export async function POST(req: Request) {
   if (Array.isArray(body.members) && body.members.length > 80) {
     return bad("メンバーは80人までです");
   }
+  if (Array.isArray(body.slots)) {
+    if (body.slots.length === 0) return bad("時間帯を1つ以上追加してください");
+    if (body.slots.length > 40) return bad("時間帯は40までです");
+    const hasWork = body.slots.some((s) => !s.isBreak);
+    if (!hasWork) return bad("シフト用の時間帯を1つ以上追加してください");
+  }
 
   const schedule = body.schedule ?? DEFAULT_SCHEDULE;
 

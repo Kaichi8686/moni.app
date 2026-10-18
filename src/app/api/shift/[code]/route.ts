@@ -111,6 +111,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const msg = e instanceof Error ? e.message : "更新に失敗しました";
     if (msg === "NOT_FOUND") return bad("シフト表が見つかりません", 404);
     if (msg === "FORBIDDEN") return bad("管理者キーが違います", 403);
+    if (msg === "SLOTS_REQUIRED") return bad("時間帯を1つ以上追加してください");
     return bad(msg, 500);
   }
 }
