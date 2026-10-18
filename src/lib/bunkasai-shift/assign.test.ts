@@ -88,6 +88,27 @@ function members(n: number, maxShifts = 7): Member[] {
   assert.ok(result.assignments["d2-s1"].includes("m0"));
 }
 
+// 不足時は上限を超えてでも埋める
+{
+  const ms = members(30, 1); // 上限1だと合計30枠しか埋まらない → 上限無視で63枠へ
+  const result = autoAssign(ms, 77);
+  for (const slot of SLOTS) {
+    assert.equal(
+      result.assignments[slot.id].length,
+      NEEDED,
+      `shortfall filled ${slot.id}: ${result.assignments[slot.id].length}`,
+    );
+  }
+  assert.ok(result.warnings.some((w) => w.message.includes("上限を超えて")));
+  const counts = new Map<string, number>();
+  for (const slot of SLOTS) {
+    for (const id of result.assignments[slot.id]) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  assert.ok([...counts.values()].some((c) => c > 1), "someone exceeded max=1");
+}
+
 {
   const stats = loadStats(members(36), autoAssign(members(36), 42).assignments);
   assert.ok(Math.max(...stats.map((s) => s.dayDiff)) <= 2);

@@ -284,11 +284,25 @@ export function autoAssign(
           break;
         }
       }
+      // 上限で入れられないときだけ上限無視で再試行
+      if (!placedCore) {
+        for (const unit of rankUnits([...coreUnits.values()])) {
+          if (tryAddUnit(unit, { ignoreMax: true })) {
+            placedCore = true;
+            warnings.push({
+              slotId: slot.id,
+              shortfall: 0,
+              message: `${slot.dayLabel} ${slot.start}–${slot.end} はコア確保のためシフト上限を超えて配置しました`,
+            });
+            break;
+          }
+        }
+      }
       if (!placedCore) {
         warnings.push({
           slotId: slot.id,
           shortfall: 0,
-          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーを入れられませんでした（NG・連続・同伴必須・上限）`,
+          message: `${slot.dayLabel} ${slot.start}–${slot.end} にコアメンバーを入れられませんでした（NG・連続・同伴必須）`,
         });
       }
     }
@@ -301,30 +315,63 @@ export function autoAssign(
       unique.set([...unit].sort().join("|"), unit);
     }
 
-    const ranked = rankUnits([...unique.values()]);
-    let i = 0;
-    while (picked.length < slot.needed && i < ranked.length) {
-      const L = loads();
-      const D = dayLoads();
-      const load0 = unitLoadSum(L, ranked[i]);
-      const bal0 = unitDayPenalty(D, ranked[i], slot.dayId);
-      let j = i;
-      while (
-        j < ranked.length &&
-        unitLoadSum(L, ranked[j]) === load0 &&
-        unitDayPenalty(D, ranked[j], slot.dayId) === bal0
-      ) {
-        j++;
+    const fillPass = (ignoreMax: boolean) => {
+      const ranked = rankUnits([...unique.values()]);
+      let i = 0;
+      while (picked.length < slot.needed && i < ranked.length) {
+        const L = loads();
+        const D = dayLoads();
+        const load0 = unitLoadSum(L, ranked[i]);
+        const bal0 = unitDayPenalty(D, ranked[i], slot.dayId);
+        let j = i;
+        while (
+          j < ranked.length &&
+          unitLoadSum(L, ranked[j]) === load0 &&
+          unitDayPenalty(D, ranked[j], slot.dayId) === bal0
+        ) {
+          j++;
+        }
+        const band = ranked.slice(i, j);
+        shuffleInPlace(band, rng);
+        for (const unit of band) {
+          if (picked.length >= slot.needed) break;
+          if (unit.every((id) => picked.includes(id))) continue;
+          tryAddUnit(unit, ignoreMax ? { ignoreMax: true } : undefined);
+        }
+        i = j;
       }
-      const band = ranked.slice(i, j);
-      shuffleInPlace(band, rng);
-      for (const unit of band) {
+    };
+
+    // 2) 通常埋め（上限あり）
+    fillPass(false);
+
+    // 3) まだ不足なら上限を無視して追加投入
+    let overMaxFills = 0;
+    if (picked.length < slot.needed) {
+      // 超過が少ない人から優先
+      const overflowRanked = [...unique.values()].sort((ua, ub) => {
+        const L = loads();
+        const over = (unit: string[]) =>
+          Math.max(
+            ...unit.map((id) => {
+              const m = byId.get(id);
+              const max = clampMaxShifts(m?.maxShifts);
+              return (L.get(id) ?? 0) - max;
+            }),
+          );
+        const oa = over(ua);
+        const ob = over(ub);
+        if (oa !== ob) return oa - ob;
+        return unitLoadSum(L, ua) - unitLoadSum(L, ub);
+      });
+      for (const unit of overflowRanked) {
         if (picked.length >= slot.needed) break;
-        // すでに全員入っているならスキップ
         if (unit.every((id) => picked.includes(id))) continue;
-        tryAddUnit(unit);
+        const beforeLen = picked.length;
+        if (tryAddUnit(unit, { ignoreMax: true }) && picked.length > beforeLen) {
+          overMaxFills += 1;
+        }
       }
-      i = j;
     }
 
     assignments[slot.id] = picked;
@@ -338,11 +385,19 @@ export function autoAssign(
       });
     }
 
+    if (overMaxFills > 0) {
+      warnings.push({
+        slotId: slot.id,
+        shortfall: 0,
+        message: `${slot.dayLabel} ${slot.start}–${slot.end} は人数不足のため、シフト上限を超えて ${overMaxFills} 組を追加しました`,
+      });
+    }
+
     if (picked.length < slot.needed) {
       warnings.push({
         slotId: slot.id,
         shortfall: slot.needed - picked.length,
-        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人。あと ${slot.needed - picked.length}人不足（連続・同伴必須・NG・上限の影響）`,
+        message: `${slot.dayLabel} ${slot.start}–${slot.end} は ${picked.length}/${slot.needed}人。あと ${slot.needed - picked.length}人不足（連続・同伴必須・NGの影響。上限無視でも不足）`,
       });
     }
   }
