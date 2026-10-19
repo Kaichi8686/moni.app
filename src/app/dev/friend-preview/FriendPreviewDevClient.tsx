@@ -11,6 +11,7 @@ const DEMO_MEMBER = {
   avatarUrl:
     "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
   skills: ["プログラミング", "デザイン", "動画編集"],
+  interestFields: ["AI・機械学習", "ゲーム", "起業・ビジネス"],
   traits: ["好奇心旺盛", "リーダーシップ", "やさしい"],
 };
 

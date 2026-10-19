@@ -6,11 +6,14 @@ import { Providers } from "@/components/Providers";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
 const notoSansJp = Noto_Sans_JP({
@@ -25,6 +28,7 @@ const dmMono = DM_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   display: "swap",
+  preload: false,
 });
 
 const instrumentSerif = Instrument_Serif({
@@ -33,6 +37,7 @@ const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
   variable: "--font-instrument-serif",
   display: "swap",
+  preload: false,
 });
 
 /** Instagram-style script wordmark (Billabong-adjacent) */
@@ -41,6 +46,7 @@ const grandHotel = Grand_Hotel({
   subsets: ["latin"],
   variable: "--font-moni-script",
   display: "swap",
+  preload: false,
 });
 
 const siteUrlRaw = process.env.NEXT_PUBLIC_SITE_URL?.trim();

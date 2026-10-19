@@ -1,8 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { SignupOnboardingWizard } from "@/components/onboarding/SignupOnboardingWizard";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import {
   resolveOnboardingCompleted,
@@ -10,6 +10,11 @@ import {
 } from "@/lib/profile/onboardingStatus";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
+
+const SignupOnboardingWizard = dynamic(
+  () => import("@/components/onboarding/SignupOnboardingWizard").then((m) => m.SignupOnboardingWizard),
+  { loading: () => <main className="min-h-[100dvh] bg-[#f6f5f2]" aria-busy="true" /> },
+);
 
 function shouldBypassOnboarding(pathname: string): boolean {
   if (pathname === "/login" || pathname.startsWith("/login/")) return true;

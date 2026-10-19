@@ -236,9 +236,10 @@ export default function WorkspaceChat() {
         },
       )
       .subscribe();
+    // Realtime covers inserts; slow backup poll only.
     const poll = window.setInterval(() => {
       if (!cancelled && document.visibilityState === "visible") void loadMessages();
-    }, 2500);
+    }, 20000);
     return () => {
       cancelled = true;
       window.clearInterval(poll);

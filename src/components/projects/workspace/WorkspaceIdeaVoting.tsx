@@ -156,7 +156,7 @@ export default function WorkspaceIdeaVoting() {
       channel.subscribe();
     })();
 
-    const poll = window.setInterval(() => void refresh(), 8000);
+    const poll = window.setInterval(() => void refresh(), 20000);
     return () => {
       cancelled = true;
       window.clearInterval(poll);

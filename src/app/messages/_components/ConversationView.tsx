@@ -198,9 +198,10 @@ export function ConversationView({ conversationId }: Props) {
 
     void ensureRealtimeAuth(client);
 
+    // Realtime covers message/reaction changes; slow backup poll only.
     const poll = window.setInterval(() => {
       if (!cancelled && document.visibilityState === "visible") void load();
-    }, 2500);
+    }, 20000);
 
     return () => {
       cancelled = true;

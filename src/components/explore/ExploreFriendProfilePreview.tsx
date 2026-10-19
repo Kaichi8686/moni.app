@@ -4,13 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, MessageCircle, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
-import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { countryLabel } from "@/lib/profile/countries";
 import { genderLabel } from "@/lib/profile/gender";
+import { interestFieldLabel } from "@/lib/profile/interestFields";
 import { loadProfileView } from "@/lib/profile/profileData";
+import {
+  SKILL_PRESETS,
+  TRAIT_PRESETS,
+  displayTagLabel,
+} from "@/lib/profile/skillsTraits";
 import type { ProfileView } from "@/lib/profile/types";
 import { profileUsername } from "@/lib/profile/username";
 import { supabase } from "@/lib/supabase";
@@ -23,6 +28,7 @@ export type ExploreFriendPreviewMember = {
   avatarUrl?: string | null;
   skills?: string[];
   traits?: string[];
+  interestFields?: string[];
 };
 
 export type ExploreFriendPreviewProject = {
@@ -44,6 +50,40 @@ type Props = {
 
 function formatFollowerCount(n: number, locale: "ja" | "en"): string {
   return n.toLocaleString(locale === "ja" ? "ja-JP" : "en-US");
+}
+
+function BadgeSection({
+  title,
+  empty,
+  tags,
+  renderLabel,
+  chipClassName,
+}: {
+  title: string;
+  empty: string;
+  tags: string[];
+  renderLabel: (tag: string) => string;
+  chipClassName: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">{title}</p>
+      {tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.slice(0, 8).map((tag) => (
+            <span
+              key={`${title}-${tag}`}
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-medium ${chipClassName}`}
+            >
+              {renderLabel(tag)}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[12px] text-zinc-400">{empty}</p>
+      )}
+    </div>
+  );
 }
 
 export function ExploreFriendProfilePreview({
@@ -69,6 +109,9 @@ export function ExploreFriendProfilePreview({
   const displayName = profile?.displayName ?? member.name;
   const skills = profile?.skills?.length ? profile.skills : (member.skills ?? []);
   const traits = profile?.traits?.length ? profile.traits : (member.traits ?? []);
+  const interestFields = profile?.interestFields?.length
+    ? profile.interestFields
+    : (member.interestFields ?? []);
 
   useEffect(() => {
     if (!supabase || !member.id) return;
@@ -298,13 +341,29 @@ export function ExploreFriendProfilePreview({
                   .join(" · ")}
               </p>
             ) : null}
-            <ProfileSkillsTraits
-              skills={skills}
-              traits={traits}
-              interestFields={profile?.interestFields ?? []}
-              socialIssues={profile?.socialIssues ?? []}
-              className="pt-1"
-            />
+            <div className="space-y-3 pt-2">
+              <BadgeSection
+                title={tx("特技", "Skills")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={skills}
+                renderLabel={(tag) => displayTagLabel(tag, SKILL_PRESETS, locale)}
+                chipClassName="border-zinc-200 bg-zinc-50 text-zinc-700"
+              />
+              <BadgeSection
+                title={tx("興味", "Interests")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={interestFields}
+                renderLabel={(tag) => interestFieldLabel(tag, locale)}
+                chipClassName="border-sky-200 bg-sky-50 text-sky-900"
+              />
+              <BadgeSection
+                title={tx("性格", "Personality")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={traits}
+                renderLabel={(tag) => displayTagLabel(tag, TRAIT_PRESETS, locale)}
+                chipClassName="border-violet-200 bg-violet-50 text-violet-800"
+              />
+            </div>
           </section>
 
           <section className="mt-6 space-y-3">
