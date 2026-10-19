@@ -47,7 +47,7 @@ export function ProjectDeleteVotePanel({
   useEffect(() => {
     if (!open) return;
     void reload();
-    const t = window.setInterval(() => void reload(), 5000);
+    const t = window.setInterval(() => void reload(), 15000);
     return () => window.clearInterval(t);
   }, [open, reload]);
 
