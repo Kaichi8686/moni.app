@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { geminiChat } from "@/lib/ai/geminiMessages";
 import { buildMentorSystemExtension, type MentorClientContext } from "@/lib/ai/mentorContext";
 
 const blockedWords = ["自傷", "暴力", "死にたい", "いじめ"];
@@ -114,78 +115,95 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "入力が長すぎます。要点を短くして送ってください。" }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json({
-        reply:
-          "いまはAIメンターを休止中です。予算ができたら OpenAI の API キーを .env.local の OPENAI_API_KEY に入れて、開発サーバーを再起動するとまた会話できます。それまでは他の機能を楽しんでください。",
-        source: "paused",
-      });
-    }
-
     const useIdeaMode = shouldUseIdeaMode(history);
     const contextBlock = buildMentorSystemExtension(body.context);
     const system = `${SYSTEM_BASE}${contextBlock}${useIdeaMode ? IDEA_MODE_INSTRUCTION : ""}`;
-    const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
-    const userFocus = latestUserText(history);
+    const temperature = useIdeaMode ? 0.62 : 0.6;
+    const openaiKey = process.env.OPENAI_API_KEY?.trim();
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: AbortSignal.timeout(45_000),
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "system", content: system }, ...history],
-        max_tokens: 2500,
-        temperature: useIdeaMode ? 0.62 : 0.6,
-        frequency_penalty: 0.2,
-        presence_penalty: 0.1,
-        ...(useIdeaMode
-          ? {
-              metadata: {
-                mode: "idea",
-                focus: userFocus.slice(0, 120),
-              },
-            }
-          : {}),
-      }),
-    });
+    // Prefer OpenAI when configured; otherwise use Gemini (same key as idea excavate / project AI).
+    if (openaiKey) {
+      const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
+      const userFocus = latestUserText(history);
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openaiKey}`,
+          "Content-Type": "application/json",
+        },
+        signal: AbortSignal.timeout(45_000),
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "system", content: system }, ...history],
+          max_tokens: 2500,
+          temperature,
+          frequency_penalty: 0.2,
+          presence_penalty: 0.1,
+          ...(useIdeaMode
+            ? {
+                metadata: {
+                  mode: "idea",
+                  focus: userFocus.slice(0, 120),
+                },
+              }
+            : {}),
+        }),
+      });
 
-    const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string };
-    };
+      const json = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: { message?: string };
+      };
 
-    if (!response.ok) {
-      const detail = json.error?.message ?? response.statusText;
-      const quotaOrBilling =
-        response.status === 429 ||
-        /quota|billing|exceeded your current quota|insufficient_quota/i.test(String(detail));
-      if (quotaOrBilling) {
+      if (response.ok) {
+        const reply = json.choices?.[0]?.message?.content?.trim();
+        if (reply) {
+          return NextResponse.json({ reply, source: "openai" });
+        }
+      } else {
+        const detail = json.error?.message ?? response.statusText;
+        const quotaOrBilling =
+          response.status === 429 ||
+          /quota|billing|exceeded your current quota|insufficient_quota/i.test(String(detail));
+        // If OpenAI is out of quota but Gemini is available, fall through.
+        if (!quotaOrBilling || !geminiKey) {
+          if (quotaOrBilling) {
+            return NextResponse.json({
+              reply:
+                "いまはAIメンターを使えません（OpenAI の利用枠や課金の都合です）。予算が整ったらまた試してね。",
+              source: "paused",
+            });
+          }
+          return NextResponse.json({ error: `OpenAI API エラー: ${detail}` }, { status: 502 });
+        }
+      }
+    }
+
+    if (geminiKey) {
+      const gemini = await geminiChat({
+        system,
+        messages: history,
+        temperature,
+      });
+      if (gemini.ok) {
+        return NextResponse.json({ reply: gemini.text.trim(), source: "gemini" });
+      }
+      if (gemini.code === "quota") {
         return NextResponse.json({
           reply:
-            "いまはAIメンターを使えません（OpenAI の利用枠や課金の都合です）。予算が整ったらまた試してね。",
+            "いまはAIの利用上限に達しています。しばらくしてからもう一度送ってみてください。",
           source: "paused",
         });
       }
-      return NextResponse.json(
-        { error: `OpenAI API エラー: ${detail}` },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: gemini.message }, { status: 502 });
     }
 
-    const reply = json.choices?.[0]?.message?.content?.trim();
-    if (!reply) {
-      return NextResponse.json(
-        { error: "AIからの返答が空でした。もう一度送ってみてください。" },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json({ reply, source: "openai" });
+    return NextResponse.json({
+      reply:
+        "いまはAIメンターを休止中です。Vercel（または .env.local）に GEMINI_API_KEY か OPENAI_API_KEY を設定すると会話できます。",
+      source: "paused",
+    });
   } catch {
     return NextResponse.json({ error: "mentor API error" }, { status: 500 });
   }
