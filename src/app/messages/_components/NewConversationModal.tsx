@@ -9,7 +9,7 @@ import {
   getOrCreateDirectConversation,
   getOrCreateProjectConversation,
 } from "@/lib/messages/api";
-import { loadMutualFollowList } from "@/lib/profile/followActions";
+import { loadFollowingListRecent } from "@/lib/profile/followActions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -21,7 +21,7 @@ type Props = {
   onCreated: () => void;
 };
 
-type Mode = "members" | "mutual" | "projects" | "group";
+type Mode = "members" | "following" | "projects" | "group";
 
 type UserRow = { id: string; display_name: string; avatar_url: string | null };
 type ProjectRow = { id: string; name: string; icon?: string | null };
@@ -29,9 +29,9 @@ type ProjectRow = { id: string; name: string; icon?: string | null };
 export function NewConversationModal({ currentUserId, projectId, onClose, onCreated }: Props) {
   const { tx } = useI18n();
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>(projectId ? "members" : "mutual");
+  const [mode, setMode] = useState<Mode>(projectId ? "members" : "following");
   const [query, setQuery] = useState("");
-  const [mutualPeers, setMutualPeers] = useState<UserRow[]>([]);
+  const [followingPeers, setFollowingPeers] = useState<UserRow[]>([]);
   const [projectMembers, setProjectMembers] = useState<UserRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -43,8 +43,8 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
     if (!supabase) return;
     const client = supabase;
     void (async () => {
-      const list = await loadMutualFollowList(client, currentUserId);
-      setMutualPeers(
+      const list = await loadFollowingListRecent(client, currentUserId, 80);
+      setFollowingPeers(
         list.map((u) => ({
           id: u.id,
           display_name: u.displayName,
@@ -99,11 +99,11 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
     })();
   }, [currentUserId, projectId]);
 
-  const filteredMutual = useMemo(() => {
+  const filteredFollowing = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return mutualPeers;
-    return mutualPeers.filter((u) => u.display_name.toLowerCase().includes(q));
-  }, [mutualPeers, query]);
+    if (!q) return followingPeers;
+    return followingPeers.filter((u) => u.display_name.toLowerCase().includes(q));
+  }, [followingPeers, query]);
 
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -131,8 +131,8 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
     setError(
       result.reason === "not_mutual"
         ? tx(
-            "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
-            "Mail unlocks for project teammates or mutual follows",
+            "フォロー中の相手、または同じプロジェクトのメンバーにメールできます",
+            "Mail unlocks for people you follow or project teammates",
           )
         : tx("トークを開けませんでした", "Could not open chat"),
     );
@@ -165,7 +165,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
     if (!supabase || selectedIds.size === 0) return;
     setLoading(true);
     setError("");
-    const names = mutualPeers.filter((u) => selectedIds.has(u.id)).map((u) => u.display_name);
+    const names = followingPeers.filter((u) => selectedIds.has(u.id)).map((u) => u.display_name);
     const defaultName =
       groupName.trim() ||
       (names.length <= 2 ? names.join("・") : `${names.slice(0, 2).join("・")} ほか`);
@@ -181,7 +181,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
 
   const modes: Array<{ key: Mode; label: string }> = [
     ...(projectId ? [{ key: "members" as const, label: tx("メンバー", "Members") }] : []),
-    { key: "mutual", label: tx("相互フォロー", "Friends") },
+    { key: "following", label: tx("フォロー中", "Following") },
     { key: "projects", label: tx("グループライン", "Group line") },
     { key: "group", label: tx("グループ作成", "New group") },
   ];
@@ -300,12 +300,12 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
           </>
         ) : null}
 
-        {mode === "mutual"
+        {mode === "following"
           ? renderUserList(
-              filteredMutual,
+              filteredFollowing,
               tx(
-                "相互フォローの人がいません。同じプロジェクトのメンバーとはメンバータブからメールできます。",
-                "No mutual follows yet. Project teammates are under the Members tab.",
+                "フォロー中の人がいません。探すタブから友達をフォローするとここに表示されます。",
+                "You’re not following anyone yet. Follow friends in Discover to see them here.",
               ),
             )
           : null}
@@ -355,16 +355,16 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                 onChange={(e) => setGroupName(e.target.value)}
               />
               <p className="text-[11px] text-zinc-500">
-                {tx("相互フォローの人から参加者を選んでください", "Pick mutual follows")}
+                {tx("フォロー中の人から参加者を選んでください", "Pick people you follow")}
               </p>
             </div>
             <ul>
-              {filteredMutual.length === 0 ? (
+              {filteredFollowing.length === 0 ? (
                 <li className="px-4 py-8 text-center text-sm text-zinc-500">
-                  {tx("相互フォローの人がいません。", "No mutual follows yet.")}
+                  {tx("フォロー中の人がいません。", "You’re not following anyone yet.")}
                 </li>
               ) : (
-                filteredMutual.map((u) => {
+                filteredFollowing.map((u) => {
                   const selected = selectedIds.has(u.id);
                   return (
                     <li key={u.id}>

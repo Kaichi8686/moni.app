@@ -57,13 +57,16 @@ export function FriendPreviewDevClient() {
           onToggleFollow={() => {
             if (following) {
               setFollowing(false);
+              setPending(false);
               return;
             }
             if (pending) {
               setPending(false);
+              setFollowing(true);
               return;
             }
-            setPending(true);
+            // 公開アカウント想定: 1タップでフォロー（メッセージボタン出現）
+            setFollowing(true);
           }}
         />
       ) : null}

@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboxConversation, Message, MessageContentType } from "@/lib/types/messages";
 import { mapInboxRow, mapMessageRow, profileToSender } from "@/lib/messages/mappers";
-import { areMutualFollowers, loadMutualFollowList } from "@/lib/profile/followActions";
+import { loadMutualFollowList } from "@/lib/profile/followActions";
+import { isFollowingUser } from "@/lib/profile/profileData";
 
 export type DirectConversationResult =
   | { ok: true; conversationId: string }
@@ -34,6 +35,30 @@ export async function shareProjectMembership(
   return false;
 }
 
+/** 既存の 1:1 があるか（やりとり済み／空ルーム含む） */
+export async function hasExistingDirectConversation(
+  client: SupabaseClient,
+  userId: string,
+  otherUserId: string,
+): Promise<boolean> {
+  if (!userId || !otherUserId || userId === otherUserId) return false;
+  const peers = await loadExistingDirectPeerIds(client, userId);
+  return peers.has(otherUserId);
+}
+
+/** プロフィール側メール: フォロー中 / プロジェクト仲間 / 既存DM なら開始可 */
+export async function canStartDirectMessage(
+  client: SupabaseClient,
+  userId: string,
+  otherUserId: string,
+): Promise<boolean> {
+  if (!userId || !otherUserId || userId === otherUserId) return false;
+  if (await isFollowingUser(client, userId, otherUserId)) return true;
+  if (await shareProjectMembership(client, userId, otherUserId)) return true;
+  if (await hasExistingDirectConversation(client, userId, otherUserId)) return true;
+  return false;
+}
+
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
@@ -42,10 +67,9 @@ export async function getOrCreateDirectConversation(
   const uid = sessionData.session?.user.id;
   if (!uid) return { ok: false, reason: "error" };
 
-  // RPC 側で相互フォロー／プロジェクト仲間を判定。クライアントは先に弾いて無駄な RPC を減らす。
-  const mutual = await areMutualFollowers(client, uid, otherUserId);
-  const projectPeer = mutual ? true : await shareProjectMembership(client, uid, otherUserId);
-  if (!mutual && !projectPeer) return { ok: false, reason: "not_mutual" };
+  // RPC 側でフォロー中／プロジェクト仲間／既存DMを判定。クライアントは先に弾いて無駄な RPC を減らす。
+  const allowed = await canStartDirectMessage(client, uid, otherUserId);
+  if (!allowed) return { ok: false, reason: "not_mutual" };
 
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,

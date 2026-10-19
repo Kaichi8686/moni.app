@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import {
   hasPendingFollowRequest,
   isFollowingUser,
   loadFollowList,
 } from "@/lib/profile/profileData";
 import type { FollowListUser } from "@/lib/profile/types";
+import { profileUsername } from "@/lib/profile/username";
 
 export type FollowRelationState = "following" | "pending" | "none";
 
@@ -163,6 +165,51 @@ export async function loadMutualFollowList(
     ((data ?? []) as Array<{ follower_id: string }>).map((r) => r.follower_id),
   );
   return following.filter((u) => mutualIds.has(u.id));
+}
+
+/** People the viewer follows, newest first (for 「フォロー中の人とチャット」). */
+export async function loadFollowingListRecent(
+  client: SupabaseClient,
+  viewerId: string,
+  limit = 40,
+): Promise<FollowListUser[]> {
+  if (!viewerId) return [];
+
+  const { data: rows, error } = await client
+    .from("follows")
+    .select("following_id, created_at")
+    .eq("follower_id", viewerId)
+    .order("created_at", { ascending: false })
+    .limit(Math.max(1, limit));
+
+  if (error || !rows?.length) return [];
+
+  const ids = (rows as Array<{ following_id: string }>).map((r) => r.following_id);
+  const { data: profiles } = await client
+    .from("profiles")
+    .select("id,display_name,avatar_url")
+    .in("id", ids);
+
+  const profileMap = new Map<string, FollowListUser>();
+  for (const p of profiles ?? []) {
+    const id = p.id as string;
+    const displayName = ((p.display_name as string) || "ユーザー").trim() || "ユーザー";
+    profileMap.set(id, {
+      id,
+      displayName,
+      username: profileUsername(displayName, id),
+      avatarUrl: resolveMemberAvatarUrl(id, (p.avatar_url as string | null) ?? null),
+      isFollowing: true,
+      isPending: false,
+    });
+  }
+
+  const result: FollowListUser[] = [];
+  for (const id of ids) {
+    const user = profileMap.get(id);
+    if (user) result.push(user);
+  }
+  return result;
 }
 
 /**
