@@ -73,14 +73,19 @@ function IdeaHubInner() {
 
   const setAiMode = useCallback(
     (mode: IdeaPersonalAiMode) => {
-      setStartFreshOnChat(false);
+      // Switching 相談 / 発掘 should open a blank thread, not the last saved chat.
+      setOpenHistoryOnChat(false);
+      setStartFreshOnChat(true);
+      setChatKey((k) => k + 1);
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
     [replaceTab],
   );
 
+  const inAiChat = view === "chat";
+
   return (
-    <div className="relative min-h-[100dvh] bg-white pb-bottom-nav">
+    <div className={`relative min-h-[100dvh] bg-white ${inAiChat ? "" : "pb-bottom-nav"}`}>
       {view === "mine" || view === "board" || view === "interviews" ? (
         <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
@@ -91,7 +96,7 @@ function IdeaHubInner() {
 
       {view === "mine" ? <MyIdeasPanel /> : null}
 
-      {view === "chat" ? (
+      {inAiChat ? (
         <IdeaInterviewApp
           key={`${aiMode}-${chatKey}`}
           variant="hub"
@@ -144,7 +149,7 @@ function IdeaHubInner() {
         </button>
       ) : null}
 
-      <AppBottomNav />
+      {inAiChat ? null : <AppBottomNav />}
     </div>
   );
 }

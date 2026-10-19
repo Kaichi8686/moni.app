@@ -8,7 +8,7 @@ type Props = {
 };
 
 /** Shared emphasis for `**important**` spans (bold + larger). Used by project & Ideas AI. */
-export const AI_CHAT_EMPHASIS_CLASS = "ai-chat-emphasis font-semibold";
+export const AI_CHAT_EMPHASIS_CLASS = "ai-chat-emphasis font-bold";
 
 /** Renders AI chat text with `**bold**` and preserved newlines (emojis pass through). */
 export function AiChatRichText({ text, className }: Props) {
