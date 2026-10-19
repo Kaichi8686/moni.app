@@ -5,13 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { ja, enUS } from "date-fns/locale";
-import { FolderKanban, Pencil, Search, Users } from "lucide-react";
+import { FolderKanban, Search, Users } from "lucide-react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
-import { NewConversationModal } from "@/app/messages/_components/NewConversationModal";
 import {
   ensureMyProjectConversations,
   ensureProjectScopedMail,
@@ -61,7 +60,6 @@ export function InboxList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showNew, setShowNew] = useState(false);
   const [showFollowingPicker, setShowFollowingPicker] = useState(false);
   const [recentFollowing, setRecentFollowing] = useState<FollowListUser[]>([]);
   const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
@@ -280,15 +278,15 @@ export function InboxList() {
     }
     if (filter === "projects") {
       return tx(
-        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。右上から手動でも開始できます。",
-        "No project group chats yet. Joined projects appear here automatically, or start one from the pencil button.",
+        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。",
+        "No project group chats yet. Joined projects appear here automatically.",
       );
     }
     if (filter === "unread") {
       return tx("未読のトークはありません。", "No unread chats.");
     }
     if (filter === "groups") {
-      return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
+      return tx("グループトークはまだありません。", "No group chats yet.");
     }
     return tx(
       "まだトークがありません。上の「フォロー中の人とチャット」から始められます。",
@@ -302,25 +300,7 @@ export function InboxList() {
         <AppBrandHeader
           bare
           className="py-1"
-          right={
-            <div className="flex items-center gap-1">
-              {userId ? <ProjectNoticeBell userId={userId} /> : null}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!userId) {
-                    router.push("/login?next=/messages");
-                    return;
-                  }
-                  setShowNew(true);
-                }}
-                className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
-                aria-label={tx("新しいメール", "New mail")}
-              >
-                <Pencil className="h-5 w-5" />
-              </button>
-            </div>
-          }
+          right={userId ? <ProjectNoticeBell userId={userId} /> : null}
         />
       </div>
 
@@ -393,18 +373,6 @@ export function InboxList() {
           </>
         )}
       </div>
-
-      {showNew && userId ? (
-        <NewConversationModal
-          currentUserId={userId}
-          projectId={scopedProjectId ?? undefined}
-          onClose={() => setShowNew(false)}
-          onCreated={() => {
-            setShowNew(false);
-            void load({ syncPeers: true });
-          }}
-        />
-      ) : null}
 
       {showFollowingPicker && userId ? (
         <FollowingChatPicker
