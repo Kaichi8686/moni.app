@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { ContactShadows, Environment, Html, RoundedBox } from "@react-three/drei";
+import { ContactShadows, Html, RoundedBox } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -15,12 +15,15 @@ import { rememberLastProject } from "@/lib/workspace/lastProject";
 
 /** Active cube Y rotation per frame (~60fps). Kept slow so faces stay readable. */
 const ACTIVE_SPIN_PER_FRAME = 0.003;
-const FACE_TEX_SIZE = 512;
+/** 256 keeps faces sharp enough while cutting GPU/CPU texture cost in half. */
+const FACE_TEX_SIZE = 256;
 /** Soft rounded cube — matches the floating carousel look. */
 const CUBE_SIZE = 1.9;
 const CUBE_RADIUS = 0.22;
-const CUBE_SMOOTHNESS = 5;
+const CUBE_SMOOTHNESS = 3;
 const CUBE_SPACING = 2.85;
+const INACTIVE_TINT = new THREE.Color("#c4c4c4");
+const ACTIVE_TINT = new THREE.Color("#ffffff");
 
 type Props = {
   projects: ProjectRow[];
@@ -50,38 +53,43 @@ function hexForProject(id: string) {
 }
 
 function paintEmojiOrLetter(ctx: CanvasRenderingContext2D, label: string, isEmoji: boolean) {
+  const mid = FACE_TEX_SIZE / 2;
+  const scale = FACE_TEX_SIZE / 512;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   if (isEmoji) {
-    ctx.font = "280px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
-    ctx.fillText(label, FACE_TEX_SIZE / 2, FACE_TEX_SIZE / 2 + 14);
+    ctx.font = `${Math.round(280 * scale)}px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif`;
+    ctx.fillText(label, mid, mid + 7 * scale);
   } else {
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 220px system-ui, sans-serif";
-    ctx.fillText(label, FACE_TEX_SIZE / 2, FACE_TEX_SIZE / 2 + 16);
+    ctx.font = `bold ${Math.round(220 * scale)}px system-ui, sans-serif`;
+    ctx.fillText(label, mid, mid + 8 * scale);
   }
 }
 
 function paintFaceFallback(ctx: CanvasRenderingContext2D, opts: FacePaintOpts & { photoPending?: boolean }) {
+  const s = FACE_TEX_SIZE;
+  const mid = s / 2;
+  const scale = s / 512;
   ctx.fillStyle = opts.photoPending ? "#18181b" : opts.bg;
-  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  ctx.fillRect(0, 0, s, s);
   if (opts.photoPending) return;
 
-  const vignette = ctx.createRadialGradient(256, 220, 40, 256, 256, 320);
+  const vignette = ctx.createRadialGradient(mid, 220 * scale, 40 * scale, mid, mid, 320 * scale);
   vignette.addColorStop(0, "rgba(255,255,255,0.18)");
   vignette.addColorStop(1, "rgba(0,0,0,0.22)");
   ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+  ctx.fillRect(0, 0, s, s);
 
   if (opts.create) {
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 36;
+    ctx.lineWidth = 36 * scale;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(256, 140);
-    ctx.lineTo(256, 372);
-    ctx.moveTo(140, 256);
-    ctx.lineTo(372, 256);
+    ctx.moveTo(mid, 140 * scale);
+    ctx.lineTo(mid, 372 * scale);
+    ctx.moveTo(140 * scale, mid);
+    ctx.lineTo(372 * scale, mid);
     ctx.stroke();
     return;
   }
@@ -248,27 +256,17 @@ function remapRoundedBoxPlanarUVs(geometry: THREE.BufferGeometry, size: number) 
 }
 
 function createFaceMaterials(tex: THREE.CanvasTexture, hasPhoto: boolean) {
-  return Array.from({ length: 6 }, () => {
-    if (hasPhoto) {
-      return new THREE.MeshStandardMaterial({
-        map: tex,
-        roughness: 0.52,
-        metalness: 0,
-        color: "#ffffff",
-        transparent: true,
-        opacity: 1,
-      });
-    }
-    return new THREE.MeshPhysicalMaterial({
+  // MeshStandardMaterial is cheaper than Physical+clearcoat and looks close enough here.
+  return Array.from({ length: 6 }, () =>
+    new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.38,
-      metalness: 0.12,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.4,
+      roughness: hasPhoto ? 0.52 : 0.42,
+      metalness: hasPhoto ? 0 : 0.08,
+      color: "#ffffff",
       transparent: true,
       opacity: 1,
-    });
-  });
+    }),
+  );
 }
 
 function useFaceMaterials(tex: THREE.CanvasTexture, hasPhoto: boolean) {
@@ -358,10 +356,10 @@ function ProjectCubeMesh({
     /* eslint-disable react-hooks/immutability -- R3F mesh materials */
     if (!hasPhoto) {
       const targetOpacity = active ? 1 : 0.48;
-      const targetColor = active ? "#ffffff" : "#c4c4c4";
+      const targetColor = active ? ACTIVE_TINT : INACTIVE_TINT;
       for (const mat of materials) {
         mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.1);
-        mat.color.lerp(new THREE.Color(targetColor), 0.08);
+        mat.color.lerp(targetColor, 0.08);
       }
     } else {
       for (const mat of materials) {
@@ -435,10 +433,9 @@ function SceneCubes({
 
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[4, 6, 3]} intensity={1.15} castShadow shadow-mapSize={[1024, 1024]} />
-      <directionalLight position={[-3, 2, -2]} intensity={0.35} />
-      <Environment preset="city" environmentIntensity={0.45} />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[4, 6, 3]} intensity={1.05} castShadow shadow-mapSize={[512, 512]} />
+      <directionalLight position={[-3, 2, -2]} intensity={0.4} />
 
       {visible.map(({ item, index, side }) => (
         <ProjectCubeMesh
@@ -453,11 +450,11 @@ function SceneCubes({
 
       <ContactShadows
         position={[0, -1.35, 0]}
-        opacity={0.38}
+        opacity={0.32}
         scale={14}
-        blur={2.8}
+        blur={2.2}
         far={4.2}
-        resolution={512}
+        resolution={256}
         color="#1a1a1a"
       />
     </>
@@ -481,7 +478,15 @@ export function ProjectCubeCarousel({
 }: Props) {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [tabVisible, setTabVisible] = useState(true);
   const pressLockRef = useRef(false);
+
+  useEffect(() => {
+    const sync = () => setTabVisible(document.visibilityState === "visible");
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
 
   const items = useMemo<CubeItem[]>(
     () => [...projects.map((project) => ({ kind: "project" as const, project })), { kind: "create", id: "__create__" }],
@@ -552,9 +557,10 @@ export function ProjectCubeCarousel({
         <Canvas
           className="!absolute inset-0 h-full w-full"
           shadows
-          dpr={[1, 1.75]}
+          dpr={[1, 1.25]}
+          frameloop={tabVisible ? "always" : "never"}
           camera={{ position: [0, 0.35, 5.35], fov: 38, near: 0.1, far: 40 }}
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
           style={{ background: "transparent" }}
         >
           <Suspense fallback={<SceneFallback />}>

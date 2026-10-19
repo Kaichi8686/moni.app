@@ -479,7 +479,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
     document.addEventListener("visibilitychange", onVisible);
     const poll = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshMailUnread();
-    }, 15000);
+    }, 45000);
 
     return () => {
       sub.subscription.unsubscribe();

@@ -42,7 +42,7 @@ export function ProjectNoticeBell({ userId, onAccepted }: Props) {
     document.addEventListener("visibilitychange", onVisible);
     const poll = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshBadge(userId);
-    }, 20000);
+    }, 45000);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(poll);
