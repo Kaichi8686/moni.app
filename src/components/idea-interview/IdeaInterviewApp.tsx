@@ -148,9 +148,15 @@ export function IdeaInterviewApp({
     setHistoryOpen(true);
   }, [openHistoryOnMount, hydrated]);
 
-  // Must run before hydrate so the first load is a blank "新規" thread.
-  if (startFreshOnMount && !hydrated) {
-    startFreshOnModeChangeRef.current = true;
+  /**
+   * Hub opens / mode switches start on a blank "新規" thread. Keep forcing fresh
+   * across guest→user ownerKey flips, but only once per ownerKey so mid-chat
+   * re-hydrates do not wipe the active thread.
+   */
+  const hubForceFreshRef = useRef(Boolean(isHub && startFreshOnMount));
+  const hubFreshForOwnerRef = useRef<string | null>(null);
+  if (isHub && startFreshOnMount) {
+    hubForceFreshRef.current = true;
   }
 
   useEffect(() => {
@@ -230,10 +236,13 @@ export function IdeaInterviewApp({
 
   useEffect(() => {
     if (!ownerReady) return;
-    const preferFresh = startFreshOnModeChangeRef.current;
+    const hubNeedsFresh =
+      isHub && hubForceFreshRef.current && hubFreshForOwnerRef.current !== ownerKey;
+    const preferFresh = startFreshOnModeChangeRef.current || hubNeedsFresh;
     startFreshOnModeChangeRef.current = false;
     hydrateMode(aiMode, preferFresh);
-  }, [ownerReady, ownerKey, aiMode, projectScopeId, hydrateMode]);
+    if (preferFresh) hubFreshForOwnerRef.current = ownerKey;
+  }, [ownerReady, ownerKey, aiMode, projectScopeId, hydrateMode, isHub]);
 
   useEffect(() => {
     if (!hydrated || !activeId || isConsult || !persistScopeRef.current) return;
@@ -319,6 +328,8 @@ export function IdeaInterviewApp({
 
   const openConversation = useCallback(
     (conversation: { id: string }) => {
+      hubForceFreshRef.current = false;
+      hubFreshForOwnerRef.current = ownerKey;
       if (isConsult) {
         const full = consultConversations.find((c) => c.id === conversation.id);
         if (!full) return;
@@ -340,7 +351,7 @@ export function IdeaInterviewApp({
       setSavedSeedIds({});
       setHistoryOpen(false);
     },
-    [consultConversations, excavateConversations, isConsult],
+    [consultConversations, excavateConversations, isConsult, ownerKey],
   );
 
   const deleteConversation = useCallback(
@@ -661,7 +672,14 @@ export function IdeaInterviewApp({
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
   const switchHubMode = (mode: IdeaPersonalAiMode) => {
-    if (mode === aiMode) return;
+    if (mode === aiMode) {
+      // Already on this mode — still jump to a blank thread.
+      startNewChat();
+      return;
+    }
+    hubForceFreshRef.current = true;
+    hubFreshForOwnerRef.current = null;
+    startFreshOnModeChangeRef.current = true;
     if (onModeChange) onModeChange(mode);
     else setAiMode(mode);
   };

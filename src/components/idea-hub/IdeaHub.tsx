@@ -73,7 +73,10 @@ function IdeaHubInner() {
 
   const setAiMode = useCallback(
     (mode: IdeaPersonalAiMode) => {
-      setStartFreshOnChat(false);
+      // Switching 相談 / 発掘 should open a blank thread, not the last saved chat.
+      setOpenHistoryOnChat(false);
+      setStartFreshOnChat(true);
+      setChatKey((k) => k + 1);
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
     [replaceTab],
