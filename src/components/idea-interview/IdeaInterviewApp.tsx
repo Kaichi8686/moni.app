@@ -128,6 +128,18 @@ export function IdeaInterviewApp({
   const startFreshOnModeChangeRef = useRef(false);
   /** Persist only under the owner(+project) scope that was last hydrated. */
   const persistScopeRef = useRef("");
+  /** Latest chat snapshot for a synchronous flush on unmount (mode switch / exit). */
+  const persistSnapshotRef = useRef({
+    ownerKey: "guest",
+    projectScopeId: undefined as string | undefined,
+    isConsult: false,
+    activeId: "",
+    newTitle: "",
+    consultMessages: [] as AiChatMessage[],
+    consultConversations: [] as AiSavedConversation[],
+    excavateConversations: [] as IdeaInterviewConversation[],
+    session: emptySession(),
+  });
 
   const isConsult = aiMode === "consult";
   const messages = isConsult ? consultMessages : (session.messages as AiChatMessage[]);
@@ -138,6 +150,18 @@ export function IdeaInterviewApp({
       consultMessages.every((m) => m.role === "assistant")
     : excavateHome;
   const projectScopeId = isProject ? projectId : undefined;
+
+  persistSnapshotRef.current = {
+    ownerKey,
+    projectScopeId,
+    isConsult,
+    activeId,
+    newTitle,
+    consultMessages,
+    consultConversations,
+    excavateConversations,
+    session,
+  };
 
   useEffect(() => {
     if (!isProject) setAiMode(initialMode);
@@ -196,10 +220,15 @@ export function IdeaInterviewApp({
         const loaded = loadConsultConversations(ownerKey, newTitle);
         if (preferFresh) {
           const blank = blankConsultConversation(newTitle);
-          const next = [blank, ...loaded.conversations].slice(0, 30);
+          // Keep prior threads (incl. ones with user turns) under the new blank.
+          const kept = loaded.conversations.filter(
+            (c) => c.id !== blank.id && c.messages.some((m) => m.role === "user"),
+          );
+          const next = [blank, ...kept].slice(0, 30);
           setConsultConversations(next);
           setActiveId(blank.id);
           setConsultMessages(blank.messages);
+          saveConsultConversations(ownerKey, blank.id, next);
         } else {
           setConsultConversations(loaded.conversations);
           setActiveId(loaded.activeId);
@@ -213,10 +242,18 @@ export function IdeaInterviewApp({
         const loaded = loadIdeaInterviewConversations(ownerKey, newTitle, projectScopeId);
         if (preferFresh) {
           const blank = blankIdeaInterviewConversation(newTitle);
-          const next = [blank, ...loaded.conversations].slice(0, 30);
+          const kept = loaded.conversations.filter(
+            (c) =>
+              c.id !== blank.id &&
+              (c.messages.some((m) => m.role === "user") ||
+                c.meta.phase === "chat" ||
+                c.meta.phase === "results"),
+          );
+          const next = [blank, ...kept].slice(0, 30);
           setExcavateConversations(next);
           setActiveId(blank.id);
           setSession(conversationToSession(blank));
+          saveIdeaInterviewConversations(ownerKey, blank.id, next, projectScopeId);
         } else {
           setExcavateConversations(loaded.conversations);
           setActiveId(loaded.activeId);
@@ -243,6 +280,54 @@ export function IdeaInterviewApp({
     hydrateMode(aiMode, preferFresh);
     if (preferFresh) hubFreshForOwnerRef.current = ownerKey;
   }, [ownerReady, ownerKey, aiMode, projectScopeId, hydrateMode, isHub]);
+
+  // Flush the active thread to localStorage on unmount so mode switch / back keeps history.
+  useEffect(() => {
+    return () => {
+      const snap = persistSnapshotRef.current;
+      if (!snap.activeId || !persistScopeRef.current) return;
+      if (snap.isConsult) {
+        if (persistScopeRef.current !== `consult:${snap.ownerKey}`) return;
+        const hasUser = snap.consultMessages.some((m) => m.role === "user");
+        if (!hasUser) {
+          // Still persist the list as-is so siblings are not dropped.
+          saveConsultConversations(snap.ownerKey, snap.activeId, snap.consultConversations);
+          return;
+        }
+        const next = upsertActiveConversation(
+          snap.consultConversations,
+          snap.activeId,
+          snap.consultMessages,
+          snap.newTitle,
+        );
+        saveConsultConversations(snap.ownerKey, snap.activeId, next);
+        return;
+      }
+      const expected = snap.projectScopeId
+        ? `excavate:project:${snap.projectScopeId}:${snap.ownerKey}`
+        : `excavate:${snap.ownerKey}`;
+      if (persistScopeRef.current !== expected) return;
+      const msgs = snap.session.messages as AiChatMessage[];
+      const hasUser = msgs.some((m) => m.role === "user");
+      if (!hasUser && snap.session.phase !== "results" && snap.session.phase !== "chat") {
+        saveIdeaInterviewConversations(
+          snap.ownerKey,
+          snap.activeId,
+          snap.excavateConversations,
+          snap.projectScopeId,
+        );
+        return;
+      }
+      const next = upsertIdeaInterviewConversation(
+        snap.excavateConversations,
+        snap.activeId,
+        msgs,
+        sessionToThreadMeta(snap.session),
+        snap.newTitle,
+      );
+      saveIdeaInterviewConversations(snap.ownerKey, snap.activeId, next, snap.projectScopeId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !activeId || isConsult || !persistScopeRef.current) return;
