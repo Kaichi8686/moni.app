@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageCircle, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
+import { ArrowLeft, ChevronRight, MessageCircle, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
+import { ExploreFriendProjectDetail } from "@/components/explore/ExploreFriendProjectDetail";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -101,6 +102,8 @@ export function ExploreFriendProfilePreview({
   const [shareNotice, setShareNotice] = useState("");
   const [messageError, setMessageError] = useState("");
   const [messageLoading, setMessageLoading] = useState(false);
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+  const openProject = projects.find((p) => p.id === openProjectId) ?? null;
 
   const avatarSrc = resolveMemberAvatarUrl(member.id, member.avatarUrl);
   const username = profile?.username ?? profileUsername(member.name, member.id ?? "guest");
@@ -384,16 +387,32 @@ export function ExploreFriendProfilePreview({
             ) : (
               <ul className="space-y-2.5">
                 {projects.map((p) => (
-                  <li key={`peer-proj-${p.id}`} className="rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 flex-1 font-semibold text-zinc-900">{p.name}</p>
-                      <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600 ring-1 ring-zinc-200">
-                        {p.visibility === "public" ? tx("公開", "Public") : tx("非公開", "Private")}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-zinc-600">
-                      {(p.description ?? "").trim() || tx("説明はまだありません。", "No description yet.")}
-                    </p>
+                  <li key={`peer-proj-${p.id}`}>
+                    <button
+                      type="button"
+                      disabled={!p.id}
+                      onClick={() => setOpenProjectId(p.id)}
+                      className="w-full rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-3.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label={tx(`${p.name}の詳細を見る`, `View details for ${p.name}`)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 font-semibold text-zinc-900">{p.name}</p>
+                        <span className="inline-flex shrink-0 items-center gap-1">
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-zinc-600 ring-1 ring-zinc-200">
+                            {p.visibility === "public" ? tx("公開", "Public") : tx("非公開", "Private")}
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-zinc-400" aria-hidden />
+                        </span>
+                      </div>
+                      <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-zinc-600">
+                        {(p.description ?? "").trim() || tx("説明はまだありません。", "No description yet.")}
+                      </p>
+                      <p className="mt-2 text-[11px] font-medium text-zinc-400">
+                        {p.visibility === "public"
+                          ? tx("タップして詳細を見る（閲覧のみ）", "Tap to view details (read-only)")
+                          : tx("タップして確認（非公開はメンバーのみ）", "Tap to check (private: members only)")}
+                      </p>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -401,6 +420,23 @@ export function ExploreFriendProfilePreview({
           </section>
         </div>
       </div>
+
+      {openProjectId ? (
+        <ExploreFriendProjectDetail
+          projectId={openProjectId}
+          seed={
+            openProject
+              ? {
+                  id: openProject.id,
+                  name: openProject.name,
+                  description: openProject.description,
+                  visibility: openProject.visibility,
+                }
+              : null
+          }
+          onClose={() => setOpenProjectId(null)}
+        />
+      ) : null}
     </div>
   );
 }
