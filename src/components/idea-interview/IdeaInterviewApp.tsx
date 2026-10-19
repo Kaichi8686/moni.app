@@ -655,7 +655,7 @@ export function IdeaInterviewApp({
   }
 
   const shellClass = isHub
-    ? "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-[420px] w-full overflow-hidden bg-white"
+    ? "flex h-[100dvh] min-h-[420px] w-full overflow-hidden bg-white"
     : isProject
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
