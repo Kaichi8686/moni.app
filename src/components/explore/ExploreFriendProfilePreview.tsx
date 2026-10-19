@@ -216,23 +216,23 @@ export function ExploreFriendProfilePreview({
             type="button"
             disabled={!member.id}
             onClick={onToggleFollow}
-            className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-[16px] font-bold transition-all duration-300 ease-out active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`inline-flex h-12 items-center justify-center gap-2 rounded-full font-bold transition-all duration-300 ease-out active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
               isFollowing
-                ? "min-w-0 flex-[0.34] bg-white/18 px-3 text-[14px] text-white backdrop-blur-md ring-1 ring-white/25"
+                ? "shrink-0 bg-white/18 px-3.5 text-[13px] text-white backdrop-blur-md ring-1 ring-white/25"
                 : isPending
-                  ? "w-full bg-white/18 text-white backdrop-blur-md ring-1 ring-white/25"
-                  : "w-full bg-[#FFE600] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
+                  ? "w-full bg-white/18 px-5 text-[16px] text-white backdrop-blur-md ring-1 ring-white/25"
+                  : "w-full bg-[#FFE600] px-5 text-[16px] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
             }`}
           >
             <AddIcon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
-            <span className="truncate">{addLabel}</span>
+            <span className="whitespace-nowrap">{addLabel}</span>
           </button>
           {isFollowing && member.id ? (
             <button
               type="button"
               disabled={messageLoading}
               onClick={() => void handleMessage()}
-              className="inline-flex h-12 min-w-0 flex-[0.66] items-center justify-center gap-2 rounded-full bg-[#FFE600] px-4 text-[15px] font-bold text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
+              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#FFE600] px-4 text-[15px] font-bold text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
               aria-label={tx("メッセージ", "Message")}
             >
               <MessageCircle className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
