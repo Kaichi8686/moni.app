@@ -48,7 +48,6 @@ import {
   type IdeaInterviewSession,
   type IdeaInterviewTheme,
   type IdeaSeed,
-  themeLabel,
 } from "@/lib/idea-interview/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -138,7 +137,6 @@ export function IdeaInterviewApp({
     ? consultMessages.filter((m) => m.role === "user").length === 0 &&
       consultMessages.every((m) => m.role === "assistant")
     : excavateHome;
-  const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
   const projectScopeId = isProject ? projectId : undefined;
 
   useEffect(() => {
@@ -662,12 +660,49 @@ export function IdeaInterviewApp({
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
 
-  const modeLabel = isConsult ? tx("相談", "Chat") : tx("発掘", "Discover");
-
   const switchHubMode = (mode: IdeaPersonalAiMode) => {
     if (mode === aiMode) return;
     if (onModeChange) onModeChange(mode);
     else setAiMode(mode);
+  };
+
+  const circleBtn =
+    "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]";
+
+  const renderThreadMessage = (m: AiChatMessage, i: number) => {
+    const isUser = m.role === "user";
+    const streaming = Boolean(m.id && m.id === streamingId);
+    return (
+      <div
+        key={m.id ?? `${m.role}-${i}`}
+        className={
+          isUser
+            ? "ml-auto max-w-[85%] rounded-[22px] bg-[#EAF0FB] px-4 py-2.5 text-[16px] leading-[1.65] text-[#1B3A6B]"
+            : "w-full max-w-2xl text-[16px] leading-[1.75] text-[#0D0D0D]"
+        }
+      >
+        {m.role === "assistant" ? (
+          <AiChatStreamingRichText
+            text={m.content}
+            className="break-words [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+            animate={streaming}
+            onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+            onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
+          />
+        ) : (
+          <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
+        )}
+        {m.content.trim() && !streaming ? (
+          <div className={`mt-1.5 flex ${isUser ? "justify-end" : "justify-start"}`}>
+            <AiChatCopyButton
+              text={m.content}
+              compact
+              className={isUser ? "text-[#1B3A6B]/70 hover:bg-[#1B3A6B]/10" : "text-zinc-400"}
+            />
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -676,14 +711,14 @@ export function IdeaInterviewApp({
         {historyRail}
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
-          <div className="flex items-center gap-2">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between px-3 pt-3">
+          <div className="pointer-events-auto">
             {isHub && onExit ? (
               <button
                 type="button"
                 onClick={onExit}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                className={circleBtn}
                 aria-label={tx("マイアイデアに戻る", "Back to My ideas")}
               >
                 <ArrowLeft className="h-5 w-5" aria-hidden />
@@ -691,7 +726,7 @@ export function IdeaInterviewApp({
             ) : !isHub ? (
               <Link
                 href={exitHref}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#374151] transition hover:bg-[#F3F4F6]"
+                className={circleBtn}
                 aria-label={
                   isProject
                     ? tx("プロジェクトに戻る", "Back to project")
@@ -700,51 +735,31 @@ export function IdeaInterviewApp({
               >
                 <ArrowLeft className="h-5 w-5" aria-hidden />
               </Link>
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[14px] font-bold text-[#1A1A1A]">AI</p>
-              <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">
-                {session.phase === "results" && !isConsult
-                  ? `${tx("アイデアの種", "Idea seeds")} · ${activeTitle}`
-                  : !isConsult && session.theme
-                    ? `${modeLabel} · ${tx(
-                        themeLabel(session.theme),
-                        (
-                          {
-                            school: "School",
-                            parttime: "Part-time job",
-                            club: "Club",
-                            friends: "Friends",
-                            family: "Home",
-                            other: "Other",
-                          } as const
-                        )[session.theme],
-                      )} · ${activeTitle}`
-                    : `${modeLabel} · ${activeTitle}`}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-1.5">
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(true)}
-                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] px-2.5 text-[12px] font-semibold text-[#374151] md:hidden"
-              >
-                <History className="h-3.5 w-3.5" aria-hidden />
-                {tx("履歴", "History")}
-              </button>
-              <button
-                type="button"
-                onClick={startNewChat}
-                className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]"
-              >
-                <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
-                {tx("新規", "New")}
-              </button>
-            </div>
+            ) : (
+              <span className="inline-block h-10 w-10" aria-hidden />
+            )}
+          </div>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className={`${circleBtn} md:hidden`}
+              aria-label={tx("履歴", "History")}
+            >
+              <History className="h-[18px] w-[18px]" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={startNewChat}
+              className={circleBtn}
+              aria-label={tx("新規", "New")}
+            >
+              <MessageSquarePlus className="h-[18px] w-[18px]" aria-hidden />
+            </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4 pt-14">
           {showModeHome ? (
             <div
               className={`flex flex-col items-center justify-center gap-4 px-2 ${
@@ -828,66 +843,10 @@ export function IdeaInterviewApp({
           ) : null}
 
           {/* Consult: show welcome + thread (hide raw welcome-only on mode home) */}
-          {isConsult && !showModeHome
-            ? messages.map((m, i) => (
-                <div
-                  key={m.id ?? `${m.role}-${i}`}
-                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
-                  }`}
-                >
-                  {m.role === "assistant" ? (
-                    <AiChatStreamingRichText
-                      text={m.content}
-                      className="break-words"
-                      animate={Boolean(m.id && m.id === streamingId)}
-                      onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
-                      onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
-                    />
-                  ) : (
-                    <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
-                  )}
-                  {m.content.trim() && !(m.id && m.id === streamingId) ? (
-                    <div className={`mt-1.5 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <AiChatCopyButton
-                        text={m.content}
-                        className={m.role === "user" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-zinc-500"}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            : null}
+          {isConsult && !showModeHome ? messages.map((m, i) => renderThreadMessage(m, i)) : null}
 
           {!isConsult && !excavateHome && session.phase !== "results"
-            ? messages.map((m, i) => (
-                <div
-                  key={m.id ?? `${m.role}-${i}`}
-                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-[14px] leading-relaxed ${
-                    m.role === "user" ? "ml-auto bg-violet-600 text-white" : "bg-[#F3F4F6] text-[#1A1A1A]"
-                  }`}
-                >
-                  {m.role === "assistant" ? (
-                    <AiChatStreamingRichText
-                      text={m.content}
-                      className="break-words"
-                      animate={Boolean(m.id && m.id === streamingId)}
-                      onTick={() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
-                      onComplete={() => setStreamingId((cur) => (cur === m.id ? null : cur))}
-                    />
-                  ) : (
-                    <p className="select-text whitespace-pre-wrap break-words">{m.content}</p>
-                  )}
-                  {m.content.trim() && !(m.id && m.id === streamingId) ? (
-                    <div className={`mt-1.5 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <AiChatCopyButton
-                        text={m.content}
-                        className={m.role === "user" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-zinc-500"}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))
+            ? messages.map((m, i) => renderThreadMessage(m, i))
             : null}
 
           {(isConsult || session.phase === "chat") && (sending || generating) ? (
@@ -987,19 +946,19 @@ export function IdeaInterviewApp({
         {isConsult || session.phase !== "results" ? (
           <form
             onSubmit={(e) => void onSubmit(e)}
-            className="shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+            className="shrink-0 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
           >
             {!isConsult && session.phase === "chat" && session.userTurns >= 1 && !sending && !generating ? (
               <button
                 type="button"
                 onClick={() => void generateIdeas({ ...session, readyForIdeas: true })}
-                className="mb-2 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-800 transition hover:bg-violet-100"
+                className="mb-2 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-800 transition hover:bg-violet-100"
               >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 {tx("この内容でアイデアの種を出す", "Generate idea seeds from this")}
               </button>
             ) : null}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F7F7F8] px-2 py-1.5 focus-within:border-zinc-300 focus-within:bg-white">
               <input
                 ref={inputRef}
                 value={draft}
@@ -1012,12 +971,12 @@ export function IdeaInterviewApp({
                       ? tx("モヤモヤしていることを書いてみる…", "Write what’s bothering you…")
                       : placeholder
                 }
-                className="min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2 disabled:opacity-60"
+                className="min-h-[40px] flex-1 bg-transparent px-3 text-[16px] text-[#0D0D0D] outline-none placeholder:text-[#9CA3AF] disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={sending || generating || !draft.trim()}
-                className="min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-violet-600 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
