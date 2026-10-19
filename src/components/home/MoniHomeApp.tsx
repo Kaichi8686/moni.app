@@ -49,6 +49,7 @@ import {
   toggleFollowRelation,
 } from "@/lib/profile/followActions";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
+import { parseInterestFields } from "@/lib/profile/interestFields";
 import { parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import {
@@ -175,6 +176,7 @@ type MatchMember = {
   country?: string | null;
   skills?: string[];
   traits?: string[];
+  interestFields?: string[];
 };
 
 type PeerProjectSummary = { id: string; name: string; description: string; visibility: string; updated_at?: string };
@@ -342,11 +344,13 @@ function mapProfileToMatchMember(row: {
   country?: string | null;
   skills?: unknown;
   traits?: unknown;
+  interest_fields?: unknown;
 }): MatchMember {
   const id = row.id;
   const dbAvatar = row.avatar_url ?? null;
   const skills = parseStringTagArray(row.skills);
   const traits = parseStringTagArray(row.traits);
+  const interestFields = parseInterestFields(row.interest_fields);
   const strength = skills[0] || strengthFromRole(row.role);
   const birthdayRaw = (row.birthday ?? "").trim().slice(0, 10);
   const birthday = /^\d{4}-\d{2}-\d{2}$/.test(birthdayRaw) ? birthdayRaw : null;
@@ -376,6 +380,7 @@ function mapProfileToMatchMember(row: {
     country,
     skills,
     traits,
+    interestFields,
     aiType:
       row.role === "investor"
         ? "marketer"
@@ -1779,9 +1784,10 @@ export function MoniHomeApp() {
     let cancelled = false;
     void (async () => {
       for (const sel of [
+        "id,display_name,goal,role,avatar_url,skills,traits,interest_fields,birthday,age,gender,country",
+        "id,display_name,goal,role,avatar_url,skills,traits,interest_fields,age,gender,country",
+        "id,display_name,goal,role,avatar_url,skills,traits,interest_fields",
         "id,display_name,goal,role,avatar_url,skills,traits,birthday,age,gender,country",
-        "id,display_name,goal,role,avatar_url,skills,traits,age,gender,country",
-        "id,display_name,goal,role,avatar_url,skills,traits,age,country",
         "id,display_name,goal,role,avatar_url,skills,traits",
         "id,display_name,goal,role,avatar_url",
       ]) {
@@ -1800,6 +1806,7 @@ export function MoniHomeApp() {
           country?: string | null;
           skills?: unknown;
           traits?: unknown;
+          interest_fields?: unknown;
         };
         const mapped = mapProfileToMatchMember({
           id: row.id,
@@ -1813,6 +1820,7 @@ export function MoniHomeApp() {
           country: row.country ?? null,
           skills: row.skills,
           traits: row.traits,
+          interest_fields: row.interest_fields,
         });
         setActiveProfileMember((prev) => {
           if (!prev || prev.id !== uid) return prev;
@@ -2849,13 +2857,45 @@ export function MoniHomeApp() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,birthday,age,gender,country")
+        .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,interest_fields,birthday,age,gender,country")
         .neq("id", session.user.id)
         .order("created_at", { ascending: false })
         .limit(12)
         .abortSignal(controller.signal);
       if (error) {
         // age/country/skills may be missing until migrations — retry leaner select
+        const mid = await supabase
+          .from("profiles")
+          .select("id,display_name,goal,role,avatar_url,created_at,skills,traits,birthday,age,gender,country")
+          .neq("id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(12)
+          .abortSignal(controller.signal);
+        if (!mid.error && mid.data) {
+          const mapped = mid.data.map((row) =>
+            mapProfileToMatchMember({
+              id: row.id as string,
+              display_name: row.display_name as string | null,
+              goal: row.goal as string | null,
+              role: row.role as string | null,
+              avatar_url: (row.avatar_url as string | null) ?? null,
+              birthday: (row as { birthday?: string | null }).birthday ?? null,
+              age: (row as { age?: number | null }).age ?? null,
+              gender: (row as { gender?: string | null }).gender ?? null,
+              country: (row as { country?: string | null }).country ?? null,
+              skills: (row as { skills?: unknown }).skills,
+              traits: (row as { traits?: unknown }).traits,
+            }),
+          );
+          setMatches(mapped);
+          setMatchSource("recommended");
+          setMatchNotice(
+            mapped.length === 0
+              ? "まだおすすめが少ないです。検索して探してみましょう。"
+              : "",
+          );
+          return;
+        }
         const fallback = await supabase
           .from("profiles")
           .select("id,display_name,goal,role,avatar_url,created_at")
@@ -2899,6 +2939,7 @@ export function MoniHomeApp() {
           country: (row as { country?: string | null }).country ?? null,
           skills: (row as { skills?: unknown }).skills,
           traits: (row as { traits?: unknown }).traits,
+          interest_fields: (row as { interest_fields?: unknown }).interest_fields,
         }),
       );
       setMatches(mapped);
@@ -2932,12 +2973,48 @@ export function MoniHomeApp() {
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("id,display_name,goal,role,avatar_url,skills,traits,birthday,age,gender,country")
+          .select("id,display_name,goal,role,avatar_url,skills,traits,interest_fields,birthday,age,gender,country")
           .neq("id", session.user.id)
           .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
           .limit(30)
           .abortSignal(controller.signal);
         if (error) {
+          const mid = await supabase
+            .from("profiles")
+            .select("id,display_name,goal,role,avatar_url,skills,traits,birthday,age,gender,country")
+            .neq("id", session.user.id)
+            .or(terms.flatMap((term) => [`goal.ilike.%${term}%`, `display_name.ilike.%${term}%`]).join(","))
+            .limit(30)
+            .abortSignal(controller.signal);
+          if (!mid.error && mid.data) {
+            const mapped: MatchMember[] = mid.data.map((row) =>
+              mapProfileToMatchMember({
+                id: row.id as string,
+                display_name: row.display_name as string | null,
+                goal: row.goal as string | null,
+                role: row.role as string | null,
+                avatar_url: (row.avatar_url as string | null) ?? null,
+                birthday: (row as { birthday?: string | null }).birthday ?? null,
+                age: (row as { age?: number | null }).age ?? null,
+                gender: (row as { gender?: string | null }).gender ?? null,
+                country: (row as { country?: string | null }).country ?? null,
+                skills: (row as { skills?: unknown }).skills,
+                traits: (row as { traits?: unknown }).traits,
+              }),
+            );
+            setMatches(mapped);
+            setMatchSource("search");
+            if (opts?.fromSubmit) {
+              trackOpsEvent("matching_search");
+              trackOpsEvent("search_started");
+            }
+            setMatchNotice(
+              mapped.length === 0
+                ? "条件に合うユーザーがまだいません。キーワードを変えて試してください。"
+                : `${mapped.length}件見つかりました。`,
+            );
+            return;
+          }
           const fallback = await supabase
             .from("profiles")
             .select("id,display_name,goal,role,avatar_url")
@@ -2985,6 +3062,7 @@ export function MoniHomeApp() {
             country: (row as { country?: string | null }).country ?? null,
             skills: (row as { skills?: unknown }).skills,
             traits: (row as { traits?: unknown }).traits,
+            interest_fields: (row as { interest_fields?: unknown }).interest_fields,
           }),
         );
         setMatches(mapped);
