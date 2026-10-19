@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { countryLabel } from "@/lib/profile/countries";
 import { genderLabel } from "@/lib/profile/gender";
+import { interestFieldLabel } from "@/lib/profile/interestFields";
 import { loadProfileView } from "@/lib/profile/profileData";
 import {
   SKILL_PRESETS,
@@ -25,6 +26,7 @@ export type ExploreFriendPreviewMember = {
   avatarUrl?: string | null;
   skills?: string[];
   traits?: string[];
+  interestFields?: string[];
 };
 
 export type ExploreFriendPreviewProject = {
@@ -48,6 +50,40 @@ function formatFollowerCount(n: number, locale: "ja" | "en"): string {
   return n.toLocaleString(locale === "ja" ? "ja-JP" : "en-US");
 }
 
+function BadgeSection({
+  title,
+  empty,
+  tags,
+  renderLabel,
+  chipClassName,
+}: {
+  title: string;
+  empty: string;
+  tags: string[];
+  renderLabel: (tag: string) => string;
+  chipClassName: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">{title}</p>
+      {tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.slice(0, 8).map((tag) => (
+            <span
+              key={`${title}-${tag}`}
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-medium ${chipClassName}`}
+            >
+              {renderLabel(tag)}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[12px] text-zinc-400">{empty}</p>
+      )}
+    </div>
+  );
+}
+
 export function ExploreFriendProfilePreview({
   member,
   projects,
@@ -68,6 +104,9 @@ export function ExploreFriendProfilePreview({
   const displayName = profile?.displayName ?? member.name;
   const skills = profile?.skills?.length ? profile.skills : (member.skills ?? []);
   const traits = profile?.traits?.length ? profile.traits : (member.traits ?? []);
+  const interestFields = profile?.interestFields?.length
+    ? profile.interestFields
+    : (member.interestFields ?? []);
 
   useEffect(() => {
     if (!supabase || !member.id) return;
@@ -254,48 +293,27 @@ export function ExploreFriendProfilePreview({
               </p>
             ) : null}
             <div className="space-y-3 pt-2">
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-                  {tx("特技", "Skills")}
-                </p>
-                {skills.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {skills.slice(0, 8).map((tag) => (
-                      <span
-                        key={`skill-${tag}`}
-                        className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[12px] font-medium text-zinc-700"
-                      >
-                        {displayTagLabel(tag, SKILL_PRESETS, locale)}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[12px] text-zinc-400">
-                    {tx("まだ登録がありません", "Not set yet")}
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-                  {tx("性格", "Personality")}
-                </p>
-                {traits.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {traits.slice(0, 8).map((tag) => (
-                      <span
-                        key={`trait-${tag}`}
-                        className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[12px] font-medium text-violet-800"
-                      >
-                        {displayTagLabel(tag, TRAIT_PRESETS, locale)}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[12px] text-zinc-400">
-                    {tx("まだ登録がありません", "Not set yet")}
-                  </p>
-                )}
-              </div>
+              <BadgeSection
+                title={tx("特技", "Skills")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={skills}
+                renderLabel={(tag) => displayTagLabel(tag, SKILL_PRESETS, locale)}
+                chipClassName="border-zinc-200 bg-zinc-50 text-zinc-700"
+              />
+              <BadgeSection
+                title={tx("興味", "Interests")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={interestFields}
+                renderLabel={(tag) => interestFieldLabel(tag, locale)}
+                chipClassName="border-sky-200 bg-sky-50 text-sky-900"
+              />
+              <BadgeSection
+                title={tx("性格", "Personality")}
+                empty={tx("まだ登録がありません", "Not set yet")}
+                tags={traits}
+                renderLabel={(tag) => displayTagLabel(tag, TRAIT_PRESETS, locale)}
+                chipClassName="border-violet-200 bg-violet-50 text-violet-800"
+              />
             </div>
           </section>
 
