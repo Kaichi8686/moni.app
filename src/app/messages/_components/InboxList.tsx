@@ -206,7 +206,7 @@ export function InboxList() {
       if (!cancelled && document.visibilityState === "visible") {
         void load({ syncPeers: true });
       }
-    }, 8000);
+    }, 30000);
 
     return () => {
       cancelled = true;

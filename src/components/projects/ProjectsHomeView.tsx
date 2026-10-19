@@ -85,7 +85,16 @@ function ProjectsHomeViewInner() {
       applySession(session);
       const uid = session?.user.id;
       if (!uid) {
-        // 未ログインはキューブ／空状態を出す
+        // 未ログインでアプリを開いた場合はランディングへ（プレビュー済みセッションは一覧のまま）
+        try {
+          if (window.sessionStorage.getItem("moni-has-entered-app") !== "1") {
+            router.replace("/?landing=1");
+            return;
+          }
+        } catch {
+          router.replace("/?landing=1");
+          return;
+        }
         showList();
         return;
       }
