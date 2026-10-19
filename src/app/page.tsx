@@ -1042,6 +1042,9 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // 認証復元前に /projects へ飛ばすと、未ログインでも LP をスキップしてしまう
+    if (!clientReady || !authReady) return;
+
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
     const community = params.get("community");
@@ -1068,7 +1071,10 @@ export default function Home() {
       return;
     }
     if (!tab && !mentor) {
-      router.replace(HOME_PROJECTS_HREF);
+      // ログイン済みだけプロジェクトへ。未ログインは / に留まりランディングを表示
+      if (session) {
+        router.replace(HOME_PROJECTS_HREF);
+      }
       return;
     }
     if (tab === "articles" || tab === "mentor" || tab === "chat") {
@@ -1087,7 +1093,7 @@ export default function Home() {
     if (segment === "friends" || segment === "projects" || segment === "recruit") {
       setExploreSegment(segment);
     }
-  }, [router, showLandingPage]);
+  }, [router, showLandingPage, clientReady, authReady, session]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
