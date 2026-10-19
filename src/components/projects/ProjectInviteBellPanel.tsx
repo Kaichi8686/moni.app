@@ -188,7 +188,7 @@ export function ProjectInviteBellPanel({
     toast(
       dm.ok
         ? "フォローバックしました。メールに相手が表示されます"
-        : "フォローバックしました。相互フォローになるとメールできます",
+        : "フォローバックしました。フォロー中の相手にはメールできます",
     );
     setFollowNotices((prev) => prev.filter((n) => n.id !== notice.id));
     onAccepted?.();

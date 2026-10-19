@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, MessageCircle, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { countryLabel } from "@/lib/profile/countries";
@@ -94,8 +96,11 @@ export function ExploreFriendProfilePreview({
   onToggleFollow,
 }: Props) {
   const { tx, locale } = useI18n();
+  const router = useRouter();
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [shareNotice, setShareNotice] = useState("");
+  const [messageError, setMessageError] = useState("");
+  const [messageLoading, setMessageLoading] = useState(false);
 
   const avatarSrc = resolveMemberAvatarUrl(member.id, member.avatarUrl);
   const username = profile?.username ?? profileUsername(member.name, member.id ?? "guest");
@@ -141,6 +146,25 @@ export function ExploreFriendProfilePreview({
       setShareNotice(tx("リンクをコピーしました", "Link copied"));
     } catch {
       /* user cancelled share */
+    }
+  }
+
+  async function handleMessage() {
+    if (!supabase || !member.id || messageLoading) return;
+    setMessageError("");
+    setMessageLoading(true);
+    try {
+      const result = await navigateToDirectMessage(supabase, router, member.id);
+      if (!result.ok && result.reason === "not_mutual") {
+        setMessageError(
+          tx(
+            "フォロー中の相手にメッセージできます",
+            "You can message people you follow",
+          ),
+        );
+      }
+    } finally {
+      setMessageLoading(false);
     }
   }
 
@@ -226,20 +250,45 @@ export function ExploreFriendProfilePreview({
           </div>
         </div>
 
-        <button
-          type="button"
-          disabled={!member.id}
-          onClick={onToggleFollow}
-          className={`inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[16px] font-bold transition active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
-            isFollowing || isPending
-              ? "bg-white/18 text-white backdrop-blur-md ring-1 ring-white/25"
-              : "bg-[#FFE600] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
+        <div
+          className={`flex w-full items-center gap-2 transition-[gap] duration-300 ease-out ${
+            isFollowing ? "justify-between" : ""
           }`}
         >
-          <AddIcon className="h-[18px] w-[18px]" strokeWidth={2.4} />
-          {addLabel}
-        </button>
+          <button
+            type="button"
+            disabled={!member.id}
+            onClick={onToggleFollow}
+            className={`inline-flex h-12 items-center justify-center gap-2 rounded-full font-bold transition-all duration-300 ease-out active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-45 ${
+              isFollowing
+                ? "shrink-0 bg-white/18 px-3.5 text-[13px] text-white backdrop-blur-md ring-1 ring-white/25"
+                : isPending
+                  ? "w-full bg-white/18 px-5 text-[16px] text-white backdrop-blur-md ring-1 ring-white/25"
+                  : "w-full bg-[#FFE600] px-5 text-[16px] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
+            }`}
+          >
+            <AddIcon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
+            <span className="whitespace-nowrap">{addLabel}</span>
+          </button>
+          {isFollowing && member.id ? (
+            <button
+              type="button"
+              disabled={messageLoading}
+              onClick={() => void handleMessage()}
+              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#FFE600] px-4 text-[15px] font-bold text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
+              aria-label={tx("メッセージ", "Message")}
+            >
+              <MessageCircle className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
+              <span className="truncate">
+                {messageLoading ? tx("開いています…", "Opening…") : tx("メッセージ", "Message")}
+              </span>
+            </button>
+          ) : null}
+        </div>
 
+        {messageError ? (
+          <p className="mt-2 text-center text-xs font-medium text-rose-200">{messageError}</p>
+        ) : null}
         {shareNotice ? (
           <p className="mt-2 text-center text-xs font-medium text-white/80">{shareNotice}</p>
         ) : null}

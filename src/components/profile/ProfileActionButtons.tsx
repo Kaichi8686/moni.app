@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BookOpen, MessageCircle, MoreHorizontal, Pencil } from "lucide-react";
-import { shareProjectMembership } from "@/lib/messages/api";
-import { areMutualFollowers, toggleFollowRelation } from "@/lib/profile/followActions";
+import { canStartDirectMessage } from "@/lib/messages/api";
+import { toggleFollowRelation } from "@/lib/profile/followActions";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -59,9 +59,8 @@ export function ProfileActionButtons({
         if (!cancelled) setCanMessage(false);
         return;
       }
-      const mutual = await areMutualFollowers(supabase, uid, profileId);
-      const projectPeer = mutual ? true : await shareProjectMembership(supabase, uid, profileId);
-      if (!cancelled) setCanMessage(mutual || projectPeer);
+      const allowed = await canStartDirectMessage(supabase, uid, profileId);
+      if (!cancelled) setCanMessage(allowed);
     })();
     return () => {
       cancelled = true;
@@ -111,8 +110,8 @@ export function ProfileActionButtons({
     if (!result.ok && result.reason === "not_mutual") {
       setActionError(
         tx(
-          "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
-          "Mail unlocks for project teammates or mutual follows",
+          "フォロー中の相手、または同じプロジェクトのメンバーにメールできます",
+          "Mail unlocks for people you follow or project teammates",
         ),
       );
     }
@@ -159,16 +158,16 @@ export function ProfileActionButtons({
             canMessage
               ? tx("メッセージ", "Message")
               : tx(
-                  "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
-                  "Mail unlocks for project teammates or mutual follows",
+                  "フォロー中の相手、または同じプロジェクトのメンバーにメールできます",
+                  "Mail unlocks for people you follow or project teammates",
                 )
           }
           title={
             canMessage
               ? tx("メッセージ", "Message")
               : tx(
-                  "同じプロジェクトのメンバーか、相互フォローになるとメールできます",
-                  "Mail unlocks for project teammates or mutual follows",
+                  "フォロー中の相手、または同じプロジェクトのメンバーにメールできます",
+                  "Mail unlocks for people you follow or project teammates",
                 )
           }
         >

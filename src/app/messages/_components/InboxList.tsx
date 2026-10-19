@@ -5,20 +5,21 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { ja, enUS } from "date-fns/locale";
-import { FolderKanban, Pencil, Search, Users } from "lucide-react";
+import { FolderKanban, Search, Users } from "lucide-react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
-import { NewConversationModal } from "@/app/messages/_components/NewConversationModal";
+import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
+import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
 import {
-  ensureMyMutualDirectConversations,
   ensureMyProjectConversations,
-  ensureMyProjectPeerDirectConversations,
   ensureProjectScopedMail,
   fetchInboxConversations,
 } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
+import { loadFollowingListRecent } from "@/lib/profile/followActions";
+import type { FollowListUser } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 import type { InboxConversation } from "@/lib/types/messages";
@@ -59,7 +60,8 @@ export function InboxList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showNew, setShowNew] = useState(false);
+  const [showFollowingPicker, setShowFollowingPicker] = useState(false);
+  const [recentFollowing, setRecentFollowing] = useState<FollowListUser[]>([]);
   const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
   const [scopedMemberOk, setScopedMemberOk] = useState(false);
   const peerHandledRef = useRef<string | null>(null);
@@ -81,10 +83,10 @@ export function InboxList() {
         return;
       }
 
-      // グループライン全員同期・プロジェクト仲間 DM・相互フォロー DM を揃えてから一覧取得
+      // プロジェクトブロック: グループ＋メンバー1:1を揃える
+      // プロフィールブロック: やりとり済みの相手だけ表示（空の相互フォローDMは自動作成しない）
       if (opts?.syncPeers !== false) {
         if (scopedProjectId) {
-          // プロジェクトブロックのメール: そのプロジェクトのグループ＋メンバー1:1を先に揃える
           try {
             await ensureProjectScopedMail(supabase, uid, scopedProjectId);
           } catch (e) {
@@ -96,17 +98,19 @@ export function InboxList() {
           } catch (e) {
             console.warn("ensureMyProjectConversations", e);
           }
-          try {
-            await ensureMyProjectPeerDirectConversations(supabase, uid);
-          } catch (e) {
-            console.warn("ensureMyProjectPeerDirectConversations", e);
-          }
         }
+      }
+
+      if (!scopedProjectId) {
         try {
-          await ensureMyMutualDirectConversations(supabase, uid);
+          const following = await loadFollowingListRecent(supabase, uid, 8);
+          setRecentFollowing(following);
         } catch (e) {
-          console.warn("ensureMyMutualDirectConversations", e);
+          console.warn("loadFollowingListRecent", e);
+          setRecentFollowing([]);
         }
+      } else {
+        setRecentFollowing([]);
       }
 
       if (scopedProjectId) {
@@ -233,6 +237,12 @@ export function InboxList() {
         if (c.type === "direct" && c.otherUser?.id) return projectPeerIds.has(c.otherUser.id);
         return false;
       });
+    } else if (!scopedProjectId) {
+      // プロフィールブロック: やりとり済みの 1:1 + グループ／プロジェクト
+      list = list.filter((c) => {
+        if (c.type === "direct") return Boolean(c.lastMessage);
+        return c.type === "group" || c.type === "project";
+      });
     }
     if (filter === "unread") list = list.filter((c) => c.unreadCount > 0);
     if (filter === "groups") list = list.filter((c) => c.type === "group");
@@ -268,19 +278,19 @@ export function InboxList() {
     }
     if (filter === "projects") {
       return tx(
-        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。右上から手動でも開始できます。",
-        "No project group chats yet. Joined projects appear here automatically, or start one from the pencil button.",
+        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。",
+        "No project group chats yet. Joined projects appear here automatically.",
       );
     }
     if (filter === "unread") {
       return tx("未読のトークはありません。", "No unread chats.");
     }
     if (filter === "groups") {
-      return tx("グループトークはまだありません。右上から作成できます。", "No group chats yet. Create one from the pencil button.");
+      return tx("グループトークはまだありません。", "No group chats yet.");
     }
     return tx(
-      "まだトークがありません。参加中のプロジェクトや相互フォローの相手がここに自動で表示されます。",
-      "No chats yet. Project teammates and mutual follows appear here automatically.",
+      "まだトークがありません。上の「フォロー中の人とチャット」から始められます。",
+      "No chats yet. Start from “Chat with people you follow” above.",
     );
   })();
 
@@ -290,25 +300,7 @@ export function InboxList() {
         <AppBrandHeader
           bare
           className="py-1"
-          right={
-            <div className="flex items-center gap-1">
-              {userId ? <ProjectNoticeBell userId={userId} /> : null}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!userId) {
-                    router.push("/login?next=/messages");
-                    return;
-                  }
-                  setShowNew(true);
-                }}
-                className="touch-target inline-flex items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200"
-                aria-label={tx("新しいメール", "New mail")}
-              >
-                <Pencil className="h-5 w-5" />
-              </button>
-            </div>
-          }
+          right={userId ? <ProjectNoticeBell userId={userId} /> : null}
         />
       </div>
 
@@ -365,21 +357,30 @@ export function InboxList() {
           </p>
         ) : loading ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
-        ) : filtered.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
         ) : (
-          filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
+          <>
+            {!scopedProjectId ? (
+              <FollowingChatEntry
+                recentFollowing={recentFollowing}
+                onOpen={() => setShowFollowingPicker(true)}
+              />
+            ) : null}
+            {filtered.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
+            ) : (
+              filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
+            )}
+          </>
         )}
       </div>
 
-      {showNew && userId ? (
-        <NewConversationModal
+      {showFollowingPicker && userId ? (
+        <FollowingChatPicker
           currentUserId={userId}
-          projectId={scopedProjectId ?? undefined}
-          onClose={() => setShowNew(false)}
-          onCreated={() => {
-            setShowNew(false);
-            void load({ syncPeers: true });
+          onClose={() => setShowFollowingPicker(false)}
+          onOpened={() => {
+            setShowFollowingPicker(false);
+            void load({ syncPeers: false });
           }}
         />
       ) : null}
