@@ -1,4 +1,4 @@
-import { NEEDED, SLOTS, formatSlotTitle } from "./schedule";
+import { SLOTS, formatSlotTitle } from "./schedule";
 import type { Assignments, Member, ShiftSlot } from "./types";
 
 /** LINE・シートで壊れやすい文字を避ける */
@@ -31,15 +31,6 @@ function unassignedMembers(members: Member[], assignments: Assignments): Member[
     .sort((a, b) => safeName(a.name).localeCompare(safeName(b.name), "ja"));
 }
 
-/** 各時間帯の担当列数（定員。超過分も表示できるように実人数の最大も見る） */
-export function rosterColumnCount(assignments: Assignments): number {
-  let max = NEEDED;
-  for (const slot of SLOTS) {
-    max = Math.max(max, assignments[slot.id].length);
-  }
-  return Math.max(1, Math.min(20, max));
-}
-
 export type SlotRosterRow = {
   slot: ShiftSlot;
   names: string[];
@@ -70,11 +61,10 @@ export function buildSlotRosterRows(
 }
 
 /**
- * LINE・コピー用本文。時間帯に誰が入っているかを主にした表。
+ * LINE・コピー用本文。時間帯に誰が入っているか（人数表記なし）。
  */
 export function formatShiftText(members: Member[], assignments: Assignments): string {
   const rows = buildSlotRosterRows(members, assignments);
-  const cols = rosterColumnCount(assignments);
   const lines: string[] = ["【文化祭シフト表】", ""];
 
   let day = "";
@@ -82,20 +72,12 @@ export function formatShiftText(members: Member[], assignments: Assignments): st
     if (row.slot.dayLabel !== day) {
       day = row.slot.dayLabel;
       lines.push(`■ ${day}`);
-      // ヘッダー（タブ区切り＝シートに貼れる）
-      lines.push(
-        ["時間", "人数", ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`)].join(
-          "\t",
-        ),
-      );
+      lines.push(["時間", "メンバー"].join("\t"));
     }
-    const flag = row.short ? "不足" : row.over ? "超過" : "";
-    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
     lines.push(
       [
         `${row.slot.start}-${row.slot.end}`,
-        `${row.count}/${row.needed}${flag ? ` ${flag}` : ""}`,
-        ...cells,
+        row.names.length > 0 ? row.names.join("、") : "（未割当）",
       ].join("\t"),
     );
   }
@@ -109,29 +91,18 @@ export function formatShiftText(members: Member[], assignments: Assignments): st
   return lines.join("\n").trimEnd();
 }
 
-/** 時間帯×担当のシート用TSV（主表） */
+/** 時間帯×メンバーのシート用TSV（人数なし・名前は1セル） */
 export function formatSlotRosterTsv(members: Member[], assignments: Assignments): string {
   const rows = buildSlotRosterRows(members, assignments);
-  const cols = rosterColumnCount(assignments);
-  const header = [
-    "日程",
-    "開始",
-    "終了",
-    "割当",
-    "必要",
-    ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`),
-  ];
-  const body = rows.map((row) => {
-    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
-    return [
+  const header = ["日程", "開始", "終了", "メンバー"];
+  const body = rows.map((row) =>
+    [
       row.slot.dayLabel,
       row.slot.start,
       row.slot.end,
-      String(row.count),
-      String(row.needed),
-      ...cells,
-    ].join("\t");
-  });
+      row.names.join("、"),
+    ].join("\t"),
+  );
   return [header.join("\t"), ...body].join("\n");
 }
 
@@ -152,29 +123,12 @@ export function formatShiftTsv(members: Member[], assignments: Assignments): str
 
 export function formatShiftCsv(members: Member[], assignments: Assignments): string {
   const rows = buildSlotRosterRows(members, assignments);
-  const cols = rosterColumnCount(assignments);
-  const header = [
-    "日程",
-    "開始",
-    "終了",
-    "割当人数",
-    "必要人数",
-    ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`),
-  ];
-  const body = rows.map((row) => {
-    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
-    return [
-      row.slot.dayLabel,
-      row.slot.start,
-      row.slot.end,
-      String(row.count),
-      String(row.needed),
-      ...cells,
-    ]
+  const header = ["日程", "開始", "終了", "メンバー"];
+  const body = rows.map((row) =>
+    [row.slot.dayLabel, row.slot.start, row.slot.end, row.names.join("、")]
       .map(csvEscape)
-      .join(",");
-  });
-
+      .join(","),
+  );
   return [header.join(","), ...body].join("\n");
 }
 
@@ -191,27 +145,6 @@ export function downloadText(filename: string, content: string, mime: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-export type MatrixRow = {
-  id: string;
-  name: string;
-  marks: boolean[];
-  total: number;
-};
-
-export function buildMatrixRows(members: Member[], assignments: Assignments): MatrixRow[] {
-  return [...members]
-    .sort((a, b) => safeName(a.name).localeCompare(safeName(b.name), "ja"))
-    .map((m) => {
-      const marks = SLOTS.map((slot) => assignments[slot.id].includes(m.id));
-      return {
-        id: m.id,
-        name: safeName(m.name),
-        marks,
-        total: marks.filter(Boolean).length,
-      };
-    });
 }
 
 export { formatSlotTitle, slotShortLabel, slotHeader, SLOTS };

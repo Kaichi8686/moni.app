@@ -7,7 +7,6 @@ import {
   formatShiftCsv,
   formatShiftText,
   formatSlotRosterTsv,
-  rosterColumnCount,
 } from "@/lib/bunkasai-shift/export";
 import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
 
@@ -50,10 +49,6 @@ export function ExportPanel() {
   const rosterRows = useMemo(
     () => buildSlotRosterRows(members, assignments),
     [members, assignments],
-  );
-  const colCount = useMemo(
-    () => rosterColumnCount(assignments),
-    [assignments],
   );
 
   function flash(msg: string, tone: "ok" | "warn" = "ok") {
@@ -98,7 +93,6 @@ export function ExportPanel() {
 
   const hasAssignments = rosterRows.some((r) => r.count > 0);
 
-  // 日程ごとにグループ化して見出し行を出す
   const dayGroups: { day: string; rows: typeof rosterRows }[] = [];
   for (const row of rosterRows) {
     const last = dayGroups[dayGroups.length - 1];
@@ -116,7 +110,7 @@ export function ExportPanel() {
           エクスポート
         </h2>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          時間帯ごとに誰が入るかを一覧にしています。LINEは共有メニューか、コピーして貼り付けで送れます。
+          時間帯ごとに担当者を一覧にしています。LINEは共有メニューか、コピーして貼り付けで送れます。
         </p>
       </div>
 
@@ -177,29 +171,25 @@ export function ExportPanel() {
         </p>
       ) : null}
 
-      {/* 主表: 時間帯 × 担当者 */}
+      {/* 時間 | メンバー名（折り返しで一枚に収める） */}
       <div>
         <h3 className="mb-2 text-base font-semibold text-[var(--bs-ink)]">
           時間帯ごとの担当
         </h3>
-        <div className="overflow-x-auto rounded-xl border border-[var(--bs-line)] bg-white shadow-sm">
-          <table className="min-w-full border-collapse text-left text-xs sm:text-sm">
+        <div className="rounded-xl border border-[var(--bs-line)] bg-white shadow-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            <colgroup>
+              <col className="w-[7.5rem] sm:w-36" />
+              <col />
+            </colgroup>
             <thead>
               <tr className="bg-[var(--bs-soft)]">
-                <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-[var(--bs-line)] bg-[var(--bs-soft)] px-3 py-2.5 font-semibold text-[var(--bs-ink)]">
+                <th className="border-b border-r border-[var(--bs-line)] px-3 py-2.5 font-semibold text-[var(--bs-ink)]">
                   時間
                 </th>
-                <th className="whitespace-nowrap border-b border-[var(--bs-line)] px-2 py-2.5 text-center font-semibold text-[var(--bs-ink-soft)]">
-                  人数
+                <th className="border-b border-[var(--bs-line)] px-3 py-2.5 font-semibold text-[var(--bs-ink)]">
+                  メンバー
                 </th>
-                {Array.from({ length: colCount }, (_, i) => (
-                  <th
-                    key={i}
-                    className="whitespace-nowrap border-b border-[var(--bs-line)] px-2 py-2.5 text-center font-semibold text-[var(--bs-muted)]"
-                  >
-                    {i + 1}
-                  </th>
-                ))}
               </tr>
             </thead>
             <tbody>
@@ -207,45 +197,36 @@ export function ExportPanel() {
                 <Fragment key={group.day}>
                   <tr className="bg-teal-50/90">
                     <td
-                      colSpan={2 + colCount}
+                      colSpan={2}
                       className="border-b border-[var(--bs-line)] px-3 py-2 text-sm font-bold tracking-wide text-teal-900"
                     >
                       {group.day}
                     </td>
                   </tr>
                   {group.rows.map((row) => (
-                    <tr key={row.slot.id} className="align-middle hover:bg-slate-50/80">
-                      <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-[var(--bs-line)] bg-white px-3 py-2.5 text-left font-semibold text-[var(--bs-ink)]">
-                        {row.slot.start}
-                        <span className="font-normal text-[var(--bs-muted)]">
+                    <tr key={row.slot.id} className="align-top">
+                      <th className="border-b border-r border-[var(--bs-line)] px-3 py-3 text-left font-semibold text-[var(--bs-ink)]">
+                        <div>{row.slot.start}</div>
+                        <div className="font-normal text-[var(--bs-muted)]">
                           –{row.slot.end}
-                        </span>
+                        </div>
                       </th>
-                      <td
-                        className={`border-b border-[var(--bs-line)] px-2 py-2.5 text-center font-semibold ${
-                          row.short
-                            ? "text-amber-700"
-                            : row.over
-                              ? "text-sky-700"
-                              : "text-[var(--bs-ink)]"
-                        }`}
-                      >
-                        {row.count}/{row.needed}
+                      <td className="border-b border-[var(--bs-line)] px-3 py-3">
+                        {row.names.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {row.names.map((name) => (
+                              <span
+                                key={`${row.slot.id}-${name}`}
+                                className="rounded-md bg-teal-50 px-2 py-0.5 text-[13px] font-medium leading-snug text-teal-950"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[var(--bs-muted)]">（未割当）</span>
+                        )}
                       </td>
-                      {Array.from({ length: colCount }, (_, i) => (
-                        <td
-                          key={i}
-                          className="whitespace-nowrap border-b border-[var(--bs-line)] px-2 py-2.5 text-center text-[var(--bs-ink)]"
-                        >
-                          {row.names[i] ? (
-                            <span className="inline-block rounded-md bg-teal-50 px-1.5 py-0.5 font-medium text-teal-900">
-                              {row.names[i]}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--bs-muted)]">·</span>
-                          )}
-                        </td>
-                      ))}
                     </tr>
                   ))}
                 </Fragment>
@@ -253,16 +234,13 @@ export function ExportPanel() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-[var(--bs-muted)]">
-          1列＝1人。人数が足りない時間帯は人数がオレンジになります。
-        </p>
       </div>
 
       <details className="rounded-xl border border-[var(--bs-line)] bg-white/70 p-3">
         <summary className="cursor-pointer text-sm font-medium text-[var(--bs-ink-soft)]">
           テキスト版（LINE・コピー用）
         </summary>
-        <pre className="mt-3 overflow-x-auto whitespace-pre font-mono text-xs leading-relaxed text-[var(--bs-ink)] sm:text-sm">
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--bs-ink)] sm:text-sm">
           {text}
         </pre>
       </details>
