@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { emptyAssignments } from "./schedule";
+import seedMain from "./seed-main.json";
 import type {
   AssignWarning,
   Assignments,
@@ -92,6 +93,17 @@ function emptySnapshot(room: string): BunkasaiSnapshot {
     dependencies: [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+/** リポジトリ同梱の初期名簿。リモート/ディスクが空でも消えないようにする */
+function loadBundledSeed(room: string): BunkasaiSnapshot | null {
+  if (room !== DEFAULT_ROOM) return null;
+  const hydrated = hydrateSnapshot(
+    room,
+    seedMain as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] },
+  );
+  if (hydrated.members.length === 0) return null;
+  return hydrated;
 }
 
 function normalizeDependencies(
@@ -215,37 +227,60 @@ function preferRicher(a: BunkasaiSnapshot | null, b: BunkasaiSnapshot | null): B
   return aTime >= bTime ? a : b;
 }
 
+async function promoteIfNeeded(
+  richer: BunkasaiSnapshot,
+  remote: BunkasaiSnapshot | null,
+): Promise<void> {
+  if (remote && remote.members.length > 0) return;
+  if (richer.members.length === 0) return;
+  if (supabaseEnabled()) {
+    try {
+      await writeRemoteSnapshot(richer);
+    } catch {
+      /* 次回 PUT に任せる */
+    }
+  }
+  try {
+    await writeFileSnapshot(richer);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiSnapshot> {
   const room = sanitizeRoom(roomInput);
   const fileSnap = await readFileSnapshot(room);
+  const seedSnap = loadBundledSeed(room);
 
   if (supabaseEnabled()) {
     try {
       const remote = await readRemoteSnapshot(room);
-      const best = preferRicher(remote, fileSnap);
-      if (best) {
-        // リモートが空でローカルに名簿がある → 一度だけ昇格して消えないようにする
-        if (
-          (!remote || remote.members.length === 0) &&
-          fileSnap &&
-          fileSnap.members.length > 0
-        ) {
-          try {
-            await writeRemoteSnapshot(fileSnap);
-          } catch {
-            /* 読み取り優先。保存失敗は次回 PUT に任せる */
-          }
-          return fileSnap;
-        }
+      const best = preferRicher(preferRicher(remote, fileSnap), seedSnap);
+      if (best && best.members.length > 0) {
+        await promoteIfNeeded(best, remote);
         return best;
       }
     } catch {
-      if (fileSnap) return fileSnap;
+      const fallback = preferRicher(fileSnap, seedSnap);
+      if (fallback) return fallback;
       return emptySnapshot(room);
     }
   }
 
-  return fileSnap ?? emptySnapshot(room);
+  const local = preferRicher(fileSnap, seedSnap);
+  if (local && local.members.length > 0) {
+    // ディスクが空ならシードを書き戻し、以降のプロセスでも残す
+    if (!fileSnap || fileSnap.members.length === 0) {
+      try {
+        await writeFileSnapshot(local);
+      } catch {
+        /* ignore */
+      }
+    }
+    return local;
+  }
+
+  return emptySnapshot(room);
 }
 
 export async function saveSnapshot(
