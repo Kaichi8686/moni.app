@@ -313,8 +313,13 @@ export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiS
       const remote = await readRemoteSnapshot(room);
       // シードは「リモートもファイルも空」の初回だけ。設定済みリモートを古くしない
       if (remote && remote.members.length > 0) {
-        const best = preferRicher(remote, fileSnap);
-        return best ?? remote;
+        // Vercel の /tmp は古いインスタンスに残ることがあるので、リモートを正とする
+        try {
+          await writeFileSnapshot(remote);
+        } catch {
+          /* ignore */
+        }
+        return remote;
       }
       const best = preferRicher(fileSnap, seedSnap);
       if (best && best.members.length > 0) {
