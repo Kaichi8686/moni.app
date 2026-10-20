@@ -258,6 +258,33 @@ export function MemberManager() {
                 </button>
               </div>
 
+              {!open && (m.ngSlotIds.length > 0 || (m.mustSlotIds ?? []).length > 0) ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(m.mustSlotIds ?? []).map((id) => {
+                    const slot = SLOTS.find((s) => s.id === id);
+                    return (
+                      <span
+                        key={`must-${id}`}
+                        className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
+                      >
+                        必 {slot ? formatSlotTitle(slot) : id}
+                      </span>
+                    );
+                  })}
+                  {m.ngSlotIds.map((id) => {
+                    const slot = SLOTS.find((s) => s.id === id);
+                    return (
+                      <span
+                        key={`ng-${id}`}
+                        className="rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-800"
+                      >
+                        NG {slot ? formatSlotTitle(slot) : id}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : null}
+
               {open ? (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-[var(--bs-muted)]">

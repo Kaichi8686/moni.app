@@ -521,6 +521,33 @@ export function readLegacyLocalMembers(): Member[] | null {
   }
 }
 
+function memberSettingsScore(members: Member[]): number {
+  let score = 0;
+  for (const m of members) {
+    score += (m.ngSlotIds?.length ?? 0) * 3;
+    score += (m.mustSlotIds?.length ?? 0) * 4;
+  }
+  return score;
+}
+
+function mergeMemberLists(primary: Member[], secondary: Member[]): Member[] {
+  const byId = new Map(secondary.map((m) => [m.id, m]));
+  const byName = new Map(secondary.map((m) => [m.name.trim(), m]));
+  return primary.map((raw) => {
+    const base = normalizeMember(raw);
+    const other = byId.get(base.id) ?? byName.get(base.name);
+    if (!other) return base;
+    const o = normalizeMember(other);
+    return normalizeMember({
+      ...base,
+      ngSlotIds: base.ngSlotIds.length >= o.ngSlotIds.length ? base.ngSlotIds : o.ngSlotIds,
+      mustSlotIds:
+        base.mustSlotIds.length >= o.mustSlotIds.length ? base.mustSlotIds : o.mustSlotIds,
+      maxShifts: base.maxShifts ?? o.maxShifts,
+    });
+  });
+}
+
 export async function hydrateFromServer(): Promise<void> {
   const store = useBunkasaiShiftStore.getState();
   store.setSyncStatus("loading");
@@ -537,25 +564,43 @@ export async function hydrateFromServer(): Promise<void> {
     const local = useBunkasaiShiftStore.getState();
     const legacy = readLegacyLocalMembers();
 
-    let bestMembers = server.members ?? [];
+    const serverMembers = (server.members ?? []).map((m) => normalizeMember(m));
+    const localMembers = local.members.map((m) => normalizeMember(m));
+    const legacyMembers = (legacy ?? []).map((m) => normalizeMember(m));
+
+    let bestMembers = serverMembers;
     let from: "server" | "local" | "legacy" = "server";
 
-    if (local.members.length > bestMembers.length) {
-      bestMembers = local.members;
+    // 人数が多い方を優先。同数なら NG/必須が多い方（端末の空設定で消さない）
+    if (localMembers.length > bestMembers.length) {
+      bestMembers = localMembers;
       from = "local";
-    }
-    if (legacy && legacy.length > bestMembers.length) {
-      bestMembers = legacy;
-      from = "legacy";
-    }
-    if (
-      from === "local" &&
-      server.members.length === local.members.length &&
-      server.members.length > 0
+    } else if (
+      localMembers.length === bestMembers.length &&
+      localMembers.length > 0 &&
+      memberSettingsScore(localMembers) > memberSettingsScore(bestMembers)
     ) {
-      bestMembers = server.members;
+      bestMembers = mergeMemberLists(localMembers, bestMembers);
+      from = "local";
+    } else if (serverMembers.length > 0 && localMembers.length > 0) {
+      bestMembers = mergeMemberLists(serverMembers, localMembers);
       from = "server";
     }
+
+    if (legacyMembers.length > bestMembers.length) {
+      bestMembers = legacyMembers;
+      from = "legacy";
+    } else if (
+      legacyMembers.length === bestMembers.length &&
+      legacyMembers.length > 0 &&
+      memberSettingsScore(legacyMembers) > memberSettingsScore(bestMembers)
+    ) {
+      bestMembers = mergeMemberLists(legacyMembers, bestMembers);
+      from = "legacy";
+    }
+
+    const serverScore = memberSettingsScore(serverMembers);
+    const bestScore = memberSettingsScore(bestMembers);
 
     store.replaceSnapshot({
       members: bestMembers,
@@ -574,13 +619,13 @@ export async function hydrateFromServer(): Promise<void> {
             ? local.lastAssignedAt
             : null,
       coreMemberIds:
-        from === "server"
+        (server.coreMemberIds?.length ?? 0) > 0
           ? server.coreMemberIds ?? []
           : from === "local"
             ? local.coreMemberIds
             : [],
       dependencies:
-        from === "server"
+        (server.dependencies?.length ?? 0) > 0
           ? server.dependencies ?? []
           : from === "local"
             ? local.dependencies
@@ -588,9 +633,10 @@ export async function hydrateFromServer(): Promise<void> {
       serverUpdatedAt: server.updatedAt,
     });
 
-    if (server.members.length === 0 && bestMembers.length > 0) {
+    // サーバーより設定が厚いときだけ昇格保存。薄い端末データで上書きしない
+    if (serverMembers.length === 0 && bestMembers.length > 0) {
       scheduleServerSave(0);
-    } else if (from !== "server" && bestMembers.length > server.members.length) {
+    } else if (bestMembers.length > serverMembers.length || bestScore > serverScore) {
       scheduleServerSave(0);
     } else {
       store.setSyncStatus("saved");
