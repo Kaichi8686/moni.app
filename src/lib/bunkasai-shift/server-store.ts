@@ -216,21 +216,77 @@ async function writeRemoteSnapshot(snapshot: BunkasaiSnapshot): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** NG・必須・上限・コア・同伴の「設定の濃さ」。名簿人数だけで勝敗を決めない */
+export function settingsScore(snap: Pick<
+  BunkasaiSnapshot,
+  "members" | "coreMemberIds" | "dependencies"
+>): number {
+  let score = 0;
+  for (const m of snap.members) {
+    score += (m.ngSlotIds?.length ?? 0) * 3;
+    score += (m.mustSlotIds?.length ?? 0) * 4;
+    if (m.maxShifts != null) score += 1;
+  }
+  score += (snap.coreMemberIds?.length ?? 0) * 2;
+  score += (snap.dependencies?.length ?? 0) * 3;
+  return score;
+}
+
 function preferRicher(a: BunkasaiSnapshot | null, b: BunkasaiSnapshot | null): BunkasaiSnapshot | null {
   if (!a) return b;
   if (!b) return a;
   if (a.members.length !== b.members.length) {
     return a.members.length > b.members.length ? a : b;
   }
+  const aScore = settingsScore(a);
+  const bScore = settingsScore(b);
+  if (aScore !== bScore) return aScore > bScore ? a : b;
   const aTime = Date.parse(a.updatedAt) || 0;
   const bTime = Date.parse(b.updatedAt) || 0;
   return aTime >= bTime ? a : b;
+}
+
+/**
+ * 同名/同IDのメンバーについて、NG・必須が空の側で上書きしない。
+ * 端末の古い localStorage が設定を消す事故を防ぐ。
+ */
+export function mergeMembersPreservingSettings(
+  existing: Member[],
+  incoming: Member[],
+): Member[] {
+  const byId = new Map(existing.map((m) => [m.id, m]));
+  const byName = new Map(existing.map((m) => [m.name.trim(), m]));
+  return incoming.map((raw) => {
+    const next = normalizeMember(raw);
+    const prev = byId.get(next.id) ?? byName.get(next.name);
+    if (!prev) return next;
+    const ng =
+      next.ngSlotIds.length > 0
+        ? next.ngSlotIds
+        : prev.ngSlotIds.length > 0
+          ? prev.ngSlotIds
+          : next.ngSlotIds;
+    const must =
+      next.mustSlotIds.length > 0
+        ? next.mustSlotIds
+        : prev.mustSlotIds.length > 0
+          ? prev.mustSlotIds
+          : next.mustSlotIds;
+    return normalizeMember({
+      ...next,
+      ngSlotIds: ng,
+      mustSlotIds: must,
+      // 上限は明示値を優先。incoming にあればそれを使う
+      maxShifts: next.maxShifts ?? prev.maxShifts,
+    });
+  });
 }
 
 async function promoteIfNeeded(
   richer: BunkasaiSnapshot,
   remote: BunkasaiSnapshot | null,
 ): Promise<void> {
+  // リモートに名簿があるときはシード等で上書きしない
   if (remote && remote.members.length > 0) return;
   if (richer.members.length === 0) return;
   if (supabaseEnabled()) {
@@ -255,7 +311,12 @@ export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiS
   if (supabaseEnabled()) {
     try {
       const remote = await readRemoteSnapshot(room);
-      const best = preferRicher(preferRicher(remote, fileSnap), seedSnap);
+      // シードは「リモートもファイルも空」の初回だけ。設定済みリモートを古くしない
+      if (remote && remote.members.length > 0) {
+        const best = preferRicher(remote, fileSnap);
+        return best ?? remote;
+      }
+      const best = preferRicher(fileSnap, seedSnap);
       if (best && best.members.length > 0) {
         await promoteIfNeeded(best, remote);
         return best;
@@ -269,7 +330,6 @@ export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiS
 
   const local = preferRicher(fileSnap, seedSnap);
   if (local && local.members.length > 0) {
-    // ディスクが空ならシードを書き戻し、以降のプロセスでも残す
     if (!fileSnap || fileSnap.members.length === 0) {
       try {
         await writeFileSnapshot(local);
