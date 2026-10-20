@@ -1,4 +1,4 @@
-import { SLOTS, formatSlotTitle } from "./schedule";
+import { NEEDED, SLOTS, formatSlotTitle } from "./schedule";
 import type { Assignments, Member, ShiftSlot } from "./types";
 
 /** LINE・シートで壊れやすい文字を避ける */
@@ -17,111 +17,125 @@ function slotHeader(slot: ShiftSlot): string {
   return `${slot.dayLabel}\n${slot.start}-${slot.end}`;
 }
 
-function orderedMembers(members: Member[], assignments: Assignments): {
-  assigned: Member[];
-  unassigned: Member[];
-} {
+function nameById(members: Member[]): Map<string, string> {
+  return new Map(members.map((m) => [m.id, safeName(m.name)]));
+}
+
+function unassignedMembers(members: Member[], assignments: Assignments): Member[] {
   const assignedIds = new Set<string>();
   for (const slot of SLOTS) {
     for (const id of assignments[slot.id]) assignedIds.add(id);
   }
-  const assigned = [...members]
-    .filter((m) => assignedIds.has(m.id))
-    .sort((a, b) => safeName(a.name).localeCompare(safeName(b.name), "ja"));
-  const unassigned = members
+  return members
     .filter((m) => !assignedIds.has(m.id))
     .sort((a, b) => safeName(a.name).localeCompare(safeName(b.name), "ja"));
-  return { assigned, unassigned };
 }
 
-function pad(str: string, width: number): string {
-  const chars = [...str];
-  let w = 0;
-  for (const ch of chars) {
-    w += ch.charCodeAt(0) > 0xff ? 2 : 1;
+/** 各時間帯の担当列数（定員。超過分も表示できるように実人数の最大も見る） */
+export function rosterColumnCount(assignments: Assignments): number {
+  let max = NEEDED;
+  for (const slot of SLOTS) {
+    max = Math.max(max, assignments[slot.id].length);
   }
-  return str + " ".repeat(Math.max(0, width - w));
+  return Math.max(1, Math.min(20, max));
+}
+
+export type SlotRosterRow = {
+  slot: ShiftSlot;
+  names: string[];
+  count: number;
+  needed: number;
+  short: boolean;
+  over: boolean;
+};
+
+export function buildSlotRosterRows(
+  members: Member[],
+  assignments: Assignments,
+): SlotRosterRow[] {
+  const byId = nameById(members);
+  return SLOTS.map((slot) => {
+    const names = assignments[slot.id]
+      .map((id) => byId.get(id) ?? "?")
+      .sort((a, b) => a.localeCompare(b, "ja"));
+    return {
+      slot,
+      names,
+      count: names.length,
+      needed: slot.needed,
+      short: names.length < slot.needed,
+      over: names.length > slot.needed,
+    };
+  });
 }
 
 /**
- * LINE貼り付け用のスプレッドシート風テキスト。
- * タブ区切りマトリクスを中心にし、チャットでもシートでも使える形にする。
+ * LINE・コピー用本文。時間帯に誰が入っているかを主にした表。
  */
 export function formatShiftText(members: Member[], assignments: Assignments): string {
-  const byId = new Map(members.map((m) => [m.id, safeName(m.name)]));
-  const { assigned, unassigned } = orderedMembers(members, assignments);
-  const matrixMembers = assigned.length > 0 ? assigned : [...members].sort((a, b) =>
-    safeName(a.name).localeCompare(safeName(b.name), "ja"),
-  );
-
+  const rows = buildSlotRosterRows(members, assignments);
+  const cols = rosterColumnCount(assignments);
   const lines: string[] = ["【文化祭シフト表】", ""];
 
-  // --- 時間帯ごとの名簿（読みやすい一覧） ---
   let day = "";
-  for (const slot of SLOTS) {
-    if (slot.dayLabel !== day) {
-      day = slot.dayLabel;
+  for (const row of rows) {
+    if (row.slot.dayLabel !== day) {
+      day = row.slot.dayLabel;
       lines.push(`■ ${day}`);
+      // ヘッダー（タブ区切り＝シートに貼れる）
+      lines.push(
+        ["時間", "人数", ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`)].join(
+          "\t",
+        ),
+      );
     }
-    const ids = assignments[slot.id];
-    const flag =
-      ids.length < slot.needed ? " 【不足】" : ids.length > slot.needed ? " 【超過】" : "";
-    lines.push(`${slot.start}-${slot.end}  ${ids.length}/${slot.needed}人${flag}`);
-    const names = ids.map((id) => byId.get(id) ?? "?");
-    if (names.length === 0) {
-      lines.push("  (未割当)");
-    } else {
-      // 3人ずつで折り返し
-      for (let i = 0; i < names.length; i += 3) {
-        lines.push(`  ${names.slice(i, i + 3).join(" / ")}`);
-      }
-    }
-    lines.push("");
-  }
-
-  // --- スプレッドシート風マトリクス（タブ区切り＝LINEからSheetsへ貼れる） ---
-  lines.push("■ メンバー表（タブ区切り・シートにそのまま貼れます）");
-  const headers = ["名前", ...SLOTS.map((s) => slotShortLabel(s)), "合計"];
-  lines.push(headers.join("\t"));
-  for (const m of matrixMembers) {
-    const marks = SLOTS.map((slot) =>
-      assignments[slot.id].includes(m.id) ? "○" : "",
+    const flag = row.short ? "不足" : row.over ? "超過" : "";
+    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
+    lines.push(
+      [
+        `${row.slot.start}-${row.slot.end}`,
+        `${row.count}/${row.needed}${flag ? ` ${flag}` : ""}`,
+        ...cells,
+      ].join("\t"),
     );
-    const total = marks.filter(Boolean).length;
-    lines.push([safeName(m.name), ...marks, String(total)].join("\t"));
   }
 
-  // --- 等幅っぽい見本（チャットで表に見える） ---
-  lines.push("");
-  lines.push("■ 見やすい表（○=担当）");
-  const nameW = Math.min(
-    14,
-    Math.max(6, ...matrixMembers.map((m) => [...safeName(m.name)].length + 2)),
-  );
-  const colW = 8;
-  const head =
-    pad("名前", nameW) +
-    SLOTS.map((s) => pad(slotShortLabel(s).replace("日目", "日"), colW)).join("") +
-    "合計";
-  lines.push(head);
-  lines.push("-".repeat(Math.min(80, head.length)));
-  for (const m of matrixMembers) {
-    const marks = SLOTS.map((slot) =>
-      pad(assignments[slot.id].includes(m.id) ? "○" : "・", colW),
-    );
-    const total = SLOTS.filter((slot) => assignments[slot.id].includes(m.id)).length;
-    lines.push(pad(safeName(m.name), nameW) + marks.join("") + String(total));
-  }
-
+  const unassigned = unassignedMembers(members, assignments);
   if (unassigned.length > 0) {
     lines.push("");
-    lines.push(`■ 未割当: ${unassigned.map((m) => safeName(m.name)).join(" / ")}`);
+    lines.push(`■ 未割当: ${unassigned.map((m) => safeName(m.name)).join("、")}`);
   }
 
   return lines.join("\n").trimEnd();
 }
 
-/** スプレッドシートにそのまま貼れるTSV（マトリクスのみ） */
+/** 時間帯×担当のシート用TSV（主表） */
+export function formatSlotRosterTsv(members: Member[], assignments: Assignments): string {
+  const rows = buildSlotRosterRows(members, assignments);
+  const cols = rosterColumnCount(assignments);
+  const header = [
+    "日程",
+    "開始",
+    "終了",
+    "割当",
+    "必要",
+    ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`),
+  ];
+  const body = rows.map((row) => {
+    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
+    return [
+      row.slot.dayLabel,
+      row.slot.start,
+      row.slot.end,
+      String(row.count),
+      String(row.needed),
+      ...cells,
+    ].join("\t");
+  });
+  return [header.join("\t"), ...body].join("\n");
+}
+
+/** メンバー×時間のマトリクスTSV（補助） */
 export function formatShiftTsv(members: Member[], assignments: Assignments): string {
   const headers = ["名前", ...SLOTS.map((s) => `${s.dayLabel} ${s.start}-${s.end}`), "合計"];
   const rows = [...members]
@@ -136,69 +150,32 @@ export function formatShiftTsv(members: Member[], assignments: Assignments): str
   return [headers.join("\t"), ...rows].join("\n");
 }
 
-/** 時間帯ごとの名簿TSV（1行=1コマ） */
-export function formatSlotRosterTsv(members: Member[], assignments: Assignments): string {
-  const byId = new Map(members.map((m) => [m.id, safeName(m.name)]));
-  const header = ["日程", "開始", "終了", "必要", "割当", "メンバー"];
-  const rows = SLOTS.map((slot) => {
-    const names = assignments[slot.id]
-      .map((id) => byId.get(id) ?? "")
-      .filter(Boolean)
-      .join("、");
-    return [
-      slot.dayLabel,
-      slot.start,
-      slot.end,
-      String(slot.needed),
-      String(assignments[slot.id].length),
-      names,
-    ].join("\t");
-  });
-  return [header.join("\t"), ...rows].join("\n");
-}
-
 export function formatShiftCsv(members: Member[], assignments: Assignments): string {
-  const byId = new Map(members.map((m) => [m.id, safeName(m.name)]));
-  const header = ["日程", "開始", "終了", "必要人数", "割当人数", "メンバー"];
-  const rows = SLOTS.map((slot) => {
-    const names = assignments[slot.id]
-      .map((id) => byId.get(id) ?? "")
-      .filter(Boolean)
-      .join(" / ");
+  const rows = buildSlotRosterRows(members, assignments);
+  const cols = rosterColumnCount(assignments);
+  const header = [
+    "日程",
+    "開始",
+    "終了",
+    "割当人数",
+    "必要人数",
+    ...Array.from({ length: cols }, (_, i) => `担当${i + 1}`),
+  ];
+  const body = rows.map((row) => {
+    const cells = Array.from({ length: cols }, (_, i) => row.names[i] ?? "");
     return [
-      slot.dayLabel,
-      slot.start,
-      slot.end,
-      String(slot.needed),
-      String(assignments[slot.id].length),
-      names,
+      row.slot.dayLabel,
+      row.slot.start,
+      row.slot.end,
+      String(row.count),
+      String(row.needed),
+      ...cells,
     ]
       .map(csvEscape)
       .join(",");
   });
 
-  const matrixHeader = [
-    "名前",
-    ...SLOTS.map((s) => `${s.dayLabel}_${s.start}`),
-    "合計",
-  ];
-  const matrixRows = [...members]
-    .sort((a, b) => safeName(a.name).localeCompare(safeName(b.name), "ja"))
-    .map((m) => {
-      const marks = SLOTS.map((slot) =>
-        assignments[slot.id].includes(m.id) ? "○" : "",
-      );
-      const total = marks.filter(Boolean).length;
-      return [safeName(m.name), ...marks, String(total)].map(csvEscape).join(",");
-    });
-
-  return [
-    header.join(","),
-    ...rows,
-    "",
-    matrixHeader.join(","),
-    ...matrixRows,
-  ].join("\n");
+  return [header.join(","), ...body].join("\n");
 }
 
 function csvEscape(value: string): string {
