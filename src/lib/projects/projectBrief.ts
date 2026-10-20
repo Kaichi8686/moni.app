@@ -1,6 +1,6 @@
 import { parseCoachingContext, type CoachingContext } from "@/lib/projects/coachingContext";
 
-/** 新規作成・設定で使うプロジェクト詳細の3欄 */
+/** 概要・設定で使うプロジェクト詳細の3欄（作成時は空で、概要できっかけとゴールを最初に入力） */
 export type ProjectBrief = {
   /** どのようなことを解決したくてこのプロジェクトを思いついたか */
   problemMotivation: string;
