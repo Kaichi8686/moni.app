@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { emptyAssignments } from "./schedule";
 import type {
   AssignWarning,
@@ -26,7 +27,13 @@ const DATA_DIR =
     ? path.join("/tmp", "bunkasai-shift-data")
     : path.join(process.cwd(), ".data", "bunkasai-shift");
 
+/** festival-shift バケット内。既存の shift ボードと同居 */
+const BUCKET = "festival-shift";
+const OBJECT_PREFIX = "bunkasai-rooms";
+
 const DEFAULT_ROOM = "main";
+
+let bucketReady: Promise<void> | null = null;
 
 function sanitizeRoom(room: string | null | undefined): string {
   const raw = (room ?? DEFAULT_ROOM).trim().toLowerCase() || DEFAULT_ROOM;
@@ -38,8 +45,40 @@ function filePath(room: string): string {
   return path.join(DATA_DIR, `${room}.json`);
 }
 
+function objectPath(room: string): string {
+  return `${OBJECT_PREFIX}/${room}.json`;
+}
+
 async function ensureDir(): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
+}
+
+function supabaseEnabled(): boolean {
+  return Boolean(getSupabaseAdmin());
+}
+
+async function ensureBucket(): Promise<void> {
+  if (!supabaseEnabled()) return;
+  if (!bucketReady) {
+    bucketReady = (async () => {
+      const admin = getSupabaseAdmin()!;
+      const { data, error } = await admin.storage.listBuckets();
+      if (error) throw new Error(error.message);
+      if (!data?.some((b) => b.name === BUCKET)) {
+        const { error: createErr } = await admin.storage.createBucket(BUCKET, {
+          public: false,
+          fileSizeLimit: 2 * 1024 * 1024,
+        });
+        if (createErr && !/already exists|duplicate/i.test(createErr.message)) {
+          throw new Error(createErr.message);
+        }
+      }
+    })().catch((e) => {
+      bucketReady = null;
+      throw e;
+    });
+  }
+  await bucketReady;
 }
 
 function emptySnapshot(room: string): BunkasaiSnapshot {
@@ -100,30 +139,113 @@ function normalizeDependencies(
   return out.slice(0, 80);
 }
 
-export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiSnapshot> {
-  const room = sanitizeRoom(roomInput);
+function hydrateSnapshot(
+  room: string,
+  parsed: Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] },
+): BunkasaiSnapshot {
+  const members = (Array.isArray(parsed.members) ? parsed.members : []).map((m) =>
+    normalizeMember(m),
+  );
+  const memberIds = new Set(members.map((m) => m.id));
+  return {
+    room,
+    members,
+    assignments: parsed.assignments ?? emptyAssignments(),
+    warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+    lastAssignedAt: parsed.lastAssignedAt ?? null,
+    coreMemberIds: Array.isArray(parsed.coreMemberIds)
+      ? parsed.coreMemberIds.map(String).filter((id) => memberIds.has(id))
+      : [],
+    dependencies: normalizeDependencies(parsed.dependencies, parsed.pairs, memberIds),
+    updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+async function readFileSnapshot(room: string): Promise<BunkasaiSnapshot | null> {
   try {
     const raw = await fs.readFile(filePath(room), "utf8");
-    const parsed = JSON.parse(raw) as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] };
-    const members = (Array.isArray(parsed.members) ? parsed.members : []).map((m) =>
-      normalizeMember(m),
-    );
-    const memberIds = new Set(members.map((m) => m.id));
-    return {
+    return hydrateSnapshot(
       room,
-      members,
-      assignments: parsed.assignments ?? emptyAssignments(),
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
-      lastAssignedAt: parsed.lastAssignedAt ?? null,
-      coreMemberIds: Array.isArray(parsed.coreMemberIds)
-        ? parsed.coreMemberIds.map(String).filter((id) => memberIds.has(id))
-        : [],
-      dependencies: normalizeDependencies(parsed.dependencies, parsed.pairs, memberIds),
-      updatedAt: parsed.updatedAt ?? new Date().toISOString(),
-    };
+      JSON.parse(raw) as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] },
+    );
   } catch {
-    return emptySnapshot(room);
+    return null;
   }
+}
+
+async function writeFileSnapshot(snapshot: BunkasaiSnapshot): Promise<void> {
+  await ensureDir();
+  const target = filePath(snapshot.room);
+  const tmp = `${target}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(snapshot), "utf8");
+  await fs.rename(tmp, target);
+}
+
+async function readRemoteSnapshot(room: string): Promise<BunkasaiSnapshot | null> {
+  await ensureBucket();
+  const admin = getSupabaseAdmin()!;
+  const { data, error } = await admin.storage.from(BUCKET).download(objectPath(room));
+  if (error || !data) return null;
+  const text = await data.text();
+  return hydrateSnapshot(
+    room,
+    JSON.parse(text) as Partial<BunkasaiSnapshot> & { pairs?: MemberPair[] },
+  );
+}
+
+async function writeRemoteSnapshot(snapshot: BunkasaiSnapshot): Promise<void> {
+  await ensureBucket();
+  const admin = getSupabaseAdmin()!;
+  const body = JSON.stringify(snapshot);
+  const { error } = await admin.storage.from(BUCKET).upload(objectPath(snapshot.room), body, {
+    contentType: "application/json",
+    upsert: true,
+  });
+  if (error) throw new Error(error.message);
+}
+
+function preferRicher(a: BunkasaiSnapshot | null, b: BunkasaiSnapshot | null): BunkasaiSnapshot | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.members.length !== b.members.length) {
+    return a.members.length > b.members.length ? a : b;
+  }
+  const aTime = Date.parse(a.updatedAt) || 0;
+  const bTime = Date.parse(b.updatedAt) || 0;
+  return aTime >= bTime ? a : b;
+}
+
+export async function loadSnapshot(roomInput?: string | null): Promise<BunkasaiSnapshot> {
+  const room = sanitizeRoom(roomInput);
+  const fileSnap = await readFileSnapshot(room);
+
+  if (supabaseEnabled()) {
+    try {
+      const remote = await readRemoteSnapshot(room);
+      const best = preferRicher(remote, fileSnap);
+      if (best) {
+        // リモートが空でローカルに名簿がある → 一度だけ昇格して消えないようにする
+        if (
+          (!remote || remote.members.length === 0) &&
+          fileSnap &&
+          fileSnap.members.length > 0
+        ) {
+          try {
+            await writeRemoteSnapshot(fileSnap);
+          } catch {
+            /* 読み取り優先。保存失敗は次回 PUT に任せる */
+          }
+          return fileSnap;
+        }
+        return best;
+      }
+    } catch {
+      if (fileSnap) return fileSnap;
+      return emptySnapshot(room);
+    }
+  }
+
+  return fileSnap ?? emptySnapshot(room);
 }
 
 export async function saveSnapshot(
@@ -153,11 +275,17 @@ export async function saveSnapshot(
     updatedAt: new Date().toISOString(),
   };
 
-  await ensureDir();
-  const target = filePath(room);
-  const tmp = `${target}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(snapshot), "utf8");
-  await fs.rename(tmp, target);
+  // サーバーレスの /tmp は消えるので、Supabase があるときは必ずリモートへ
+  if (supabaseEnabled()) {
+    await writeRemoteSnapshot(snapshot);
+  }
+  // ローカル開発・フォールバック用にもディスクへ（Vercel /tmp でも最新プロセス内の再読込に効く）
+  try {
+    await writeFileSnapshot(snapshot);
+  } catch {
+    if (!supabaseEnabled()) throw new Error("SAVE_FAILED");
+  }
+
   return snapshot;
 }
 
