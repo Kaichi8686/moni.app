@@ -11,7 +11,7 @@ import {
 } from "@/lib/projects/deletionVote";
 
 /**
- * 削除提案が進行中のとき、プロジェクト詳細とロードマップの間に
+ * 削除提案が進行中のとき、ゴール欄とロードマップの間に
  * 賛成・反対の人数を常時表示する。
  */
 export function ProjectDeletionVoteBanner() {

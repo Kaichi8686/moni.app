@@ -141,7 +141,7 @@ export function ProjectDeleteVotePanel({
               <p className="mt-2 text-[11px] text-[#6B7280]">
                 {state.thresholdMet
                   ? "基準を満たしました。オーナーが最終削除できます。"
-                  : "まだ基準に達していません。投票状況はプロジェクト詳細とロードマップの間にも表示されます。"}
+                  : "まだ基準に達していません。投票状況はゴール欄とロードマップの間にも表示されます。"}
               </p>
             </div>
 
