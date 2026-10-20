@@ -79,23 +79,14 @@ export async function PUT(req: Request) {
       members = [];
     }
 
-    const coreMemberIds =
-      Array.isArray(body.coreMemberIds) && body.coreMemberIds.length > 0
-        ? body.coreMemberIds
-        : Array.isArray(body.coreMemberIds) &&
-            body.coreMemberIds.length === 0 &&
-            existing.coreMemberIds.length > 0
-          ? existing.coreMemberIds
-          : (body.coreMemberIds ?? existing.coreMemberIds);
+    // 未指定は既存維持。[] を明示したときはクリア（意図的な解除）
+    const coreMemberIds = Array.isArray(body.coreMemberIds)
+      ? body.coreMemberIds
+      : existing.coreMemberIds;
 
-    const dependencies =
-      Array.isArray(body.dependencies) && body.dependencies.length > 0
-        ? body.dependencies
-        : Array.isArray(body.dependencies) &&
-            body.dependencies.length === 0 &&
-            existing.dependencies.length > 0
-          ? existing.dependencies
-          : (body.dependencies ?? existing.dependencies);
+    const dependencies = Array.isArray(body.dependencies)
+      ? body.dependencies
+      : existing.dependencies;
 
     const snapshot = await saveSnapshot({
       room,
