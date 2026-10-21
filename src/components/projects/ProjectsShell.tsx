@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
-import { CommandPaletteGate } from "@/components/ui/CommandPaletteGate";
+import { CommandPalette } from "@/components/ui/CommandPalette";
 
 export function ProjectsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,7 +12,7 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <CommandPaletteGate projectId={projectId} />
+      <CommandPalette projectId={projectId} />
       {hideBottomNav ? null : <AppBottomNav />}
     </>
   );

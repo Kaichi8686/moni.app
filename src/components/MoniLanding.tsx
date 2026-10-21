@@ -172,14 +172,11 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
   const { t, locale, setLocale } = useI18n();
   const [navSolid, setNavSolid] = useState(false);
   const onMountRef = useRef(onMount);
+  onMountRef.current = onMount;
 
   const onScroll = useCallback(() => {
     setNavSolid(window.scrollY > 18);
   }, []);
-
-  useEffect(() => {
-    onMountRef.current = onMount;
-  }, [onMount]);
 
   useEffect(() => {
     document.documentElement.classList.add("moni-landing-active");
@@ -193,16 +190,6 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
   }, [onScroll]);
 
   useEffect(() => {
-    // Keep root layout lean: pull display faces only on the landing page.
-    const id = "moni-landing-fonts";
-    if (!document.getElementById(id)) {
-      const link = document.createElement("link");
-      link.id = id;
-      link.rel = "stylesheet";
-      link.href =
-        "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Grand+Hotel&family=Instrument+Serif:ital@0;1&display=swap";
-      document.head.appendChild(link);
-    }
     onMountRef.current?.();
   }, []);
 
