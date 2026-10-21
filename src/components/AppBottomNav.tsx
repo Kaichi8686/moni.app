@@ -456,19 +456,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }, []);
 
   useEffect(() => {
-    // Defer badge work so route first paint / WebGL isn't competing with unread counts.
-    const run = () => {
+    const timer = window.setTimeout(() => {
       void refreshMailUnread();
-    };
-    const ric = window as Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    if (ric.requestIdleCallback) {
-      const idleId = ric.requestIdleCallback(run, { timeout: 2000 });
-      return () => ric.cancelIdleCallback?.(idleId);
-    }
-    const timer = window.setTimeout(run, 200);
+    }, 0);
     return () => window.clearTimeout(timer);
   }, [refreshMailUnread, pathname]);
 
@@ -496,7 +486,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
     document.addEventListener("visibilitychange", onVisible);
     const poll = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshMailUnread();
-    }, 60000);
+    }, 45000);
 
     return () => {
       sub.subscription.unsubscribe();
