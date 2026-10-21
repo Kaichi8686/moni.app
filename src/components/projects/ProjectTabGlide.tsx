@@ -8,6 +8,7 @@ import { buildRoadmapTemplateRows, PROJECT_LINE_META, projectLineShortLabel } fr
 import type { ProjectRow } from "@/lib/projects/types";
 import { ActiveProjectCard } from "@/components/home/ActiveProjectCard";
 import { ProjectCubeCarousel } from "@/components/projects/ProjectCubeCarousel";
+import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { openProjectCluster } from "@/lib/navigation/projectCluster";
@@ -264,6 +265,7 @@ export function ProjectTabGlide({
       return;
     }
     /** きっかけ・ゴールは作成後に概要で入力する（初回は空） */
+    const defaultPhoto = form.thumbnail_url.trim() || pickDefaultProjectPhoto();
     const fullPayload = {
       owner_id: uid,
       name: form.name.trim(),
@@ -272,7 +274,7 @@ export function ProjectTabGlide({
       business_type: form.business_type,
       category: form.category.trim() || "探究",
       tags: form.tags.split(/[,、]/).map((x) => x.trim()).filter(Boolean),
-      thumbnail_url: form.thumbnail_url.trim() || null,
+      thumbnail_url: defaultPhoto,
       visibility: form.visibility,
       recruitment_target: form.recruitment_target.trim(),
       recruitment_message: form.recruitment_message.trim(),
@@ -287,6 +289,7 @@ export function ProjectTabGlide({
         business_type: fullPayload.business_type,
         category: fullPayload.category,
         tags: fullPayload.tags,
+        thumbnail_url: defaultPhoto,
         visibility: fullPayload.visibility,
       },
       {
@@ -296,12 +299,19 @@ export function ProjectTabGlide({
         business_type: fullPayload.business_type,
         category: fullPayload.category,
         tags: fullPayload.tags,
+        thumbnail_url: defaultPhoto,
         visibility: fullPayload.visibility,
       },
       {
         owner_id: uid,
         name: fullPayload.name,
         description: fullPayload.description,
+        thumbnail_url: defaultPhoto,
+      },
+      {
+        owner_id: uid,
+        name: fullPayload.name,
+        thumbnail_url: defaultPhoto,
       },
       {
         owner_id: uid,
@@ -310,11 +320,15 @@ export function ProjectTabGlide({
     ];
     let data: { id: string } | null = null;
     let error: { message: string; code?: string } | null = null;
+    let usedThumbnail = false;
     for (const candidate of payloadCandidates) {
       const res = await supabase.from("projects").insert(candidate).select("id").single();
       data = (res.data as { id: string } | null) ?? null;
       error = (res.error as { message: string; code?: string } | null) ?? null;
-      if (!error) break;
+      if (!error) {
+        usedThumbnail = "thumbnail_url" in candidate;
+        break;
+      }
       const schemaMismatch =
         error.code === "42703" ||
         error.code === "PGRST204" ||
@@ -328,6 +342,15 @@ export function ProjectTabGlide({
       return;
     }
     const projectId = data.id as string;
+    if (!usedThumbnail) {
+      const { error: thumbErr } = await supabase
+        .from("projects")
+        .update({ thumbnail_url: defaultPhoto })
+        .eq("id", projectId);
+      if (thumbErr) {
+        console.warn("[projects] default photo assign skipped:", thumbErr.message);
+      }
+    }
     const { error: memErr } = await supabase
       .from("project_members")
       .upsert(
