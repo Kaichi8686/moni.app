@@ -22,6 +22,7 @@ import {
 } from "@/lib/messages/api";
 import { profileToSender } from "@/lib/messages/mappers";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
+import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Message } from "@/lib/types/messages";
@@ -110,6 +111,9 @@ export function ConversationView({ conversationId }: Props) {
         });
       } else {
         setHeader({ title: head.title, subtitle: head.subtitle, type: head.type, id: head.id });
+        if (head.type === "direct") {
+          markDirectConversationOpened(conversationId);
+        }
       }
       try {
         const reads = await fetchMemberReadMap(supabase, conversationId);

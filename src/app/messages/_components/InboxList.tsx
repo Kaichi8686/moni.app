@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
@@ -18,11 +18,23 @@ import {
 } from "@/lib/messages/api";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
+import {
+  readOpenedDirectConversationIds,
+  subscribeOpenedDirectConversations,
+} from "@/lib/messages/openedDirectConversations";
 import { loadFollowingListRecent } from "@/lib/profile/followActions";
 import type { FollowListUser } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 import type { InboxConversation } from "@/lib/types/messages";
+
+function getOpenedDirectSnapshot(): string {
+  return [...readOpenedDirectConversationIds()].sort().join(",");
+}
+
+function getOpenedDirectServerSnapshot(): string {
+  return "";
+}
 
 type InboxFilter = "all" | "unread" | "groups" | "projects";
 
@@ -65,6 +77,15 @@ export function InboxList() {
   const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
   const [scopedMemberOk, setScopedMemberOk] = useState(false);
   const peerHandledRef = useRef<string | null>(null);
+  const openedDirectKey = useSyncExternalStore(
+    subscribeOpenedDirectConversations,
+    getOpenedDirectSnapshot,
+    getOpenedDirectServerSnapshot,
+  );
+  const openedDirectIds = useMemo(
+    () => new Set(openedDirectKey ? openedDirectKey.split(",") : []),
+    [openedDirectKey],
+  );
 
   const scopedProjectId = (() => {
     const raw = searchParams.get("project")?.trim() ?? "";
@@ -245,9 +266,12 @@ export function InboxList() {
         return false;
       });
     } else if (!scopedProjectId) {
-      // プロフィールブロック: やりとり済みの 1:1 + グループ／プロジェクト
+      // プロフィールブロック: やりとり済み／ユーザーが開いた 1:1 + グループ／プロジェクト
+      // （プロジェクト同期で作られた空DMは、開いていない限り出さない）
       list = list.filter((c) => {
-        if (c.type === "direct") return Boolean(c.lastMessage);
+        if (c.type === "direct") {
+          return Boolean(c.lastMessage) || openedDirectIds.has(c.id);
+        }
         return c.type === "group" || c.type === "project";
       });
     }
@@ -274,7 +298,16 @@ export function InboxList() {
       return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
     });
     return list;
-  }, [conversations, filter, searchQuery, locale, scopedProjectId, scopedMemberOk, projectPeerIds]);
+  }, [
+    conversations,
+    filter,
+    searchQuery,
+    locale,
+    scopedProjectId,
+    scopedMemberOk,
+    projectPeerIds,
+    openedDirectIds,
+  ]);
 
   const emptyHint = (() => {
     if (scopedProjectId && scopedMemberOk) {
