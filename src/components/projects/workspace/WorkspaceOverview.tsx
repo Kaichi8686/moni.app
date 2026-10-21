@@ -207,7 +207,10 @@ export default function WorkspaceOverview() {
     }
   }
 
-  if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
+  // Don't block the whole overview once the project shell is available.
+  if (loading && !project) {
+    return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
+  }
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
   const completedSteps = sortedPhases.filter((phase) => phase.status === "completed").length;

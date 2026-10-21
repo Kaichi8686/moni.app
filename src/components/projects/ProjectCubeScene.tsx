@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { ContactShadows, Html, RoundedBox } from "@react-three/drei";
+import { Html, RoundedBox } from "@react-three/drei";
 import { useDrag } from "@use-gesture/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -394,8 +394,6 @@ function ProjectCubeMesh({
         args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]}
         radius={CUBE_RADIUS}
         smoothness={CUBE_SMOOTHNESS}
-        castShadow
-        receiveShadow
         material={materials}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
@@ -433,8 +431,8 @@ function SceneCubes({
 
   return (
     <>
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[4, 6, 3]} intensity={1.05} castShadow shadow-mapSize={[512, 512]} />
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[4, 6, 3]} intensity={1.05} />
       <directionalLight position={[-3, 2, -2]} intensity={0.4} />
 
       {visible.map(({ item, index, side }) => (
@@ -447,16 +445,6 @@ function SceneCubes({
           onOpen={() => onOpenIndex(index)}
         />
       ))}
-
-      <ContactShadows
-        position={[0, -1.35, 0]}
-        opacity={0.32}
-        scale={14}
-        blur={2.2}
-        far={4.2}
-        resolution={256}
-        color="#1a1a1a"
-      />
     </>
   );
 }
@@ -556,8 +544,7 @@ export function ProjectCubeCarousel({
       >
         <Canvas
           className="!absolute inset-0 h-full w-full"
-          shadows
-          dpr={[1, 1.25]}
+          dpr={[1, 1.15]}
           frameloop={tabVisible ? "always" : "never"}
           camera={{ position: [0, 0.35, 5.35], fov: 38, near: 0.1, far: 40 }}
           gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}

@@ -1,11 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { fetchIncomingProjectInvites, fetchMyProjectNotifications } from "@/lib/projects/projectInvites";
 import { countActionableFollowNotices } from "@/lib/profile/socialNotifications";
-import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
 import { supabase } from "@/lib/supabase";
+
+const ProjectInviteBellPanel = dynamic(
+  () => import("@/components/projects/ProjectInviteBellPanel").then((m) => m.ProjectInviteBellPanel),
+  { ssr: false },
+);
 
 type Props = {
   userId: string | null;
@@ -32,10 +37,25 @@ export function ProjectNoticeBell({ userId, onAccepted }: Props) {
 
   useEffect(() => {
     if (!userId) {
-      setBadge(0);
+      queueMicrotask(() => setBadge(0));
       return;
     }
-    void refreshBadge(userId);
+    const ric = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    let cancelIdle: (() => void) | undefined;
+    if (ric.requestIdleCallback) {
+      const idleId = ric.requestIdleCallback(() => {
+        void refreshBadge(userId);
+      }, { timeout: 1500 });
+      cancelIdle = () => ric.cancelIdleCallback?.(idleId);
+    } else {
+      const timer = window.setTimeout(() => {
+        void refreshBadge(userId);
+      }, 0);
+      cancelIdle = () => window.clearTimeout(timer);
+    }
     const onVisible = () => {
       if (document.visibilityState === "visible") void refreshBadge(userId);
     };
@@ -46,6 +66,7 @@ export function ProjectNoticeBell({ userId, onAccepted }: Props) {
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(poll);
+      cancelIdle?.();
     };
   }, [userId, refreshBadge]);
 
@@ -73,19 +94,21 @@ export function ProjectNoticeBell({ userId, onAccepted }: Props) {
         ) : null}
       </button>
 
-      <ProjectInviteBellPanel
-        open={open}
-        onClose={() => {
-          setOpen(false);
-          void refreshBadge(userId);
-        }}
-        userId={userId}
-        onAccepted={() => {
-          onAccepted?.();
-          void refreshBadge(userId);
-        }}
-        toast={flashToast}
-      />
+      {open ? (
+        <ProjectInviteBellPanel
+          open={open}
+          onClose={() => {
+            setOpen(false);
+            void refreshBadge(userId);
+          }}
+          userId={userId}
+          onAccepted={() => {
+            onAccepted?.();
+            void refreshBadge(userId);
+          }}
+          toast={flashToast}
+        />
+      ) : null}
 
       {toast ? (
         <div className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
