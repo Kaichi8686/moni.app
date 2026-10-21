@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar, LogOut, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays } from "date-fns";
@@ -20,8 +21,6 @@ import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { leaveProject as leaveProjectApi } from "@/lib/projects/leaveProject";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
-import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
-import { ProjectInviteComposeModal } from "@/components/projects/ProjectInviteComposeModal";
 import type { Issue, IssueStatus, IssueWorkflow, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import { applyIssueDueDatesForProject } from "@/lib/workspace/applyIssueDueDates";
 import { dueIsoForNewIssueInPhase, hasMeaningfulTargetDate } from "@/lib/workspace/issueDueSchedule";
@@ -52,10 +51,9 @@ import {
   type PhaseRowDb,
   type ProfileLite,
 } from "@/lib/workspace/mapRows";
-import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
+import type { ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
 import { ProjectWorkspaceSwitcher } from "@/components/projects/workspace/ProjectWorkspaceSwitcher";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
-import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
 import { fetchDeletionState } from "@/lib/projects/deletionVote";
 import {
   busyDateKeysFromSchedules,
@@ -63,6 +61,23 @@ import {
   isBusySchedule,
   type ScheduleKind,
 } from "@/lib/workspace/busyScheduleDays";
+
+const ProjectSettingsModal = dynamic(
+  () => import("@/components/projects/workspace/ProjectSettingsModal").then((m) => m.ProjectSettingsModal),
+  { ssr: false },
+);
+const ProjectDeleteVotePanel = dynamic(
+  () => import("@/components/projects/workspace/ProjectDeleteVotePanel").then((m) => m.ProjectDeleteVotePanel),
+  { ssr: false },
+);
+const ProjectInviteBellPanel = dynamic(
+  () => import("@/components/projects/ProjectInviteBellPanel").then((m) => m.ProjectInviteBellPanel),
+  { ssr: false },
+);
+const ProjectInviteComposeModal = dynamic(
+  () => import("@/components/projects/ProjectInviteComposeModal").then((m) => m.ProjectInviteComposeModal),
+  { ssr: false },
+);
 
 const DELETION_VOTE_BANNER_ID = "project-deletion-vote-banner";
 
@@ -316,7 +331,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       }
       const row = prow as ProjectDbRow;
 
-      const { data: mems } = await client.from("project_members").select("project_id,user_id,role").eq("project_id", projectId);
+      const { data: mems } = await client
+        .from("project_members")
+        .select("project_id,user_id,role")
+        .eq("project_id", projectId);
       const memberRows = (mems ?? []) as ProjectMemberRow[];
       const member = userId ? memberRows.find((m) => m.user_id === userId) : undefined;
       const owner = Boolean(userId && row.owner_id === userId);
@@ -330,7 +348,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       if (!moderator) setPendingJoinRequestCount(0);
 
       const ids = [...new Set([row.owner_id, ...memberRows.map((m) => m.user_id)])];
-      const { data: profs } = await client.from("profiles").select("id,display_name,avatar_url").in("id", ids);
+      const { data: profs } = ids.length
+        ? await client.from("profiles").select("id,display_name,avatar_url").in("id", ids)
+        : { data: [] as ProfileLite[] };
       const profileMap: Record<string, ProfileLite> = {};
       for (const p of (profs ?? []) as ProfileLite[]) profileMap[p.id] = p;
       let members = buildMembers(memberRows, profileMap, row.owner_id);
@@ -346,46 +366,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         members = [ownerMember, ...members];
       }
 
-      let phaseRows: PhaseRowDb[] = [];
-      let issueRows: IssueRowDb[] = [];
-      const { data: ph, error: phErr } = await client
-        .from("project_phases")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("order", { ascending: true });
-      if (phErr) {
-        if (isMissingTable(phErr)) {
-          setError(
-            "Linearワークスペース用のDBが未適用です。Supabase で supabase/apply_linear_workspace.sql を実行してください。",
-          );
-        } else {
-          setError(phErr.message);
-        }
-      } else {
-        phaseRows = (ph ?? []) as PhaseRowDb[];
-      }
-      const { data: iss, error: issErr } = await client.from("project_issues").select("*").eq("project_id", projectId);
-      if (!issErr) issueRows = (iss ?? []) as IssueRowDb[];
-      const { data: sched, error: schedErr } = await client
-        .from("project_schedules")
-        .select("id,title,description,starts_at,ends_at,attendees,kind")
-        .eq("project_id", projectId)
-        .order("starts_at", { ascending: true });
-      if (schedErr) {
-        const { data: schedFallback } = await client
-          .from("project_schedules")
-          .select("id,title,description,starts_at,ends_at,attendees")
-          .eq("project_id", projectId)
-          .order("starts_at", { ascending: true });
-        setSchedules((schedFallback ?? []).map(mapScheduleRow));
-      } else {
-        setSchedules((sched ?? []).map(mapScheduleRow));
-      }
-      const mappedIssues = issueRows.map(mapIssueRow);
-      const nested = nestPhasesWithIssues(phaseRows, mappedIssues);
-      setIssues(mappedIssues);
-      setPhases(nested);
-      const wsProject = projectRowToWorkspace(row, nested, mappedIssues, members);
       const meta = {
         thumbnail_url: row.thumbnail_url ?? null,
         background_url: row.background_url ?? null,
@@ -395,10 +375,57 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         recruitment_message: row.recruitment_message ?? "",
         visibility: row.visibility ?? "public",
       };
-      setProject(wsProject);
+      // Paint shell first; phases/issues/schedules fill in without blocking overview chrome.
+      const earlyProject = projectRowToWorkspace(row, [], [], members);
+      setProject(earlyProject);
       setProjectMeta(meta);
-      setProjectContext(projectIssueContextFromWorkspace(wsProject, meta));
+      setProjectContext(projectIssueContextFromWorkspace(earlyProject, meta));
       setCoachingContext(parseCoachingContext(row.coaching_context));
+      setLoading(false);
+
+      const [phRes, issRes, schedRes] = await Promise.all([
+        client.from("project_phases").select("*").eq("project_id", projectId).order("order", { ascending: true }),
+        client.from("project_issues").select("*").eq("project_id", projectId),
+        client
+          .from("project_schedules")
+          .select("id,title,description,starts_at,ends_at,attendees,kind")
+          .eq("project_id", projectId)
+          .order("starts_at", { ascending: true }),
+      ]);
+
+      let phaseRows: PhaseRowDb[] = [];
+      if (phRes.error) {
+        if (isMissingTable(phRes.error)) {
+          setError(
+            "Linearワークスペース用のDBが未適用です。Supabase で supabase/apply_linear_workspace.sql を実行してください。",
+          );
+        } else {
+          setError(phRes.error.message);
+        }
+      } else {
+        phaseRows = (phRes.data ?? []) as PhaseRowDb[];
+      }
+
+      const issueRows = !issRes.error ? ((issRes.data ?? []) as IssueRowDb[]) : [];
+
+      if (schedRes.error) {
+        const { data: schedFallback } = await client
+          .from("project_schedules")
+          .select("id,title,description,starts_at,ends_at,attendees")
+          .eq("project_id", projectId)
+          .order("starts_at", { ascending: true });
+        setSchedules((schedFallback ?? []).map(mapScheduleRow));
+      } else {
+        setSchedules((schedRes.data ?? []).map(mapScheduleRow));
+      }
+
+      const mappedIssues = issueRows.map(mapIssueRow);
+      const nested = nestPhasesWithIssues(phaseRows, mappedIssues);
+      setIssues(mappedIssues);
+      setPhases(nested);
+      const wsProject = projectRowToWorkspace(row, nested, mappedIssues, members);
+      setProject(wsProject);
+      setProjectContext(projectIssueContextFromWorkspace(wsProject, meta));
     } finally {
       setLoading(false);
     }
@@ -1404,43 +1431,47 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             </div>
           </main>
         </div>
-        <ProjectSettingsModal
-          open={settingsOpen}
-          projectId={projectId}
-          userId={uid}
-          canEdit={canEdit}
-          isOwner={isOwner}
-          name={project?.name ?? ""}
-          description={project?.description}
-          coachingContext={coachingContext}
-          meta={projectMeta}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => void reload()}
-          onDelete={deleteProject}
-          onLeft={() => {
-            clearLastProjectIfMatches(projectId);
-            router.push(HOME_PROJECTS_HREF);
-          }}
-          onNotice={(message) => {
-            setHeaderNotice(message);
-            window.setTimeout(() => setHeaderNotice(""), 3200);
-          }}
-        />
+        {settingsOpen ? (
+          <ProjectSettingsModal
+            open={settingsOpen}
+            projectId={projectId}
+            userId={uid}
+            canEdit={canEdit}
+            isOwner={isOwner}
+            name={project?.name ?? ""}
+            description={project?.description}
+            coachingContext={coachingContext}
+            meta={projectMeta}
+            onClose={() => setSettingsOpen(false)}
+            onSaved={() => void reload()}
+            onDelete={deleteProject}
+            onLeft={() => {
+              clearLastProjectIfMatches(projectId);
+              router.push(HOME_PROJECTS_HREF);
+            }}
+            onNotice={(message) => {
+              setHeaderNotice(message);
+              window.setTimeout(() => setHeaderNotice(""), 3200);
+            }}
+          />
+        ) : null}
 
-        <ProjectDeleteVotePanel
-          open={deleteProjectConfirmOpen && Boolean(project)}
-          projectId={projectId}
-          projectName={project?.name ?? ""}
-          uid={uid}
-          isOwner={isOwner}
-          deleting={deletingProject}
-          onClose={() => setDeleteProjectConfirmOpen(false)}
-          onProposed={revealDeletionVoteOnOverview}
-          onVoteChanged={notifyDeletionVoteChanged}
-          onFinalizeDelete={async () => {
-            await confirmDeleteProject();
-          }}
-        />
+        {deleteProjectConfirmOpen && project ? (
+          <ProjectDeleteVotePanel
+            open
+            projectId={projectId}
+            projectName={project.name}
+            uid={uid}
+            isOwner={isOwner}
+            deleting={deletingProject}
+            onClose={() => setDeleteProjectConfirmOpen(false)}
+            onProposed={revealDeletionVoteOnOverview}
+            onVoteChanged={notifyDeletionVoteChanged}
+            onFinalizeDelete={async () => {
+              await confirmDeleteProject();
+            }}
+          />
+        ) : null}
 
         {inviteBellOpen && uid && project ? (
           <ProjectInviteBellPanel
