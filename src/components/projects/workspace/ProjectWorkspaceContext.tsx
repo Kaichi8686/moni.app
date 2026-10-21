@@ -56,12 +56,25 @@ import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/pro
 import { ProjectWorkspaceSwitcher } from "@/components/projects/workspace/ProjectWorkspaceSwitcher";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
+import { fetchDeletionState } from "@/lib/projects/deletionVote";
 import {
   busyDateKeysFromSchedules,
   encodeScheduleDescription,
   isBusySchedule,
   type ScheduleKind,
 } from "@/lib/workspace/busyScheduleDays";
+
+const DELETION_VOTE_BANNER_ID = "project-deletion-vote-banner";
+
+function scrollToDeletionVoteBanner() {
+  if (typeof window === "undefined") return;
+  window.requestAnimationFrame(() => {
+    document.getElementById(DELETION_VOTE_BANNER_ID)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  });
+}
 
 function mapScheduleRow(row: {
   id: string;
@@ -115,6 +128,10 @@ type Ctx = {
   refreshPendingJoinRequests: () => Promise<void>;
   deleteProject: () => Promise<void>;
   leaveProject: () => Promise<void>;
+  /** 削除投票バナーを即時再取得するためのカウンタ */
+  deletionVoteRevision: number;
+  /** 削除提案・投票・取り下げ後に呼び、概要のバナーを更新する */
+  notifyDeletionVoteChanged: () => void;
   reload: () => Promise<void>;
   createSchedule: (payload: {
     title: string;
@@ -205,6 +222,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
+  const [deletionVoteRevision, setDeletionVoteRevision] = useState(0);
   const [deletingProject, setDeletingProject] = useState(false);
   const [leavingProject, setLeavingProject] = useState(false);
   const [projectMeta, setProjectMeta] = useState<ProjectSettingsMeta | null>(null);
@@ -874,6 +892,58 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     }
   }, [deleteProject]);
 
+  const notifyDeletionVoteChanged = useCallback(() => {
+    setDeletionVoteRevision((n) => n + 1);
+  }, []);
+
+  /** 進行中の提案があれば概要の詳細〜ロードマップ間バナーへ。なければ提案モーダルを開く。 */
+  const openDeletionVoteFlow = useCallback(async () => {
+    const overviewHref = `/projects/${projectId}/overview`;
+    try {
+      const state = await fetchDeletionState(projectId, uid);
+      if (state.proposal) {
+        notifyDeletionVoteChanged();
+        setDeleteProjectConfirmOpen(false);
+        if (pathname !== overviewHref) {
+          router.push(overviewHref);
+          window.setTimeout(scrollToDeletionVoteBanner, 350);
+        } else {
+          scrollToDeletionVoteBanner();
+        }
+        setHeaderNotice(
+          tx(
+            "削除の投票は、プロジェクト詳細とロードマップの間に表示されています。",
+            "The deletion vote is shown between project details and the roadmap.",
+          ),
+        );
+        window.setTimeout(() => setHeaderNotice(""), 5000);
+        return;
+      }
+    } catch {
+      // 取得失敗時は従来どおりモーダルで提案できる
+    }
+    setDeleteProjectConfirmOpen(true);
+  }, [notifyDeletionVoteChanged, pathname, projectId, router, tx, uid]);
+
+  const revealDeletionVoteOnOverview = useCallback(() => {
+    const overviewHref = `/projects/${projectId}/overview`;
+    notifyDeletionVoteChanged();
+    setDeleteProjectConfirmOpen(false);
+    setHeaderNotice(
+      tx(
+        "削除が提案されました。プロジェクト詳細とロードマップの間で賛否を確認できます。",
+        "Deletion proposed. Approve or oppose between project details and the roadmap.",
+      ),
+    );
+    window.setTimeout(() => setHeaderNotice(""), 5000);
+    if (pathname !== overviewHref) {
+      router.push(overviewHref);
+      window.setTimeout(scrollToDeletionVoteBanner, 350);
+      return;
+    }
+    scrollToDeletionVoteBanner();
+  }, [notifyDeletionVoteChanged, pathname, projectId, router, tx]);
+
   const saveIssueWork = useCallback(
     async (issueId: string, patch: Partial<IssueWork>) => {
       if (!supabase || !canEdit) return;
@@ -1023,6 +1093,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         refreshPendingJoinRequests,
         deleteProject,
         leaveProject,
+        deletionVoteRevision,
+        notifyDeletionVoteChanged,
         reload,
         createPhase,
         movePhase,
@@ -1060,6 +1132,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       refreshPendingJoinRequests,
       deleteProject,
       leaveProject,
+      deletionVoteRevision,
+      notifyDeletionVoteChanged,
       reload,
       createPhase,
       movePhase,
@@ -1277,7 +1351,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                           className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                           onClick={() => {
                             setActionMenuOpen(false);
-                            setDeleteProjectConfirmOpen(true);
+                            void openDeletionVoteFlow();
                           }}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden />
@@ -1361,6 +1435,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           isOwner={isOwner}
           deleting={deletingProject}
           onClose={() => setDeleteProjectConfirmOpen(false)}
+          onProposed={revealDeletionVoteOnOverview}
+          onVoteChanged={notifyDeletionVoteChanged}
           onFinalizeDelete={async () => {
             await confirmDeleteProject();
           }}

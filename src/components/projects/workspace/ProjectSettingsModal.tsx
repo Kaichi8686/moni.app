@@ -673,8 +673,8 @@ export function ProjectSettingsModal({
             <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
               {tx(
-                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上メニューから「プロジェクト削除…」で提案を開始すると、賛成・反対の人数は概要のゴール欄とロードマップの間に表示されます。脱退したい場合は「メンバー」タブから権限を引き継いでください。",
-                "Deleting a project needs 2/3 member approval, then the owner confirms. Start with “Delete project…” in the top-right menu; approve/oppose counts then appear between the goal section and the roadmap on Overview. To leave as owner, transfer ownership from the Members tab first.",
+                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上メニューから「プロジェクト削除…」で提案を開始すると、賛成・反対は概要のプロジェクト詳細とロードマップの間に表示されます。脱退したい場合は「メンバー」タブから権限を引き継いでください。",
+                "Deleting a project needs 2/3 member approval, then the owner confirms. Start with “Delete project…” in the top-right menu; approve/oppose then appear between project details and the roadmap on Overview. To leave as owner, transfer ownership from the Members tab first.",
               )}
             </p>
           </section>
