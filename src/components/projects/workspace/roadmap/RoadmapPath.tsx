@@ -8,10 +8,9 @@ import {
 } from "react";
 
 /**
- * Duolingo 風の縦蛇行オフセット（px）。
- * 中 → 左 → さらに左 → 左 → 中 → 右 … のゆるい S カーブ。
+ * ゆるい左右の切り替え（道のカーブ）。極端なウネリは避ける。
  */
-const PATH_OFFSETS_PX = [0, -40, -68, -40, 0, 40, 68, 40] as const;
+const PATH_OFFSETS_PX = [0, -22, -34, -22, 0, 22, 34, 22] as const;
 
 export function roadmapPathOffsetX(index: number): number {
   return PATH_OFFSETS_PX[index % PATH_OFFSETS_PX.length] ?? 0;
@@ -19,23 +18,48 @@ export function roadmapPathOffsetX(index: number): number {
 
 type Point = { x: number; y: number };
 
-function curvedRoad(a: Point, b: Point): string {
+/**
+ * マス間の道。横ずれは控えめなベジェでつなぎ、
+ * 縁＋路面＋中央破線で「道」に見せる（太い一本線のウネリにしない）。
+ */
+function roadSegment(a: Point, b: Point): string {
+  if (Math.abs(a.x - b.x) < 1) {
+    return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+  }
   const dy = b.y - a.y;
-  const pull = Math.max(28, Math.abs(dy) * 0.42);
+  const pull = Math.abs(dy) * 0.33;
   return `M ${a.x} ${a.y} C ${a.x} ${a.y + pull}, ${b.x} ${b.y - pull}, ${b.x} ${b.y}`;
 }
 
 type Props = {
   children: ReactNode;
   /**
-   * マス i → i+1 の道を「通過済み（緑）」にするか。
-   * 省略時はすべて灰色。
+   * マス i → i+1 の道を「通過済み」にするか。
+   * 省略時はすべて未通過。
    */
   segmentCleared?: boolean[];
   className?: string;
 };
 
-/** 子（各マス）を縦に並べ、曲線の道を背後に描く */
+type RoadColors = {
+  edge: string;
+  surface: string;
+  dash: string;
+};
+
+const ROAD_AHEAD: RoadColors = {
+  edge: "#C5C5C5",
+  surface: "#EDEDED",
+  dash: "#FFFFFF",
+};
+
+const ROAD_DONE: RoadColors = {
+  edge: "#46A302",
+  surface: "#7AC70C",
+  dash: "#F4FFE8",
+};
+
+/** 子（各マス）を縦に並べ、縁のある道を背後に描く */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
@@ -86,16 +110,40 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
             const to = points[index + 1];
             if (!to) return null;
             const cleared = Boolean(segmentCleared?.[index]);
+            const colors = cleared ? ROAD_DONE : ROAD_AHEAD;
+            const d = roadSegment(from, to);
             return (
-              <path
-                key={`road-${index}`}
-                d={curvedRoad(from, to)}
-                fill="none"
-                stroke={cleared ? "#58CC02" : "#D4D4D8"}
-                strokeWidth={16}
-                strokeLinecap="round"
-                opacity={cleared ? 0.85 : 0.9}
-              />
+              <g key={`road-${index}`}>
+                {/* 道の縁 */}
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={colors.edge}
+                  strokeWidth={24}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {/* 路面 */}
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={colors.surface}
+                  strokeWidth={16}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {/* 中央の破線 */}
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={colors.dash}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="8 12"
+                  opacity={0.9}
+                />
+              </g>
             );
           })}
         </svg>
