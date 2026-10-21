@@ -43,6 +43,7 @@ export function EditProfileForm() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const countries = useMemo(() => sortedCountries(locale), [locale]);
   const derivedAge = ageFromBirthday(form.birthday);
 
@@ -96,6 +97,19 @@ export function EditProfileForm() {
   }, [router]);
 
   const isDirty = JSON.stringify(form) !== initialForm;
+
+  function handleBack() {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    router.back();
+  }
+
+  function confirmDiscard() {
+    setShowDiscardConfirm(false);
+    router.back();
+  }
 
   async function handleAvatarUpload(file: File) {
     if (!supabase || !userId) return;
@@ -213,7 +227,7 @@ export function EditProfileForm() {
       <header className="account-header profile-inset justify-between">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={handleBack}
           className="inline-flex min-h-[40px] touch-manipulation items-center text-[13px] transition-opacity hover:opacity-70 active:opacity-50"
           style={{ color: "var(--color-text-secondary)" }}
         >
@@ -459,6 +473,51 @@ export function EditProfileForm() {
         <p className="px-4 pb-6 text-center text-[12px]" style={{ color: "var(--color-text-secondary)" }}>
           {message}
         </p>
+      ) : null}
+
+      {showDiscardConfirm ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onClick={() => setShowDiscardConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discard-profile-edits-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="discard-profile-edits-title"
+              className="text-base font-bold text-zinc-900"
+            >
+              {tx("変更を破棄しますか？", "Discard changes?")}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              {tx(
+                "保存していない変更は失われます。",
+                "Unsaved changes will be lost.",
+              )}
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDiscardConfirm(false)}
+                className="min-h-[44px] flex-1 rounded-xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                {tx("編集を続ける", "Keep editing")}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDiscard}
+                className="min-h-[44px] flex-1 rounded-xl bg-rose-600 text-sm font-semibold text-white hover:bg-rose-700"
+              >
+                {tx("破棄する", "Discard")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
