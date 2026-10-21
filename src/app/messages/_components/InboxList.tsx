@@ -22,7 +22,7 @@ import {
   readOpenedDirectConversationIds,
   subscribeOpenedDirectConversations,
 } from "@/lib/messages/openedDirectConversations";
-import { loadFollowingListRecent } from "@/lib/profile/followActions";
+import { loadFollowingIds, loadFollowingListRecent } from "@/lib/profile/followActions";
 import type { FollowListUser } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -74,6 +74,7 @@ export function InboxList() {
   const [loading, setLoading] = useState(true);
   const [showFollowingPicker, setShowFollowingPicker] = useState(false);
   const [recentFollowing, setRecentFollowing] = useState<FollowListUser[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(() => new Set());
   const [projectPeerIds, setProjectPeerIds] = useState<Set<string>>(new Set());
   const [scopedMemberOk, setScopedMemberOk] = useState(false);
   const peerHandledRef = useRef<string | null>(null);
@@ -108,11 +109,20 @@ export function InboxList() {
       // First paint: inbox list (+ following chips). Ensure/sync runs after loading clears.
       const inboxPromise = fetchInboxConversations(client, uid);
       const followingPromise = scopedProjectId
-        ? Promise.resolve([] as Awaited<ReturnType<typeof loadFollowingListRecent>>)
-        : loadFollowingListRecent(client, uid, 8).catch((e) => {
-            console.warn("loadFollowingListRecent", e);
-            return [] as Awaited<ReturnType<typeof loadFollowingListRecent>>;
-          });
+        ? Promise.resolve({
+            recent: [] as FollowListUser[],
+            ids: new Set<string>(),
+          })
+        : Promise.all([
+            loadFollowingListRecent(client, uid, 40).catch((e) => {
+              console.warn("loadFollowingListRecent", e);
+              return [] as FollowListUser[];
+            }),
+            loadFollowingIds(client, uid).catch((e) => {
+              console.warn("loadFollowingIds", e);
+              return new Set<string>();
+            }),
+          ]).then(([recent, ids]) => ({ recent, ids }));
       const scopedMetaPromise = scopedProjectId
         ? Promise.all([
             client.from("projects").select("id, name, owner_id").eq("id", scopedProjectId).maybeSingle(),
@@ -131,8 +141,10 @@ export function InboxList() {
       setConversations(rows);
       if (scopedProjectId) {
         setRecentFollowing([]);
+        setFollowingIds(new Set());
       } else {
-        setRecentFollowing(following);
+        setRecentFollowing(following.recent);
+        setFollowingIds(following.ids);
       }
 
       if (scopedMetaPromise) {
@@ -266,11 +278,13 @@ export function InboxList() {
         return false;
       });
     } else if (!scopedProjectId) {
-      // プロフィールブロック: やりとり済み／ユーザーが開いた 1:1 + グループ／プロジェクト
-      // （プロジェクト同期で作られた空DMは、開いていない限り出さない）
+      // プロフィールブロック: やりとり済み／開いた／フォロー中の相手の 1:1 + グループ／プロジェクト
+      // （プロジェクト同期の空DMは、フォローしていない限り出さない）
       list = list.filter((c) => {
         if (c.type === "direct") {
-          return Boolean(c.lastMessage) || openedDirectIds.has(c.id);
+          if (c.lastMessage || openedDirectIds.has(c.id)) return true;
+          const peerId = c.otherUser?.id;
+          return Boolean(peerId && followingIds.has(peerId));
         }
         return c.type === "group" || c.type === "project";
       });
@@ -307,7 +321,27 @@ export function InboxList() {
     scopedMemberOk,
     projectPeerIds,
     openedDirectIds,
+    followingIds,
   ]);
+
+  /** Peers already listed as DMs — keep them out of 「フォロー中の人とチャット」 */
+  const inboxListedPeerIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (scopedProjectId) return ids;
+    for (const c of conversations) {
+      if (c.type !== "direct" || !c.otherUser?.id) continue;
+      const peerId = c.otherUser.id;
+      if (c.lastMessage || openedDirectIds.has(c.id) || followingIds.has(peerId)) {
+        ids.add(peerId);
+      }
+    }
+    return ids;
+  }, [conversations, scopedProjectId, openedDirectIds, followingIds]);
+
+  const followingForEntry = useMemo(
+    () => recentFollowing.filter((u) => !inboxListedPeerIds.has(u.id)),
+    [recentFollowing, inboxListedPeerIds],
+  );
 
   const emptyHint = (() => {
     if (scopedProjectId && scopedMemberOk) {
@@ -401,7 +435,7 @@ export function InboxList() {
           <>
             {!scopedProjectId ? (
               <FollowingChatEntry
-                recentFollowing={recentFollowing}
+                recentFollowing={followingForEntry}
                 onOpen={() => setShowFollowingPicker(true)}
               />
             ) : null}
@@ -417,6 +451,7 @@ export function InboxList() {
       {showFollowingPicker && userId ? (
         <FollowingChatPicker
           currentUserId={userId}
+          excludePeerIds={inboxListedPeerIds}
           onClose={() => setShowFollowingPicker(false)}
           onOpened={() => {
             setShowFollowingPicker(false);
