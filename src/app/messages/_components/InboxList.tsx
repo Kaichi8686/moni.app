@@ -73,9 +73,10 @@ export function InboxList() {
 
   const load = useCallback(async (opts?: { syncPeers?: boolean }) => {
     if (!supabase) return;
+    const client = supabase;
     setLoadError(null);
     try {
-      const { data: session } = await supabase.auth.getSession();
+      const { data: session } = await client.auth.getSession();
       const uid = session.session?.user.id ?? null;
       setUserId(uid);
       if (!uid) {
@@ -83,49 +84,39 @@ export function InboxList() {
         return;
       }
 
-      // プロジェクトブロック: グループ＋メンバー1:1を揃える
-      // プロフィールブロック: やりとり済みの相手だけ表示（空の相互フォローDMは自動作成しない）
-      if (opts?.syncPeers !== false) {
-        if (scopedProjectId) {
-          try {
-            await ensureProjectScopedMail(supabase, uid, scopedProjectId);
-          } catch (e) {
-            console.warn("ensureProjectScopedMail", e);
-          }
-        } else {
-          try {
-            await ensureMyProjectConversations(supabase, uid);
-          } catch (e) {
-            console.warn("ensureMyProjectConversations", e);
-          }
-        }
-      }
-
-      if (!scopedProjectId) {
-        try {
-          const following = await loadFollowingListRecent(supabase, uid, 8);
-          setRecentFollowing(following);
-        } catch (e) {
-          console.warn("loadFollowingListRecent", e);
-          setRecentFollowing([]);
-        }
-      } else {
-        setRecentFollowing([]);
-      }
-
-      if (scopedProjectId) {
-        const [{ data: project }, { data: ownedCheck }, { data: memCheck }, { data: memberRows }] =
-          await Promise.all([
-            supabase.from("projects").select("id, name, owner_id").eq("id", scopedProjectId).maybeSingle(),
-            supabase.from("projects").select("id").eq("id", scopedProjectId).eq("owner_id", uid).maybeSingle(),
-            supabase
+      // First paint: inbox list (+ following chips). Ensure/sync runs after loading clears.
+      const inboxPromise = fetchInboxConversations(client, uid);
+      const followingPromise = scopedProjectId
+        ? Promise.resolve([] as Awaited<ReturnType<typeof loadFollowingListRecent>>)
+        : loadFollowingListRecent(client, uid, 8).catch((e) => {
+            console.warn("loadFollowingListRecent", e);
+            return [] as Awaited<ReturnType<typeof loadFollowingListRecent>>;
+          });
+      const scopedMetaPromise = scopedProjectId
+        ? Promise.all([
+            client.from("projects").select("id, name, owner_id").eq("id", scopedProjectId).maybeSingle(),
+            client.from("projects").select("id").eq("id", scopedProjectId).eq("owner_id", uid).maybeSingle(),
+            client
               .from("project_members")
               .select("project_id")
               .eq("project_id", scopedProjectId)
               .eq("user_id", uid)
               .maybeSingle(),
-            supabase.from("project_members").select("user_id").eq("project_id", scopedProjectId),
-          ]);
+            client.from("project_members").select("user_id").eq("project_id", scopedProjectId),
+          ])
+        : null;
+
+      const [rows, following] = await Promise.all([inboxPromise, followingPromise]);
+      setConversations(rows);
+      if (scopedProjectId) {
+        setRecentFollowing([]);
+      } else {
+        setRecentFollowing(following);
+      }
+
+      if (scopedMetaPromise) {
+        const [{ data: project }, { data: ownedCheck }, { data: memCheck }, { data: memberRows }] =
+          await scopedMetaPromise;
         const isMember = Boolean(ownedCheck || memCheck);
         setScopedMemberOk(Boolean(project && isMember));
         if (project && isMember) {
@@ -145,18 +136,33 @@ export function InboxList() {
         setProjectPeerIds(new Set());
       }
 
-      const rows = await fetchInboxConversations(supabase, uid);
-      setConversations(rows);
+      setLoading(false);
+
+      if (opts?.syncPeers === false) return;
+
+      // Background: create missing project threads, then soft-refresh the list.
+      try {
+        if (scopedProjectId) {
+          await ensureProjectScopedMail(client, uid, scopedProjectId);
+        } else {
+          await ensureMyProjectConversations(client, uid);
+        }
+        const refreshed = await fetchInboxConversations(client, uid);
+        setConversations(refreshed);
+      } catch (e) {
+        console.warn("inbox peer sync", e);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       setLoadError(msg.includes("conversation") ? "__db__" : msg || "__generic__");
-    } finally {
       setLoading(false);
     }
   }, [scopedProjectId]);
 
   useEffect(() => {
-    void load({ syncPeers: true });
+    queueMicrotask(() => {
+      void load({ syncPeers: true });
+    });
   }, [load]);
 
   useEffect(() => {
@@ -206,9 +212,10 @@ export function InboxList() {
 
     void ensureRealtimeAuth(client);
 
+    // Poll refreshes the list only; peer ensure is expensive and runs on mount / membership changes.
     const poll = window.setInterval(() => {
       if (!cancelled && document.visibilityState === "visible") {
-        void load({ syncPeers: true });
+        void load({ syncPeers: false });
       }
     }, 30000);
 

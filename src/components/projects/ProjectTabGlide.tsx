@@ -176,24 +176,23 @@ export function ProjectTabGlide({
     try {
       setCurrentUserId(uid);
 
-      const ownedResult = await withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧");
+      // Owned + membership ids in parallel (was a waterfall).
+      const [ownedResult, memRes] = await Promise.all([
+        withQueryTimeout(fetchOwnedProjects(client, uid), "プロジェクト一覧"),
+        withQueryTimeout(
+          client.from("project_members").select("project_id").eq("user_id", uid),
+          "参加プロジェクト",
+        ),
+      ]);
       if (ownedResult.error) {
         setErr(ownedResult.error);
       }
 
       let memberIds: string[] = [];
-      try {
-        const memRes = await withQueryTimeout(
-          client.from("project_members").select("project_id").eq("user_id", uid),
-          "参加プロジェクト",
-        );
-        if (memRes.error) {
-          setErr((prev) => prev || memRes.error.message);
-        } else {
-          memberIds = [...new Set((memRes.data ?? []).map((m: { project_id: string }) => m.project_id))];
-        }
-      } catch (e) {
-        setErr((prev) => prev || (e instanceof Error ? e.message : "参加プロジェクトの取得に失敗しました。"));
+      if (memRes.error) {
+        setErr((prev) => prev || memRes.error.message);
+      } else {
+        memberIds = [...new Set((memRes.data ?? []).map((m: { project_id: string }) => m.project_id))];
       }
 
       const memberResult =

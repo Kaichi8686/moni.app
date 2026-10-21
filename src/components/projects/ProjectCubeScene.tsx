@@ -534,7 +534,9 @@ export function ProjectCubeCarousel({
     { axis: "x", filterTaps: true, threshold: 12 },
   );
 
-  if (loading && projects.length === 0) {
+  // Keep the create cube visible while membership loads — avoid a long blank pulse.
+  if (count === 0) {
+    if (!loading) return null;
     return (
       <div className="relative h-full min-h-0 w-full flex-1" aria-busy>
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_40%,#f4f4f5_0%,#ffffff_70%)]">
@@ -544,8 +546,6 @@ export function ProjectCubeCarousel({
       </div>
     );
   }
-
-  if (count === 0) return null;
 
   return (
     <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">

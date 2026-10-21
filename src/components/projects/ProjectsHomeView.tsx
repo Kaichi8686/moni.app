@@ -8,9 +8,8 @@ import { ProjectTabGlide, type AppFeatureKey } from "@/components/projects/Proje
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { enterProjectListMode, readProjectListMode } from "@/lib/navigation/projectCluster";
-import { loadMemberProjects } from "@/lib/projects/loadMemberProjects";
 import { supabase } from "@/lib/supabase";
-import { readLastProject, rememberLastProject } from "@/lib/workspace/lastProject";
+import { readLastProject } from "@/lib/workspace/lastProject";
 
 function ProjectsHomeViewInner() {
   const router = useRouter();
@@ -23,13 +22,14 @@ function ProjectsHomeViewInner() {
   const [userId, setUserId] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   /**
-   * 一覧モード中／?list=1 はキューブのまま。
-   * それ以外で last があればプロジェクトへ（他タブから戻っても維持）。
+   * 一覧モード／?list=1／last なし → すぐキューブを出す。
+   * last があるときだけ短いリダイレクト待ち（membership 全件は待たない）。
    */
   const [resolving, setResolving] = useState(() => {
     if (forceList) return false;
-    if (typeof window !== "undefined" && readProjectListMode()) return false;
-    return true;
+    if (typeof window === "undefined") return false;
+    if (readProjectListMode()) return false;
+    return Boolean(readLastProject()?.id);
   });
 
   useEffect(() => {
@@ -99,40 +99,20 @@ function ProjectsHomeViewInner() {
         return;
       }
 
-      try {
-        // 「一覧に戻る」後は、他タブからホームに戻ってもキューブのまま
-        if (readProjectListMode()) {
-          showList();
-          return;
-        }
-
-        const last = readLastProject();
-        const rows = await loadMemberProjects(uid);
-        if (cancelled) return;
-
-        // 最後に開いたプロジェクトがまだ参加中ならそこへ
-        if (last?.id && rows.some((r) => r.id === last.id)) {
-          router.replace(`/projects/${last.id}/overview`);
-          return;
-        }
-
-        // まだ一度も開いていない／無効な last → キューブ一覧
-        if (!last?.id) {
-          showList();
-          return;
-        }
-
-        // last が無効なら先頭へ寄せて記憶を直し、次回から戻れるようにする
-        const first = rows[0];
-        if (first) {
-          rememberLastProject(first.id, first.name);
-          router.replace(`/projects/${first.id}/overview`);
-          return;
-        }
+      // 「一覧に戻る」後は、他タブからホームに戻ってもキューブのまま
+      if (readProjectListMode()) {
         showList();
-      } catch {
-        showList();
+        return;
       }
+
+      const last = readLastProject();
+      // membership 全件取得は待たず、last があれば即 overview へ（権限は各ページ側で判定）
+      if (last?.id) {
+        router.replace(`/projects/${last.id}/overview`);
+        return;
+      }
+
+      showList();
     })();
 
     const { data: sub } = client.auth.onAuthStateChange((_event, session) => {
