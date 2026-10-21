@@ -200,23 +200,30 @@ export function RoadmapPhaseInfoSheet({
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div>
+                <p className="text-xs font-semibold text-zinc-600">{tx("名前", "Name")}</p>
+                <p className="mt-1 text-base font-bold leading-snug text-zinc-900">{phase.title}</p>
+              </div>
+
               <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
                 <label htmlFor="roadmap-phase-goal" className="block text-xs font-bold text-orange-900">
-                  {tx("このステップのゴール", "Goal for this step")}
+                  {tx("ゴール", "Goal")}
                 </label>
-                <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
-                  {tx("達成したら「できた」と言えることを書いてください", "Write what “done” looks like for this step")}
-                </p>
                 {editable ? (
-                  <textarea
-                    id="roadmap-phase-goal"
-                    value={goalDraft}
-                    onChange={(e) => setGoalDraft(e.target.value)}
-                    placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
-                    rows={3}
-                    className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
-                    disabled={busy}
-                  />
+                  <>
+                    <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
+                      {tx("達成したら「できた」と言えること", "What “done” looks like")}
+                    </p>
+                    <textarea
+                      id="roadmap-phase-goal"
+                      value={goalDraft}
+                      onChange={(e) => setGoalDraft(e.target.value)}
+                      placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
+                      rows={3}
+                      className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                      disabled={busy}
+                    />
+                  </>
                 ) : goalDraft.trim() || phase.goal?.trim() ? (
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{phase.goal}</p>
                 ) : (
@@ -226,14 +233,14 @@ export function RoadmapPhaseInfoSheet({
 
               <div>
                 <label htmlFor="roadmap-phase-overview" className="block text-xs font-semibold text-zinc-600">
-                  {tx("概要", "Overview")}
+                  {tx("詳細", "Details")}
                 </label>
                 {editable ? (
                   <textarea
                     id="roadmap-phase-overview"
                     value={descriptionDraft}
                     onChange={(e) => setDescriptionDraft(e.target.value)}
-                    placeholder={tx("このステップでやることや背景を書いてください", "What you’ll do in this step, and why")}
+                    placeholder={tx("このステップでやることや背景", "What you’ll do in this step")}
                     rows={4}
                     className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
                     disabled={busy}

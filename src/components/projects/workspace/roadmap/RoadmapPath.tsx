@@ -83,10 +83,12 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     };
 
     measure();
+    const raf = window.requestAnimationFrame(() => measure());
     const ro = new ResizeObserver(() => measure());
     ro.observe(root);
     window.addEventListener("resize", measure);
     return () => {
+      window.cancelAnimationFrame(raf);
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
@@ -111,11 +113,12 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
           height={size.h}
           aria-hidden
         >
+          {/* 太い直線（マスの下に敷く） */}
           <path
             d={fullPath}
             fill="none"
             stroke="#D4D4D8"
-            strokeWidth={4}
+            strokeWidth={12}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -124,7 +127,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
               d={clearedPath}
               fill="none"
               stroke="#F97316"
-              strokeWidth={4}
+              strokeWidth={12}
               strokeLinecap="round"
               strokeLinejoin="round"
             />

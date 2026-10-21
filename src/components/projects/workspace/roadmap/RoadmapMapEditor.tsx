@@ -215,8 +215,11 @@ export function RoadmapMapEditor() {
           </div>
           <p className="mt-1 text-[13px] text-zinc-500">
             {hasSteps
-              ? tx("マスをタップして名前・絵・ゴールを変えたり、下の＋でステップを追加できます。", "Tap a step to change its name, icon, and goal, or add steps with +.")
-              : tx("最初のマスから、ステップを足していこう。", "Start from the first step and build your path.")}
+              ? tx(
+                  "マスをタップして名前・絵・ゴール・詳細を編集。＋で追加、展開中に削除もできます。",
+                  "Tap a step to edit name, icon, goal, and details. Use + to add, or delete while expanded.",
+                )
+              : tx("＋のマスから最初のステップを追加しよう。", "Start by adding the first step with +.")}
           </p>
         </div>
         <Link
@@ -373,10 +376,22 @@ export function RoadmapMapEditor() {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void removeStep(step.id)}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              tx(
+                                `「${step.title}」を削除しますか？`,
+                                `Delete “${step.title}”?`,
+                              ),
+                            )
+                          ) {
+                            return;
+                          }
+                          void removeStep(step.id);
+                        }}
                         className="mt-2 min-h-[40px] w-full rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
                       >
-                        {tx("このステップを削除", "Delete this step")}
+                        {tx("このマスを削除", "Delete this step")}
                       </button>
                     ) : null}
                   </>
@@ -462,7 +477,7 @@ export function RoadmapMapEditor() {
           </div>
           <div>
             <label htmlFor="roadmap-draft-overview" className="block text-xs font-semibold text-zinc-600">
-              {tx("概要", "Overview")}
+              {tx("詳細", "Details")}
             </label>
             <textarea
               id="roadmap-draft-overview"
@@ -486,7 +501,7 @@ export function RoadmapMapEditor() {
               disabled={busy || !draftTitle.trim()}
               className="min-h-[44px] flex-1 rounded-2xl bg-orange-500 px-4 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-40"
             >
-              {tx("追加", "Add")}
+              {tx("マスを追加", "Add step")}
             </button>
           </div>
         </form>

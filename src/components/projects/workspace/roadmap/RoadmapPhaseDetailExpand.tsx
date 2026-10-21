@@ -124,7 +124,7 @@ export function RoadmapPhaseDetailExpand({
           </div>
           <div>
             <label className={`block font-semibold text-zinc-600 ${compact ? "text-[10px]" : "text-xs"}`}>
-              {tx("概要", "Overview")}
+              {tx("詳細", "Details")}
             </label>
             <textarea
               value={descriptionDraft}
@@ -146,10 +146,15 @@ export function RoadmapPhaseDetailExpand({
         </div>
       ) : (
         <>
-          <p className={`font-bold text-zinc-900 ${compact ? "mt-0.5 text-[12px] leading-snug" : "mt-1 text-sm"}`}>
-            {title}
-          </p>
-          <div className={compact ? "mt-2 space-y-2" : "mt-3 space-y-3"}>
+          <div className={compact ? "mt-1.5 space-y-2" : "mt-2 space-y-3"}>
+            <div>
+              <p className={`font-semibold text-zinc-600 ${compact ? "text-[10px]" : "text-xs"}`}>
+                {tx("名前", "Name")}
+              </p>
+              <p className={`mt-0.5 font-bold text-zinc-900 ${compact ? "text-[12px] leading-snug" : "text-sm"}`}>
+                {title}
+              </p>
+            </div>
             <div>
               <p className={`font-bold text-orange-900 ${compact ? "text-[10px]" : "text-xs"}`}>
                 {tx("ゴール", "Goal")}
@@ -166,7 +171,7 @@ export function RoadmapPhaseDetailExpand({
             </div>
             <div>
               <p className={`font-semibold text-zinc-600 ${compact ? "text-[10px]" : "text-xs"}`}>
-                {tx("概要", "Overview")}
+                {tx("詳細", "Details")}
               </p>
               {description?.trim() ? (
                 <p className={`mt-0.5 whitespace-pre-wrap leading-relaxed text-zinc-700 ${compact ? "text-[11px]" : "text-sm"}`}>
