@@ -11,11 +11,11 @@ import {
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 
 const DEMO_STEPS = [
-  { id: "1", title: "ヒアリング", goal: "10人に話を聞く", tone: "done" as const, icon: "star" as RoadmapMarkId },
-  { id: "2", title: "仮説づくり", goal: "仮説を1つ決める", tone: "active" as const, icon: "book" as RoadmapMarkId },
-  { id: "3", title: "試作", goal: "たたき台を作る", tone: "upcoming" as const, icon: "flag" as RoadmapMarkId },
-  { id: "4", title: "検証", goal: "フィードバックをもらう", tone: "upcoming" as const, icon: "target" as RoadmapMarkId },
-  { id: "5", title: "発表", goal: "人前で話す", tone: "upcoming" as const, icon: "rocket" as RoadmapMarkId },
+  { id: "1", title: "ヒアリング", goal: "10人に話を聞く", detail: "近所の店を回る", tone: "done" as const, icon: "star" as RoadmapMarkId },
+  { id: "2", title: "仮説づくり", goal: "仮説を1つ決める", detail: "メモを1枚にまとめる", tone: "active" as const, icon: "book" as RoadmapMarkId },
+  { id: "3", title: "試作", goal: "たたき台を作る", detail: "紙でプロトタイプ", tone: "upcoming" as const, icon: "flag" as RoadmapMarkId },
+  { id: "4", title: "検証", goal: "フィードバックをもらう", detail: "3人に見せる", tone: "upcoming" as const, icon: "target" as RoadmapMarkId },
+  { id: "5", title: "発表", goal: "人前で話す", detail: "5分で紹介する", tone: "upcoming" as const, icon: "rocket" as RoadmapMarkId },
 ];
 
 /** オレンジ道＋ユーザー選択マークの見た目確認用 */
@@ -67,15 +67,25 @@ export function RoadmapPathPreviewClient() {
           </RoadmapPath>
 
           {selected ? (
-            <div className="mt-4 rounded-2xl border border-orange-100 bg-orange-50/80 px-4 py-3">
+            <div className="mt-4 space-y-2 rounded-2xl border border-orange-100 bg-orange-50/80 px-4 py-3">
               <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">
                 STEP {DEMO_STEPS.findIndex((step) => step.id === selected.id) + 1}
               </p>
-              <p className="mt-1 text-base font-bold text-zinc-900">{selected.title}</p>
-              <p className="mt-1 text-sm text-zinc-600">{selected.goal}</p>
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-500">名前</p>
+                <p className="text-base font-bold text-zinc-900">{selected.title}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-orange-800">ゴール</p>
+                <p className="text-sm text-zinc-800">{selected.goal}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-zinc-500">詳細</p>
+                <p className="text-sm text-zinc-700">{selected.detail}</p>
+              </div>
             </div>
           ) : (
-            <p className="mt-4 text-center text-sm text-zinc-400">マスを押すと名前と詳細が出ます</p>
+            <p className="mt-4 text-center text-sm text-zinc-400">マスを押すと名前・ゴール・詳細が出ます</p>
           )}
         </section>
 
