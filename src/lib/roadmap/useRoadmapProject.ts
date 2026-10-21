@@ -135,7 +135,15 @@ export function useRoadmapProject(projectId: string) {
   const updatePhase = useCallback(
     async (
       phaseId: string,
-      patch: Partial<{ title: string; goal: string; description: string; status: PhaseStatus; startDate: string; endDate: string }>,
+      patch: Partial<{
+        title: string;
+        goal: string;
+        description: string;
+        status: PhaseStatus;
+        startDate: string;
+        endDate: string;
+        icon: string;
+      }>,
     ) => {
       if (!supabase || !canEdit) return;
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -145,7 +153,12 @@ export function useRoadmapProject(projectId: string) {
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.startDate !== undefined) row.start_date = new Date(patch.startDate).toISOString();
       if (patch.endDate !== undefined) row.end_date = new Date(patch.endDate).toISOString();
-      const { error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId);
+      if (patch.icon !== undefined) row.icon = patch.icon.trim() || "star";
+      let { error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId);
+      if (err && patch.icon !== undefined && /icon/i.test(err.message)) {
+        delete row.icon;
+        ({ error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId));
+      }
       if (err) throw new Error(err.message);
       await reload();
     },
@@ -170,10 +183,11 @@ export function useRoadmapProject(projectId: string) {
       startDate: string;
       endDate: string;
       status?: PhaseStatus;
+      icon?: string;
     }) => {
       if (!supabase || !canEdit) return;
       const maxOrder = phases.reduce((m, p) => Math.max(m, p.order), -1);
-      const { error: err } = await supabase.from("project_phases").insert({
+      const base = {
         project_id: projectId,
         title: input.title.trim(),
         goal: (input.goal ?? "").trim(),
@@ -181,9 +195,15 @@ export function useRoadmapProject(projectId: string) {
         start_date: input.startDate,
         end_date: input.endDate,
         status: input.status ?? "planned",
-        color: "purple",
+        color: "amber",
         order: maxOrder + 1,
-      });
+      };
+      const withIcon = { ...base, icon: (input.icon ?? "star").trim() || "star" };
+      let { error: err } = await supabase.from("project_phases").insert(withIcon);
+      // icon 列未適用の環境ではフォールバック
+      if (err && /icon/i.test(err.message)) {
+        ({ error: err } = await supabase.from("project_phases").insert(base));
+      }
       if (err) throw new Error(err.message);
       await reload();
     },

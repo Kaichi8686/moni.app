@@ -390,7 +390,7 @@ export default function WorkspaceOverview() {
                       onClick={() => setSelectedPhaseId(phase.id)}
                       aria-label={tx(`ステップ ${index + 1}: ${phase.title}`, `Step ${index + 1}: ${phase.title}`)}
                     >
-                      <RoadmapStepMark index={index} tone={tone} />
+                      <RoadmapStepMark markId={phase.icon} index={index} tone={tone} />
                     </RoadmapPathNode>
                   </RoadmapPathItem>
                 );

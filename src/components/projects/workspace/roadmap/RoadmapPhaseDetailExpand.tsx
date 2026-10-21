@@ -2,17 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {
+  RoadmapMarkPicker,
+  resolveRoadmapMarkId,
+  type RoadmapMarkId,
+} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 
 type Props = {
   open: boolean;
   title: string;
   goal?: string;
   description?: string;
+  icon?: string | null;
   stepNumber?: number;
   compact?: boolean;
   /** 編集画面のみ true。概要の閲覧では渡さない */
   canEdit?: boolean;
-  onSave?: (patch: { title: string; goal: string; description: string }) => Promise<void>;
+  onSave?: (patch: { title: string; goal: string; description: string; icon: RoadmapMarkId }) => Promise<void>;
 };
 
 export function RoadmapPhaseDetailExpand({
@@ -20,6 +26,7 @@ export function RoadmapPhaseDetailExpand({
   title,
   goal,
   description,
+  icon,
   stepNumber,
   compact = false,
   canEdit = false,
@@ -29,6 +36,7 @@ export function RoadmapPhaseDetailExpand({
   const [titleDraft, setTitleDraft] = useState(title);
   const [goalDraft, setGoalDraft] = useState(goal ?? "");
   const [descriptionDraft, setDescriptionDraft] = useState(description ?? "");
+  const [iconDraft, setIconDraft] = useState<RoadmapMarkId>(() => resolveRoadmapMarkId(icon, (stepNumber ?? 1) - 1));
   const [busy, setBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -37,16 +45,19 @@ export function RoadmapPhaseDetailExpand({
     setTitleDraft(title);
     setGoalDraft(goal ?? "");
     setDescriptionDraft(description ?? "");
+    setIconDraft(resolveRoadmapMarkId(icon, (stepNumber ?? 1) - 1));
     setSavedFlash(false);
-  }, [open, title, goal, description]);
+  }, [open, title, goal, description, icon, stepNumber]);
 
   if (!open) return null;
 
   const editable = Boolean(canEdit && onSave);
+  const resolvedIcon = resolveRoadmapMarkId(icon, (stepNumber ?? 1) - 1);
   const dirty =
     titleDraft.trim() !== title.trim() ||
     goalDraft.trim() !== (goal ?? "").trim() ||
-    descriptionDraft.trim() !== (description ?? "").trim();
+    descriptionDraft.trim() !== (description ?? "").trim() ||
+    iconDraft !== resolvedIcon;
 
   async function handleSave() {
     if (!onSave || !editable) return;
@@ -58,6 +69,7 @@ export function RoadmapPhaseDetailExpand({
         title: nextTitle,
         goal: goalDraft.trim(),
         description: descriptionDraft.trim(),
+        icon: iconDraft,
       });
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1600);
@@ -91,6 +103,12 @@ export function RoadmapPhaseDetailExpand({
               className="mt-1 min-h-[40px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
+          <RoadmapMarkPicker
+            value={iconDraft}
+            onChange={setIconDraft}
+            disabled={busy}
+            label={tx("マスの絵", "Step icon")}
+          />
           <div>
             <label className={`block font-bold text-orange-900 ${compact ? "text-[10px]" : "text-xs"}`}>
               {tx("ゴール", "Goal")}

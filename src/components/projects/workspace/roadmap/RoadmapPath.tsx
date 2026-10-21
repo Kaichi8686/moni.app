@@ -80,9 +80,9 @@ const ROAD_AHEAD: RoadColors = {
 };
 
 const ROAD_DONE: RoadColors = {
-  edge: "#46A302",
-  surface: "#7AC70C",
-  dash: "#F4FFE8",
+  edge: "#C2410C",
+  surface: "#FB923C",
+  dash: "#FFF7ED",
 };
 
 function RoadStroke({ d, colors }: { d: string; colors: RoadColors }) {

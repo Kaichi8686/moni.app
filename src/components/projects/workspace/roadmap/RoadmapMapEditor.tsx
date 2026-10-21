@@ -10,7 +10,12 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseDetailExpand } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailExpand";
-import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import {
+  RoadmapMarkPicker,
+  RoadmapStepMark,
+  resolveRoadmapMarkId,
+  type RoadmapMarkId,
+} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -35,6 +40,7 @@ export function RoadmapMapEditor() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftGoal, setDraftGoal] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [draftIcon, setDraftIcon] = useState<RoadmapMarkId>("star");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -68,6 +74,7 @@ export function RoadmapMapEditor() {
     setDraftTitle("");
     setDraftGoal("");
     setDraftDescription("");
+    setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));
     setAdding(false);
   }
 
@@ -86,6 +93,7 @@ export function RoadmapMapEditor() {
         startDate: start.toISOString(),
         endDate: end.toISOString(),
         status: "planned",
+        icon: draftIcon,
       });
       await workspaceReload();
       resetDraft();
@@ -161,10 +169,20 @@ export function RoadmapMapEditor() {
         start_date: start.toISOString(),
         end_date: addDays(start, 14).toISOString(),
         status: "planned",
-        color: "purple",
+        color: "amber",
+        icon: resolveRoadmapMarkId(undefined, maxOrder + 1 + index),
         order: maxOrder + 1 + index,
       }));
-      const { error: insertError } = await supabase.from("project_phases").insert(rows);
+      let { error: insertError } = await supabase.from("project_phases").insert(rows);
+      if (insertError && /icon/i.test(insertError.message)) {
+        ({ error: insertError } = await supabase.from("project_phases").insert(
+          rows.map((row) => {
+            const { icon, ...rest } = row;
+            void icon;
+            return rest;
+          }),
+        ));
+      }
       if (insertError) throw new Error(insertError.message);
       await syncReload();
       setProposed([]);
@@ -312,6 +330,7 @@ export function RoadmapMapEditor() {
                       title={step.title}
                       goal={step.goal}
                       description={step.description}
+                      icon={step.icon}
                       stepNumber={stepNumber}
                       canEdit={roadmap.canEdit}
                       onSave={
@@ -321,6 +340,7 @@ export function RoadmapMapEditor() {
                                 title: patch.title,
                                 goal: patch.goal,
                                 description: patch.description,
+                                icon: patch.icon,
                               });
                               await workspaceReload();
                             }
@@ -348,7 +368,7 @@ export function RoadmapMapEditor() {
                 onClick={() => setSelectedId((current) => (current === step.id ? null : step.id))}
                 aria-label={tx(`ステップ ${stepNumber}: ${step.title}`, `Step ${stepNumber}: ${step.title}`)}
               >
-                <RoadmapStepMark index={orderIndex} tone={tone} />
+                <RoadmapStepMark markId={step.icon} index={orderIndex} tone={tone} />
               </RoadmapPathNode>
             </RoadmapPathItem>
           );
@@ -359,7 +379,10 @@ export function RoadmapMapEditor() {
             <RoadmapPathNode
               tone="create"
               disabled={busy}
-              onClick={() => setAdding(true)}
+              onClick={() => {
+                setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));
+                setAdding(true);
+              }}
               aria-label={
                 steps.length === 0
                   ? tx("ロードマップを作成する", "Create roadmap")
@@ -393,6 +416,12 @@ export function RoadmapMapEditor() {
               className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400"
             />
           </div>
+          <RoadmapMarkPicker
+            value={draftIcon}
+            onChange={setDraftIcon}
+            disabled={busy}
+            label={tx("マスの絵", "Step icon")}
+          />
           <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-3">
             <label htmlFor="roadmap-draft-goal" className="block text-xs font-bold text-orange-900">
               {tx("このステップのゴール", "Goal for this step")}
@@ -433,7 +462,7 @@ export function RoadmapMapEditor() {
             <button
               type="submit"
               disabled={busy || !draftTitle.trim()}
-              className="min-h-[44px] flex-1 rounded-2xl bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40"
+              className="min-h-[44px] flex-1 rounded-2xl bg-orange-500 px-4 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-40"
             >
               {tx("追加", "Add")}
             </button>

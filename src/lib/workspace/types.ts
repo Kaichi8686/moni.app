@@ -70,6 +70,8 @@ export interface Phase {
   startDate: string;
   endDate: string;
   color: string;
+  /** ロードマップマスのアイコンキー */
+  icon?: string;
   issues: Issue[];
   order: number;
 }

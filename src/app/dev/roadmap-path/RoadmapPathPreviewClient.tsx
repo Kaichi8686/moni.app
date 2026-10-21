@@ -4,19 +4,24 @@ import Link from "next/link";
 import { useState } from "react";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
-import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import {
+  RoadmapMarkPicker,
+  RoadmapStepMark,
+  type RoadmapMarkId,
+} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 
 const DEMO_STEPS = [
-  { id: "1", title: "ヒアリング", goal: "10人に話を聞く", tone: "done" as const },
-  { id: "2", title: "仮説づくり", goal: "仮説を1つ決める", tone: "active" as const },
-  { id: "3", title: "試作", goal: "たたき台を作る", tone: "upcoming" as const },
-  { id: "4", title: "検証", goal: "フィードバックをもらう", tone: "upcoming" as const },
-  { id: "5", title: "発表", goal: "人前で話す", tone: "upcoming" as const },
+  { id: "1", title: "ヒアリング", goal: "10人に話を聞く", tone: "done" as const, icon: "star" as RoadmapMarkId },
+  { id: "2", title: "仮説づくり", goal: "仮説を1つ決める", tone: "active" as const, icon: "book" as RoadmapMarkId },
+  { id: "3", title: "試作", goal: "たたき台を作る", tone: "upcoming" as const, icon: "flag" as RoadmapMarkId },
+  { id: "4", title: "検証", goal: "フィードバックをもらう", tone: "upcoming" as const, icon: "target" as RoadmapMarkId },
+  { id: "5", title: "発表", goal: "人前で話す", tone: "upcoming" as const, icon: "rocket" as RoadmapMarkId },
 ];
 
-/** Duolingo 風ロードマップマスの見た目確認用 */
+/** オレンジ道＋ユーザー選択マークの見た目確認用 */
 export function RoadmapPathPreviewClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<RoadmapMarkId>("lightbulb");
   const selected = DEMO_STEPS.find((step) => step.id === selectedId) ?? null;
 
   return (
@@ -25,8 +30,18 @@ export function RoadmapPathPreviewClient() {
         <header>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">dev preview</p>
           <h1 className="mt-1 text-xl font-bold text-zinc-950">Roadmap path</h1>
-          <p className="mt-1 text-sm text-zinc-500">マーク・曲線の道・進行中キラキラ・タップで詳細</p>
+          <p className="mt-1 text-sm text-zinc-500">オレンジの道・選べる絵・タップで詳細</p>
         </header>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-zinc-700">絵を選ぶ（作成時）</h2>
+          <RoadmapMarkPicker value={picked} onChange={setPicked} label="マスの絵" />
+          <div className="mt-4 flex justify-center">
+            <RoadmapPathNode tone="active" aria-label="preview">
+              <RoadmapStepMark markId={picked} tone="active" />
+            </RoadmapPathNode>
+          </div>
+        </section>
 
         <section>
           <h2 className="mb-3 text-sm font-semibold text-zinc-700">ステップあり（マスをタップ）</h2>
@@ -40,7 +55,7 @@ export function RoadmapPathPreviewClient() {
                   onClick={() => setSelectedId((current) => (current === step.id ? null : step.id))}
                   aria-label={step.title}
                 >
-                  <RoadmapStepMark index={index} tone={step.tone} />
+                  <RoadmapStepMark markId={step.icon} index={index} tone={step.tone} />
                 </RoadmapPathNode>
               </RoadmapPathItem>
             ))}

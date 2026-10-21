@@ -16,22 +16,23 @@ type Props = {
   "aria-label"?: string;
 };
 
+/** moni オレンジの立体マス */
 const TONE_FACE: Record<RoadmapPathNodeTone, string> = {
-  active: "bg-[#58CC02]",
-  done: "bg-[#58CC02]",
+  active: "bg-[#F97316]",
+  done: "bg-[#F97316]",
   upcoming: "bg-[#E5E5E5]",
-  create: "bg-[#58CC02]",
+  create: "bg-[#F97316]",
 };
 
 const TONE_BASE: Record<RoadmapPathNodeTone, string> = {
-  active: "bg-[#46A302]",
-  done: "bg-[#46A302]",
+  active: "bg-[#C2410C]",
+  done: "bg-[#C2410C]",
   upcoming: "bg-[#AFAFAF]",
-  create: "bg-[#46A302]",
+  create: "bg-[#C2410C]",
 };
 
 /**
- * Duolingo 風の立体円マス。
+ * Duolingo 風の立体円マス（オレンジ）。
  * 名前はマス下に出さず、タップ後の詳細 UI で見せる。
  * Link で包むときは親に `group` を付ける。
  */
@@ -71,7 +72,7 @@ export function RoadmapPathNode({
           selected
             ? tone === "upcoming"
               ? "ring-4 ring-zinc-300/80"
-              : "ring-4 ring-[#58CC02]/35"
+              : "ring-4 ring-orange-300/60"
             : sparkle
               ? "ring-4 ring-[#FFD84D]/55"
               : ""

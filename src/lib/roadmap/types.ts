@@ -30,6 +30,8 @@ export type RoadmapPhase = {
   startDate: string;
   endDate: string;
   color: PhaseColor;
+  /** マス内アイコン（star / book / flag など） */
+  icon?: string;
   order: number;
   tasks: PhaseTask[];
 };

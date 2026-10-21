@@ -10,6 +10,7 @@ export type PhaseRowDb = {
   start_date: string;
   end_date: string;
   color: string;
+  icon?: string | null;
   order: number;
   created_at: string;
   updated_at: string;
@@ -85,6 +86,7 @@ export function nestPhasesWithTasks(phaseRows: PhaseRowDb[], taskRows: PhaseTask
       startDate: row.start_date,
       endDate: row.end_date,
       color: mapColor(row.color),
+      icon: row.icon?.trim() || undefined,
       order: row.order,
       tasks: byPhase.get(row.id) ?? [],
     }))
