@@ -172,7 +172,10 @@ grant execute on function public.get_or_create_direct_conversation(uuid) to auth
 -- RLS: conversations
 drop policy if exists "conversations: members select" on public.conversations;
 create policy "conversations: members select" on public.conversations
-  for select using (public.is_conversation_member(id));
+  for select using (
+    public.is_conversation_member(id)
+    or created_by = auth.uid()
+  );
 
 drop policy if exists "conversations: authenticated insert" on public.conversations;
 create policy "conversations: authenticated insert" on public.conversations

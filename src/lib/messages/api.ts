@@ -105,25 +105,37 @@ async function findDirectConversationId(
   return (peerRows?.[0]?.conversation_id as string | undefined) ?? null;
 }
 
+function newConversationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const n = (Math.random() * 16) | 0;
+    const v = ch === "x" ? n : (n & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /**
  * Create a 1:1 when the RPC still requires mutual follow (older DB).
- * Uses conversations / conversation_members RLS (creator + admin inserts).
+ * Pre-generate id and skip `.select()` — SELECT RLS only allows members, so
+ * insert+returning fails before the creator is added as a member.
  */
 async function createDirectConversationClient(
   client: SupabaseClient,
   userId: string,
   otherUserId: string,
 ): Promise<string | null> {
-  const { data: conv, error: convErr } = await client
-    .from("conversations")
-    .insert({ type: "direct", created_by: userId })
-    .select("id")
-    .single();
-  if (convErr || !conv?.id) {
+  const convId = newConversationId();
+  const { error: convErr } = await client.from("conversations").insert({
+    id: convId,
+    type: "direct",
+    created_by: userId,
+  });
+  if (convErr) {
     console.error("createDirectConversationClient conv", convErr);
     return null;
   }
-  const convId = conv.id as string;
 
   const { error: selfErr } = await client.from("conversation_members").insert({
     conversation_id: convId,
@@ -147,6 +159,41 @@ async function createDirectConversationClient(
   return convId;
 }
 
+/** Server route that can use service role when client RLS / old RPC blocks create. */
+async function createDirectConversationViaApi(
+  client: SupabaseClient,
+  otherUserId: string,
+): Promise<DirectConversationResult | null> {
+  if (typeof window === "undefined") return null;
+  const { data: sessionData } = await client.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) return null;
+  try {
+    const res = await fetch("/api/messages/direct", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ peerUserId: otherUserId }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      conversationId?: string;
+      reason?: "not_mutual" | "error";
+    };
+    if (res.ok && json.conversationId) {
+      return { ok: true, conversationId: json.conversationId };
+    }
+    if (json.reason === "not_mutual" || res.status === 403) {
+      return { ok: false, reason: "not_mutual" };
+    }
+    return { ok: false, reason: "error" };
+  } catch (e) {
+    console.error("createDirectConversationViaApi", e);
+    return null;
+  }
+}
+
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
@@ -160,7 +207,12 @@ export async function getOrCreateDirectConversation(
   // Bulk ensure paths already know the peer is allowed — skip the expensive gate there.
   if (!opts?.skipClientGate) {
     const allowed = await canStartDirectMessage(client, uid, otherUserId);
-    if (!allowed) return { ok: false, reason: "not_mutual" };
+    if (!allowed) {
+      // UI 上はフォロー中でも判定が揺れることがあるので API（service role）で最終確認
+      const viaApi = await createDirectConversationViaApi(client, otherUserId);
+      if (viaApi) return viaApi;
+      return { ok: false, reason: "not_mutual" };
+    }
   }
 
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
@@ -170,17 +222,16 @@ export async function getOrCreateDirectConversation(
     return { ok: true, conversationId: data as string };
   }
 
-  // 本番RPCが旧「相互フォロー必須」のままでも、フォロー中ならクライアントで開けるようにする
+  // 本番RPCが旧「相互フォロー必須」のままでも開けるようにする
   const existing = await findDirectConversationId(client, uid, otherUserId);
   if (existing) return { ok: true, conversationId: existing };
 
   const created = await createDirectConversationClient(client, uid, otherUserId);
   if (created) return { ok: true, conversationId: created };
 
-  const msg = error?.message || "";
-  if (/mutual follow required/i.test(msg)) {
-    return { ok: false, reason: "not_mutual" };
-  }
+  const viaApi = await createDirectConversationViaApi(client, otherUserId);
+  if (viaApi) return viaApi;
+
   if (error) console.error("get_or_create_direct_conversation", error);
   return { ok: false, reason: "error" };
 }

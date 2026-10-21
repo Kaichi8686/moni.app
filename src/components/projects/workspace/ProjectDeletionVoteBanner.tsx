@@ -11,12 +11,12 @@ import {
 } from "@/lib/projects/deletionVote";
 
 /**
- * 削除提案が進行中のとき、ゴール欄とロードマップの間に
+ * 削除提案が進行中のとき、プロジェクト詳細とロードマップの間に
  * 賛成・反対の人数を常時表示する。
  */
 export function ProjectDeletionVoteBanner() {
   const { tx } = useI18n();
-  const { projectId, project, uid, isOwner, deleteProject } = useProjectWorkspace();
+  const { projectId, project, uid, isOwner, deleteProject, deletionVoteRevision } = useProjectWorkspace();
   const [state, setState] = useState<DeletionState | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -36,7 +36,7 @@ export function ProjectDeletionVoteBanner() {
     void reload();
     const t = window.setInterval(() => void reload(), 15000);
     return () => window.clearInterval(t);
-  }, [reload]);
+  }, [reload, deletionVoteRevision]);
 
   if (!state?.proposal || !project) return null;
 
@@ -93,6 +93,7 @@ export function ProjectDeletionVoteBanner() {
 
   return (
     <section
+      id="project-deletion-vote-banner"
       className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-4 sm:px-5"
       aria-live="polite"
     >
