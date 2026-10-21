@@ -100,6 +100,11 @@ export function openProjectCluster() {
   writeStoredProjectClusterOpen(true);
 }
 
+/** Collapse to the profile tab block (Messages / AI / Find). */
+export function closeProjectCluster() {
+  writeStoredProjectClusterOpen(false);
+}
+
 /** True when URL is inside a specific project workspace (not the /projects list). */
 export function isInsideProjectWorkspace(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

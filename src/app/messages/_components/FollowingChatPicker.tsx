@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
-import { getOrCreateDirectConversation } from "@/lib/messages/api";
+import { openDirectMessage } from "@/lib/messages/openDirectMessage";
+import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
+import { closeProjectCluster } from "@/lib/navigation/projectCluster";
 import { loadFollowingListRecent } from "@/lib/profile/followActions";
 import type { FollowListUser } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -53,9 +55,11 @@ export function FollowingChatPicker({ currentUserId, onClose, onOpened }: Props)
     if (!supabase || openingId) return;
     setOpeningId(peerId);
     setError("");
-    const result = await getOrCreateDirectConversation(supabase, peerId);
+    const result = await openDirectMessage(supabase, peerId);
     setOpeningId(null);
     if (result.ok) {
+      markDirectConversationOpened(result.conversationId);
+      closeProjectCluster();
       onOpened();
       router.push(`/messages/${result.conversationId}`);
       return;

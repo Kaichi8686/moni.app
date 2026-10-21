@@ -9,6 +9,7 @@ import {
   getOrCreateDirectConversation,
   getOrCreateProjectConversation,
 } from "@/lib/messages/api";
+import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
 import { loadFollowingListRecent } from "@/lib/profile/followActions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -124,6 +125,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
     const result = await getOrCreateDirectConversation(supabase, otherId);
     setLoading(false);
     if (result.ok) {
+      markDirectConversationOpened(result.conversationId);
       onCreated();
       router.push(`/messages/${result.conversationId}`);
       return;

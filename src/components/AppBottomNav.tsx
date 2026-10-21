@@ -17,6 +17,7 @@ import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Spa
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
 import {
+  closeProjectCluster,
   enterProjectListMode,
   isInsideProjectWorkspace,
   markProjectClusterUnlocked,
@@ -358,7 +359,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const projectMailHref = lastProjectId ? `/messages?project=${lastProjectId}` : "/messages";
   /** 一覧モード中はキューブへ。そうでなければ最後のプロジェクトへ */
   const projectsHomeHref = resolveHomeProjectsHref(lastProjectId, listMode);
-  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}`;
+  const messagesProjectParam = searchParams.get("project");
+  const onMessagesPath = pathname === "/messages" || pathname.startsWith("/messages/");
+  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}`;
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
@@ -370,10 +373,14 @@ function AppBottomNavInner({ className }: { className?: string }) {
       // キューブ一覧：ブロック閉じ＋矢印なしを維持
       enterProjectListMode();
       setOpenPref(false);
-    } else if (profileActive) {
-      // プロフィール側にいるときはプロフィールブロックを伸ばす
+    } else if (onMessagesPath && messagesProjectParam) {
+      // プロジェクトブロックのメール
+      openProjectCluster();
+      setOpenPref(true);
+    } else if (onMessagesPath || profileActive) {
+      // プロフィール側メッセージ／プロフィール: プロフィールブロックを伸ばす
+      closeProjectCluster();
       setOpenPref(false);
-      writeStoredProjectClusterOpen(false);
     } else {
       const stored = readStoredProjectClusterOpen();
       if (stored !== null) setOpenPref(stored);

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateDirectConversation } from "@/lib/messages/api";
+import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
+import { closeProjectCluster } from "@/lib/navigation/projectCluster";
 
 type RouterPush = { push: (href: string) => void };
 
@@ -15,14 +17,17 @@ export async function openDirectMessage(
   return getOrCreateDirectConversation(client, peerUserId);
 }
 
-/** 1対1 DM を開く（新メッセージ）。失敗時はインボックスへ */
+/** 1対1 DM を開く（プロフィール側メッセージ欄へ戻れるようにクラスタを閉じる） */
 export async function navigateToDirectMessage(
   client: SupabaseClient,
   router: RouterPush,
   peerUserId: string,
 ): Promise<OpenDirectMessageResult> {
   const result = await openDirectMessage(client, peerUserId);
+  // プロフィールタブブロックのメッセージに戻す
+  closeProjectCluster();
   if (result.ok) {
+    markDirectConversationOpened(result.conversationId);
     router.push(`/messages/${result.conversationId}`);
     return result;
   }
