@@ -17,6 +17,10 @@ type Props = {
   isOwner: boolean;
   deleting: boolean;
   onClose: () => void;
+  /** 削除提案が作成された直後（概要の詳細〜ロードマップ間バナーへ誘導） */
+  onProposed?: () => void;
+  /** 投票・取り下げなど、バナー側の再取得が必要なとき */
+  onVoteChanged?: () => void;
   onFinalizeDelete: () => Promise<void>;
 };
 
@@ -28,6 +32,8 @@ export function ProjectDeleteVotePanel({
   isOwner,
   deleting,
   onClose,
+  onProposed,
+  onVoteChanged,
   onFinalizeDelete,
 }: Props) {
   const [state, setState] = useState<DeletionState | null>(null);
@@ -61,6 +67,7 @@ export function ProjectDeleteVotePanel({
     try {
       await proposeDeletion(projectId, uid);
       await reload();
+      onProposed?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "提案に失敗しました");
     } finally {
@@ -74,6 +81,7 @@ export function ProjectDeleteVotePanel({
     try {
       await castDeletionVote(projectId, state.proposal.id, uid, approve);
       await reload();
+      onVoteChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "投票に失敗しました");
     } finally {
@@ -87,6 +95,7 @@ export function ProjectDeleteVotePanel({
     try {
       await cancelDeletionProposal(state.proposal.id);
       await reload();
+      onVoteChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "キャンセルに失敗しました");
     } finally {
@@ -100,7 +109,7 @@ export function ProjectDeleteVotePanel({
         <h3 className="text-base font-semibold text-[#1A1A1A]">プロジェクト削除の手続き</h3>
         <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
           「{projectName}」の削除には、メンバーの<strong className="text-[#374151]">2/3以上の賛成</strong>
-          が必要です。その後、オーナーが最終削除できます。
+          が必要です。提案後は概要のプロジェクト詳細とロードマップの間で賛否を選べます。基準到達後、オーナーが最終削除できます。
         </p>
 
         {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{error}</p> : null}
@@ -141,7 +150,7 @@ export function ProjectDeleteVotePanel({
               <p className="mt-2 text-[11px] text-[#6B7280]">
                 {state.thresholdMet
                   ? "基準を満たしました。オーナーが最終削除できます。"
-                  : "まだ基準に達していません。投票状況はゴール欄とロードマップの間にも表示されます。"}
+                  : "まだ基準に達していません。投票状況はプロジェクト詳細とロードマップの間にも表示されます。"}
               </p>
             </div>
 
