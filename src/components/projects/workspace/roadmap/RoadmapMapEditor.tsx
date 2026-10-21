@@ -71,6 +71,15 @@ export function RoadmapMapEditor() {
     if (steps.some((step) => step.id === phaseIdFromUrl)) setSelectedId(phaseIdFromUrl);
   }, [phaseIdFromUrl, steps]);
 
+  /** 概要の作成マスから ?add=1 で来たら、すぐステップ追加フォームを開く */
+  const addFromUrl = searchParams.get("add") === "1";
+  useEffect(() => {
+    if (!addFromUrl || !roadmap.canEdit || roadmap.loading) return;
+    setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));
+    setAdding(true);
+    router.replace(`/projects/${projectId}/roadmap`, { scroll: false });
+  }, [addFromUrl, roadmap.canEdit, roadmap.loading, projectId, router, steps.length]);
+
   function resetDraft() {
     setDraftTitle("");
     setDraftGoal("");

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -93,15 +92,14 @@ export function RoadmapPathPreviewClient() {
           <h2 className="mb-3 text-sm font-semibold text-zinc-700">初回作成</h2>
           <RoadmapPath>
             <RoadmapPathItem index={0}>
-              <Link
-                href="#"
-                className="group relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem]"
+              <RoadmapPathNode
+                tone="create"
+                sparkle
+                onClick={() => undefined}
                 aria-label="ロードマップを作成する"
               >
-                <RoadmapPathNode tone="create" sparkle className="pointer-events-none w-full">
-                  <RoadmapStepMark index={0} tone="create" />
-                </RoadmapPathNode>
-              </Link>
+                <RoadmapStepMark index={0} tone="create" />
+              </RoadmapPathNode>
             </RoadmapPathItem>
           </RoadmapPath>
         </section>

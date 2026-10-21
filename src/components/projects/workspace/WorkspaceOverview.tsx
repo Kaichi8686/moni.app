@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, type ComponentType } from "react";
 import {
   Camera,
@@ -78,6 +79,7 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
+  const router = useRouter();
   const {
     project,
     projectMeta,
@@ -90,6 +92,7 @@ export default function WorkspaceOverview() {
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const roadmapEditHref = `/projects/${projectId}/roadmap`;
   const photoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
@@ -363,7 +366,7 @@ export default function WorkspaceOverview() {
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
           {canEdit ? (
             <Link
-              href={`/projects/${projectId}/roadmap`}
+              href={roadmapEditHref}
               className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
             >
               <PenLine className="h-3.5 w-3.5" aria-hidden />
@@ -422,15 +425,14 @@ export default function WorkspaceOverview() {
         ) : (
           <RoadmapPath>
             <RoadmapPathItem index={0}>
-              <Link
-                href={`/projects/${projectId}/roadmap`}
-                className="group relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem]"
+              <RoadmapPathNode
+                tone="create"
+                sparkle
+                onClick={() => router.push(`${roadmapEditHref}?add=1`)}
                 aria-label={tx("ロードマップを作成する", "Create roadmap")}
               >
-                <RoadmapPathNode tone="create" sparkle className="pointer-events-none w-full">
-                  <RoadmapStepMark index={0} tone="create" />
-                </RoadmapPathNode>
-              </Link>
+                <RoadmapStepMark index={0} tone="create" />
+              </RoadmapPathNode>
             </RoadmapPathItem>
           </RoadmapPath>
         )}
