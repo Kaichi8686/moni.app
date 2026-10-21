@@ -6,7 +6,8 @@ export type RoadmapPathNodeTone = "active" | "done" | "upcoming" | "create";
 
 type Props = {
   tone?: RoadmapPathNodeTone;
-  label?: string;
+  /** 進行中マスの周囲キラキラ */
+  sparkle?: boolean;
   selected?: boolean;
   disabled?: boolean;
   children?: ReactNode;
@@ -30,13 +31,13 @@ const TONE_BASE: Record<RoadmapPathNodeTone, string> = {
 };
 
 /**
- * Duolingo 風の立体円マス（ロードマップの1ステップ / 作成 CTA）。
- * アイコンやキャラは置かず、円そのものをマスとして使う。
- * Link で包むときは親に `group` を付け、このコンポーネントは見た目だけにする。
+ * Duolingo 風の立体円マス。
+ * 名前はマス下に出さず、タップ後の詳細 UI で見せる。
+ * Link で包むときは親に `group` を付ける。
  */
 export function RoadmapPathNode({
   tone = "active",
-  label,
+  sparkle = false,
   selected = false,
   disabled = false,
   children,
@@ -48,41 +49,51 @@ export function RoadmapPathNode({
   const base = TONE_BASE[tone];
 
   const body = (
-    <>
-      <span className="relative mx-auto block h-[72px] w-[72px] transition-transform duration-150 group-active:translate-y-[4px] sm:h-[80px] sm:w-[80px]">
-        <span aria-hidden className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full ${base}`} />
-        <span
-          className={`absolute inset-x-0 bottom-[6px] top-0 flex items-center justify-center rounded-full ${face} ${
-            selected ? "ring-4 ring-[#58CC02]/35" : ""
-          }`}
-        >
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-[10%] rounded-full"
-            style={{
-              background: `radial-gradient(circle at 50% 28%, ${
-                tone === "upcoming" ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.42)"
-              } 0%, transparent 62%)`,
-            }}
-          />
-          {children ? (
-            <span className="relative z-[1] flex items-center justify-center text-white">{children}</span>
-          ) : null}
-        </span>
-      </span>
-      {label ? (
-        <span
-          className={`mt-2 block max-w-[7.5rem] text-center text-[12px] font-bold leading-snug sm:max-w-[8.5rem] sm:text-[13px] ${
-            tone === "upcoming" ? "text-zinc-400" : "text-zinc-800"
-          }`}
-        >
-          {label}
-        </span>
+    <span
+      data-roadmap-node
+      className={`relative mx-auto block h-[72px] w-[72px] transition-transform duration-150 group-active:translate-y-[4px] sm:h-[80px] sm:w-[80px] ${
+        sparkle ? "roadmap-node-sparkle" : ""
+      }`}
+    >
+      {sparkle ? (
+        <>
+          <span className="roadmap-sparkle roadmap-sparkle-1" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-2" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-3" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-4" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-5" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-6" aria-hidden />
+        </>
       ) : null}
-    </>
+      <span aria-hidden className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full ${base}`} />
+      <span
+        className={`absolute inset-x-0 bottom-[6px] top-0 flex items-center justify-center rounded-full ${face} ${
+          selected
+            ? tone === "upcoming"
+              ? "ring-4 ring-zinc-300/80"
+              : "ring-4 ring-[#58CC02]/35"
+            : sparkle
+              ? "ring-4 ring-[#FFD84D]/55"
+              : ""
+        }`}
+      >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-[10%] rounded-full"
+          style={{
+            background: `radial-gradient(circle at 50% 28%, ${
+              tone === "upcoming" ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.42)"
+            } 0%, transparent 62%)`,
+          }}
+        />
+        {children ? (
+          <span className="relative z-[1] flex items-center justify-center">{children}</span>
+        ) : null}
+      </span>
+    </span>
   );
 
-  const shellClass = `relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem] ${
+  const shellClass = `relative z-[1] flex w-[7.5rem] flex-col items-center sm:w-[8.5rem] ${
     disabled ? "opacity-50" : ""
   } ${className}`;
 

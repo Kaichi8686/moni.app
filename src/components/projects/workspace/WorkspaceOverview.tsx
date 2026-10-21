@@ -8,7 +8,6 @@ import {
   ImagePlus,
   PenLine,
   PenTool,
-  Plus,
   Sparkles,
   Vote,
 } from "lucide-react";
@@ -18,6 +17,7 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
+import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
@@ -368,23 +368,30 @@ export default function WorkspaceOverview() {
         </div>
         {sortedPhases.length > 0 ? (
           <>
-            <RoadmapPath>
+            <RoadmapPath
+              segmentCleared={visiblePhases.map((phase) => {
+                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                return phase.status === "completed" || index < currentIndex;
+              })}
+            >
               {visiblePhases.map((phase, visibleIndex) => {
                 const index = sortedPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
                 const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-                /** 先のマスは色だけ控えめ（中身は開ける） */
+                /** 先のマスは灰色（中身は開ける） */
                 const upcoming = !complete && !current && index > currentIndex;
                 const tone = complete ? "done" : upcoming ? "upcoming" : "active";
                 return (
                   <RoadmapPathItem key={phase.id} index={visibleIndex}>
                     <RoadmapPathNode
                       tone={tone}
-                      label={phase.title}
+                      sparkle={current}
                       selected={selectedPhaseId === phase.id}
                       onClick={() => setSelectedPhaseId(phase.id)}
                       aria-label={tx(`ステップ ${index + 1}: ${phase.title}`, `Step ${index + 1}: ${phase.title}`)}
-                    />
+                    >
+                      <RoadmapStepMark index={index} tone={tone} />
+                    </RoadmapPathNode>
                   </RoadmapPathItem>
                 );
               })}
@@ -415,12 +422,8 @@ export default function WorkspaceOverview() {
                 className="group relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem]"
                 aria-label={tx("ロードマップを作成する", "Create roadmap")}
               >
-                <RoadmapPathNode
-                  tone="create"
-                  label={tx("作成する", "Create")}
-                  className="pointer-events-none w-full"
-                >
-                  <Plus className="h-8 w-8" strokeWidth={2.75} aria-hidden />
+                <RoadmapPathNode tone="create" className="pointer-events-none w-full">
+                  <RoadmapStepMark index={0} tone="create" />
                 </RoadmapPathNode>
               </Link>
             </RoadmapPathItem>

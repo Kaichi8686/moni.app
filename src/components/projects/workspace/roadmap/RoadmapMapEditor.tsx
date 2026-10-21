@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Map, Plus, Sparkles } from "lucide-react";
+import { Map, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
@@ -10,6 +10,7 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseDetailExpand } from "@/components/projects/workspace/roadmap/RoadmapPhaseDetailExpand";
+import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -52,13 +53,6 @@ export function RoadmapMapEditor() {
     () => [...roadmap.phases].sort((a, b) => a.order - b.order),
     [roadmap.phases],
   );
-
-  /** 未完了を先頭に、完了済みはその後ろ（いずれも order 順） */
-  const displaySteps = useMemo(() => {
-    const active = steps.filter((step) => step.status !== "completed");
-    const done = steps.filter((step) => step.status === "completed");
-    return [...active, ...done];
-  }, [steps]);
 
   useEffect(() => {
     setSelectedId(null);
@@ -289,21 +283,27 @@ export function RoadmapMapEditor() {
         </section>
       ) : null}
 
-      <RoadmapPath>
-        {displaySteps.map((step, pathIndex) => {
-          const orderIndex = steps.findIndex((item) => item.id === step.id);
+      <RoadmapPath
+        segmentCleared={steps.map((step, orderIndex) => {
+          const currentIndex = steps.findIndex((item) => item.status !== "completed");
+          const cursor = currentIndex >= 0 ? currentIndex : 0;
+          return step.status === "completed" || orderIndex < cursor;
+        })}
+      >
+        {steps.map((step, orderIndex) => {
           const stepNumber = orderIndex + 1;
           const isDone = step.status === "completed";
           const expanded = selectedId === step.id;
           const currentIndex = steps.findIndex((item) => item.status !== "completed");
+          const cursor = currentIndex >= 0 ? currentIndex : 0;
           const isCurrent =
-            step.status === "in_progress" || (!isDone && orderIndex === (currentIndex >= 0 ? currentIndex : 0));
-          const upcoming = !isDone && !isCurrent && orderIndex > (currentIndex >= 0 ? currentIndex : 0);
+            step.status === "in_progress" || (!isDone && orderIndex === cursor);
+          const upcoming = !isDone && !isCurrent && orderIndex > cursor;
           const tone = isDone ? "done" : upcoming ? "upcoming" : "active";
           return (
             <RoadmapPathItem
               key={step.id}
-              index={pathIndex}
+              index={orderIndex}
               below={
                 expanded ? (
                   <>
@@ -343,33 +343,30 @@ export function RoadmapMapEditor() {
             >
               <RoadmapPathNode
                 tone={tone}
-                label={step.title}
+                sparkle={isCurrent}
                 selected={expanded}
                 onClick={() => setSelectedId((current) => (current === step.id ? null : step.id))}
                 aria-label={tx(`ステップ ${stepNumber}: ${step.title}`, `Step ${stepNumber}: ${step.title}`)}
-              />
+              >
+                <RoadmapStepMark index={orderIndex} tone={tone} />
+              </RoadmapPathNode>
             </RoadmapPathItem>
           );
         })}
 
         {roadmap.canEdit && !adding ? (
-          <RoadmapPathItem index={displaySteps.length}>
+          <RoadmapPathItem index={steps.length}>
             <RoadmapPathNode
               tone="create"
-              label={
-                displaySteps.length === 0
-                  ? tx("作成する", "Create")
-                  : tx("次を追加", "Add next")
-              }
               disabled={busy}
               onClick={() => setAdding(true)}
               aria-label={
-                displaySteps.length === 0
+                steps.length === 0
                   ? tx("ロードマップを作成する", "Create roadmap")
                   : tx("次のステップを追加", "Add the next step")
               }
             >
-              <Plus className="h-8 w-8" strokeWidth={2.75} aria-hidden />
+              <RoadmapStepMark index={steps.length} tone="create" />
             </RoadmapPathNode>
           </RoadmapPathItem>
         ) : null}
