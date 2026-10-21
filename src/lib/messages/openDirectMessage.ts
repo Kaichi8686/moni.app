@@ -17,20 +17,17 @@ export async function openDirectMessage(
   return getOrCreateDirectConversation(client, peerUserId);
 }
 
-/** 1対1 DM を開く（プロフィール側メッセージ欄へ戻れるようにクラスタを閉じる） */
+/** 1対1 DM を開く（成功時のみ会話へ。失敗時は遷移せず理由を返す） */
 export async function navigateToDirectMessage(
   client: SupabaseClient,
   router: RouterPush,
   peerUserId: string,
 ): Promise<OpenDirectMessageResult> {
   const result = await openDirectMessage(client, peerUserId);
+  if (!result.ok) return result;
   // プロフィールタブブロックのメッセージに戻す
   closeProjectCluster();
-  if (result.ok) {
-    markDirectConversationOpened(result.conversationId);
-    router.push(`/messages/${result.conversationId}`);
-    return result;
-  }
-  router.push("/messages");
+  markDirectConversationOpened(result.conversationId);
+  router.push(`/messages/${result.conversationId}`);
   return result;
 }

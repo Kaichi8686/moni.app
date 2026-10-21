@@ -162,14 +162,14 @@ export function ExploreFriendProfilePreview({
         onClose();
         return;
       }
-      if (result.reason === "not_mutual") {
-        setMessageError(
-          tx(
-            "フォロー中の相手にメッセージできます",
-            "You can message people you follow",
-          ),
-        );
-      }
+      setMessageError(
+        result.reason === "not_mutual"
+          ? tx(
+              "フォロー中の相手にメッセージできます",
+              "You can message people you follow",
+            )
+          : tx("メッセージを開けませんでした。もう一度お試しください。", "Couldn’t open the chat. Try again."),
+      );
     } finally {
       setMessageLoading(false);
     }

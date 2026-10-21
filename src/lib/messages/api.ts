@@ -74,6 +74,79 @@ async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => P
   return results;
 }
 
+/** Find existing 1:1 conversation id between two users (client-side). */
+async function findDirectConversationId(
+  client: SupabaseClient,
+  userId: string,
+  otherUserId: string,
+): Promise<string | null> {
+  if (!userId || !otherUserId || userId === otherUserId) return null;
+  const { data: myMemberships } = await client
+    .from("conversation_members")
+    .select("conversation_id")
+    .eq("user_id", userId);
+  const convIds = (myMemberships ?? []).map((m) => m.conversation_id as string);
+  if (convIds.length === 0) return null;
+
+  const { data: directs } = await client
+    .from("conversations")
+    .select("id")
+    .eq("type", "direct")
+    .in("id", convIds);
+  const directIds = (directs ?? []).map((c) => c.id as string);
+  if (directIds.length === 0) return null;
+
+  const { data: peerRows } = await client
+    .from("conversation_members")
+    .select("conversation_id")
+    .eq("user_id", otherUserId)
+    .in("conversation_id", directIds)
+    .limit(1);
+  return (peerRows?.[0]?.conversation_id as string | undefined) ?? null;
+}
+
+/**
+ * Create a 1:1 when the RPC still requires mutual follow (older DB).
+ * Uses conversations / conversation_members RLS (creator + admin inserts).
+ */
+async function createDirectConversationClient(
+  client: SupabaseClient,
+  userId: string,
+  otherUserId: string,
+): Promise<string | null> {
+  const { data: conv, error: convErr } = await client
+    .from("conversations")
+    .insert({ type: "direct", created_by: userId })
+    .select("id")
+    .single();
+  if (convErr || !conv?.id) {
+    console.error("createDirectConversationClient conv", convErr);
+    return null;
+  }
+  const convId = conv.id as string;
+
+  const { error: selfErr } = await client.from("conversation_members").insert({
+    conversation_id: convId,
+    user_id: userId,
+    role: "admin",
+  });
+  if (selfErr) {
+    console.error("createDirectConversationClient self", selfErr);
+    return null;
+  }
+
+  const { error: peerErr } = await client.from("conversation_members").insert({
+    conversation_id: convId,
+    user_id: otherUserId,
+    role: "member",
+  });
+  if (peerErr) {
+    console.error("createDirectConversationClient peer", peerErr);
+    return null;
+  }
+  return convId;
+}
+
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
@@ -93,16 +166,23 @@ export async function getOrCreateDirectConversation(
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,
   });
-  if (error) {
-    const msg = error.message || "";
-    if (/mutual follow required/i.test(msg)) {
-      return { ok: false, reason: "not_mutual" };
-    }
-    console.error("get_or_create_direct_conversation", error);
-    return { ok: false, reason: "error" };
+  if (!error && data) {
+    return { ok: true, conversationId: data as string };
   }
-  if (!data) return { ok: false, reason: "error" };
-  return { ok: true, conversationId: data as string };
+
+  // 本番RPCが旧「相互フォロー必須」のままでも、フォロー中ならクライアントで開けるようにする
+  const existing = await findDirectConversationId(client, uid, otherUserId);
+  if (existing) return { ok: true, conversationId: existing };
+
+  const created = await createDirectConversationClient(client, uid, otherUserId);
+  if (created) return { ok: true, conversationId: created };
+
+  const msg = error?.message || "";
+  if (/mutual follow required/i.test(msg)) {
+    return { ok: false, reason: "not_mutual" };
+  }
+  if (error) console.error("get_or_create_direct_conversation", error);
+  return { ok: false, reason: "error" };
 }
 
 async function loadMyProjectIds(client: SupabaseClient, userId: string): Promise<string[]> {
