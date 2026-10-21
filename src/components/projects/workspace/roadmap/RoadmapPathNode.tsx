@@ -64,6 +64,10 @@ export function RoadmapPathNode({
           <span className="roadmap-sparkle roadmap-sparkle-4" aria-hidden />
           <span className="roadmap-sparkle roadmap-sparkle-5" aria-hidden />
           <span className="roadmap-sparkle roadmap-sparkle-6" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-7" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-8" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-9" aria-hidden />
+          <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-10" aria-hidden />
         </>
       ) : null}
       <span aria-hidden className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full ${base}`} />
@@ -74,7 +78,7 @@ export function RoadmapPathNode({
               ? "ring-4 ring-zinc-300/80"
               : "ring-4 ring-orange-300/60"
             : sparkle
-              ? "ring-4 ring-[#FFD84D]/55"
+              ? "ring-[5px] ring-[#FFD84D]/70"
               : ""
         }`}
       >

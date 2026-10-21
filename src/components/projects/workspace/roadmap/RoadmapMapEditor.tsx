@@ -415,6 +415,7 @@ export function RoadmapMapEditor() {
           <RoadmapPathItem index={steps.length}>
             <RoadmapPathNode
               tone="create"
+              sparkle={steps.length === 0}
               disabled={busy}
               onClick={() => {
                 setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));

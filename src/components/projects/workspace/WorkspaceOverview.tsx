@@ -427,7 +427,7 @@ export default function WorkspaceOverview() {
                 className="group relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem]"
                 aria-label={tx("ロードマップを作成する", "Create roadmap")}
               >
-                <RoadmapPathNode tone="create" className="pointer-events-none w-full">
+                <RoadmapPathNode tone="create" sparkle className="pointer-events-none w-full">
                   <RoadmapStepMark index={0} tone="create" />
                 </RoadmapPathNode>
               </Link>
