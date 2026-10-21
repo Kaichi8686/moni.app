@@ -2,6 +2,7 @@
 
 import {
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -18,17 +19,42 @@ export function roadmapPathOffsetX(index: number): number {
 
 type Point = { x: number; y: number };
 
-/**
- * マス間の道。横ずれは控えめなベジェでつなぎ、
- * 縁＋路面＋中央破線で「道」に見せる（太い一本線のウネリにしない）。
- */
-function roadSegment(a: Point, b: Point): string {
+function curveTo(a: Point, b: Point): string {
   if (Math.abs(a.x - b.x) < 1) {
-    return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+    return `L ${b.x} ${b.y}`;
   }
   const dy = b.y - a.y;
   const pull = Math.abs(dy) * 0.33;
-  return `M ${a.x} ${a.y} C ${a.x} ${a.y + pull}, ${b.x} ${b.y - pull}, ${b.x} ${b.y}`;
+  return `C ${a.x} ${a.y + pull}, ${b.x} ${b.y - pull}, ${b.x} ${b.y}`;
+}
+
+/** 複数マスを1本の道としてつなぐ */
+function buildRoadPath(points: Point[]): string {
+  if (points.length < 2) return "";
+  const first = points[0];
+  if (!first) return "";
+  let d = `M ${first.x} ${first.y}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    if (!prev || !curr) continue;
+    d += ` ${curveTo(prev, curr)}`;
+  }
+  return d;
+}
+
+/**
+ * 先頭から連続して「通過済み」の区間の終点インデックス。
+ * segmentCleared[i] = マス i → i+1 が通過済み。
+ */
+function clearedEndIndex(segmentCleared: boolean[] | undefined, pointCount: number): number {
+  if (!segmentCleared || pointCount < 2) return 0;
+  let end = 0;
+  for (let i = 0; i < pointCount - 1; i++) {
+    if (!segmentCleared[i]) break;
+    end = i + 1;
+  }
+  return end;
 }
 
 type Props = {
@@ -58,6 +84,40 @@ const ROAD_DONE: RoadColors = {
   surface: "#7AC70C",
   dash: "#F4FFE8",
 };
+
+function RoadStroke({ d, colors }: { d: string; colors: RoadColors }) {
+  if (!d) return null;
+  return (
+    <g>
+      <path
+        d={d}
+        fill="none"
+        stroke={colors.edge}
+        strokeWidth={24}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={d}
+        fill="none"
+        stroke={colors.surface}
+        strokeWidth={16}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={d}
+        fill="none"
+        stroke={colors.dash}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="8 12"
+        opacity={0.9}
+      />
+    </g>
+  );
+}
 
 /** 子（各マス）を縦に並べ、縁のある道を背後に描く */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
@@ -94,6 +154,13 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     };
   }, [children, segmentCleared]);
 
+  const fullPath = useMemo(() => buildRoadPath(points), [points]);
+  const clearedPath = useMemo(() => {
+    const end = clearedEndIndex(segmentCleared, points.length);
+    if (end < 1) return "";
+    return buildRoadPath(points.slice(0, end + 1));
+  }, [points, segmentCleared]);
+
   return (
     <ol
       ref={listRef}
@@ -106,46 +173,10 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
           height={size.h}
           aria-hidden
         >
-          {points.slice(0, -1).map((from, index) => {
-            const to = points[index + 1];
-            if (!to) return null;
-            const cleared = Boolean(segmentCleared?.[index]);
-            const colors = cleared ? ROAD_DONE : ROAD_AHEAD;
-            const d = roadSegment(from, to);
-            return (
-              <g key={`road-${index}`}>
-                {/* 道の縁 */}
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={colors.edge}
-                  strokeWidth={24}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* 路面 */}
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={colors.surface}
-                  strokeWidth={16}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* 中央の破線 */}
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={colors.dash}
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray="8 12"
-                  opacity={0.9}
-                />
-              </g>
-            );
-          })}
+          {/* 全体の道（未通過＝灰色） */}
+          <RoadStroke d={fullPath} colors={ROAD_AHEAD} />
+          {/* 通過済みを上に重ねる（継ぎ目なしの1本） */}
+          {clearedPath ? <RoadStroke d={clearedPath} colors={ROAD_DONE} /> : null}
         </svg>
       ) : null}
       {children}
