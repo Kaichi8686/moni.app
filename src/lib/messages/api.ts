@@ -59,17 +59,36 @@ export async function canStartDirectMessage(
   return false;
 }
 
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const idx = next;
+      next += 1;
+      results[idx] = await fn(items[idx]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export async function getOrCreateDirectConversation(
   client: SupabaseClient,
   otherUserId: string,
+  opts?: { skipClientGate?: boolean },
 ): Promise<DirectConversationResult> {
   const { data: sessionData } = await client.auth.getSession();
   const uid = sessionData.session?.user.id;
   if (!uid) return { ok: false, reason: "error" };
 
   // RPC 側でフォロー中／プロジェクト仲間／既存DMを判定。クライアントは先に弾いて無駄な RPC を減らす。
-  const allowed = await canStartDirectMessage(client, uid, otherUserId);
-  if (!allowed) return { ok: false, reason: "not_mutual" };
+  // Bulk ensure paths already know the peer is allowed — skip the expensive gate there.
+  if (!opts?.skipClientGate) {
+    const allowed = await canStartDirectMessage(client, uid, otherUserId);
+    if (!allowed) return { ok: false, reason: "not_mutual" };
+  }
 
   const { data, error } = await client.rpc("get_or_create_direct_conversation", {
     p_other_user_id: otherUserId,
@@ -103,12 +122,8 @@ export async function ensureMyProjectConversations(
   userId: string,
 ): Promise<string[]> {
   const ids = await loadMyProjectIds(client, userId);
-  const convIds: string[] = [];
-  for (const projectId of ids) {
-    const convId = await getOrCreateProjectConversation(client, projectId);
-    if (convId) convIds.push(convId);
-  }
-  return convIds;
+  const results = await mapPool(ids, 4, (projectId) => getOrCreateProjectConversation(client, projectId));
+  return results.filter((id): id is string => Boolean(id));
 }
 
 /** 参加プロジェクトのメンバー全員と 1:1 を inbox に揃える（未作成分のみ） */
@@ -141,12 +156,11 @@ export async function ensureMyProjectPeerDirectConversations(
   const missing = [...peerIds].filter((id) => !existingPeers.has(id));
   if (missing.length === 0) return [];
 
-  const convIds: string[] = [];
-  for (const peerId of missing) {
-    const result = await getOrCreateDirectConversation(client, peerId);
-    if (result.ok) convIds.push(result.conversationId);
-  }
-  return convIds;
+  // Peers already share a project — skip canStartDirectMessage gate per peer.
+  const results = await mapPool(missing, 4, (peerId) =>
+    getOrCreateDirectConversation(client, peerId, { skipClientGate: true }),
+  );
+  return results.filter((r): r is Extract<DirectConversationResult, { ok: true }> => r.ok).map((r) => r.conversationId);
 }
 
 /** 1プロジェクト分のグループライン＋メンバー 1:1 を inbox に揃える */
@@ -204,12 +218,11 @@ export async function ensureMyMutualDirectConversations(
   const missing = peers.filter((p) => !existingPeers.has(p.id));
   if (missing.length === 0) return [];
 
-  const convIds: string[] = [];
-  for (const peer of missing) {
-    const result = await getOrCreateDirectConversation(client, peer.id);
-    if (result.ok) convIds.push(result.conversationId);
-  }
-  return convIds;
+  // Mutual follow already verified by loadMutualFollowList — skip per-peer gate.
+  const results = await mapPool(missing, 4, (peer) =>
+    getOrCreateDirectConversation(client, peer.id, { skipClientGate: true }),
+  );
+  return results.filter((r): r is Extract<DirectConversationResult, { ok: true }> => r.ok).map((r) => r.conversationId);
 }
 
 export async function getOrCreateProjectConversation(
@@ -397,11 +410,13 @@ export async function fetchInboxConversations(
 
   if (convErr || !convs?.length) return [];
 
+  // Cap rows so inbox load does not pull the entire message history.
   const { data: lastMessages } = await client
     .from("messages")
     .select("id, conversation_id, sender_id, content, content_type, is_deleted, created_at")
     .in("conversation_id", convIds)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(Math.min(Math.max(convIds.length * 3, 60), 300));
 
   type LastMsgRow = {
     id: string;
@@ -447,19 +462,25 @@ export async function fetchInboxConversations(
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, profileToSender(p)]));
 
-  const unreadCounts = await Promise.all(
-    convIds.map(async (cid) => {
-      const lastRead = readMap.get(cid) ?? new Date(0).toISOString();
-      const { count } = await client
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("conversation_id", cid)
-        .gt("created_at", lastRead)
-        .neq("sender_id", userId)
-        .eq("is_deleted", false);
-      return [cid, count ?? 0] as const;
-    }),
-  );
+  // Only hit count queries for threads that might have unread (last msg after last_read).
+  const unreadCandidates = convIds.filter((cid) => {
+    const last = lastByConv.get(cid);
+    if (!last || last.sender_id === userId || last.is_deleted) return false;
+    const lastRead = readMap.get(cid);
+    if (!lastRead) return true;
+    return new Date(last.created_at).getTime() > new Date(lastRead).getTime();
+  });
+  const unreadCounts = await mapPool(unreadCandidates, 6, async (cid) => {
+    const lastRead = readMap.get(cid) ?? new Date(0).toISOString();
+    const { count } = await client
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", cid)
+      .gt("created_at", lastRead)
+      .neq("sender_id", userId)
+      .eq("is_deleted", false);
+    return [cid, count ?? 0] as const;
+  });
   const unreadMap = new Map(unreadCounts);
 
   return convs.map((c) => {
