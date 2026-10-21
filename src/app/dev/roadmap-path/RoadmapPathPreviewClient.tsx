@@ -30,7 +30,7 @@ export function RoadmapPathPreviewClient() {
         <header>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">dev preview</p>
           <h1 className="mt-1 text-xl font-bold text-zinc-950">Roadmap path</h1>
-          <p className="mt-1 text-sm text-zinc-500">オレンジの道・選べる絵・タップで詳細</p>
+          <p className="mt-1 text-sm text-zinc-500">オレンジの直線・選べる絵・タップで詳細</p>
         </header>
 
         <section>

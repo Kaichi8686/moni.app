@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Map, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
@@ -198,40 +199,61 @@ export function RoadmapMapEditor() {
     return <p className="p-6 text-sm text-zinc-500">{tx("読み込み中...", "Loading…")}</p>;
   }
 
+  const hasSteps = steps.length > 0;
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-1 pb-8">
-      <div className="flex items-center gap-2">
-        <Map className="h-6 w-6 text-orange-500" aria-hidden />
-        <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">
-          {tx("この挑戦の地図を、今から描こう", "Draw the map for this challenge")}
-        </h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Map className="h-6 w-6 shrink-0 text-orange-500" aria-hidden />
+            <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">
+              {hasSteps
+                ? tx("ロードマップを編集", "Edit roadmap")
+                : tx("この挑戦の地図を、今から描こう", "Draw the map for this challenge")}
+            </h1>
+          </div>
+          <p className="mt-1 text-[13px] text-zinc-500">
+            {hasSteps
+              ? tx("マスをタップして名前・絵・ゴールを変えたり、下の＋でステップを追加できます。", "Tap a step to change its name, icon, and goal, or add steps with +.")
+              : tx("最初のマスから、ステップを足していこう。", "Start from the first step and build your path.")}
+          </p>
+        </div>
+        <Link
+          href={`/projects/${projectId}/overview`}
+          className="inline-flex min-h-[40px] items-center rounded-full border border-zinc-200 bg-white px-3.5 text-[13px] font-semibold text-zinc-700 hover:bg-zinc-50"
+        >
+          {tx("概要に戻る", "Back to overview")}
+        </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => setMode("manual")}
-          className={`min-h-[52px] rounded-2xl border px-3 text-sm font-semibold transition ${
-            mode === "manual" ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 bg-white text-zinc-700"
-          }`}
-        >
-          {tx("手動で作る", "Build manually")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("ai")}
-          className={`inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
-            mode === "ai"
-              ? "border-violet-600 bg-violet-600 text-white"
-              : "border-violet-200 bg-violet-50 text-violet-800"
-          }`}
-        >
-          <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"}`}>
-            <Sparkles className="h-4 w-4" aria-hidden />
-          </span>
-          {tx("AI診断", "AI draft")}
-        </button>
-      </div>
+      {roadmap.canEdit ? (
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setMode("manual")}
+            className={`min-h-[48px] rounded-2xl border px-3 text-sm font-semibold transition ${
+              mode === "manual" ? "border-orange-500 bg-orange-500 text-white" : "border-zinc-200 bg-white text-zinc-700"
+            }`}
+          >
+            {tx("マスを編集", "Edit steps")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("ai")}
+            className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
+              mode === "ai"
+                ? "border-violet-600 bg-violet-600 text-white"
+                : "border-violet-200 bg-violet-50 text-violet-800"
+            }`}
+          >
+            <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"}`}>
+              <Sparkles className="h-4 w-4" aria-hidden />
+            </span>
+            {tx("AIで作る", "AI draft")}
+          </button>
+        </div>
+      ) : null}
 
       {mode === "ai" ? (
         <section className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">

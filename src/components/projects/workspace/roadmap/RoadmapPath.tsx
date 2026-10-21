@@ -9,9 +9,9 @@ import {
 } from "react";
 
 /**
- * ゆるい左右の切り替え（道のカーブ）。極端なウネリは避ける。
+ * 左右に少しずらして縦に並べる（直線でつなぐ前提なので控えめ）。
  */
-const PATH_OFFSETS_PX = [0, -22, -34, -22, 0, 22, 34, 22] as const;
+const PATH_OFFSETS_PX = [0, -28, -40, -28, 0, 28, 40, 28] as const;
 
 export function roadmapPathOffsetX(index: number): number {
   return PATH_OFFSETS_PX[index % PATH_OFFSETS_PX.length] ?? 0;
@@ -19,26 +19,16 @@ export function roadmapPathOffsetX(index: number): number {
 
 type Point = { x: number; y: number };
 
-function curveTo(a: Point, b: Point): string {
-  if (Math.abs(a.x - b.x) < 1) {
-    return `L ${b.x} ${b.y}`;
-  }
-  const dy = b.y - a.y;
-  const pull = Math.abs(dy) * 0.33;
-  return `C ${a.x} ${a.y + pull}, ${b.x} ${b.y - pull}, ${b.x} ${b.y}`;
-}
-
-/** 複数マスを1本の道としてつなぐ */
-function buildRoadPath(points: Point[]): string {
+/** マス中心を直線でつなぐ */
+function buildStraightPath(points: Point[]): string {
   if (points.length < 2) return "";
   const first = points[0];
   if (!first) return "";
   let d = `M ${first.x} ${first.y}`;
   for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    if (!prev || !curr) continue;
-    d += ` ${curveTo(prev, curr)}`;
+    const p = points[i];
+    if (!p) continue;
+    d += ` L ${p.x} ${p.y}`;
   }
   return d;
 }
@@ -60,66 +50,14 @@ function clearedEndIndex(segmentCleared: boolean[] | undefined, pointCount: numb
 type Props = {
   children: ReactNode;
   /**
-   * マス i → i+1 の道を「通過済み」にするか。
-   * 省略時はすべて未通過。
+   * マス i → i+1 の線を「通過済み（オレンジ）」にするか。
+   * 省略時はすべて灰色。
    */
   segmentCleared?: boolean[];
   className?: string;
 };
 
-type RoadColors = {
-  edge: string;
-  surface: string;
-  dash: string;
-};
-
-const ROAD_AHEAD: RoadColors = {
-  edge: "#C5C5C5",
-  surface: "#EDEDED",
-  dash: "#FFFFFF",
-};
-
-const ROAD_DONE: RoadColors = {
-  edge: "#C2410C",
-  surface: "#FB923C",
-  dash: "#FFF7ED",
-};
-
-function RoadStroke({ d, colors }: { d: string; colors: RoadColors }) {
-  if (!d) return null;
-  return (
-    <g>
-      <path
-        d={d}
-        fill="none"
-        stroke={colors.edge}
-        strokeWidth={24}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d={d}
-        fill="none"
-        stroke={colors.surface}
-        strokeWidth={16}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d={d}
-        fill="none"
-        stroke={colors.dash}
-        strokeWidth={2.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="8 12"
-        opacity={0.9}
-      />
-    </g>
-  );
-}
-
-/** 子（各マス）を縦に並べ、縁のある道を背後に描く */
+/** 子（各マス）を縦に並べ、マス間を細い直線でつなぐ */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
@@ -154,11 +92,11 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     };
   }, [children, segmentCleared]);
 
-  const fullPath = useMemo(() => buildRoadPath(points), [points]);
+  const fullPath = useMemo(() => buildStraightPath(points), [points]);
   const clearedPath = useMemo(() => {
     const end = clearedEndIndex(segmentCleared, points.length);
     if (end < 1) return "";
-    return buildRoadPath(points.slice(0, end + 1));
+    return buildStraightPath(points.slice(0, end + 1));
   }, [points, segmentCleared]);
 
   return (
@@ -173,10 +111,24 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
           height={size.h}
           aria-hidden
         >
-          {/* 全体の道（未通過＝灰色） */}
-          <RoadStroke d={fullPath} colors={ROAD_AHEAD} />
-          {/* 通過済みを上に重ねる（継ぎ目なしの1本） */}
-          {clearedPath ? <RoadStroke d={clearedPath} colors={ROAD_DONE} /> : null}
+          <path
+            d={fullPath}
+            fill="none"
+            stroke="#D4D4D8"
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          {clearedPath ? (
+            <path
+              d={clearedPath}
+              fill="none"
+              stroke="#F97316"
+              strokeWidth={4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ) : null}
         </svg>
       ) : null}
       {children}
@@ -187,7 +139,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
 type ItemProps = {
   index: number;
   children: ReactNode;
-  /** 蛇行させず中央に置く追従コンテンツ（詳細パネルなど） */
+  /** 直線パスからずらさず中央に置く追従コンテンツ（詳細パネルなど） */
   below?: ReactNode;
   className?: string;
 };

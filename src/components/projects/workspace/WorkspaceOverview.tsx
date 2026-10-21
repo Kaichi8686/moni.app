@@ -361,10 +361,15 @@ export default function WorkspaceOverview() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
-          <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
-            <PenLine className="h-3.5 w-3.5" aria-hidden />
-            {tx("編集する", "Edit")}
-          </Link>
+          {canEdit ? (
+            <Link
+              href={`/projects/${projectId}/roadmap`}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+            >
+              <PenLine className="h-3.5 w-3.5" aria-hidden />
+              {tx("編集する", "Edit")}
+            </Link>
+          ) : null}
         </div>
         {sortedPhases.length > 0 ? (
           <>
