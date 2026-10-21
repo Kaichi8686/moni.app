@@ -167,6 +167,22 @@ export async function loadMutualFollowList(
   return following.filter((u) => mutualIds.has(u.id));
 }
 
+/** Following user ids (for inbox empty-DM visibility). */
+export async function loadFollowingIds(
+  client: SupabaseClient,
+  viewerId: string,
+  limit = 500,
+): Promise<Set<string>> {
+  if (!viewerId) return new Set();
+  const { data: rows, error } = await client
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", viewerId)
+    .limit(Math.max(1, limit));
+  if (error || !rows?.length) return new Set();
+  return new Set((rows as Array<{ following_id: string }>).map((r) => r.following_id));
+}
+
 /** People the viewer follows, newest first (for 「フォロー中の人とチャット」). */
 export async function loadFollowingListRecent(
   client: SupabaseClient,

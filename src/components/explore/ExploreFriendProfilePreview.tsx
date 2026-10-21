@@ -158,7 +158,11 @@ export function ExploreFriendProfilePreview({
     setMessageLoading(true);
     try {
       const result = await navigateToDirectMessage(supabase, router, member.id);
-      if (!result.ok && result.reason === "not_mutual") {
+      if (result.ok) {
+        onClose();
+        return;
+      }
+      if (result.reason === "not_mutual") {
         setMessageError(
           tx(
             "フォロー中の相手にメッセージできます",

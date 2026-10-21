@@ -14,11 +14,18 @@ import { supabase } from "@/lib/supabase";
 
 type Props = {
   currentUserId: string;
+  /** Peers already shown in the inbox list — omit so they only appear once */
+  excludePeerIds?: ReadonlySet<string>;
   onClose: () => void;
   onOpened: () => void;
 };
 
-export function FollowingChatPicker({ currentUserId, onClose, onOpened }: Props) {
+export function FollowingChatPicker({
+  currentUserId,
+  excludePeerIds,
+  onClose,
+  onOpened,
+}: Props) {
   const { tx } = useI18n();
   const router = useRouter();
   const [peers, setPeers] = useState<FollowListUser[]>([]);
@@ -42,14 +49,19 @@ export function FollowingChatPicker({ currentUserId, onClose, onOpened }: Props)
     };
   }, [currentUserId]);
 
+  const availablePeers = useMemo(() => {
+    if (!excludePeerIds || excludePeerIds.size === 0) return peers;
+    return peers.filter((u) => !excludePeerIds.has(u.id));
+  }, [peers, excludePeerIds]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return peers;
-    return peers.filter(
+    if (!q) return availablePeers;
+    return availablePeers.filter(
       (u) =>
         u.displayName.toLowerCase().includes(q) || u.username.toLowerCase().includes(q),
     );
-  }, [peers, query]);
+  }, [availablePeers, query]);
 
   async function openChat(peerId: string) {
     if (!supabase || openingId) return;
@@ -125,7 +137,12 @@ export function FollowingChatPicker({ currentUserId, onClose, onOpened }: Props)
                     "まだ誰もフォローしていません。探すタブから友達をフォローしてみましょう。",
                     "You’re not following anyone yet. Find friends in Discover.",
                   )
-                : tx("一致する人がいません", "No matches")}
+                : availablePeers.length === 0
+                  ? tx(
+                      "フォロー中の人はすでにメッセージ一覧にいます。",
+                      "Everyone you follow is already in your message list.",
+                    )
+                  : tx("一致する人がいません", "No matches")}
             </p>
           ) : (
             <ul className="divide-y divide-zinc-50">
