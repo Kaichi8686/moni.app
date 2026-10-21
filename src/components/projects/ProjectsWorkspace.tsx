@@ -11,6 +11,7 @@ import {
   emptyProjectBrief,
   type ProjectBrief,
 } from "@/lib/projects/projectBrief";
+import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import type { ProjectMemberRow, ProjectRow, ProjectTaskRow } from "@/lib/projects/types";
 import type { UserSituation } from "@/lib/projects/userSituation";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
@@ -212,8 +213,10 @@ export function ProjectsWorkspace({ projectId }: Props) {
     if (!supabase || !uid || !form.name.trim()) return;
     const description = composeProjectDescription(brief);
     const coaching_context = applyBriefToCoachingContext({}, brief);
+    const defaultPhoto = form.thumbnail_url.trim() || pickDefaultProjectPhoto();
     const fullPayload = {
       ...form,
+      thumbnail_url: defaultPhoto,
       description,
       coaching_context,
       owner_id: uid,
@@ -228,6 +231,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
         coaching_context,
         category: form.category.trim() || "general",
         tags: fullPayload.tags,
+        thumbnail_url: defaultPhoto,
         visibility: form.visibility,
       },
       {
@@ -236,12 +240,19 @@ export function ProjectsWorkspace({ projectId }: Props) {
         description,
         category: form.category.trim() || "general",
         tags: fullPayload.tags,
+        thumbnail_url: defaultPhoto,
         visibility: form.visibility,
       },
       {
         owner_id: uid,
         name: form.name.trim(),
         description,
+        thumbnail_url: defaultPhoto,
+      },
+      {
+        owner_id: uid,
+        name: form.name.trim(),
+        thumbnail_url: defaultPhoto,
       },
       {
         owner_id: uid,
@@ -250,17 +261,32 @@ export function ProjectsWorkspace({ projectId }: Props) {
     ];
     let data: ProjectRow | null = null;
     let error: { message: string; code?: string } | null = null;
+    let usedThumbnail = false;
     for (const candidate of payloadCandidates) {
       const res = await supabase.from("projects").insert(candidate).select("*").single();
       data = (res.data as ProjectRow | null) ?? null;
       error = (res.error as { message: string; code?: string } | null) ?? null;
-      if (!error) break;
+      if (!error) {
+        usedThumbnail = "thumbnail_url" in candidate;
+        break;
+      }
       const schemaMismatch =
         error.code === "42703" ||
         error.code === "PGRST204" ||
         error.message.includes("does not exist") ||
         error.message.includes("schema cache");
       if (!schemaMismatch) break;
+    }
+    if (!error && data?.id && !usedThumbnail) {
+      const { error: thumbErr } = await supabase
+        .from("projects")
+        .update({ thumbnail_url: defaultPhoto })
+        .eq("id", data.id);
+      if (thumbErr) {
+        console.warn("[projects] default photo assign skipped:", thumbErr.message);
+      } else {
+        data = { ...data, thumbnail_url: defaultPhoto };
+      }
     }
     if (error) {
       setErr(error.message);

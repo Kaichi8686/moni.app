@@ -10,6 +10,7 @@ import type { Issue, Member, Phase, Project, ProjectStatus } from "@/lib/workspa
 import { projectRowToWorkspace } from "@/lib/workspace/mapRows";
 import { readLastProject } from "@/lib/workspace/lastProject";
 import { useWorkspaceUiStore } from "@/lib/workspace/store";
+import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import { applyTemplateToProject, listProjectTemplates } from "@/lib/projects/projectTemplates";
 import type { TemplateListItem } from "@/lib/projects/projectTemplates";
 
@@ -185,6 +186,7 @@ export function ProjectsLinearHome() {
           description: "",
           category: "探究",
           tags: [],
+          thumbnail_url: pickDefaultProjectPhoto(),
           visibility: "public",
           recruitment_target: "",
           recruitment_message: "",
