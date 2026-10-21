@@ -19,6 +19,7 @@ create table if not exists public.project_phases (
   start_date timestamptz not null,
   end_date timestamptz not null,
   color text not null default 'purple',
+  icon text default 'star',
   "order" integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

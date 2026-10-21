@@ -4,19 +4,20 @@ import Link from "next/link";
 import { useMemo, useRef, useState, type ComponentType } from "react";
 import {
   Camera,
-  Check,
   FileText,
   ImagePlus,
   PenLine,
   PenTool,
-  PlusCircle,
   Sparkles,
   Vote,
 } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
+import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
+import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
@@ -360,56 +361,46 @@ export default function WorkspaceOverview() {
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
-          <Link href={`/projects/${projectId}/roadmap`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
-            <PenLine className="h-3.5 w-3.5" aria-hidden />
-            {tx("編集する", "Edit")}
-          </Link>
+          {canEdit ? (
+            <Link
+              href={`/projects/${projectId}/roadmap`}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+            >
+              <PenLine className="h-3.5 w-3.5" aria-hidden />
+              {tx("編集する", "Edit")}
+            </Link>
+          ) : null}
         </div>
         {sortedPhases.length > 0 ? (
           <>
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {visiblePhases.map((phase) => {
+            <RoadmapPath
+              segmentCleared={visiblePhases.map((phase) => {
+                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                return phase.status === "completed" || index < currentIndex;
+              })}
+            >
+              {visiblePhases.map((phase, visibleIndex) => {
                 const index = sortedPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
                 const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-                /** 先のマスは色だけ控えめ（鍵アイコンは出さず、中身は開ける） */
+                /** 先のマスは灰色（中身は開ける） */
                 const upcoming = !complete && !current && index > currentIndex;
+                const tone = complete ? "done" : upcoming ? "upcoming" : "active";
                 return (
-                  <button
-                    key={phase.id}
-                    type="button"
-                    className="text-left"
-                    onClick={() => setSelectedPhaseId(phase.id)}
-                  >
-                    <div
-                      className={`relative min-h-[96px] overflow-hidden rounded-2xl border p-2.5 pt-4 transition sm:min-h-[120px] sm:p-4 sm:pt-6 ${
-                        upcoming
-                          ? "border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-zinc-300"
-                          : "border-zinc-200 bg-white text-zinc-900 hover:border-orange-200 hover:shadow-sm"
-                      }`}
+                  <RoadmapPathItem key={phase.id} index={visibleIndex}>
+                    <RoadmapPathNode
+                      tone={tone}
+                      sparkle={current}
+                      selected={selectedPhaseId === phase.id}
+                      onClick={() => setSelectedPhaseId(phase.id)}
+                      aria-label={tx(`ステップ ${index + 1}: ${phase.title}`, `Step ${index + 1}: ${phase.title}`)}
                     >
-                      <span className={`absolute inset-x-0 top-0 h-1.5 ${complete || current ? "bg-orange-400" : "bg-zinc-200"}`} />
-                      {current ? (
-                        <span className="absolute right-2 top-2.5 h-2 w-2 rounded-full bg-orange-500 ring-4 ring-orange-100 sm:right-3 sm:top-3 sm:h-2.5 sm:w-2.5" />
-                      ) : null}
-                      <p className="text-[9px] font-bold tracking-[0.12em] text-zinc-400 sm:text-[10px]">STEP {index + 1}</p>
-                      <p
-                        className={`mt-1.5 line-clamp-2 text-[12px] font-semibold leading-snug sm:mt-2 sm:text-sm ${
-                          upcoming ? "text-zinc-400" : "text-zinc-800"
-                        }`}
-                      >
-                        {phase.title}
-                      </p>
-                      {complete ? (
-                        <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600 sm:mt-2">
-                          <Check className="h-3 w-3" aria-hidden /> {tx("完了", "Done")}
-                        </span>
-                      ) : null}
-                    </div>
-                  </button>
+                      <RoadmapStepMark markId={phase.icon} index={index} tone={tone} />
+                    </RoadmapPathNode>
+                  </RoadmapPathItem>
                 );
               })}
-            </div>
+            </RoadmapPath>
             {hiddenPhaseCount > 0 ? (
               <button
                 type="button"
@@ -429,18 +420,19 @@ export default function WorkspaceOverview() {
             ) : null}
           </>
         ) : (
-          <Link
-            href={`/projects/${projectId}/roadmap`}
-            className="flex min-h-[108px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 text-sm font-semibold text-zinc-600"
-          >
-            <PlusCircle
-              className="h-8 w-8 text-zinc-300"
-              strokeWidth={1.75}
-              strokeDasharray="2.5 2.5"
-              aria-hidden
-            />
-            {tx("ロードマップを作成する", "Create roadmap")}
-          </Link>
+          <RoadmapPath>
+            <RoadmapPathItem index={0}>
+              <Link
+                href={`/projects/${projectId}/roadmap`}
+                className="group relative flex w-[7.5rem] flex-col items-center sm:w-[8.5rem]"
+                aria-label={tx("ロードマップを作成する", "Create roadmap")}
+              >
+                <RoadmapPathNode tone="create" className="pointer-events-none w-full">
+                  <RoadmapStepMark index={0} tone="create" />
+                </RoadmapPathNode>
+              </Link>
+            </RoadmapPathItem>
+          </RoadmapPath>
         )}
       </section>
 
