@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import {
   buildSlotRosterRows,
   downloadText,
@@ -8,7 +8,11 @@ import {
   formatShiftText,
   formatSlotRosterTsv,
 } from "@/lib/bunkasai-shift/export";
-import { useBunkasaiShiftStore } from "@/lib/bunkasai-shift/store";
+import { buildShiftBackup, parseShiftImport } from "@/lib/bunkasai-shift/import";
+import {
+  scheduleServerSave,
+  useBunkasaiShiftStore,
+} from "@/lib/bunkasai-shift/store";
 
 async function copyText(value: string): Promise<boolean> {
   try {
@@ -35,8 +39,15 @@ async function copyText(value: string): Promise<boolean> {
 export function ExportPanel() {
   const members = useBunkasaiShiftStore((s) => s.members);
   const assignments = useBunkasaiShiftStore((s) => s.assignments);
+  const warnings = useBunkasaiShiftStore((s) => s.warnings);
+  const lastAssignedAt = useBunkasaiShiftStore((s) => s.lastAssignedAt);
+  const coreMemberIds = useBunkasaiShiftStore((s) => s.coreMemberIds);
+  const dependencies = useBunkasaiShiftStore((s) => s.dependencies);
+  const replaceSnapshot = useBunkasaiShiftStore((s) => s.replaceSnapshot);
+  const setTab = useBunkasaiShiftStore((s) => s.setTab);
   const [status, setStatus] = useState("");
   const [statusTone, setStatusTone] = useState<"ok" | "warn">("ok");
+  const importRef = useRef<HTMLInputElement>(null);
 
   const text = useMemo(
     () => formatShiftText(members, assignments),
@@ -54,7 +65,59 @@ export function ExportPanel() {
   function flash(msg: string, tone: "ok" | "warn" = "ok") {
     setStatusTone(tone);
     setStatus(msg);
-    window.setTimeout(() => setStatus(""), 5000);
+    window.setTimeout(() => setStatus(""), 6000);
+  }
+
+  function downloadEditable() {
+    const backup = buildShiftBackup({
+      members,
+      assignments,
+      warnings,
+      lastAssignedAt,
+      coreMemberIds,
+      dependencies,
+    });
+    downloadText(
+      "bunkasai-shift-edit.json",
+      JSON.stringify(backup, null, 2),
+      "application/json;charset=utf-8",
+    );
+    flash("再編集用ファイルをダウンロードしました。あとから「表をインポート」で戻せます");
+  }
+
+  async function onImportFile(file: File) {
+    try {
+      const raw = await file.text();
+      const result = parseShiftImport(raw, members);
+      const assigned = Object.values(result.assignments).reduce((n, ids) => n + ids.length, 0);
+      if (
+        assigned > 0 &&
+        Object.values(assignments).some((ids) => ids.length > 0) &&
+        !confirm("今のシフト表を、インポートした内容で置き換えますか？")
+      ) {
+        return;
+      }
+      replaceSnapshot({
+        members: result.members,
+        assignments: result.assignments,
+        warnings: result.warnings,
+        lastAssignedAt: result.lastAssignedAt,
+        coreMemberIds: result.coreMemberIds,
+        dependencies: result.dependencies,
+      });
+      scheduleServerSave(0);
+      setTab("assign");
+      const extra =
+        result.createdNames.length > 0
+          ? `（新規 ${result.createdNames.length}人を名簿に追加）`
+          : "";
+      flash(`シフト表をインポートしました${extra}。シフト表タブで編集できます`);
+    } catch (e) {
+      flash(
+        e instanceof Error ? e.message : "インポートに失敗しました",
+        "warn",
+      );
+    }
   }
 
   async function copy(value: string, okMsg: string) {
@@ -110,7 +173,7 @@ export function ExportPanel() {
           エクスポート
         </h2>
         <p className="mt-1 text-sm text-[var(--bs-muted)]">
-          時間帯ごとに担当者を一覧にしています。LINEは共有メニューか、コピーして貼り付けで送れます。
+          時間帯ごとの担当一覧です。保存した表は「表をインポート」で戻して編集できます。
         </p>
       </div>
 
@@ -151,7 +214,35 @@ export function ExportPanel() {
         >
           CSVダウンロード
         </button>
+        <button
+          type="button"
+          onClick={downloadEditable}
+          className="rounded-xl border border-[var(--bs-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--bs-ink-soft)] hover:bg-[var(--bs-soft)]"
+        >
+          編集用に保存
+        </button>
+        <button
+          type="button"
+          onClick={() => importRef.current?.click()}
+          className="rounded-xl bg-[var(--bs-ink)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        >
+          表をインポート
+        </button>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/tab-separated-values,text/plain"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void onImportFile(file);
+          }}
+        />
       </div>
+      <p className="text-xs text-[var(--bs-muted)]">
+        「編集用に保存」の JSON が確実です。以前ダウンロードした CSV / シート用TSV もインポートできます。
+      </p>
 
       {status ? (
         <p
