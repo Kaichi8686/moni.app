@@ -7,6 +7,7 @@ import { Map, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -17,6 +18,7 @@ import {
   resolveRoadmapMarkId,
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -35,8 +37,12 @@ export function RoadmapMapEditor() {
   const { tx } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { projectId, reload: workspaceReload } = useProjectWorkspace();
+  const { projectId, project, coachingContext, reload: workspaceReload } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const projectGoal = resolveProjectBrief({
+    coachingContext,
+    description: project?.description,
+  }).projectGoal.trim();
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftGoal, setDraftGoal] = useState("");
@@ -333,6 +339,14 @@ export function RoadmapMapEditor() {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {project && projectGoal ? (
+        <ProjectGoalBanner
+          projectName={project.name}
+          goal={projectGoal}
+          onGuideClick={() => router.push(`/projects/${projectId}/overview#project-brief`)}
+        />
       ) : null}
 
       <RoadmapPath

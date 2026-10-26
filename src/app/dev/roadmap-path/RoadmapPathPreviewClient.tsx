@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import {
@@ -44,6 +45,11 @@ export function RoadmapPathPreviewClient() {
 
         <section>
           <h2 className="mb-3 text-sm font-semibold text-zinc-700">ステップあり（マスをタップ）</h2>
+          <ProjectGoalBanner
+            className="mb-4"
+            projectName="moni"
+            goal="文化祭までに、クラス全員が見られる告知アプリを公開する"
+          />
           <RoadmapPath segmentCleared={[true, true, false, false, false]}>
             {DEMO_STEPS.map((step, index) => (
               <RoadmapPathItem key={step.id} index={index}>
