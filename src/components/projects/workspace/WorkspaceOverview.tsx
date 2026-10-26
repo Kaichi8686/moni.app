@@ -14,12 +14,14 @@ import {
 } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
+import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
@@ -89,9 +91,14 @@ export default function WorkspaceOverview() {
     loading,
     uid,
     canEdit,
+    coachingContext,
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
+  const projectGoal = resolveProjectBrief({
+    coachingContext,
+    description: project?.description,
+  }).projectGoal.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
   const photoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
@@ -374,6 +381,20 @@ export default function WorkspaceOverview() {
             </Link>
           ) : null}
         </div>
+        {project && projectGoal ? (
+          <ProjectGoalBanner
+            className="mb-4"
+            projectName={project.name}
+            goal={projectGoal}
+            onGuideClick={
+              canEdit
+                ? () => {
+                    window.dispatchEvent(new Event("moni:edit-project-brief"));
+                  }
+                : undefined
+            }
+          />
+        ) : null}
         {sortedPhases.length > 0 ? (
           <>
             <RoadmapPath

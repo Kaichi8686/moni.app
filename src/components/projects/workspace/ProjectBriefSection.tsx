@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
 
 function hasCoreBrief(brief: ProjectBrief): boolean {
   const t = trimProjectBrief(brief);
-  return Boolean(t.problemMotivation || t.projectGoal);
+  return Boolean(t.problemMotivation && t.projectGoal);
 }
 
 export function ProjectBriefSection() {
@@ -44,6 +44,27 @@ export function ProjectBriefSection() {
     setEditing(!hasCoreBrief(next) && canEdit);
     setError("");
   }, [coachingContext, project?.description, canEdit, project?.id]);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    const onEditRequest = () => {
+      const next = resolveProjectBrief({
+        coachingContext,
+        description: project?.description,
+      });
+      setDraft(next);
+      setEditing(true);
+      setError("");
+      window.requestAnimationFrame(() => {
+        document.getElementById("project-brief")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    };
+    window.addEventListener("moni:edit-project-brief", onEditRequest);
+    return () => window.removeEventListener("moni:edit-project-brief", onEditRequest);
+  }, [canEdit, coachingContext, project?.description]);
 
   if (!project) return null;
   if (!filled && !canEdit) return null;
@@ -103,7 +124,10 @@ export function ProjectBriefSection() {
   if (editing && canEdit) {
     const isFirstFill = !filled;
     return (
-      <section className="rounded-2xl border border-orange-200/80 bg-orange-50/40 px-4 py-4 sm:px-5">
+      <section
+        id="project-brief"
+        className="rounded-2xl border border-orange-200/80 bg-orange-50/40 px-4 py-4 sm:px-5"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
@@ -187,10 +211,13 @@ export function ProjectBriefSection() {
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 sm:px-5">
+    <section
+      id="project-brief"
+      className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 sm:px-5"
+    >
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
-          {tx("プロジェクトのゴール", "Project goal")}
+          {tx("きっかけ", "Motivation")}
         </h2>
         {canEdit ? (
           <button
@@ -208,33 +235,16 @@ export function ProjectBriefSection() {
         ) : null}
       </div>
 
-      <div className="mt-3 space-y-4">
-        {brief.problemMotivation ? (
-          <div>
-            <p className="text-[11px] font-semibold text-zinc-500">
-              {tx(
-                "どのようなことを解決したくてこのプロジェクトを思いついたか",
-                "What problem made you think of this project?",
-              )}
-            </p>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-              {brief.problemMotivation}
-            </p>
-          </div>
-        ) : null}
-        {brief.projectGoal ? (
-          <div>
-            <p className="text-[11px] font-semibold text-zinc-500">
-              {tx("このプロジェクトのゴール", "Project goal")}
-            </p>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-              {brief.projectGoal}
-            </p>
-          </div>
-        ) : null}
-        {!brief.problemMotivation && !brief.projectGoal ? (
-          <p className="text-sm text-zinc-500">—</p>
-        ) : null}
+      <div className="mt-3">
+        <p className="text-[11px] font-semibold text-zinc-500">
+          {tx(
+            "どのようなことを解決したくてこのプロジェクトを思いついたか",
+            "What problem made you think of this project?",
+          )}
+        </p>
+        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
+          {brief.problemMotivation || "—"}
+        </p>
       </div>
     </section>
   );
