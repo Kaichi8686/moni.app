@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
+import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import {
@@ -22,6 +23,7 @@ const DEMO_STEPS = [
 export function RoadmapPathPreviewClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [picked, setPicked] = useState<RoadmapMarkId>("lightbulb");
+  const [goalOpen, setGoalOpen] = useState(false);
   const selected = DEMO_STEPS.find((step) => step.id === selectedId) ?? null;
 
   return (
@@ -49,6 +51,14 @@ export function RoadmapPathPreviewClient() {
             className="mb-4"
             projectName="moni"
             goal="文化祭までに、クラス全員が見られる告知アプリを公開する"
+            onClick={() => setGoalOpen(true)}
+          />
+          <ProjectGoalDetailSheet
+            open={goalOpen}
+            onClose={() => setGoalOpen(false)}
+            projectName="moni"
+            goal="文化祭までに、クラス全員が見られる告知アプリを公開する"
+            problemMotivation="学校の行事告知がバラバラで、みんな見逃しがちだった"
           />
           <RoadmapPath segmentCleared={[true, true, false, false, false]}>
             {DEMO_STEPS.map((step, index) => (

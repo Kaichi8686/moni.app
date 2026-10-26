@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, type ComponentType } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import {
   Camera,
   FileText,
@@ -15,6 +15,7 @@ import {
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
+import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -82,6 +83,7 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     project,
     projectMeta,
@@ -95,10 +97,18 @@ export default function WorkspaceOverview() {
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
-  const projectGoal = resolveProjectBrief({
+
+  useEffect(() => {
+    if (searchParams.get("editBrief") !== "1" || !canEdit) return;
+    window.dispatchEvent(new Event("moni:edit-project-brief"));
+    router.replace(`/projects/${projectId}/overview`, { scroll: false });
+  }, [searchParams, canEdit, projectId, router]);
+  const projectBrief = resolveProjectBrief({
     coachingContext,
     description: project?.description,
-  }).projectGoal.trim();
+  });
+  const projectGoal = projectBrief.projectGoal.trim();
+  const problemMotivation = projectBrief.problemMotivation.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
   const photoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +116,7 @@ export default function WorkspaceOverview() {
     projectId,
     open: false,
   });
+  const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [bgPreview, setBgPreview] = useState<string | null>(null);
@@ -382,7 +393,12 @@ export default function WorkspaceOverview() {
           ) : null}
         </div>
         {project && projectGoal ? (
-          <ProjectGoalBanner className="mb-4" projectName={project.name} goal={projectGoal} />
+          <ProjectGoalBanner
+            className="mb-4"
+            projectName={project.name}
+            goal={projectGoal}
+            onClick={() => setGoalDetailOpen(true)}
+          />
         ) : null}
         {sortedPhases.length > 0 ? (
           <>
@@ -447,6 +463,20 @@ export default function WorkspaceOverview() {
           </RoadmapPath>
         )}
       </section>
+
+      {project && projectGoal ? (
+        <ProjectGoalDetailSheet
+          open={goalDetailOpen}
+          onClose={() => setGoalDetailOpen(false)}
+          projectName={project.name}
+          goal={projectGoal}
+          problemMotivation={problemMotivation}
+          canEdit={canEdit}
+          onEdit={() => {
+            window.dispatchEvent(new Event("moni:edit-project-brief"));
+          }}
+        />
+      ) : null}
 
       <RoadmapPhaseInfoSheet
         open={Boolean(selectedPhaseLive)}

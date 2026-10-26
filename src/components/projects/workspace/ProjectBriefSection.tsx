@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PenLine } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { parseCoachingContext } from "@/lib/projects/coachingContext";
@@ -45,8 +44,31 @@ export function ProjectBriefSection() {
     setError("");
   }, [coachingContext, project?.description, canEdit, project?.id]);
 
+  useEffect(() => {
+    if (!canEdit) return;
+    const onEditRequest = () => {
+      const next = resolveProjectBrief({
+        coachingContext,
+        description: project?.description,
+      });
+      setDraft(next);
+      setEditing(true);
+      setError("");
+      window.requestAnimationFrame(() => {
+        document.getElementById("project-brief")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    };
+    window.addEventListener("moni:edit-project-brief", onEditRequest);
+    return () => window.removeEventListener("moni:edit-project-brief", onEditRequest);
+  }, [canEdit, coachingContext, project?.description]);
+
   if (!project) return null;
   if (!filled && !canEdit) return null;
+  // 入力済みの閲覧はゴールバナー → 詳細シート側。ここでは未入力フォームと編集だけ。
+  if (filled && !editing) return null;
 
   async function save() {
     if (!canEdit || !supabase || !project) return;
@@ -189,42 +211,5 @@ export function ProjectBriefSection() {
     );
   }
 
-  return (
-    <section
-      id="project-brief"
-      className="rounded-2xl border border-zinc-200 bg-white px-4 py-4 sm:px-5"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
-          {tx("きっかけ", "Motivation")}
-        </h2>
-        {canEdit ? (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(brief);
-              setEditing(true);
-              setError("");
-            }}
-            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
-          >
-            <PenLine className="h-3.5 w-3.5" aria-hidden />
-            {tx("編集", "Edit")}
-          </button>
-        ) : null}
-      </div>
-
-      <div className="mt-3">
-        <p className="text-[11px] font-semibold text-zinc-500">
-          {tx(
-            "どのようなことを解決したくてこのプロジェクトを思いついたか",
-            "What problem made you think of this project?",
-          )}
-        </p>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-          {brief.problemMotivation || "—"}
-        </p>
-      </div>
-    </section>
-  );
+  return null;
 }
