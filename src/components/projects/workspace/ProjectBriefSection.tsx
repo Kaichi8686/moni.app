@@ -45,27 +45,6 @@ export function ProjectBriefSection() {
     setError("");
   }, [coachingContext, project?.description, canEdit, project?.id]);
 
-  useEffect(() => {
-    if (!canEdit) return;
-    const onEditRequest = () => {
-      const next = resolveProjectBrief({
-        coachingContext,
-        description: project?.description,
-      });
-      setDraft(next);
-      setEditing(true);
-      setError("");
-      window.requestAnimationFrame(() => {
-        document.getElementById("project-brief")?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      });
-    };
-    window.addEventListener("moni:edit-project-brief", onEditRequest);
-    return () => window.removeEventListener("moni:edit-project-brief", onEditRequest);
-  }, [canEdit, coachingContext, project?.description]);
-
   if (!project) return null;
   if (!filled && !canEdit) return null;
 

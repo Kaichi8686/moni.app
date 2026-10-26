@@ -382,18 +382,7 @@ export default function WorkspaceOverview() {
           ) : null}
         </div>
         {project && projectGoal ? (
-          <ProjectGoalBanner
-            className="mb-4"
-            projectName={project.name}
-            goal={projectGoal}
-            onGuideClick={
-              canEdit
-                ? () => {
-                    window.dispatchEvent(new Event("moni:edit-project-brief"));
-                  }
-                : undefined
-            }
-          />
+          <ProjectGoalBanner className="mb-4" projectName={project.name} goal={projectGoal} />
         ) : null}
         {sortedPhases.length > 0 ? (
           <>

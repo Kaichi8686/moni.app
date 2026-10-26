@@ -342,11 +342,7 @@ export function RoadmapMapEditor() {
       ) : null}
 
       {project && projectGoal ? (
-        <ProjectGoalBanner
-          projectName={project.name}
-          goal={projectGoal}
-          onGuideClick={() => router.push(`/projects/${projectId}/overview#project-brief`)}
-        />
+        <ProjectGoalBanner projectName={project.name} goal={projectGoal} />
       ) : null}
 
       <RoadmapPath
