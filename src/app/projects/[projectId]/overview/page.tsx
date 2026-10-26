@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import WorkspaceOverview from "@/components/projects/workspace/WorkspaceOverview";
 
 export const metadata: Metadata = {
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function OverviewPage() {
-  return <WorkspaceOverview />;
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-gray-500">読み込み中...</p>}>
+      <WorkspaceOverview />
+    </Suspense>
+  );
 }

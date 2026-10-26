@@ -8,6 +8,7 @@ import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
+import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -37,12 +38,14 @@ export function RoadmapMapEditor() {
   const { tx } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { projectId, project, coachingContext, reload: workspaceReload } = useProjectWorkspace();
+  const { projectId, project, coachingContext, canEdit, reload: workspaceReload } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
-  const projectGoal = resolveProjectBrief({
+  const projectBrief = resolveProjectBrief({
     coachingContext,
     description: project?.description,
-  }).projectGoal.trim();
+  });
+  const projectGoal = projectBrief.projectGoal.trim();
+  const problemMotivation = projectBrief.problemMotivation.trim();
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftGoal, setDraftGoal] = useState("");
@@ -56,6 +59,7 @@ export function RoadmapMapEditor() {
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [goalDetailOpen, setGoalDetailOpen] = useState(false);
 
   /** 地図編集と概要タブのフェーズ一覧を同じ DB 状態に揃える */
   async function syncReload() {
@@ -345,7 +349,21 @@ export function RoadmapMapEditor() {
         <ProjectGoalBanner
           projectName={project.name}
           goal={projectGoal}
-          onGuideClick={() => router.push(`/projects/${projectId}/overview#project-brief`)}
+          onClick={() => setGoalDetailOpen(true)}
+        />
+      ) : null}
+
+      {project && projectGoal ? (
+        <ProjectGoalDetailSheet
+          open={goalDetailOpen}
+          onClose={() => setGoalDetailOpen(false)}
+          projectName={project.name}
+          goal={projectGoal}
+          problemMotivation={problemMotivation}
+          canEdit={canEdit}
+          onEdit={() => {
+            router.push(`/projects/${projectId}/overview?editBrief=1`);
+          }}
         />
       ) : null}
 
