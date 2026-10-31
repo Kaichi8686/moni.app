@@ -11,13 +11,13 @@ type Props = {
 };
 
 const SIZE = {
-  sm: "h-[4.5rem] w-[4.5rem]",
-  md: "h-28 w-28",
-  lg: "h-40 w-40",
-  xl: "h-52 w-52",
+  sm: "h-[5.25rem] w-[5.25rem]",
+  md: "h-36 w-36",
+  lg: "h-48 w-48",
+  xl: "h-60 w-60",
 } as const;
 
-/** Chunky cartoon gift — Duolingo illustration energy */
+/** Deep isometric gift + clean folded paper bow. */
 export function GiftBoxVisual({
   pattern,
   size = "md",
@@ -26,113 +26,154 @@ export function GiftBoxVisual({
   className = "",
 }: Props) {
   const meta = GIFT_PATTERNS.find((g) => g.id === pattern) ?? GIFT_PATTERNS[0];
+  const uid = `g3-${pattern}-${size}`;
+  const wrap = meta.wrap;
+  const wrapDark = shade(wrap, -40);
+  const wrapMid = shade(wrap, -18);
+  const wrapLight = shade(wrap, 30);
+  const accent = meta.accent;
+  const ribbon = meta.ribbon;
+  const rDark = shade(ribbon, -40);
+  const rMid = shade(ribbon, -10);
+  const rLight = shade(ribbon, 32);
 
   return (
     <div
       className={`relative ${SIZE[size]} ${shaking ? "animate-[duo-gift-shake_0.45s_ease-in-out_infinite]" : ""} ${className}`}
       aria-hidden
     >
-      {/* 3D base shadow */}
-      <div
-        className="absolute inset-x-[8%] bottom-0 top-[18%] rounded-[1.1rem]"
-        style={{ background: meta.base }}
-      />
+      <svg viewBox="0 0 200 200" className="h-full w-full overflow-visible">
+        <defs>
+          <linearGradient id={`${uid}-f`} x1="0" y1="0" x2="0.2" y2="1">
+            <stop offset="0%" stopColor={wrapLight} />
+            <stop offset="40%" stopColor={wrap} />
+            <stop offset="100%" stopColor={wrapMid} />
+          </linearGradient>
+          <linearGradient id={`${uid}-s`} x1="0" y1="0" x2="1" y2="0.3">
+            <stop offset="0%" stopColor={wrapMid} />
+            <stop offset="100%" stopColor={wrapDark} />
+          </linearGradient>
+          <linearGradient id={`${uid}-t`} x1="0.2" y1="0" x2="0.8" y2="1">
+            <stop offset="0%" stopColor={wrapLight} />
+            <stop offset="100%" stopColor={wrap} />
+          </linearGradient>
+          <linearGradient id={`${uid}-rv`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={rDark} />
+            <stop offset="30%" stopColor={ribbon} />
+            <stop offset="50%" stopColor={rLight} />
+            <stop offset="100%" stopColor={rDark} />
+          </linearGradient>
+          <linearGradient id={`${uid}-rh`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={rLight} />
+            <stop offset="55%" stopColor={ribbon} />
+            <stop offset="100%" stopColor={rDark} />
+          </linearGradient>
+          <pattern id={`${uid}-p`} width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
+            <rect width="16" height="16" fill={wrap} />
+            {(pattern === "stripe" || pattern === "plaid") && (
+              <rect width="8" height="16" fill={accent} opacity="0.9" />
+            )}
+            {(pattern === "dots" || pattern === "spark" || pattern === "wave") && (
+              <>
+                <circle cx="4" cy="5" r="2.2" fill="#fff" opacity="0.4" />
+                <circle cx="12" cy="11" r="1.6" fill="#fff" opacity="0.3" />
+              </>
+            )}
+            {pattern === "ribbon" && <rect width="16" height="16" fill={accent} opacity="0.25" />}
+          </pattern>
+          <filter id={`${uid}-ds`} x="-25%" y="-15%" width="160%" height="150%">
+            <feDropShadow dx="2" dy="8" stdDeviation="4" floodColor="#000" floodOpacity="0.28" />
+          </filter>
+        </defs>
 
-      {/* Lid */}
-      <div
-        className="absolute left-1/2 z-30 w-[118%] origin-[50%_100%] transition-transform duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)]"
-        style={{
-          top: open ? "-48%" : "-4%",
-          transform: `translateX(-50%) ${open ? "rotate(-26deg) translate(-12%, -6%)" : "rotate(0)"}`,
-        }}
-      >
-        <div
-          className="relative h-[32%] min-h-[1.55rem] w-full rounded-[0.85rem] border-[3px] border-black/10"
+        <ellipse cx="104" cy="186" rx="52" ry="8" fill="rgba(0,0,0,0.18)" />
+
+        <g filter={`url(#${uid}-ds)`}>
+          {/* RIGHT extrusion — deep */}
+          <polygon
+            points="130,78 168,98 168,158 130,178"
+            fill={`url(#${uid}-s)`}
+            stroke={wrapDark}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          {/* side ribbon */}
+          <polygon points="130,118 168,138 168,148 130,128" fill={rDark} />
+          <polygon points="130,78 142,84 142,178 130,178" fill={`url(#${uid}-rv)`} opacity="0.7" />
+
+          {/* FRONT face */}
+          <polygon
+            points="40,98 130,98 130,178 40,178"
+            fill={`url(#${uid}-p)`}
+            stroke={wrapDark}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <polygon points="40,98 130,98 130,178 40,178" fill={`url(#${uid}-f)`} opacity="0.4" />
+
+          {/* front ribbons — flat strips */}
+          <rect x="78" y="98" width="16" height="80" fill={`url(#${uid}-rv)`} />
+          <rect x="40" y="128" width="90" height="14" fill={`url(#${uid}-rh)`} />
+
+          {/* front edge highlight */}
+          <polyline points="44,102 44,172" stroke="#fff" strokeWidth="3" opacity="0.2" strokeLinecap="round" />
+        </g>
+
+        {/* LID group */}
+        <g
           style={{
-            background: `linear-gradient(180deg, ${meta.ribbon} 0%, ${meta.ribbon} 70%, ${shade(meta.ribbon, -18)} 100%)`,
-            boxShadow: `0 4px 0 ${shade(meta.ribbon, -28)}`,
+            transformOrigin: "85px 78px",
+            transform: open ? "translate(-22px,-48px) rotate(-32deg)" : undefined,
+            transition: "transform 0.55s cubic-bezier(0.34,1.4,0.64,1)",
           }}
         >
-          {/* bow knot */}
-          <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-[60%] items-center">
-            <span
-              className="h-5 w-5 -rotate-[25deg] rounded-full border-2 border-black/10"
-              style={{ background: meta.ribbon, boxShadow: `0 2px 0 ${shade(meta.ribbon, -25)}` }}
-            />
-            <span
-              className="z-[1] -mx-1 h-4 w-4 rounded-full border-2 border-black/10"
-              style={{ background: shade(meta.ribbon, -10) }}
-            />
-            <span
-              className="h-5 w-5 rotate-[25deg] rounded-full border-2 border-black/10"
-              style={{ background: meta.ribbon, boxShadow: `0 2px 0 ${shade(meta.ribbon, -25)}` }}
-            />
-          </div>
-        </div>
-      </div>
+          {/* lid top diamond */}
+          <polygon
+            points="40,78 85,48 168,78 123,108"
+            fill={`url(#${uid}-t)`}
+            stroke={wrapDark}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            filter={`url(#${uid}-ds)`}
+          />
+          {/* lid thickness */}
+          <polygon points="40,78 123,108 123,116 40,86" fill={wrapMid} />
+          <polygon points="123,108 168,78 168,86 123,116" fill={wrapDark} />
 
-      {/* Box body */}
-      <div
-        className="absolute inset-x-[6%] bottom-[6%] top-[14%] overflow-hidden rounded-[1.05rem] border-[3px] border-black/10"
-        style={{
-          background: patternFill(pattern, meta.wrap, meta.accent),
-          boxShadow: `inset 0 3px 0 rgba(255,255,255,0.28)`,
-        }}
-      >
-        {/* vertical ribbon */}
-        <div
-          className="absolute inset-y-0 left-1/2 w-[22%] -translate-x-1/2 border-x-2 border-black/5"
-          style={{ background: meta.ribbon }}
-        />
-        {/* horizontal ribbon */}
-        <div
-          className="absolute inset-x-0 top-[42%] h-[20%] border-y-2 border-black/5"
-          style={{ background: meta.ribbon }}
-        />
-        {/* face highlight */}
-        <div className="pointer-events-none absolute inset-x-[12%] top-[8%] h-[28%] rounded-full bg-white/25 blur-[1px]" />
+          {/* lid ribbons */}
+          <polygon points="78,64 92,56 100,60 86,70" fill={`url(#${uid}-rh)`} />
+          <polygon points="55,92 130,62 136,66 62,98" fill={`url(#${uid}-rh)`} />
+
+          {!open ? (
+            <g transform="translate(85 52)">
+              {/* Simple knot where ribbons cross — no looping bow */}
+              <rect
+                x="-9"
+                y="-9"
+                width="18"
+                height="18"
+                rx="3"
+                fill={rMid}
+                stroke={rDark}
+                strokeWidth="1.6"
+              />
+              <rect x="-5.5" y="-5.5" width="11" height="11" rx="2" fill={rLight} />
+              <circle cx="0" cy="0" r="2.2" fill={rDark} opacity="0.35" />
+            </g>
+          ) : null}
+        </g>
 
         {open ? (
-          <div className="absolute inset-x-[14%] top-[12%] bottom-[10%] flex items-center justify-center rounded-md bg-[#1a1a1a]/20">
-            <div
-              className="h-[70%] w-[36%] rounded-full border-2 border-[#C4842D]/55"
-              style={{
-                background: "repeating-linear-gradient(90deg, #FFF8E7 0 4px, #FFE2A8 4px 7px)",
-              }}
-            />
-          </div>
+          <g>
+            <polygon points="58,112 112,112 112,158 58,158" fill="rgba(0,0,0,0.32)" />
+            <rect x="76" y="118" width="18" height="34" rx="9" fill="#FFF3D1" stroke="#C4842D" strokeWidth="2" />
+          </g>
         ) : null}
-      </div>
+      </svg>
     </div>
   );
 }
 
-function patternFill(pattern: GiftPatternId, wrap: string, accent: string): string {
-  switch (pattern) {
-    case "stripe":
-      return `repeating-linear-gradient(-32deg, ${wrap}, ${wrap} 12px, ${accent} 12px, ${accent} 22px)`;
-    case "dots":
-      return `radial-gradient(circle at 25% 30%, rgba(255,255,255,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 70% 55%, rgba(255,255,255,0.35) 0 4px, transparent 5px),
-        radial-gradient(circle at 40% 78%, rgba(255,255,255,0.3) 0 3px, transparent 4px),
-        ${wrap}`;
-    case "plaid":
-      return `repeating-linear-gradient(90deg, ${wrap} 0 14px, ${accent} 14px 18px),
-        repeating-linear-gradient(0deg, transparent 0 14px, rgba(255,255,255,0.18) 14px 18px)`;
-    case "ribbon":
-      return `linear-gradient(145deg, ${wrap} 0%, ${accent} 100%)`;
-    case "wave":
-      return `repeating-radial-gradient(circle at 0 40%, transparent 0 10px, rgba(255,255,255,0.2) 10px 14px), ${wrap}`;
-    case "spark":
-      return `linear-gradient(160deg, ${wrap}, ${accent}),
-        radial-gradient(circle at 22% 28%, rgba(255,255,255,0.55) 0 3px, transparent 4px),
-        radial-gradient(circle at 72% 42%, rgba(255,255,255,0.45) 0 2px, transparent 3px)`;
-    default:
-      return wrap;
-  }
-}
-
-/** crude hex shade helper */
 function shade(hex: string, amount: number): string {
   const h = hex.replace("#", "");
   if (h.length !== 6) return hex;
