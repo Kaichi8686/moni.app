@@ -135,30 +135,33 @@ export function WeeklyBox({
                       }}
                     />
 
-                    {/* Bottle: cork above the board, short neck into the hole (natural size, not stretched) */}
+                    {/* Bottle UNDER the rim — only what fits in the hole opening shows */}
                     {bottle ? (
                       <span
-                        className={`absolute left-1/2 z-[4] flex -translate-x-1/2 justify-center transition-transform duration-500 ${
-                          isInserting ? "-translate-y-3 scale-110" : ""
+                        className={`absolute left-1/2 z-[2] flex -translate-x-1/2 justify-center transition-transform duration-500 ${
+                          isInserting ? "-translate-y-2 scale-110" : ""
                         }`}
-                        style={{ top: compact ? "-28%" : "-24%" }}
+                        style={{
+                          // Sit in the hole: cork peeks through the rim opening
+                          top: compact ? "6%" : "8%",
+                        }}
                       >
                         <BottleVisual size={compact ? "sm" : "md"} seated />
                       </span>
                     ) : null}
 
-                    {/* Thick board rim (under the visible cork) */}
+                    {/* Rim ON TOP of bottle — occludes body; hole opening shows cork */}
                     <span
                       aria-hidden
                       className="pointer-events-none absolute inset-0 z-[3] rounded-full"
                       style={{
                         background: `radial-gradient(circle,
-                          transparent 0 22%,
-                          #6B4423 23%,
-                          #E8C49A 36%,
-                          #C9955A 52%,
-                          #8B5A2B 66%,
-                          transparent 67%)`,
+                          transparent 0 28%,
+                          #6B4423 29%,
+                          #E8C49A 42%,
+                          #C9955A 56%,
+                          #8B5A2B 70%,
+                          transparent 71%)`,
                         boxShadow: "inset 0 2px 0 rgba(255,240,210,0.45)",
                       }}
                     />
