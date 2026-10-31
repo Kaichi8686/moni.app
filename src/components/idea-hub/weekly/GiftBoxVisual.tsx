@@ -148,8 +148,9 @@ export function GiftBoxVisual({
                 <ellipse cx="20" cy="4" rx="9" ry="5" fill={rDark} opacity="0.35" transform="rotate(12 20 4)" stroke="none" />
                 <ellipse cx="0" cy="2" rx="11" ry="10" fill={ribbon} />
                 <ellipse cx="-2" cy="-1" rx="4" ry="3" fill="#fff" opacity="0.4" stroke="none" />
-                <path d="M-6 10 Q-18 34 -6 36 Q2 22 4 12 Z" fill={ribbon} />
-                <path d="M6 10 Q18 34 6 36 Q-2 22 -2 12 Z" fill={rLight} />
+                {/* Short tails stay on the lid — don't hang down the front face */}
+                <path d="M-5 9 Q-12 22 -4 24 Q0 16 2 10 Z" fill={ribbon} />
+                <path d="M5 9 Q12 22 4 24 Q0 16 -1 10 Z" fill={rLight} />
               </g>
             ) : null}
           </g>
