@@ -25,7 +25,7 @@ const TOKYO = "Asia/Tokyo";
 export const WEEKDAY_LABELS_JA = ["月", "火", "水", "木", "金", "土"] as const;
 export const WEEKDAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** Bright Duolingo-like gift wraps */
+/** Bright isometric wraps — yellow ribbon like the reference gift */
 export const GIFT_PATTERNS: Array<{
   id: GiftPatternId;
   labelJa: string;
@@ -35,12 +35,12 @@ export const GIFT_PATTERNS: Array<{
   accent: string;
   base: string;
 }> = [
-  { id: "stripe", labelJa: "みどり", labelEn: "Green", wrap: "#58CC02", ribbon: "#FFC800", accent: "#46A302", base: "#3D8C00" },
-  { id: "dots", labelJa: "あか", labelEn: "Red", wrap: "#FF4B4B", ribbon: "#FFC800", accent: "#EA2B2B", base: "#C91F1F" },
-  { id: "plaid", labelJa: "あお", labelEn: "Blue", wrap: "#1CB0F6", ribbon: "#FF9600", accent: "#1899D6", base: "#0F7FB8" },
-  { id: "ribbon", labelJa: "オレンジ", labelEn: "Orange", wrap: "#FF9600", ribbon: "#58CC02", accent: "#E08600", base: "#C46F00" },
-  { id: "wave", labelJa: "ピンク", labelEn: "Pink", wrap: "#FF86D0", ribbon: "#1CB0F6", accent: "#E85BB8", base: "#CE3F9C" },
-  { id: "spark", labelJa: "きいろ", labelEn: "Yellow", wrap: "#FFC800", ribbon: "#FF4B4B", accent: "#E5A500", base: "#C48C00" },
+  { id: "dots", labelJa: "あか", labelEn: "Red", wrap: "#E53935", ribbon: "#FFD54F", accent: "#FF8A65", base: "#B71C1C" },
+  { id: "stripe", labelJa: "みどり", labelEn: "Green", wrap: "#43A047", ribbon: "#FFD54F", accent: "#AED581", base: "#2E7D32" },
+  { id: "plaid", labelJa: "あお", labelEn: "Blue", wrap: "#1E88E5", ribbon: "#FFD54F", accent: "#64B5F6", base: "#1565C0" },
+  { id: "ribbon", labelJa: "オレンジ", labelEn: "Orange", wrap: "#FB8C00", ribbon: "#FFD54F", accent: "#FFCC80", base: "#EF6C00" },
+  { id: "wave", labelJa: "ピンク", labelEn: "Pink", wrap: "#EC407A", ribbon: "#FFD54F", accent: "#F8BBD0", base: "#C2185B" },
+  { id: "spark", labelJa: "むらさき", labelEn: "Purple", wrap: "#8E24AA", ribbon: "#FFD54F", accent: "#CE93D8", base: "#6A1B9A" },
 ];
 
 export const PROMPT_QUESTION = {

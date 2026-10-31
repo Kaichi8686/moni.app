@@ -11,13 +11,16 @@ type Props = {
 };
 
 const SIZE = {
-  sm: "h-[5.25rem] w-[5.25rem]",
+  sm: "h-[5.5rem] w-[5.5rem]",
   md: "h-36 w-36",
   lg: "h-48 w-48",
   xl: "h-60 w-60",
 } as const;
 
-/** Deep isometric gift + clean folded paper bow. */
+/**
+ * Isometric gift matching the reference: thick outlines, flat two-tone faces,
+ * polka dots, yellow ribbon, fluffy rounded bow.
+ */
 export function GiftBoxVisual({
   pattern,
   size = "md",
@@ -26,149 +29,115 @@ export function GiftBoxVisual({
   className = "",
 }: Props) {
   const meta = GIFT_PATTERNS.find((g) => g.id === pattern) ?? GIFT_PATTERNS[0];
-  const uid = `g3-${pattern}-${size}`;
-  const wrap = meta.wrap;
-  const wrapDark = shade(wrap, -40);
-  const wrapMid = shade(wrap, -18);
-  const wrapLight = shade(wrap, 30);
-  const accent = meta.accent;
-  const ribbon = meta.ribbon;
-  const rDark = shade(ribbon, -40);
-  const rMid = shade(ribbon, -10);
-  const rLight = shade(ribbon, 32);
+  const uid = `iso-${pattern}-${size}`;
+
+  // Face colors (left = lit, right = shade) — like the red reference
+  const left = meta.wrap;
+  const right = shade(meta.wrap, -38);
+  const top = shade(meta.wrap, 18);
+  const dotL = shade(meta.accent, 40);
+  const dotR = shade(meta.accent, -10);
+  const ribbon = meta.ribbon; // yellow-ish
+  const ribbonShade = shade(meta.ribbon, -28);
+  const outline = "#2B2118";
 
   return (
     <div
       className={`relative ${SIZE[size]} ${shaking ? "animate-[duo-gift-shake_0.45s_ease-in-out_infinite]" : ""} ${className}`}
       aria-hidden
     >
-      <svg viewBox="0 0 200 200" className="h-full w-full overflow-visible">
+      <svg viewBox="0 0 240 240" className="h-full w-full overflow-visible">
         <defs>
-          <linearGradient id={`${uid}-f`} x1="0" y1="0" x2="0.2" y2="1">
-            <stop offset="0%" stopColor={wrapLight} />
-            <stop offset="40%" stopColor={wrap} />
-            <stop offset="100%" stopColor={wrapMid} />
-          </linearGradient>
-          <linearGradient id={`${uid}-s`} x1="0" y1="0" x2="1" y2="0.3">
-            <stop offset="0%" stopColor={wrapMid} />
-            <stop offset="100%" stopColor={wrapDark} />
-          </linearGradient>
-          <linearGradient id={`${uid}-t`} x1="0.2" y1="0" x2="0.8" y2="1">
-            <stop offset="0%" stopColor={wrapLight} />
-            <stop offset="100%" stopColor={wrap} />
-          </linearGradient>
-          <linearGradient id={`${uid}-rv`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={rDark} />
-            <stop offset="30%" stopColor={ribbon} />
-            <stop offset="50%" stopColor={rLight} />
-            <stop offset="100%" stopColor={rDark} />
-          </linearGradient>
-          <linearGradient id={`${uid}-rh`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={rLight} />
-            <stop offset="55%" stopColor={ribbon} />
-            <stop offset="100%" stopColor={rDark} />
-          </linearGradient>
-          <pattern id={`${uid}-p`} width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
-            <rect width="16" height="16" fill={wrap} />
-            {(pattern === "stripe" || pattern === "plaid") && (
-              <rect width="8" height="16" fill={accent} opacity="0.9" />
-            )}
-            {(pattern === "dots" || pattern === "spark" || pattern === "wave") && (
-              <>
-                <circle cx="4" cy="5" r="2.2" fill="#fff" opacity="0.4" />
-                <circle cx="12" cy="11" r="1.6" fill="#fff" opacity="0.3" />
-              </>
-            )}
-            {pattern === "ribbon" && <rect width="16" height="16" fill={accent} opacity="0.25" />}
-          </pattern>
-          <filter id={`${uid}-ds`} x="-25%" y="-15%" width="160%" height="150%">
-            <feDropShadow dx="2" dy="8" stdDeviation="4" floodColor="#000" floodOpacity="0.28" />
+          <filter id={`${uid}-soft`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="6" stdDeviation="3" floodColor="#000" floodOpacity="0.18" />
           </filter>
         </defs>
 
-        <ellipse cx="104" cy="186" rx="52" ry="8" fill="rgba(0,0,0,0.18)" />
+        {/* Floor shadow */}
+        <ellipse cx="120" cy="220" rx="58" ry="10" fill="rgba(0,0,0,0.14)" />
 
-        <g filter={`url(#${uid}-ds)`}>
-          {/* RIGHT extrusion — deep */}
-          <polygon
-            points="130,78 168,98 168,158 130,178"
-            fill={`url(#${uid}-s)`}
-            stroke={wrapDark}
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          {/* side ribbon */}
-          <polygon points="130,118 168,138 168,148 130,128" fill={rDark} />
-          <polygon points="130,78 142,84 142,178 130,178" fill={`url(#${uid}-rv)`} opacity="0.7" />
+        <g filter={`url(#${uid}-soft)`} stroke={outline} strokeWidth="3.2" strokeLinejoin="round">
+          {/* ===== BODY ===== */}
+          {/* Left face */}
+          <polygon points="40,110 120,150 120,210 40,170" fill={left} />
+          {/* Right face */}
+          <polygon points="120,150 200,110 200,170 120,210" fill={right} />
 
-          {/* FRONT face */}
-          <polygon
-            points="40,98 130,98 130,178 40,178"
-            fill={`url(#${uid}-p)`}
-            stroke={wrapDark}
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          <polygon points="40,98 130,98 130,178 40,178" fill={`url(#${uid}-f)`} opacity="0.4" />
+          {/* Polka dots — left */}
+          <g fill={dotL} stroke="none">
+            <circle cx="68" cy="128" r="9" />
+            <circle cx="92" cy="148" r="9" />
+            <circle cx="64" cy="160" r="9" />
+            <circle cx="90" cy="178" r="9" />
+            <circle cx="70" cy="192" r="8" />
+          </g>
+          {/* Polka dots — right (darker) */}
+          <g fill={dotR} stroke="none">
+            <circle cx="150" cy="128" r="9" />
+            <circle cx="174" cy="148" r="9" />
+            <circle cx="148" cy="160" r="9" />
+            <circle cx="172" cy="178" r="9" />
+            <circle cx="152" cy="192" r="8" />
+          </g>
 
-          {/* front ribbons — flat strips */}
-          <rect x="78" y="98" width="16" height="80" fill={`url(#${uid}-rv)`} />
-          <rect x="40" y="128" width="90" height="14" fill={`url(#${uid}-rh)`} />
+          {/* Vertical ribbons on faces */}
+          <polygon points="105,142 135,142 135,210 105,210" fill={ribbon} stroke={outline} strokeWidth="2.6" />
+          {/* Right-face ribbon continuation */}
+          <polygon points="120,150 140,140 140,200 120,210" fill={ribbonShade} stroke={outline} strokeWidth="2.2" />
 
-          {/* front edge highlight */}
-          <polyline points="44,102 44,172" stroke="#fff" strokeWidth="3" opacity="0.2" strokeLinecap="round" />
-        </g>
+          {/* ===== LID ===== */}
+          <g
+            style={{
+              transformOrigin: "120px 100px",
+              transform: open ? "translate(-20px,-40px) rotate(-26deg)" : undefined,
+              transition: "transform 0.55s cubic-bezier(0.34,1.4,0.64,1)",
+            }}
+          >
+            {/* Lid top */}
+            <polygon points="40,100 120,60 200,100 120,140" fill={top} />
+            {/* Lid side lip (front edge) */}
+            <polygon points="40,100 120,140 120,150 40,110" fill={left} />
+            <polygon points="120,140 200,100 200,110 120,150" fill={right} />
 
-        {/* LID group */}
-        <g
-          style={{
-            transformOrigin: "85px 78px",
-            transform: open ? "translate(-22px,-48px) rotate(-32deg)" : undefined,
-            transition: "transform 0.55s cubic-bezier(0.34,1.4,0.64,1)",
-          }}
-        >
-          {/* lid top diamond */}
-          <polygon
-            points="40,78 85,48 168,78 123,108"
-            fill={`url(#${uid}-t)`}
-            stroke={wrapDark}
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-            filter={`url(#${uid}-ds)`}
-          />
-          {/* lid thickness */}
-          <polygon points="40,78 123,108 123,116 40,86" fill={wrapMid} />
-          <polygon points="123,108 168,78 168,86 123,116" fill={wrapDark} />
+            {/* Top ribbon cross */}
+            <polygon points="105,90 135,90 150,98 120,112 90,98" fill={ribbon} stroke={outline} strokeWidth="2.4" />
+            <polygon points="112,72 128,72 148,112 92,112" fill={ribbon} stroke={outline} strokeWidth="2.4" />
+            {/* Top ribbon highlight */}
+            <line x1="100" y1="96" x2="118" y2="88" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" opacity="0.55" />
 
-          {/* lid ribbons */}
-          <polygon points="78,64 92,56 100,60 86,70" fill={`url(#${uid}-rh)`} />
-          <polygon points="55,92 130,62 136,66 62,98" fill={`url(#${uid}-rh)`} />
+            {/* Fluffy rounded bow — reference style */}
+            {!open ? (
+              <g transform="translate(120 58)" stroke={outline} strokeWidth="2.6" strokeLinejoin="round">
+                {/* back loops */}
+                <ellipse cx="-22" cy="-10" rx="20" ry="14" fill={ribbonShade} transform="rotate(-18 -22 -10)" />
+                <ellipse cx="22" cy="-10" rx="20" ry="14" fill={ribbonShade} transform="rotate(18 22 -10)" />
+                {/* front loops */}
+                <ellipse cx="-18" cy="2" rx="22" ry="15" fill={ribbon} transform="rotate(-12 -18 2)" />
+                <ellipse cx="18" cy="2" rx="22" ry="15" fill={ribbon} transform="rotate(12 18 2)" />
+                {/* loop inner shade */}
+                <ellipse cx="-18" cy="2" rx="10" ry="6" fill={ribbonShade} opacity="0.45" transform="rotate(-12 -18 2)" stroke="none" />
+                <ellipse cx="18" cy="2" rx="10" ry="6" fill={ribbonShade} opacity="0.45" transform="rotate(12 18 2)" stroke="none" />
+                {/* center knot */}
+                <ellipse cx="0" cy="0" rx="11" ry="10" fill={ribbon} />
+                <ellipse cx="-2" cy="-2" rx="4" ry="3" fill="#fff" opacity="0.4" stroke="none" />
+                {/* short tails under bow */}
+                <path d="M-6 8 Q-16 28 -8 30 Q0 20 4 10 Z" fill={ribbon} />
+                <path d="M6 8 Q16 28 8 30 Q0 20 -2 10 Z" fill={ribbonShade} />
+              </g>
+            ) : null}
+          </g>
 
-          {!open ? (
-            <g transform="translate(85 52)">
-              {/* Simple knot where ribbons cross — no looping bow */}
-              <rect
-                x="-9"
-                y="-9"
-                width="18"
-                height="18"
-                rx="3"
-                fill={rMid}
-                stroke={rDark}
-                strokeWidth="1.6"
-              />
-              <rect x="-5.5" y="-5.5" width="11" height="11" rx="2" fill={rLight} />
-              <circle cx="0" cy="0" r="2.2" fill={rDark} opacity="0.35" />
+          {/* Open cavity */}
+          {open ? (
+            <g stroke="none">
+              <polygon points="70,130 170,130 150,175 90,175" fill="rgba(30,20,15,0.35)" />
+              <rect x="108" y="138" width="24" height="36" rx="12" fill="#FFF3D1" stroke={outline} strokeWidth="2.4" />
             </g>
           ) : null}
         </g>
 
-        {open ? (
-          <g>
-            <polygon points="58,112 112,112 112,158 58,158" fill="rgba(0,0,0,0.32)" />
-            <rect x="76" y="118" width="18" height="34" rx="9" fill="#FFF3D1" stroke="#C4842D" strokeWidth="2" />
-          </g>
-        ) : null}
+        {/* Ribbon edge highlight on left vertical */}
+        <line x1="110" y1="148" x2="110" y2="200" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
       </svg>
     </div>
   );

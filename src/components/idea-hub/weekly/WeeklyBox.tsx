@@ -22,7 +22,7 @@ type Props = {
 
 const SLOT_RIM = ["#58CC02", "#1CB0F6", "#FF9600", "#FF4B4B", "#CE82FF", "#FFC800"] as const;
 
-/** Blue plastic milk-bottle crate (牛乳箱) with chunky walls & wells. */
+/** Blue milk-bottle crate — bottles snap into round wells (top half only). */
 export function WeeklyBox({
   bottles,
   locale,
@@ -50,7 +50,6 @@ export function WeeklyBox({
       ) : null}
 
       <div className="relative" style={{ paddingBottom: compact ? 10 : 16 }}>
-        {/* Deep base block */}
         <div
           className="absolute inset-x-[3%] bottom-0 rounded-[1.35rem]"
           style={{
@@ -59,7 +58,6 @@ export function WeeklyBox({
             boxShadow: "0 12px 0 #03314D, 0 20px 28px rgba(10,40,60,0.28)",
           }}
         />
-        {/* Right extrusion */}
         <div
           className="absolute bottom-[8%] right-[1%] top-[6%] w-[8%] rounded-r-[1rem]"
           style={{
@@ -68,7 +66,6 @@ export function WeeklyBox({
           }}
         />
 
-        {/* Main crate body */}
         <div
           className={`relative rounded-[1.2rem] ${compact ? "px-2 pb-2 pt-3" : "px-3 pb-3.5 pt-4"}`}
           style={{
@@ -82,7 +79,6 @@ export function WeeklyBox({
             `,
           }}
         >
-          {/* Handle cutouts (milk crate) */}
           <div className="mb-2 flex justify-center gap-8">
             <span
               className={`rounded-full bg-[#064A72]/55 ${compact ? "h-1.5 w-8" : "h-2 w-12"}`}
@@ -94,39 +90,16 @@ export function WeeklyBox({
             />
           </div>
 
-          {/* Inner well floor */}
           <div
-            className={`relative grid grid-cols-3 ${compact ? "gap-1.5" : "gap-2.5"}`}
+            className={`relative grid grid-cols-3 ${compact ? "gap-2" : "gap-3"}`}
             style={{
               background: "linear-gradient(180deg, #0A5A88 0%, #064A72 100%)",
               borderRadius: compact ? 12 : 14,
-              padding: compact ? 7 : 10,
+              padding: compact ? 8 : 12,
               boxShadow: "inset 0 6px 14px rgba(0,20,40,0.55)",
               border: "2.5px solid #03314D",
             }}
           >
-            {/* Grid rails */}
-            <div
-              className="pointer-events-none absolute inset-[8px] rounded-lg opacity-90"
-              style={{
-                backgroundImage: `
-                  linear-gradient(90deg,
-                    transparent calc(33.33% - 2px), #2BB0F0 calc(33.33% - 2px),
-                    #7DD3F7 calc(33.33%), #2BB0F0 calc(33.33% + 2px),
-                    transparent calc(33.33% + 2px),
-                    transparent calc(66.66% - 2px), #2BB0F0 calc(66.66% - 2px),
-                    #7DD3F7 calc(66.66%), #2BB0F0 calc(66.66% + 2px),
-                    transparent calc(66.66% + 2px)
-                  ),
-                  linear-gradient(180deg,
-                    transparent calc(50% - 2px), #2BB0F0 calc(50% - 2px),
-                    #7DD3F7 calc(50%), #2BB0F0 calc(50% + 2px),
-                    transparent calc(50% + 2px)
-                  )
-                `,
-              }}
-            />
-
             {([0, 1, 2, 3, 4, 5] as WeekdaySlot[]).map((slot) => {
               const bottle = bySlot.get(slot);
               const rim = SLOT_RIM[slot];
@@ -144,37 +117,66 @@ export function WeeklyBox({
                       if (bottle) onSelectBottle?.(bottle);
                       else if (emptyToday) onEmptyToday();
                     }}
-                    className={`group relative ${compact ? "h-11 w-11" : "h-[4.4rem] w-[4.4rem]"} ${
+                    className={`group relative ${compact ? "h-12 w-12" : "h-[4.75rem] w-[4.75rem]"} ${
                       bottle || emptyToday ? "cursor-pointer" : "cursor-default"
                     }`}
                     aria-label={bottle ? `${labels[slot]}: ${bottle.title}` : labels[slot]}
                   >
-                    {/* Recessed square well */}
+                    {/* Round milk-crate well */}
                     <span
                       aria-hidden
-                      className="absolute inset-0 rounded-[0.9rem]"
+                      className="absolute inset-[6%] rounded-full"
                       style={{
-                        background: "linear-gradient(180deg, #03314D 0%, #0A5A88 70%, #0E6FA5 100%)",
+                        background: "radial-gradient(circle at 50% 30%, #0E6FA5 0%, #03314D 70%)",
                         boxShadow: `
-                          inset 0 6px 12px rgba(0,0,0,0.5),
-                          inset 0 -2px 0 rgba(125,211,247,0.15),
-                          0 2px 0 rgba(125,211,247,0.2)
+                          inset 0 8px 14px rgba(0,0,0,0.55),
+                          inset 0 -3px 0 rgba(125,211,247,0.12),
+                          0 2px 0 rgba(125,211,247,0.22)
                         `,
-                        border: bottle || isToday ? `2.5px solid ${rim}` : "2px solid #022538",
+                        border: bottle || isToday ? `3px solid ${rim}` : "2.5px solid #022538",
                         outline: isHighlight || isInserting ? `3px solid ${rim}` : undefined,
                         outlineOffset: 2,
                       }}
                     />
 
-                    {bottle ? (
-                      <span
-                        className={`absolute inset-x-0 bottom-[4%] top-[2%] flex items-end justify-center transition-transform duration-500 group-active:translate-y-[2px] ${
-                          isInserting ? "scale-125 -translate-y-2" : ""
-                        }`}
-                      >
-                        <BottleVisual size={compact ? "xs" : "sm"} />
-                      </span>
-                    ) : emptyToday ? (
+                    {/* Inner hole lip — bottle clips below this rim */}
+                    <span
+                      aria-hidden
+                      className="absolute inset-[18%] overflow-hidden rounded-full"
+                      style={{
+                        background: "radial-gradient(circle at 50% 20%, #022538 0%, #011828 100%)",
+                        boxShadow: "inset 0 4px 8px rgba(0,0,0,0.6)",
+                      }}
+                    >
+                      {bottle ? (
+                        <span
+                          className={`absolute inset-x-0 flex justify-center transition-transform duration-500 ${
+                            isInserting ? "-translate-y-1 scale-110" : ""
+                          }`}
+                          style={{
+                            // Sit in the hole: only neck/shoulder poke above the lip
+                            top: compact ? "-28%" : "-22%",
+                            height: "140%",
+                          }}
+                        >
+                          <BottleVisual size={compact ? "xs" : "sm"} seated />
+                        </span>
+                      ) : null}
+                    </span>
+
+                    {/* Surface ring on top of the well (covers lower bottle = “kapo”) */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-[6%] rounded-full"
+                      style={{
+                        boxShadow: `
+                          inset 0 0 0 7px rgba(10,90,136,0.92),
+                          inset 0 2px 0 rgba(125,211,247,0.25)
+                        `,
+                      }}
+                    />
+
+                    {emptyToday && !bottle ? (
                       <span className="absolute inset-0 flex items-center justify-center text-lg font-black text-[#7DD3F7]/70">
                         ?
                       </span>
