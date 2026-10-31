@@ -135,34 +135,36 @@ export function WeeklyBox({
                       }}
                     />
 
-                    {/* Bottle: cork above the board, neck disappears into the hole */}
+                    {/* Bottle: cork sits above the board; neck goes into the hole */}
                     {bottle ? (
                       <span
-                        className={`absolute left-1/2 z-[2] -translate-x-1/2 transition-transform duration-500 ${
+                        className={`absolute left-1/2 z-[4] -translate-x-1/2 transition-transform duration-500 ${
                           isInserting ? "-translate-y-3 scale-110" : ""
                         }`}
                         style={{
-                          top: compact ? "-18%" : "-14%",
-                          width: compact ? "42%" : "40%",
-                          height: compact ? "70%" : "68%",
+                          top: compact ? "-22%" : "-20%",
+                          width: compact ? "50%" : "46%",
+                          height: compact ? "72%" : "70%",
+                          // Clip lower neck so only cap + short neck show above the rim
+                          clipPath: "inset(0 0 38% 0)",
                         }}
                       >
                         <BottleVisual size={compact ? "xs" : "sm"} seated className="!h-full !w-full" />
                       </span>
                     ) : null}
 
-                    {/* Thick board rim — hides everything below the neck (“kapo”) */}
+                    {/* Thick board rim (under the visible cork) */}
                     <span
                       aria-hidden
                       className="pointer-events-none absolute inset-0 z-[3] rounded-full"
                       style={{
                         background: `radial-gradient(circle,
-                          transparent 0 18%,
-                          #6B4423 19%,
-                          #E8C49A 34%,
-                          #C9955A 50%,
-                          #8B5A2B 64%,
-                          transparent 65%)`,
+                          transparent 0 22%,
+                          #6B4423 23%,
+                          #E8C49A 36%,
+                          #C9955A 52%,
+                          #8B5A2B 66%,
+                          transparent 67%)`,
                         boxShadow: "inset 0 2px 0 rgba(255,240,210,0.45)",
                       }}
                     />
