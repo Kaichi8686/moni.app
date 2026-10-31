@@ -2,7 +2,7 @@
 
 type Props = {
   size?: "xs" | "sm" | "md" | "lg";
-  /** Only neck + shoulder + cork — for crate wells (bottom half hidden in the hole). */
+  /** Cap + short neck only — body is inside the crate hole. */
   seated?: boolean;
   corkOpen?: boolean;
   showPaper?: boolean;
@@ -18,13 +18,13 @@ const SIZE = {
 } as const;
 
 const SEATED_SIZE = {
-  xs: "h-7 w-7",
-  sm: "h-10 w-10",
-  md: "h-20 w-16",
-  lg: "h-28 w-22",
+  xs: "h-8 w-7",
+  sm: "h-11 w-9",
+  md: "h-20 w-14",
+  lg: "h-28 w-18",
 } as const;
 
-/** Japanese milk bottle — full or seated (top half only). */
+/** Milk bottle — full, or seated (only what sticks out of the hole). */
 export function BottleVisual({
   size = "md",
   seated = false,
@@ -33,135 +33,101 @@ export function BottleVisual({
   paperRising = false,
   className = "",
 }: Props) {
-  const uid = `mb-${size}-${seated ? "s" : "f"}-${corkOpen ? "o" : "c"}`;
-  const box = seated ? SEATED_SIZE[size] : SIZE[size];
-  // Seated: crop to neck/shoulder region of the same SVG
-  const viewBox = seated ? "20 0 60 78" : "0 0 100 160";
+  const uid = `milk-${size}-${seated ? "s" : "f"}-${corkOpen ? "o" : "c"}`;
+
+  if (seated) {
+    // Literally only cap + neck peeking from the hole
+    return (
+      <div className={`relative ${SEATED_SIZE[size]} ${className}`} aria-hidden>
+        <svg viewBox="0 0 60 70" className="h-full w-full overflow-visible">
+          <defs>
+            <linearGradient id={`${uid}-g`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#6AA8B8" />
+              <stop offset="40%" stopColor="#EAF7FB" />
+              <stop offset="100%" stopColor="#4A8A9C" />
+            </linearGradient>
+            <linearGradient id={`${uid}-cap`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F8EED8" />
+              <stop offset="100%" stopColor="#C4A060" />
+            </linearGradient>
+          </defs>
+          {/* Neck only */}
+          <rect x="20" y="28" width="20" height="36" rx="3" fill={`url(#${uid}-g)`} stroke="#3A7080" strokeWidth="2" />
+          <rect x="23" y="32" width="5" height="18" rx="2" fill="#fff" opacity="0.5" />
+          {/* Cap */}
+          <g
+            style={{
+              transformOrigin: "30px 22px",
+              transform: corkOpen ? "translate(-14px,-12px) rotate(-26deg)" : undefined,
+              transition: "transform 0.45s ease",
+            }}
+          >
+            <rect x="16" y="8" width="28" height="14" rx="3" fill={`url(#${uid}-cap)`} stroke="#8B6914" strokeWidth="1.6" />
+            <rect x="14" y="20" width="32" height="8" rx="2" fill="#E5A500" stroke="#8B6914" strokeWidth="1.3" />
+          </g>
+        </svg>
+      </div>
+    );
+  }
 
   return (
-    <div className={`relative ${box} ${className}`} aria-hidden>
-      <svg viewBox={viewBox} className="h-full w-full overflow-visible" role="img">
+    <div className={`relative ${SIZE[size]} ${className}`} aria-hidden>
+      <svg viewBox="0 0 100 160" className="h-full w-full overflow-visible">
         <defs>
           <linearGradient id={`${uid}-glass`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="rgba(90,150,170,0.55)" />
             <stop offset="28%" stopColor="rgba(210,235,245,0.8)" />
-            <stop offset="55%" stopColor="rgba(160,210,225,0.5)" />
             <stop offset="100%" stopColor="rgba(60,120,145,0.55)" />
           </linearGradient>
           <linearGradient id={`${uid}-cap`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F7F2E8" />
-            <stop offset="60%" stopColor="#E0D0A8" />
             <stop offset="100%" stopColor="#C4A878" />
           </linearGradient>
           <linearGradient id={`${uid}-band`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#FFC800" />
             <stop offset="100%" stopColor="#C4842D" />
           </linearGradient>
-          <filter id={`${uid}-sh`} x="-30%" y="-10%" width="160%" height="140%">
-            <feDropShadow dx="0" dy="3" stdDeviation="2" floodColor="#1a3a4a" floodOpacity="0.25" />
-          </filter>
         </defs>
-
-        {!seated ? <ellipse cx="50" cy="154" rx="28" ry="5" fill="rgba(20,40,50,0.18)" /> : null}
-
-        <g filter={`url(#${uid}-sh)`}>
-          {/* Body */}
-          <path
-            d="
-              M36 42
-              C36 36, 38 32, 42 30
-              L58 30
-              C62 32, 64 36, 64 42
-              L68 52
-              C72 58, 74 64, 74 72
-              L74 138
-              C74 146, 68 150, 50 150
-              C32 150, 26 146, 26 138
-              L26 72
-              C26 64, 28 58, 32 52
-              Z
-            "
-            fill={`url(#${uid}-glass)`}
-            stroke="rgba(50,110,135,0.7)"
-            strokeWidth="2.2"
-            strokeLinejoin="round"
-          />
-
-          <path
-            d="M64 42 L74 72 L74 138 C74 144, 70 148, 58 149 L58 72 C58 62, 60 52, 64 42 Z"
-            fill="rgba(40,100,120,0.18)"
-          />
-
-          <path
-            d="M34 58 C36 70, 36 100, 35 130 L40 130 C42 100, 42 70, 40 58 Z"
-            fill="rgba(255,255,255,0.55)"
-          />
-
-          {!seated ? (
+        <ellipse cx="50" cy="154" rx="28" ry="5" fill="rgba(20,40,50,0.18)" />
+        <path
+          d="M36 42 C36 36,38 32,42 30 L58 30 C62 32,64 36,64 42 L68 52 C72 58,74 64,74 72 L74 138 C74 146,68 150,50 150 C32 150,26 146,26 138 L26 72 C26 64,28 58,32 52 Z"
+          fill={`url(#${uid}-glass)`}
+          stroke="rgba(50,110,135,0.7)"
+          strokeWidth="2.2"
+          strokeLinejoin="round"
+        />
+        <path d="M34 58 C36 70,36 100,35 130 L40 130 C42 100,42 70,40 58 Z" fill="rgba(255,255,255,0.55)" />
+        <rect x="40" y="26" width="20" height="16" rx="3" fill="rgba(190,225,235,0.65)" stroke="rgba(70,130,150,0.5)" strokeWidth="1.5" />
+        {showPaper ? (
+          <g
+            style={{
+              transform: paperRising ? "translateY(-14px) scale(1.08)" : undefined,
+              transformOrigin: "50px 110px",
+              transition: "transform 0.5s ease",
+            }}
+          >
             <rect
-              x="34"
-              y="88"
-              width="32"
-              height="8"
-              rx="4"
-              fill="rgba(255,255,255,0.12)"
-              stroke="rgba(255,255,255,0.35)"
-              strokeWidth="1"
+              x={paperRising ? 38 : 42}
+              y={paperRising ? 78 : 96}
+              width={paperRising ? 24 : 16}
+              height={paperRising ? 36 : 34}
+              rx="3"
+              fill={paperRising ? "#FFF8E7" : "#FFE2A8"}
+              stroke="#C4842D"
+              strokeWidth="1.5"
+              transform={paperRising ? undefined : "rotate(-8 50 113)"}
             />
-          ) : null}
-
-          <rect
-            x="40"
-            y="26"
-            width="20"
-            height="16"
-            rx="3"
-            fill="rgba(190,225,235,0.65)"
-            stroke="rgba(70,130,150,0.5)"
-            strokeWidth="1.5"
-          />
-
-          {showPaper && !seated ? (
-            <g
-              style={{
-                transform: paperRising ? "translateY(-14px) scale(1.08)" : "translateY(0)",
-                transformOrigin: "50px 110px",
-                transition: "transform 0.5s ease",
-              }}
-            >
-              <rect
-                x={paperRising ? 38 : 42}
-                y={paperRising ? 78 : 96}
-                width={paperRising ? 24 : 16}
-                height={paperRising ? 36 : 34}
-                rx="3"
-                fill={paperRising ? "#FFF8E7" : "#FFE2A8"}
-                stroke="#C4842D"
-                strokeWidth="1.5"
-                transform={paperRising ? undefined : "rotate(-8 50 113)"}
-              />
-            </g>
-          ) : null}
-
-          {/* Paper peek at neck when seated */}
-          {showPaper && seated ? (
-            <rect x="44" y="48" width="12" height="16" rx="2" fill="#FFE2A8" stroke="#C4842D" strokeWidth="1.2" />
-          ) : null}
-
-          {!seated ? <ellipse cx="50" cy="142" rx="18" ry="4" fill="rgba(40,100,120,0.2)" /> : null}
-        </g>
-
-        {/* Cap */}
+          </g>
+        ) : null}
         <g
           style={{
             transformOrigin: "50px 22px",
-            transform: corkOpen ? "translate(-28px, -22px) rotate(-28deg)" : "none",
+            transform: corkOpen ? "translate(-28px,-22px) rotate(-28deg)" : undefined,
             transition: "transform 0.5s cubic-bezier(0.34,1.56,0.64,1)",
           }}
         >
           <rect x="36" y="12" width="28" height="12" rx="3" fill={`url(#${uid}-cap)`} stroke="#B89A6A" strokeWidth="1.2" />
           <rect x="34" y="22" width="32" height="7" rx="2" fill={`url(#${uid}-band)`} stroke="#8B5A2B" strokeWidth="1" />
-          <rect x="40" y="14" width="10" height="3" rx="1" fill="rgba(255,255,255,0.45)" />
         </g>
       </svg>
     </div>

@@ -18,8 +18,7 @@ const SIZE = {
 } as const;
 
 /**
- * Isometric gift matching the reference: thick outlines, flat two-tone faces,
- * polka dots, yellow ribbon, fluffy rounded bow.
+ * Proper isometric gift cube (real box proportions) + fabric-like ribbon bow.
  */
 export function GiftBoxVisual({
   pattern,
@@ -29,17 +28,24 @@ export function GiftBoxVisual({
   className = "",
 }: Props) {
   const meta = GIFT_PATTERNS.find((g) => g.id === pattern) ?? GIFT_PATTERNS[0];
-  const uid = `iso-${pattern}-${size}`;
-
-  // Face colors (left = lit, right = shade) — like the red reference
   const left = meta.wrap;
-  const right = shade(meta.wrap, -38);
-  const top = shade(meta.wrap, 18);
-  const dotL = shade(meta.accent, 40);
-  const dotR = shade(meta.accent, -10);
-  const ribbon = meta.ribbon; // yellow-ish
-  const ribbonShade = shade(meta.ribbon, -28);
+  const right = shade(meta.wrap, -36);
+  const top = shade(meta.wrap, 20);
+  const dotL = shade(meta.accent, 35);
+  const dotR = shade(meta.accent, -8);
+  const ribbon = meta.ribbon;
+  const rDark = shade(meta.ribbon, -28);
+  const rLight = shade(meta.ribbon, 26);
   const outline = "#2B2118";
+
+  const leftC = [52, 112] as const;
+  const rightC = [188, 112] as const;
+  const bottomC = [120, 146] as const;
+  const leftBot = [52, 186] as const;
+  const rightBot = [188, 186] as const;
+  const bottomBot = [120, 220] as const;
+
+  const poly = (...pts: readonly (readonly number[])[]) => pts.map((p) => p.join(",")).join(" ");
 
   return (
     <div
@@ -47,97 +53,114 @@ export function GiftBoxVisual({
       aria-hidden
     >
       <svg viewBox="0 0 240 240" className="h-full w-full overflow-visible">
-        <defs>
-          <filter id={`${uid}-soft`} x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="6" stdDeviation="3" floodColor="#000" floodOpacity="0.18" />
-          </filter>
-        </defs>
+        <ellipse cx="120" cy="226" rx="62" ry="9" fill="rgba(0,0,0,0.16)" />
 
-        {/* Floor shadow */}
-        <ellipse cx="120" cy="220" rx="58" ry="10" fill="rgba(0,0,0,0.14)" />
+        <g stroke={outline} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round">
+          {/* LEFT face */}
+          <polygon
+            points={poly(leftC, bottomC, bottomBot, leftBot)}
+            fill={left}
+          />
+          {/* RIGHT face */}
+          <polygon
+            points={poly(bottomC, rightC, rightBot, bottomBot)}
+            fill={right}
+          />
 
-        <g filter={`url(#${uid}-soft)`} stroke={outline} strokeWidth="3.2" strokeLinejoin="round">
-          {/* ===== BODY ===== */}
-          {/* Left face */}
-          <polygon points="40,110 120,150 120,210 40,170" fill={left} />
-          {/* Right face */}
-          <polygon points="120,150 200,110 200,170 120,210" fill={right} />
-
-          {/* Polka dots — left */}
+          {/* Polka dots left */}
           <g fill={dotL} stroke="none">
-            <circle cx="68" cy="128" r="9" />
-            <circle cx="92" cy="148" r="9" />
-            <circle cx="64" cy="160" r="9" />
-            <circle cx="90" cy="178" r="9" />
-            <circle cx="70" cy="192" r="8" />
+            <circle cx="78" cy="130" r="8" />
+            <circle cx="96" cy="148" r="8" />
+            <circle cx="74" cy="160" r="7" />
+            <circle cx="98" cy="176" r="7" />
+            <circle cx="80" cy="190" r="6" />
           </g>
-          {/* Polka dots — right (darker) */}
+          {/* Polka dots right */}
           <g fill={dotR} stroke="none">
-            <circle cx="150" cy="128" r="9" />
-            <circle cx="174" cy="148" r="9" />
-            <circle cx="148" cy="160" r="9" />
-            <circle cx="172" cy="178" r="9" />
-            <circle cx="152" cy="192" r="8" />
+            <circle cx="148" cy="130" r="8" />
+            <circle cx="166" cy="148" r="8" />
+            <circle cx="144" cy="160" r="7" />
+            <circle cx="168" cy="176" r="7" />
+            <circle cx="150" cy="190" r="6" />
           </g>
 
-          {/* Vertical ribbons on faces */}
-          <polygon points="105,142 135,142 135,210 105,210" fill={ribbon} stroke={outline} strokeWidth="2.6" />
-          {/* Right-face ribbon continuation */}
-          <polygon points="120,150 140,140 140,200 120,210" fill={ribbonShade} stroke={outline} strokeWidth="2.2" />
+          {/* Vertical ribbon left+right faces */}
+          <polygon
+            points={poly([108, 128], [132, 128], [132, 220], [108, 220])}
+            fill={ribbon}
+            stroke={outline}
+            strokeWidth="2.5"
+          />
+          {/* ribbon on right face continuation */}
+          <polygon
+            points={poly([120, 146], [138, 137], [138, 210], [120, 220])}
+            fill={rDark}
+            stroke={outline}
+            strokeWidth="2"
+          />
 
-          {/* ===== LID ===== */}
+          {/* LID group */}
           <g
             style={{
-              transformOrigin: "120px 100px",
-              transform: open ? "translate(-20px,-40px) rotate(-26deg)" : undefined,
+              transformOrigin: "120px 112px",
+              transform: open ? "translate(-18px,-42px) rotate(-28deg)" : undefined,
               transition: "transform 0.55s cubic-bezier(0.34,1.4,0.64,1)",
             }}
           >
-            {/* Lid top */}
-            <polygon points="40,100 120,60 200,100 120,140" fill={top} />
-            {/* Lid side lip (front edge) */}
-            <polygon points="40,100 120,140 120,150 40,110" fill={left} />
-            <polygon points="120,140 200,100 200,110 120,150" fill={right} />
+            {/* Lid top (slightly larger) */}
+            <polygon
+              points={poly(
+                [44, 108],
+                [120, 66],
+                [196, 108],
+                [120, 150],
+              )}
+              fill={top}
+            />
+            {/* Lid thickness left */}
+            <polygon points={poly([44, 108], [120, 150], [120, 158], [44, 116])} fill={left} />
+            {/* Lid thickness right */}
+            <polygon points={poly([120, 150], [196, 108], [196, 116], [120, 158])} fill={right} />
 
-            {/* Top ribbon cross */}
-            <polygon points="105,90 135,90 150,98 120,112 90,98" fill={ribbon} stroke={outline} strokeWidth="2.4" />
-            <polygon points="112,72 128,72 148,112 92,112" fill={ribbon} stroke={outline} strokeWidth="2.4" />
-            {/* Top ribbon highlight */}
-            <line x1="100" y1="96" x2="118" y2="88" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" opacity="0.55" />
+            {/* Ribbon on lid */}
+            <polygon
+              points={poly([108, 96], [132, 96], [144, 108], [120, 126], [96, 108])}
+              fill={ribbon}
+              stroke={outline}
+              strokeWidth="2.4"
+            />
+            <polygon
+              points={poly([112, 78], [128, 78], [148, 124], [92, 124])}
+              fill={ribbon}
+              stroke={outline}
+              strokeWidth="2.4"
+            />
+            <line x1="100" y1="100" x2="116" y2="90" stroke="#fff" strokeWidth="2.2" opacity="0.5" />
 
-            {/* Fluffy rounded bow — reference style */}
+            {/* Fluffy bow — reference style */}
             {!open ? (
-              <g transform="translate(120 58)" stroke={outline} strokeWidth="2.6" strokeLinejoin="round">
-                {/* back loops */}
-                <ellipse cx="-22" cy="-10" rx="20" ry="14" fill={ribbonShade} transform="rotate(-18 -22 -10)" />
-                <ellipse cx="22" cy="-10" rx="20" ry="14" fill={ribbonShade} transform="rotate(18 22 -10)" />
-                {/* front loops */}
-                <ellipse cx="-18" cy="2" rx="22" ry="15" fill={ribbon} transform="rotate(-12 -18 2)" />
-                <ellipse cx="18" cy="2" rx="22" ry="15" fill={ribbon} transform="rotate(12 18 2)" />
-                {/* loop inner shade */}
-                <ellipse cx="-18" cy="2" rx="10" ry="6" fill={ribbonShade} opacity="0.45" transform="rotate(-12 -18 2)" stroke="none" />
-                <ellipse cx="18" cy="2" rx="10" ry="6" fill={ribbonShade} opacity="0.45" transform="rotate(12 18 2)" stroke="none" />
-                {/* center knot */}
-                <ellipse cx="0" cy="0" rx="11" ry="10" fill={ribbon} />
-                <ellipse cx="-2" cy="-2" rx="4" ry="3" fill="#fff" opacity="0.4" stroke="none" />
-                {/* short tails under bow */}
-                <path d="M-6 8 Q-16 28 -8 30 Q0 20 4 10 Z" fill={ribbon} />
-                <path d="M6 8 Q16 28 8 30 Q0 20 -2 10 Z" fill={ribbonShade} />
+              <g transform="translate(120 62)" stroke={outline} strokeWidth="2.6" strokeLinejoin="round">
+                <ellipse cx="-22" cy="-8" rx="18" ry="13" fill={rDark} transform="rotate(-18 -22 -8)" />
+                <ellipse cx="22" cy="-8" rx="18" ry="13" fill={rDark} transform="rotate(18 22 -8)" />
+                <ellipse cx="-20" cy="4" rx="22" ry="14" fill={ribbon} transform="rotate(-12 -20 4)" />
+                <ellipse cx="20" cy="4" rx="22" ry="14" fill={rLight} transform="rotate(12 20 4)" />
+                <ellipse cx="-20" cy="4" rx="9" ry="5" fill={rDark} opacity="0.35" transform="rotate(-12 -20 4)" stroke="none" />
+                <ellipse cx="20" cy="4" rx="9" ry="5" fill={rDark} opacity="0.35" transform="rotate(12 20 4)" stroke="none" />
+                <ellipse cx="0" cy="2" rx="11" ry="10" fill={ribbon} />
+                <ellipse cx="-2" cy="-1" rx="4" ry="3" fill="#fff" opacity="0.4" stroke="none" />
+                <path d="M-6 10 Q-18 34 -6 36 Q2 22 4 12 Z" fill={ribbon} />
+                <path d="M6 10 Q18 34 6 36 Q-2 22 -2 12 Z" fill={rLight} />
               </g>
             ) : null}
           </g>
 
-          {/* Open cavity */}
           {open ? (
             <g stroke="none">
-              <polygon points="70,130 170,130 150,175 90,175" fill="rgba(30,20,15,0.35)" />
-              <rect x="108" y="138" width="24" height="36" rx="12" fill="#FFF3D1" stroke={outline} strokeWidth="2.4" />
+              <polygon points={poly([80, 140], [160, 140], [148, 190], [92, 190])} fill="rgba(20,12,8,0.35)" />
+              <rect x="108" y="148" width="24" height="36" rx="12" fill="#FFF3D1" stroke={outline} strokeWidth="2.4" />
             </g>
           ) : null}
         </g>
-
-        {/* Ribbon edge highlight on left vertical */}
-        <line x1="110" y1="148" x2="110" y2="200" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
       </svg>
     </div>
   );
