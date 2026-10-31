@@ -36,10 +36,10 @@ export function BottleVisual({
   const uid = `milk-${size}-${seated ? "s" : "f"}-${corkOpen ? "o" : "c"}`;
 
   if (seated) {
-    // Literally only cap + neck peeking from the hole
+    // Cap + very short neck stub — body is inside the crate
     return (
       <div className={`relative ${SEATED_SIZE[size]} ${className}`} aria-hidden>
-        <svg viewBox="0 0 60 70" className="h-full w-full overflow-visible">
+        <svg viewBox="0 0 60 48" className="h-full w-full overflow-visible">
           <defs>
             <linearGradient id={`${uid}-g`} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#6AA8B8" />
@@ -51,19 +51,19 @@ export function BottleVisual({
               <stop offset="100%" stopColor="#C4A060" />
             </linearGradient>
           </defs>
-          {/* Neck only */}
-          <rect x="20" y="28" width="20" height="36" rx="3" fill={`url(#${uid}-g)`} stroke="#3A7080" strokeWidth="2" />
-          <rect x="23" y="32" width="5" height="18" rx="2" fill="#fff" opacity="0.5" />
+          {/* Short neck stub disappearing into the hole */}
+          <rect x="22" y="28" width="16" height="18" rx="2.5" fill={`url(#${uid}-g)`} stroke="#3A7080" strokeWidth="2" />
+          <rect x="24" y="30" width="4" height="10" rx="1.5" fill="#fff" opacity="0.5" />
           {/* Cap */}
           <g
             style={{
-              transformOrigin: "30px 22px",
+              transformOrigin: "30px 20px",
               transform: corkOpen ? "translate(-14px,-12px) rotate(-26deg)" : undefined,
               transition: "transform 0.45s ease",
             }}
           >
-            <rect x="16" y="8" width="28" height="14" rx="3" fill={`url(#${uid}-cap)`} stroke="#8B6914" strokeWidth="1.6" />
-            <rect x="14" y="20" width="32" height="8" rx="2" fill="#E5A500" stroke="#8B6914" strokeWidth="1.3" />
+            <rect x="16" y="6" width="28" height="14" rx="3" fill={`url(#${uid}-cap)`} stroke="#8B6914" strokeWidth="1.6" />
+            <rect x="14" y="18" width="32" height="8" rx="2" fill="#E5A500" stroke="#8B6914" strokeWidth="1.3" />
           </g>
         </svg>
       </div>
