@@ -135,21 +135,15 @@ export function WeeklyBox({
                       }}
                     />
 
-                    {/* Bottle: cork sits above the board; neck goes into the hole */}
+                    {/* Bottle: cork above the board, short neck into the hole (natural size, not stretched) */}
                     {bottle ? (
                       <span
-                        className={`absolute left-1/2 z-[4] -translate-x-1/2 transition-transform duration-500 ${
+                        className={`absolute left-1/2 z-[4] flex -translate-x-1/2 justify-center transition-transform duration-500 ${
                           isInserting ? "-translate-y-3 scale-110" : ""
                         }`}
-                        style={{
-                          top: compact ? "-22%" : "-20%",
-                          width: compact ? "50%" : "46%",
-                          height: compact ? "72%" : "70%",
-                          // Clip lower neck so only cap + short neck show above the rim
-                          clipPath: "inset(0 0 38% 0)",
-                        }}
+                        style={{ top: compact ? "-28%" : "-24%" }}
                       >
-                        <BottleVisual size={compact ? "xs" : "sm"} seated className="!h-full !w-full" />
+                        <BottleVisual size={compact ? "sm" : "md"} seated />
                       </span>
                     ) : null}
 
