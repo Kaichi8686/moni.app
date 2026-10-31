@@ -1124,6 +1124,53 @@ html.moni-landing-active {
   animation: roadmap-path-node-in 280ms ease-out both;
 }
 
+/* Weekly idea ritual — Duolingo-like gift wobble */
+@keyframes duo-gift-shake {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  25% {
+    transform: rotate(-4deg) translateY(-2px);
+  }
+  75% {
+    transform: rotate(4deg) translateY(1px);
+  }
+}
+
+@keyframes duo-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.duo-pop-in {
+  animation: duo-pop-in 420ms cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+
+@keyframes duo-float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.duo-float-y {
+  animation: duo-float-y 2.4s ease-in-out infinite;
+}
+
 /* 進行中／作成マスの周囲キラキラ（強め） */
 @keyframes roadmap-sparkle-twinkle {
   0%,

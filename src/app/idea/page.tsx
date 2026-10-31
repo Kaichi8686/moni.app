@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "アイデア | moni",
-  description: "マイアイデアを書いて残し、必要ならAIの発掘・相談で種を見つける場所。",
+  description: "月〜土、毎日ひとつのアイデアを瓶に詰める。プレゼントを開けて、今週のボックスへ。",
 };
 
 export default function IdeaPage() {

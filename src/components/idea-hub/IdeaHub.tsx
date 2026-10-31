@@ -8,7 +8,7 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
-import { MyIdeasPanel } from "@/components/idea-hub/MyIdeasPanel";
+import { WeeklyIdeaRitual } from "@/components/idea-hub/weekly/WeeklyIdeaRitual";
 import { INTERVIEW_ARTICLE_MOCKS } from "@/lib/idea-hub/interviewMocks";
 import { parseIdeaHubTab, type IdeaHubTab } from "@/lib/idea-hub/types";
 import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
@@ -37,6 +37,7 @@ function IdeaHubInner() {
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
+  const [ritualImmersive, setRitualImmersive] = useState(false);
 
   const replaceTab = useCallback(
     (next: IdeaHubTab | null, opts?: { board?: boolean }) => {
@@ -73,7 +74,6 @@ function IdeaHubInner() {
 
   const setAiMode = useCallback(
     (mode: IdeaPersonalAiMode) => {
-      // Switching 相談 / 発掘 should open a blank thread, not the last saved chat.
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(true);
       setChatKey((k) => k + 1);
@@ -83,10 +83,19 @@ function IdeaHubInner() {
   );
 
   const inAiChat = view === "chat";
+  const hideChrome = inAiChat || ritualImmersive;
 
   return (
-    <div className={`relative min-h-[100dvh] bg-white ${inAiChat ? "" : "pb-bottom-nav"}`}>
-      {view === "mine" || view === "board" || view === "interviews" ? (
+    <div className={`relative min-h-[100dvh] bg-white ${hideChrome ? "" : "pb-bottom-nav"}`}>
+      {view === "mine" && !ritualImmersive ? (
+        <header className="sticky top-0 z-30 border-b border-[#E5E5E5] bg-white/95 backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
+            <AppBrandHeader bare />
+          </div>
+        </header>
+      ) : null}
+
+      {view === "board" || view === "interviews" ? (
         <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
             <AppBrandHeader bare />
@@ -94,7 +103,7 @@ function IdeaHubInner() {
         </header>
       ) : null}
 
-      {view === "mine" ? <MyIdeasPanel /> : null}
+      {view === "mine" ? <WeeklyIdeaRitual onImmersiveChange={setRitualImmersive} /> : null}
 
       {inAiChat ? (
         <IdeaInterviewApp
@@ -114,9 +123,9 @@ function IdeaHubInner() {
             <button
               type="button"
               onClick={goHome}
-              className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+              className="mb-2 text-[13px] font-extrabold text-[#1CB0F6] hover:underline"
             >
-              {tx("← マイアイデアに戻る", "← Back to My ideas")}
+              {tx("← アイデアに戻る", "← Back to ideas")}
             </button>
           </div>
           <IdeaQnAPanel active />
@@ -129,27 +138,27 @@ function IdeaHubInner() {
             <button
               type="button"
               onClick={goHome}
-              className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+              className="mb-2 text-[13px] font-extrabold text-[#1CB0F6] hover:underline"
             >
-              {tx("← マイアイデアに戻る", "← Back to My ideas")}
+              {tx("← アイデアに戻る", "← Back to ideas")}
             </button>
           </div>
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />
         </div>
       ) : null}
 
-      {view === "mine" ? (
+      {view === "mine" && !ritualImmersive ? (
         <button
           type="button"
           onClick={() => openAi("consult")}
           aria-label={tx("AIを開く", "Open AI")}
-          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition hover:bg-violet-500 md:bottom-8"
+          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl border-b-4 border-[#1899D6] bg-[#1CB0F6] text-white transition active:translate-y-[3px] active:border-b-0 md:bottom-8"
         >
           <Sparkles className="h-6 w-6" aria-hidden />
         </button>
       ) : null}
 
-      {inAiChat ? null : <AppBottomNav />}
+      {hideChrome ? null : <AppBottomNav />}
     </div>
   );
 }
@@ -158,7 +167,7 @@ export function IdeaHub() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[100dvh] items-center justify-center bg-white text-sm text-zinc-500">
+        <div className="flex min-h-[100dvh] items-center justify-center bg-white text-sm font-bold text-[#777]">
           読み込み中…
         </div>
       }
