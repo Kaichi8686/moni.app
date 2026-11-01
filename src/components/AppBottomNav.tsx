@@ -141,7 +141,12 @@ const CLOSED_TABS: NavItem[] = [
     href: "/idea",
     labelKey: "navAi",
     icon: <Sparkles className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => p === "/idea" || p.startsWith("/idea/") || p === "/idea-interview",
+    match: (p) =>
+      p === "/idea" ||
+      p.startsWith("/idea/") ||
+      p === "/idea-interview" ||
+      p === "/invest-sim" ||
+      p.startsWith("/invest-sim/"),
   },
   {
     id: "search",

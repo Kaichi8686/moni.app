@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2, TrendingUp, X } from "lucide-react";
 import { createMyIdea, deleteMyIdea, listMyIdeas } from "@/lib/idea-hub/myIdeas";
 import type { MyIdea } from "@/lib/idea-hub/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -138,6 +138,23 @@ export function MyIdeasPanel() {
           {tx("保存", "Save")}
         </button>
       </div>
+
+      <Link
+        href="/invest-sim"
+        className="mb-5 flex items-center gap-3 rounded-2xl border border-teal-200/80 bg-teal-50/70 px-3.5 py-3 transition hover:bg-teal-50"
+      >
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-900 text-teal-50">
+          <TrendingUp className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-zinc-900">
+            {tx("投資シミュレーター", "Invest simulator")}
+          </span>
+          <span className="block text-[11px] leading-snug text-zinc-500">
+            {tx("予算・年・方法の限定 → AIが学習用シミュレーション", "Budget, years, limits → AI learning sim")}
+          </span>
+        </span>
+      </Link>
 
       {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
