@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
+import { IdeaGardenApp } from "@/components/idea-garden/IdeaGardenApp";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
-import { MyIdeasPanel } from "@/components/idea-hub/MyIdeasPanel";
 import { INTERVIEW_ARTICLE_MOCKS } from "@/lib/idea-hub/interviewMocks";
 import { parseIdeaHubTab, type IdeaHubTab } from "@/lib/idea-hub/types";
 import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
@@ -37,6 +37,7 @@ function IdeaHubInner() {
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
+  const [gardenImmersive, setGardenImmersive] = useState(false);
 
   const replaceTab = useCallback(
     (next: IdeaHubTab | null, opts?: { board?: boolean }) => {
@@ -83,18 +84,21 @@ function IdeaHubInner() {
   );
 
   const inAiChat = view === "chat";
+  const hideBottomNav = inAiChat || (view === "mine" && gardenImmersive);
 
   return (
-    <div className={`relative min-h-[100dvh] bg-white ${inAiChat ? "" : "pb-bottom-nav"}`}>
+    <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
       {view === "mine" || view === "board" || view === "interviews" ? (
-        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-          <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
-            <AppBrandHeader bare />
-          </div>
-        </header>
+        gardenImmersive && view === "mine" ? null : (
+          <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+            <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
+              <AppBrandHeader bare />
+            </div>
+          </header>
+        )
       ) : null}
 
-      {view === "mine" ? <MyIdeasPanel /> : null}
+      {view === "mine" ? <IdeaGardenApp onImmersiveChange={setGardenImmersive} /> : null}
 
       {inAiChat ? (
         <IdeaInterviewApp
@@ -116,7 +120,7 @@ function IdeaHubInner() {
               onClick={goHome}
               className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
             >
-              {tx("← マイアイデアに戻る", "← Back to My ideas")}
+              {tx("← アイデアの棚に戻る", "← Back to idea shelf")}
             </button>
           </div>
           <IdeaQnAPanel active />
@@ -131,14 +135,14 @@ function IdeaHubInner() {
               onClick={goHome}
               className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
             >
-              {tx("← マイアイデアに戻る", "← Back to My ideas")}
+              {tx("← アイデアの棚に戻る", "← Back to idea shelf")}
             </button>
           </div>
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />
         </div>
       ) : null}
 
-      {view === "mine" ? (
+      {view === "mine" && !gardenImmersive ? (
         <button
           type="button"
           onClick={() => openAi("consult")}
@@ -149,7 +153,7 @@ function IdeaHubInner() {
         </button>
       ) : null}
 
-      {inAiChat ? null : <AppBottomNav />}
+      {hideBottomNav ? null : <AppBottomNav />}
     </div>
   );
 }
