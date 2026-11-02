@@ -374,14 +374,6 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               {descriptionParts.join("\n\n")}
             </p>
           </div>
-          <DuoButton
-            tone="green"
-            fullWidth
-            className="mt-auto pt-8"
-            onClick={() => setScreen({ kind: "shelf" })}
-          >
-            {tx("閉じる", "Close")}
-          </DuoButton>
         </motion.div>
       </div>
     );
@@ -718,7 +710,11 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (screen.phase === "plant") {
       return (
         <div className="flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
-          <DuoButton tone="green" className="mt-4 min-w-[200px]" onClick={() => setGrow("question")}>
+          <DuoButton
+            tone="green"
+            className="mt-[22vh] min-w-[240px] !py-5 text-[20px] sm:mt-[18vh]"
+            onClick={() => setGrow("question")}
+          >
             {tx("育てる", "Grow")}
           </DuoButton>
           <motion.div
