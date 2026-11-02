@@ -14,9 +14,17 @@ type Props = {
   onWeekIndex: (i: number) => void;
   plants: PlantedIdea[];
   headerSlot?: ReactNode;
+  onPlantClick?: (plant: PlantedIdea) => void;
 };
 
-export function ShelfView({ weekKeys, weekIndex, onWeekIndex, plants, headerSlot }: Props) {
+export function ShelfView({
+  weekKeys,
+  weekIndex,
+  onWeekIndex,
+  plants,
+  headerSlot,
+  onPlantClick,
+}: Props) {
   const { tx, locale } = useI18n();
   const weekKey = weekKeys[weekIndex] ?? weekKeys[0]!;
   const touchX = useRef<number | null>(null);
@@ -91,12 +99,16 @@ export function ShelfView({ weekKeys, weekIndex, onWeekIndex, plants, headerSlot
                   </p>
                 ) : (
                   row.map((plant) => (
-                    <motion.div
+                    <motion.button
                       key={plant.id}
+                      type="button"
                       layout
                       initial={{ opacity: 0, y: 12, scale: 0.9 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      className="relative flex w-[42%] flex-col items-center"
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => onPlantClick?.(plant)}
+                      className="relative flex w-[42%] flex-col items-center outline-none"
+                      aria-label={plant.title}
                     >
                       {plant.gold ? (
                         <div className="pointer-events-none absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 gap-2">
@@ -130,7 +142,7 @@ export function ShelfView({ weekKeys, weekIndex, onWeekIndex, plants, headerSlot
                       <p className="text-[10px] font-bold text-[#5B4636]">
                         {weekdayLabel(plant.weekday, locale === "en" ? "en" : "ja")}
                       </p>
-                    </motion.div>
+                    </motion.button>
                   ))
                 )}
               </div>

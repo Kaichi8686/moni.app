@@ -1,29 +1,51 @@
 import type { GardenState, PlantedIdea } from "@/lib/idea-garden/types";
 
-export const GARDEN_STORAGE_KEY = "moni.ideaGarden.v1";
+/** レガシー（ユーザー未分離）キー — 初回だけ個人キーへ移行 */
+export const GARDEN_STORAGE_KEY_LEGACY = "moni.ideaGarden.v1";
+
+/** 個人のガーデン。共有しない。1人1日1花。 */
+export function gardenStorageKey(ownerId: string | null | undefined): string {
+  const id = (ownerId ?? "").trim() || "guest";
+  return `moni.ideaGarden.v1:${id}`;
+}
 
 export function emptyGarden(): GardenState {
   return { version: 1, plants: [] };
 }
 
-export function loadGarden(): GardenState {
-  if (typeof window === "undefined") return emptyGarden();
+function parseGarden(raw: string | null): GardenState | null {
+  if (!raw) return null;
   try {
-    const raw = window.localStorage.getItem(GARDEN_STORAGE_KEY);
-    if (!raw) return emptyGarden();
     const parsed = JSON.parse(raw) as Partial<GardenState>;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.plants)) {
-      return emptyGarden();
-    }
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.plants)) return null;
     return { version: 1, plants: parsed.plants as PlantedIdea[] };
   } catch {
-    return emptyGarden();
+    return null;
   }
 }
 
-export function saveGarden(state: GardenState): void {
+export function loadGarden(ownerId?: string | null): GardenState {
+  if (typeof window === "undefined") return emptyGarden();
+  const key = gardenStorageKey(ownerId);
+  const own = parseGarden(window.localStorage.getItem(key));
+  if (own) return own;
+
+  // 旧キーからの移行（ログイン時のみ本人へ移す）
+  if (ownerId) {
+    const legacy = parseGarden(window.localStorage.getItem(GARDEN_STORAGE_KEY_LEGACY));
+    if (legacy && legacy.plants.length > 0) {
+      window.localStorage.setItem(key, JSON.stringify(legacy));
+      window.localStorage.removeItem(GARDEN_STORAGE_KEY_LEGACY);
+      return legacy;
+    }
+  }
+
+  return emptyGarden();
+}
+
+export function saveGarden(state: GardenState, ownerId?: string | null): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(GARDEN_STORAGE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(gardenStorageKey(ownerId), JSON.stringify(state));
 }
 
 export function upsertPlant(plants: PlantedIdea[], plant: PlantedIdea): PlantedIdea[] {
