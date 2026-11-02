@@ -15,6 +15,7 @@ import {
   isSunday,
   tokyoDateKey,
   tokyoWeekday,
+  weekdayLabel,
   weekKeyFor,
 } from "@/lib/idea-garden/calendar";
 import { dailyPromptFor } from "@/lib/idea-garden/prompts";
@@ -38,6 +39,7 @@ import type {
 import { createMyIdea } from "@/lib/idea-hub/myIdeas";
 import { burstCelebration } from "@/lib/ui/confetti";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { supabase, supabaseEnabled } from "@/lib/supabase";
 
 type Props = {
   onImmersiveChange?: (immersive: boolean) => void;
@@ -96,6 +98,7 @@ function initialScreen(plants: PlantedIdea[]): GardenScreen {
 export function IdeaGardenApp({ onImmersiveChange }: Props) {
   const { tx, locale } = useI18n();
   const [hydrated, setHydrated] = useState(false);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [plants, setPlants] = useState<PlantedIdea[]>([]);
   const [screen, setScreen] = useState<GardenScreen>({ kind: "shelf" });
 
@@ -118,27 +121,55 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   // shelf
   const [weekIndex, setWeekIndex] = useState(0);
 
-  const persist = useCallback((next: PlantedIdea[]) => {
-    setPlants(next);
-    saveGarden({ version: 1, plants: next });
-  }, []);
+  const persist = useCallback(
+    (next: PlantedIdea[]) => {
+      setPlants(next);
+      // 個人専用ストレージ（アカウントごと / ゲストごと）。共有しない。
+      saveGarden({ version: 1, plants: next }, ownerId);
+    },
+    [ownerId],
+  );
 
   useEffect(() => {
-    // localStorage hydrate (client-only)
-    const state = loadGarden();
-    /* eslint-disable react-hooks/set-state-in-effect -- mount hydrate from localStorage */
-    setPlants(state.plants);
-    setScreen(initialScreen(state.plants));
-    setHydrated(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
+    let cancelled = false;
+
+    const hydrateFor = (uid: string | null) => {
+      const state = loadGarden(uid);
+      if (cancelled) return;
+      setOwnerId(uid);
+      setPlants(state.plants);
+      setScreen(initialScreen(state.plants));
+      setWeekIndex(0);
+      setHydrated(true);
+    };
+
+    if (!supabase || !supabaseEnabled) {
+      hydrateFor(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void supabase.auth.getSession().then(({ data }) => {
+      hydrateFor(data.session?.user.id ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      hydrateFor(session?.user.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const immersive =
-    screen.kind === "grow"
-      ? screen.phase !== "pick-bag"
-      : screen.kind === "sunday"
-        ? screen.phase !== "start"
-        : false;
+    screen.kind === "detail"
+      ? true
+      : screen.kind === "grow"
+        ? screen.phase !== "pick-bag"
+        : screen.kind === "sunday"
+          ? screen.phase !== "start"
+          : false;
 
   useEffect(() => {
     onImmersiveChange?.(immersive);
@@ -284,7 +315,71 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     );
   }
 
-  /* ——— SHELF ——— */
+  /* ——— DETAIL (private flower — title + description) ——— */
+  if (screen.kind === "detail") {
+    const plant = plants.find((p) => p.id === screen.plantId);
+    if (!plant) {
+      return (
+        <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#EAF8FF] px-6">
+          <DuoButton tone="green" onClick={() => setScreen({ kind: "shelf" })}>
+            {tx("棚に戻る", "Back to shelf")}
+          </DuoButton>
+        </div>
+      );
+    }
+    const descriptionParts = [plant.answer];
+    if (plant.gold && plant.target) {
+      descriptionParts.push(tx(`ターゲット: ${plant.target}`, `Target: ${plant.target}`));
+    }
+    if (plant.gold && plant.situation) {
+      descriptionParts.push(
+        tx(`役立つとき: ${plant.situation}`, `Useful when: ${plant.situation}`),
+      );
+    }
+
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <button
+          type="button"
+          onClick={() => setScreen({ kind: "shelf" })}
+          className="mb-2 inline-flex items-center gap-1 self-start text-[14px] font-extrabold text-[#3C3C3C]"
+        >
+          <ChevronLeft className="h-5 w-5" />
+          {tx("棚に戻る", "Back to shelf")}
+        </button>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="mx-auto flex w-full max-w-md flex-1 flex-col items-center"
+        >
+          <FlowerArt
+            kind={plant.flowerKind}
+            gold={plant.gold}
+            stage={4}
+            className="mt-2 h-56 w-48 drop-shadow-lg"
+          />
+          <p className="mt-2 text-[12px] font-bold text-zinc-500">
+            {weekdayLabel(plant.weekday, locale === "en" ? "en" : "ja")}
+            {plant.gold ? ` · ${tx("ゴールド", "Gold")}` : ""}
+          </p>
+          <h1 className="mt-4 text-center text-[24px] font-extrabold leading-snug tracking-tight text-[#3C3C3C]">
+            {plant.title}
+          </h1>
+          <div className="mt-5 w-full rounded-3xl border-[3px] border-[#E5E5E5] bg-white px-5 py-4">
+            <p className="text-[12px] font-extrabold uppercase tracking-wide text-zinc-400">
+              {tx("説明", "Description")}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-[#3C3C3C]">
+              {descriptionParts.join("\n\n")}
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  /* ——— SHELF (個人専用・1日1花) ——— */
   if (screen.kind === "shelf") {
     const canStartGrow = isGrowDay() && !plantForDate(plants, tokyoDateKey());
     const canStartSunday =
@@ -297,15 +392,16 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           weekIndex={weekIndex}
           onWeekIndex={setWeekIndex}
           plants={weekPlants}
+          onPlantClick={(plant) => setScreen({ kind: "detail", plantId: plant.id })}
           headerSlot={
             <div className="pt-1 text-center">
               <h1 className="text-[22px] font-extrabold tracking-tight text-[#3C3C3C]">
-                {tx("アイデアの棚", "Idea shelf")}
+                {tx("あなたのアイデアの棚", "Your idea shelf")}
               </h1>
               <p className="mt-1 text-[13px] font-semibold text-zinc-500">
                 {isSunday()
-                  ? tx("日曜はお気に入りを深掘りしよう", "Sundays are for deepening a favorite")
-                  : tx("毎日ひとつ、種を育てよう", "Grow one idea seed each day")}
+                  ? tx("日曜は自分のお気に入りを深掘りしよう", "Deepen your own favorite on Sundays")
+                  : tx("自分だけの毎日ひとつ。他人とは共有されません", "One private seed a day — yours only")}
               </p>
               {canStartGrow ? (
                 <div className="mt-4">
@@ -614,7 +710,11 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (screen.phase === "plant") {
       return (
         <div className="flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
-          <DuoButton tone="green" className="mt-4 min-w-[200px]" onClick={() => setGrow("question")}>
+          <DuoButton
+            tone="green"
+            className="mt-[22vh] min-w-[240px] !py-5 text-[20px] sm:mt-[18vh]"
+            onClick={() => setGrow("question")}
+          >
             {tx("育てる", "Grow")}
           </DuoButton>
           <motion.div

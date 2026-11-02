@@ -50,6 +50,7 @@ export type SundayPhase =
 
 export type GardenScreen =
   | { kind: "shelf" }
+  | { kind: "detail"; plantId: string }
   | { kind: "grow"; phase: GrowPhase }
   | { kind: "sunday"; phase: SundayPhase };
 
