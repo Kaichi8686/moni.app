@@ -25,7 +25,7 @@ const TOKYO = "Asia/Tokyo";
 export const WEEKDAY_LABELS_JA = ["月", "火", "水", "木", "金", "土"] as const;
 export const WEEKDAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** Bright isometric wraps — yellow ribbon like the reference gift */
+/** Gift cubes match Idea-tab CTA green (#58CC02 / #46A302); patterns differ. */
 export const GIFT_PATTERNS: Array<{
   id: GiftPatternId;
   labelJa: string;
@@ -35,12 +35,12 @@ export const GIFT_PATTERNS: Array<{
   accent: string;
   base: string;
 }> = [
-  { id: "dots", labelJa: "あか", labelEn: "Red", wrap: "#E53935", ribbon: "#FFD54F", accent: "#FF8A65", base: "#B71C1C" },
-  { id: "stripe", labelJa: "みどり", labelEn: "Green", wrap: "#43A047", ribbon: "#FFD54F", accent: "#AED581", base: "#2E7D32" },
-  { id: "plaid", labelJa: "あお", labelEn: "Blue", wrap: "#1E88E5", ribbon: "#FFD54F", accent: "#64B5F6", base: "#1565C0" },
-  { id: "ribbon", labelJa: "オレンジ", labelEn: "Orange", wrap: "#FB8C00", ribbon: "#FFD54F", accent: "#FFCC80", base: "#EF6C00" },
-  { id: "wave", labelJa: "ピンク", labelEn: "Pink", wrap: "#EC407A", ribbon: "#FFD54F", accent: "#F8BBD0", base: "#C2185B" },
-  { id: "spark", labelJa: "むらさき", labelEn: "Purple", wrap: "#8E24AA", ribbon: "#FFD54F", accent: "#CE93D8", base: "#6A1B9A" },
+  { id: "dots", labelJa: "ドット", labelEn: "Dots", wrap: "#58CC02", ribbon: "#FFD54F", accent: "#C8F56A", base: "#46A302" },
+  { id: "stripe", labelJa: "ストライプ", labelEn: "Stripe", wrap: "#58CC02", ribbon: "#FFC800", accent: "#46A302", base: "#3D8C00" },
+  { id: "plaid", labelJa: "チェック", labelEn: "Plaid", wrap: "#58CC02", ribbon: "#FFD54F", accent: "#3D8C00", base: "#46A302" },
+  { id: "ribbon", labelJa: "リボン", labelEn: "Ribbon", wrap: "#58CC02", ribbon: "#FFF3D1", accent: "#A8E63A", base: "#46A302" },
+  { id: "wave", labelJa: "ウェーブ", labelEn: "Wave", wrap: "#58CC02", ribbon: "#FFC800", accent: "#E8FFB0", base: "#3D8C00" },
+  { id: "spark", labelJa: "スパークル", labelEn: "Spark", wrap: "#58CC02", ribbon: "#FFD54F", accent: "#FFFFFF", base: "#46A302" },
 ];
 
 export const PROMPT_QUESTION = {
