@@ -494,32 +494,6 @@ export function ProjectTabGlide({
                 loading={loading}
                 onCreate={() => setCreateOpen(true)}
               />
-              {!loading && displayList.length === 0 ? (
-                <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-                  <div className="pointer-events-auto max-w-sm rounded-2xl border border-dashed border-zinc-300 bg-white/95 px-4 py-5 text-center shadow-lg backdrop-blur-sm">
-                    <p className="text-sm font-semibold text-zinc-800">参加しているプロジェクトはまだありません。</p>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                      キューブの「新規」をタップするか、「探す」タブから公開プロジェクトに応募してみましょう。
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                        onClick={() => setCreateOpen(true)}
-                      >
-                        プロジェクトを作る
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700"
-                        onClick={() => onNavigate("chat")}
-                      >
-                        探すタブで応募する
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-6 sm:p-4">
@@ -597,32 +571,6 @@ export function ProjectTabGlide({
                 })}
               </div>
 
-              {!loading && displayList.length === 0 ? (
-                <div className="mt-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center dark:border-zinc-600 dark:bg-zinc-900/40">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">参加しているプロジェクトはまだありません。</p>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                    自分で作るか、「探す」タブから公開プロジェクトに応募してみましょう。上の「新規」からも作成できます。
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      className="min-h-[44px] rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white"
-                      onClick={() => setCreateOpen(true)}
-                    >
-                      プロジェクトを作る
-                    </button>
-                    <button
-                      type="button"
-                      className="min-h-[44px] rounded-xl border border-zinc-300 bg-white px-4 text-sm font-semibold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
-                      onClick={() => {
-                        onNavigate("chat");
-                      }}
-                    >
-                      探すタブで応募する
-                    </button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           )}
         </div>
