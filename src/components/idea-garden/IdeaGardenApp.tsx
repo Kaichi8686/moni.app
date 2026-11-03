@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreVertical, Trash2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { IdeaStreakBadge } from "@/components/idea-garden/IdeaStreakBadge";
 import { IdeaStreakCalendar } from "@/components/idea-garden/IdeaStreakCalendar";
@@ -133,6 +133,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   // shelf
   const [weekIndex, setWeekIndex] = useState(0);
   const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const persist = useCallback(
     (next: PlantedIdea[], draft: GardenDraft | null = null) => {
@@ -498,7 +500,14 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (!plant) {
       return (
         <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#EAF8FF] px-6">
-          <DuoButton tone="orange" onClick={() => setScreen({ kind: "shelf" })}>
+          <DuoButton
+            tone="orange"
+            onClick={() => {
+              setDetailMenuOpen(false);
+              setDeleteConfirmOpen(false);
+              setScreen({ kind: "shelf" });
+            }}
+          >
             {tx("棚に戻る", "Back to shelf")}
           </DuoButton>
         </div>
@@ -514,16 +523,80 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       );
     }
 
+    const closeDetail = () => {
+      setDetailMenuOpen(false);
+      setDeleteConfirmOpen(false);
+      setScreen({ kind: "shelf" });
+    };
+
+    const confirmDeletePlant = () => {
+      const next = plants.filter((p) => p.id !== plant.id);
+      if (sundayPickId === plant.id) setSundayPickId(null);
+      persist(next, null);
+      setDetailMenuOpen(false);
+      setDeleteConfirmOpen(false);
+      setScreen({ kind: "shelf" });
+    };
+
     return (
-      <div className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <button
-          type="button"
-          onClick={() => setScreen({ kind: "shelf" })}
-          className="mb-2 inline-flex items-center gap-1 self-start text-[14px] font-extrabold text-[#3C3C3C]"
-        >
-          <ChevronLeft className="h-5 w-5" />
-          {tx("棚に戻る", "Back to shelf")}
-        </button>
+      <div className="relative flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={closeDetail}
+            className="inline-flex items-center gap-1 text-[14px] font-extrabold text-[#3C3C3C]"
+          >
+            <ChevronLeft className="h-5 w-5" />
+            {tx("棚に戻る", "Back to shelf")}
+          </button>
+
+          <div className="relative z-20">
+            <button
+              type="button"
+              onClick={() => setDetailMenuOpen((v) => !v)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#3C3C3C] shadow-sm"
+              aria-label={tx("メニュー", "Menu")}
+              aria-expanded={detailMenuOpen}
+            >
+              <MoreVertical className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+
+            <AnimatePresence>
+              {detailMenuOpen ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute right-0 top-12 min-w-[10.5rem] overflow-hidden rounded-2xl border-[3px] border-[#E5E5E5] bg-white shadow-lg"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDetailMenuOpen(false);
+                      setDeleteConfirmOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-[15px] font-extrabold text-[#E11D48] active:bg-rose-50"
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={2.5} />
+                    {tx("削除する", "Delete")}
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {detailMenuOpen ? (
+          <button
+            type="button"
+            aria-label={tx("閉じる", "Close")}
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setDetailMenuOpen(false)}
+          />
+        ) : null}
 
         <motion.div
           initial={{ opacity: 0, y: 16, scale: 0.96 }}
@@ -552,6 +625,58 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             </p>
           </div>
         </motion.div>
+
+        <AnimatePresence>
+          {deleteConfirmOpen ? (
+            <motion.div
+              className="fixed inset-0 z-40 flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteConfirmOpen(false)}
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-label={tx("削除の確認", "Confirm delete")}
+                initial={{ y: 36, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 20, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                className="w-full max-w-sm rounded-t-[1.75rem] border-[3px] border-[#E5E5E5] bg-white p-5 shadow-xl sm:rounded-[1.75rem]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="text-center text-[18px] font-extrabold text-[#3C3C3C]">
+                  {tx("このアイデアを削除する？", "Delete this idea?")}
+                </p>
+                <p className="mt-2 text-center text-[13px] font-semibold text-zinc-500">
+                  {tx(
+                    `「${plant.title}」を棚から消します。この操作は取り消せません。`,
+                    `“${plant.title}” will be removed from your shelf. This can’t be undone.`,
+                  )}
+                </p>
+                <div className="mt-5 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={confirmDeletePlant}
+                    className={[
+                      "inline-flex w-full select-none items-center justify-center rounded-2xl",
+                      "bg-[#FF4B4B] px-6 py-3.5 text-[16px] font-extrabold leading-none text-white",
+                      "shadow-[0_4px_0_#C43232]",
+                      "transition-[transform,box-shadow] duration-75 ease-out",
+                      "active:translate-y-[4px] active:shadow-none",
+                    ].join(" ")}
+                  >
+                    {tx("削除する", "Delete")}
+                  </button>
+                  <DuoButton tone="zinc" fullWidth onClick={() => setDeleteConfirmOpen(false)}>
+                    {tx("キャンセル", "Cancel")}
+                  </DuoButton>
+                </div>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     );
   }
