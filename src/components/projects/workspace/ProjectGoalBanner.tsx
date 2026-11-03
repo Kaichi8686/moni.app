@@ -10,9 +10,8 @@ type Props = {
 };
 
 /**
- * Duolingo のユニット見出し風バナー（moni オレンジ）。
- * 上段: 「プロジェクト名」のゴール / 下段: ユーザーが書いたゴール本文。
- * 押すと詳細（きっかけなど）へ。
+ * プロジェクトゴールバナー。
+ * idea-garden の DuoButton と同じ：上面フラット + 下帯シャドウ奥行き / 押すと沈む。
  */
 export function ProjectGoalBanner({ projectName, goal, className = "", onClick }: Props) {
   const { tx } = useI18n();
@@ -25,29 +24,34 @@ export function ProjectGoalBanner({ projectName, goal, className = "", onClick }
 
   const face = (
     <>
-      {/* 立体感用の下縁（パスマスと同じオレンジ系） */}
-      <span
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 top-[6px] rounded-[1.15rem] bg-[#C2410C] sm:rounded-[1.35rem]"
-      />
-      <span className="relative block overflow-hidden rounded-[1.15rem] bg-[#F97316] px-4 py-3 text-left text-white sm:rounded-[1.35rem] sm:px-5 sm:py-3.5">
-        <span className="block truncate text-[12px] font-semibold leading-snug text-white/90 sm:text-[13px]">
-          {eyebrow}
-        </span>
-        <span className="mt-0.5 line-clamp-2 block text-[15px] font-bold leading-snug tracking-tight sm:text-base">
-          {goalText}
-        </span>
+      <span className="block truncate text-[12px] font-semibold leading-snug text-white/90 sm:text-[13px]">
+        {eyebrow}
+      </span>
+      <span className="mt-0.5 line-clamp-2 block text-[15px] font-extrabold leading-snug tracking-tight sm:text-base">
+        {goalText}
       </span>
     </>
   );
+
+  const surface = [
+    "w-full rounded-[1.15rem] bg-[#FF9600] px-4 py-3 text-left text-white sm:rounded-[1.35rem] sm:px-5 sm:py-3.5",
+    "shadow-[0_5px_0_#D97706]",
+    "transition-[transform,box-shadow] duration-75 ease-out",
+  ].join(" ");
 
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className={`relative isolate w-full transition active:translate-y-[3px] active:[&>span:first-child]:opacity-0 ${className}`}
         aria-label={openLabel}
+        className={[
+          surface,
+          "select-none active:translate-y-[5px] active:shadow-none",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         {face}
       </button>
@@ -55,7 +59,7 @@ export function ProjectGoalBanner({ projectName, goal, className = "", onClick }
   }
 
   return (
-    <div className={`relative isolate ${className}`} role="region" aria-label={eyebrow}>
+    <div className={[surface, className].filter(Boolean).join(" ")} role="region" aria-label={eyebrow}>
       {face}
     </div>
   );

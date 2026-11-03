@@ -374,7 +374,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
         }, ms),
       );
     };
-    const delays = reduceMotion() ? [0, 80, 160, 240] : [0, 450, 900, 1400];
+    // ゆるっと段階成長（芽→葉→つぼみ→満開）
+    const delays = reduceMotion() ? [0, 90, 180, 270] : [0, 780, 1680, 2680];
     later(0, () => {
       setGrowStage(1);
       setShowCelebrateText(false);
@@ -383,11 +384,11 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     later(delays[1]!, () => setGrowStage(2));
     later(delays[2]!, () => setGrowStage(3));
     later(delays[3]!, () => setGrowStage(4));
-    const textAt = reduceMotion() ? 400 : 2100;
+    const textAt = reduceMotion() ? 420 : 3600;
     later(textAt, () => {
       setShowCelebrateText(true);
       if (!reduceMotion()) burstCelebration();
-      later(400, () => setShowContinueBtn(true));
+      later(500, () => setShowContinueBtn(true));
     });
     return () => {
       cancelled = true;
@@ -1119,7 +1120,19 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             ) : null}
           </AnimatePresence>
 
-          <motion.div layout className="mb-6 w-64">
+          <motion.div
+            layout
+            className="mb-6 w-64"
+            initial={false}
+            animate={{
+              y: growStage >= 4 ? 0 : [0, -3, 0],
+              scale: growStage === 0 ? 0.92 : 1,
+            }}
+            transition={{
+              y: { duration: 2.4, ease: "easeInOut", repeat: growStage > 0 && growStage < 4 ? Infinity : 0 },
+              scale: { type: "spring", stiffness: 60, damping: 14 },
+            }}
+          >
             <FlowerArt kind={kind} stage={growStage === 0 ? 1 : growStage} className="h-72 w-full" />
           </motion.div>
 

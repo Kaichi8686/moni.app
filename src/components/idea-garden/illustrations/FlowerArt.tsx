@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, motion } from "framer-motion";
 import type { FlowerKind } from "@/lib/idea-garden/types";
 
 type FlowerProps = {
@@ -25,11 +26,15 @@ const PALETTE: Record<
 
 function goldify(c: string, gold?: boolean): string {
   if (!gold) return c;
-  // map toward gold tones while keeping some shape contrast
   if (c === "#78350F") return "#92400E";
   if (c === "#F8FAFC" || c === "#F5F3FF" || c === "#FEF3C7" || c === "#FCE7F3") return "#FEF3C7";
   return "#FBBF24";
 }
+
+const STEM_H = [0, 28, 70, 95, 110] as const;
+
+const softSpring = { type: "spring" as const, stiffness: 48, damping: 14, mass: 0.9 };
+const softAppear = { type: "spring" as const, stiffness: 70, damping: 16, mass: 0.7 };
 
 /** ミニ花（種袋ラベル用） */
 export function MiniFlowerArt({
@@ -113,17 +118,116 @@ export function MiniFlowerArt({
   );
 }
 
-/** 鉢付きの成長アニメ用フラワー */
+function BloomHead({
+  kind,
+  petal,
+  petalDark,
+  center,
+  gold,
+}: {
+  kind: FlowerKind;
+  petal: string;
+  petalDark: string;
+  center: string;
+  gold?: boolean;
+}) {
+  if (kind === "sunflower") {
+    return (
+      <>
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+          <ellipse
+            key={deg}
+            cx="0"
+            cy="-18"
+            rx="9"
+            ry="20"
+            fill={petal}
+            stroke={petalDark}
+            strokeWidth="2"
+            transform={`rotate(${deg})`}
+          />
+        ))}
+        <circle cy="-4" r="14" fill={center} stroke={petalDark} strokeWidth="2.5" />
+      </>
+    );
+  }
+  if (kind === "tulip") {
+    return (
+      <path
+        d="M-22 8 C-22 -28 0 -40 0 -40 C0 -40 22 -28 22 8 Z"
+        fill={petal}
+        stroke={petalDark}
+        strokeWidth="3"
+      />
+    );
+  }
+  if (kind === "lavender") {
+    return (
+      <>
+        {[-10, 10].map((x) =>
+          [0, 1, 2, 3, 4, 5].map((i) => (
+            <circle
+              key={`${x}-${i}`}
+              cx={x}
+              cy={-8 - i * 9}
+              r="7"
+              fill={petal}
+              stroke={petalDark}
+              strokeWidth="1.5"
+            />
+          )),
+        )}
+        <circle cy="-62" r="7" fill={petal} stroke={petalDark} strokeWidth="1.5" />
+      </>
+    );
+  }
+  return (
+    <>
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <ellipse
+          key={deg}
+          cx="0"
+          cy="-16"
+          rx="11"
+          ry="18"
+          fill={petal}
+          stroke={petalDark}
+          strokeWidth="2"
+          transform={`rotate(${deg})`}
+        />
+      ))}
+      <circle cy="-2" r="10" fill={center} stroke={petalDark} strokeWidth="2.2" />
+    </>
+  );
+}
+
+/** 鉢付きの成長アニメ用フラワー（ゆるっと伸びる） */
 export function GrowingPlantArt({ kind, stage = 4, gold, className = "" }: FlowerProps) {
   const p = PALETTE[kind];
   const petal = goldify(p.petal, gold);
   const petalDark = goldify(p.petalDark, gold);
   const center = goldify(p.center, gold);
   const leaf = gold ? "#CA8A04" : p.leaf;
-  const stemH = stage <= 0 ? 0 : stage === 1 ? 28 : stage === 2 ? 70 : stage === 3 ? 95 : 110;
+  const stemH = STEM_H[stage] ?? 110;
+  const growing = stage > 0 && stage < 4;
 
   return (
-    <svg viewBox="0 0 200 260" className={className} aria-hidden>
+    <motion.svg
+      viewBox="0 0 200 260"
+      className={className}
+      aria-hidden
+      style={{ originX: "100px", originY: "232px", transformBox: "fill-box", transformOrigin: "50% 90%" }}
+      animate={
+        growing
+          ? { rotate: [0, -1.4, 1.1, -0.7, 0.4, 0] }
+          : { rotate: 0 }
+      }
+      transition={
+        growing
+          ? { duration: 2.8, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" }
+          : { duration: 0.6 }
+      }
+    >
       {/* pot */}
       <ellipse cx="100" cy="232" rx="54" ry="10" fill={gold ? "#A16207" : "#92400E"} opacity="0.25" />
       <path
@@ -143,125 +247,89 @@ export function GrowingPlantArt({ kind, stage = 4, gold, className = "" }: Flowe
         stroke={gold ? "#B45309" : "#9F1239"}
         strokeWidth="4"
       />
-      {/* soil */}
       <ellipse cx="100" cy="178" rx="40" ry="10" fill={gold ? "#A16207" : "#57534E"} />
 
-      {stage >= 1 ? (
-        <line
-          x1="100"
-          y1={178}
-          x2="100"
-          y2={178 - stemH}
-          stroke={leaf}
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-      ) : null}
+      {/* stem — ゆるく伸びる */}
+      <motion.line
+        x1="100"
+        y1={178}
+        x2="100"
+        initial={false}
+        animate={{ y2: 178 - stemH, opacity: stage >= 1 ? 1 : 0 }}
+        transition={softSpring}
+        stroke={leaf}
+        strokeWidth="6"
+        strokeLinecap="round"
+      />
 
-      {stage >= 2 ? (
-        <>
-          <ellipse
-            cx="78"
-            cy={178 - stemH * 0.45}
-            rx="18"
-            ry="9"
-            fill={leaf}
-            transform={`rotate(-28 78 ${178 - stemH * 0.45})`}
+      {/* leaves — 茎の伸びに合わせてゆるく上がる */}
+      <AnimatePresence>
+        {stage >= 2 ? (
+          <motion.g key="leaves" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.g
+              initial={{ scale: 0.5, y: 12 }}
+              animate={{ scale: 1, y: -(stemH * 0.45) }}
+              transition={softSpring}
+              style={{ originX: "78px", originY: "178px" }}
+            >
+              <ellipse cx="78" cy="178" rx="18" ry="9" fill={leaf} transform="rotate(-28 78 178)" />
+            </motion.g>
+            <motion.g
+              initial={{ scale: 0.5, y: 12 }}
+              animate={{ scale: 1, y: -(stemH * 0.6) }}
+              transition={softSpring}
+              style={{ originX: "122px", originY: "178px" }}
+            >
+              <ellipse cx="122" cy="178" rx="18" ry="9" fill={leaf} transform="rotate(28 122 178)" />
+            </motion.g>
+          </motion.g>
+        ) : null}
+      </AnimatePresence>
+
+      {/* bud → bloom */}
+      <AnimatePresence mode="wait">
+        {stage === 3 ? (
+          <motion.ellipse
+            key="bud"
+            cx="100"
+            initial={{ opacity: 0, scale: 0.4, cy: 178 - stemH + 8 }}
+            animate={{ opacity: 1, scale: 1, cy: 178 - stemH - 6 }}
+            exit={{ opacity: 0, scale: 1.15 }}
+            transition={softAppear}
+            rx="14"
+            ry="18"
+            fill={petal}
+            stroke={petalDark}
+            strokeWidth="3"
+            style={{ originX: "100px", originY: `${178 - stemH}px` }}
           />
-          <ellipse
-            cx="122"
-            cy={178 - stemH * 0.6}
-            rx="18"
-            ry="9"
-            fill={leaf}
-            transform={`rotate(28 122 ${178 - stemH * 0.6})`}
-          />
-        </>
-      ) : null}
-
-      {stage === 3 ? (
-        <ellipse
-          cx="100"
-          cy={178 - stemH - 6}
-          rx="14"
-          ry="18"
-          fill={petal}
-          stroke={petalDark}
-          strokeWidth="3"
-        />
-      ) : null}
-
-      {stage >= 4 ? (
-        <g transform={`translate(100 ${178 - stemH})`}>
-          {kind === "sunflower" ? (
-            <>
-              {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
-                <ellipse
-                  key={deg}
-                  cx="0"
-                  cy="-18"
-                  rx="9"
-                  ry="20"
-                  fill={petal}
-                  stroke={petalDark}
-                  strokeWidth="2"
-                  transform={`rotate(${deg})`}
-                />
-              ))}
-              <circle cy="-4" r="14" fill={center} stroke={petalDark} strokeWidth="2.5" />
-            </>
-          ) : kind === "tulip" ? (
-            <path
-              d="M-22 8 C-22 -28 0 -40 0 -40 C0 -40 22 -28 22 8 Z"
-              fill={petal}
-              stroke={petalDark}
-              strokeWidth="3"
-            />
-          ) : kind === "lavender" ? (
-            <>
-              {[-10, 10].map((x) =>
-                [0, 1, 2, 3, 4, 5].map((i) => (
-                  <circle
-                    key={`${x}-${i}`}
-                    cx={x}
-                    cy={-8 - i * 9}
-                    r="7"
-                    fill={petal}
-                    stroke={petalDark}
-                    strokeWidth="1.5"
-                  />
-                )),
-              )}
-              <circle cy="-62" r="7" fill={petal} stroke={petalDark} strokeWidth="1.5" />
-            </>
-          ) : (
-            <>
-              {[0, 60, 120, 180, 240, 300].map((deg) => (
-                <ellipse
-                  key={deg}
-                  cx="0"
-                  cy="-16"
-                  rx="11"
-                  ry="18"
-                  fill={petal}
-                  stroke={petalDark}
-                  strokeWidth="2"
-                  transform={`rotate(${deg})`}
-                />
-              ))}
-              <circle cy="-2" r="10" fill={center} stroke={petalDark} strokeWidth="2.2" />
-            </>
-          )}
-          {gold
-            ? [0, 72, 144, 216, 288].map((deg) => (
-                <g key={deg} transform={`rotate(${deg})`}>
-                  <path d="M0 -48 L2 -56 L0 -64 L-2 -56 Z" fill="#FEF08A" />
-                </g>
-              ))
-            : null}
-        </g>
-      ) : null}
-    </svg>
+        ) : null}
+        {stage >= 4 ? (
+          <g key="bloom" transform={`translate(100 ${178 - stemH})`}>
+            <motion.g
+              initial={{ opacity: 0, scale: 0.35 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 55, damping: 12, mass: 0.85 }}
+            >
+              <BloomHead
+                kind={kind}
+                petal={petal}
+                petalDark={petalDark}
+                center={center}
+                gold={gold}
+              />
+              {gold
+                ? [0, 72, 144, 216, 288].map((deg) => (
+                    <g key={`spark-${deg}`} transform={`rotate(${deg})`}>
+                      <path d="M0 -48 L2 -56 L0 -64 L-2 -56 Z" fill="#FEF08A" />
+                    </g>
+                  ))
+                : null}
+            </motion.g>
+          </g>
+        ) : null}
+      </AnimatePresence>
+    </motion.svg>
   );
 }
 
