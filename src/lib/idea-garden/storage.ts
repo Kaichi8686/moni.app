@@ -91,6 +91,7 @@ export function goldDoneThisWeek(plants: PlantedIdea[], weekKey: string): boolea
 /** アニメ途中の画面は安定した段階へ寄せて再開 */
 export function stabilizeDraftScreen(screen: GardenScreen): GardenScreen {
   if (screen.kind === "grow") {
+    if (screen.phase === "paused") return screen;
     const phase: GrowPhase =
       screen.phase === "seed-reveal"
         ? "plant"
@@ -112,6 +113,16 @@ export function usableDraft(plants: PlantedIdea[], draft: GardenDraft | null | u
 
   if (isGrowDay() && plantForDate(plants, tokyoDateKey())) return null;
   if (isSunday() && goldDoneThisWeek(plants, weekKeyFor())) return null;
+
+  if (draft.paused) {
+    return {
+      ...draft,
+      screen: { kind: "grow", phase: "paused" },
+      resumeScreen: draft.resumeScreen
+        ? stabilizeDraftScreen(draft.resumeScreen)
+        : { kind: "grow", phase: "plant" },
+    };
+  }
 
   return {
     ...draft,

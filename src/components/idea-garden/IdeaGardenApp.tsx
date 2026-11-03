@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { InterruptControl } from "@/components/idea-garden/InterruptMenu";
 import { QuestionPanel } from "@/components/idea-garden/QuestionPanel";
 import { SeedBagCarousel } from "@/components/idea-garden/SeedBagCarousel";
 import { ShelfView } from "@/components/idea-garden/ShelfView";
@@ -122,6 +123,9 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   const [gildProgress, setGildProgress] = useState(0);
   /** 育てる押下時のうっすら画面切替 */
   const [sceneVeil, setSceneVeil] = useState<"idle" | "in" | "out">("idle");
+  const [interruptOpen, setInterruptOpen] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [resumeScreen, setResumeScreen] = useState<GardenScreen | null>(null);
 
   // shelf
   const [weekIndex, setWeekIndex] = useState(0);
@@ -147,6 +151,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       setWeekIndex(0);
       if (draft) {
         setScreen(draft.screen);
+        setPaused(Boolean(draft.paused));
+        setResumeScreen(draft.resumeScreen ?? null);
         setBagIndex(draft.bagIndex);
         setSelectedKind(draft.selectedKind);
         setAnswer(draft.answer);
@@ -166,6 +172,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           setShowContinueBtn(true);
         }
       } else {
+        setPaused(false);
+        setResumeScreen(null);
         setScreen(initialScreen(state.plants));
       }
       setHydrated(true);
@@ -194,6 +202,9 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   useEffect(() => {
     if (!hydrated) return;
     if (screen.kind !== "grow" && screen.kind !== "sunday") return;
+    // 入口画面だけは下書きにしない（中止後にまた下書きが復活しないように）
+    if (screen.kind === "grow" && screen.phase === "pick-bag") return;
+    if (screen.kind === "sunday" && screen.phase === "start") return;
     saveGarden(
       {
         version: 1,
@@ -201,6 +212,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
         draft: {
           dateKey: tokyoDateKey(),
           screen,
+          paused,
+          resumeScreen,
           bagIndex,
           selectedKind,
           answer,
@@ -216,6 +229,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   }, [
     hydrated,
     screen,
+    paused,
+    resumeScreen,
     bagIndex,
     selectedKind,
     answer,
@@ -232,10 +247,69 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     screen.kind === "detail"
       ? true
       : screen.kind === "grow"
-        ? screen.phase !== "pick-bag"
+        ? screen.phase !== "pick-bag" && screen.phase !== "paused"
         : screen.kind === "sunday"
           ? screen.phase !== "start"
           : false;
+
+  const showInterrupt =
+    immersive &&
+    ((screen.kind === "grow" &&
+      screen.phase !== "celebrate" &&
+      screen.phase !== "growing") ||
+      (screen.kind === "sunday" &&
+        screen.phase !== "celebrate" &&
+        screen.phase !== "gilding"));
+
+  const saveAndPause = () => {
+    const resume: GardenScreen =
+      screen.kind === "grow" || screen.kind === "sunday"
+        ? screen
+        : { kind: "grow", phase: "plant" };
+    setResumeScreen(resume);
+    setPaused(true);
+    setInterruptOpen(false);
+    setSceneVeil("idle");
+    setScreen({ kind: "grow", phase: "paused" });
+  };
+
+  const abortSession = () => {
+    setInterruptOpen(false);
+    setPaused(false);
+    setResumeScreen(null);
+    setAnswer("");
+    setTitle("");
+    setSelectedKind(null);
+    setBagIndex(0);
+    setSundayIndex(0);
+    setSundayPickId(null);
+    setTarget("");
+    setSituation("");
+    setGrowStage(0);
+    setShowCelebrateText(false);
+    setShowContinueBtn(false);
+    setGildProgress(0);
+    setSceneVeil("idle");
+    persist(plants, null);
+    setScreen(initialScreen(plants));
+  };
+
+  const continuePaused = () => {
+    const next = resumeScreen ?? { kind: "grow" as const, phase: "plant" as const };
+    setPaused(false);
+    setResumeScreen(null);
+    setScreen(next);
+  };
+
+  const interruptUi = showInterrupt ? (
+    <InterruptControl
+      open={interruptOpen}
+      onOpen={() => setInterruptOpen(true)}
+      onClose={() => setInterruptOpen(false)}
+      onSaveAndPause={saveAndPause}
+      onAbort={abortSession}
+    />
+  ) : null;
 
   useEffect(() => {
     onImmersiveChange?.(immersive);
@@ -356,6 +430,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       /* offline / guest ok — local garden is source of truth */
     });
     setWeekIndex(0);
+    setPaused(false);
+    setResumeScreen(null);
     setScreen({ kind: "shelf" });
     setAnswer("");
     setTitle("");
@@ -380,6 +456,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     );
     persist(next, null);
     setWeekIndex(0);
+    setPaused(false);
+    setResumeScreen(null);
     setScreen({ kind: "shelf" });
     setTarget("");
     setSituation("");
@@ -555,7 +633,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
         );
       }
       return (
-        <div className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#FFF7D6] to-[#EAF8FF] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="relative flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#FFF7D6] to-[#EAF8FF] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+          {interruptUi}
           <p className="mt-4 text-center text-[15px] font-extrabold text-[#3C3C3C]">
             {tx("選んでください", "Please choose")}
           </p>
@@ -607,30 +686,36 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
     if (screen.phase === "target") {
       return (
-        <QuestionPanel
-          title={tx("このアイデアのターゲットは誰？", "Who is the target for this idea?")}
-          value={target}
-          onChange={setTarget}
-          placeholder={tx("例：忙しい高校生", "e.g. busy high-school students")}
-          buttonLabel={tx("次へ", "Next")}
-          onSubmit={() => setSunday("situation")}
-        />
+        <div className="relative">
+          {interruptUi}
+          <QuestionPanel
+            title={tx("このアイデアのターゲットは誰？", "Who is the target for this idea?")}
+            value={target}
+            onChange={setTarget}
+            placeholder={tx("例：忙しい高校生", "e.g. busy high-school students")}
+            buttonLabel={tx("次へ", "Next")}
+            onSubmit={() => setSunday("situation")}
+          />
+        </div>
       );
     }
 
     if (screen.phase === "situation") {
       return (
-        <QuestionPanel
-          title={tx(
-            "どのような時にこのアイデアは役に立つ？",
-            "When is this idea useful?",
-          )}
-          value={situation}
-          onChange={setSituation}
-          placeholder={tx("例：朝の通学で時間が足りないとき", "e.g. when rushing to school")}
-          buttonLabel={tx("完了", "Done")}
-          onSubmit={() => setSunday("gilding")}
-        />
+        <div className="relative">
+          {interruptUi}
+          <QuestionPanel
+            title={tx(
+              "どのような時にこのアイデアは役に立つ？",
+              "When is this idea useful?",
+            )}
+            value={situation}
+            onChange={setSituation}
+            placeholder={tx("例：朝の通学で時間が足りないとき", "e.g. when rushing to school")}
+            buttonLabel={tx("完了", "Done")}
+            onSubmit={() => setSunday("gilding")}
+          />
+        </div>
       );
     }
 
@@ -722,10 +807,32 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       );
     }
 
+    if (screen.phase === "paused") {
+      return (
+        <div className="flex min-h-[calc(100dvh-7rem)] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+          <p className="mt-2 text-center text-[15px] font-extrabold text-[#3C3C3C]">
+            {tx("続きから育てよう", "Continue growing")}
+          </p>
+          <DuoButton
+            tone="green"
+            size="xl"
+            className="mt-[18vh] min-w-[260px]"
+            onClick={continuePaused}
+          >
+            {tx("続ける", "Continue")}
+          </DuoButton>
+          <div className="mt-auto w-64">
+            <EmptyPotArt showSeed className="h-64 w-full" />
+          </div>
+        </div>
+      );
+    }
+
     if (screen.phase === "bag-focus") {
       const kind = selectedKind ?? bag.id;
       return (
-        <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#E8F8FF] to-[#F0FFF4] px-6">
+        <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#E8F8FF] to-[#F0FFF4] px-6">
+          {interruptUi}
           <p className="mb-6 text-center text-[15px] font-extrabold text-[#3C3C3C]">
             {tx("もう一度タップして種を出そう", "Tap again to open the bag")}
           </p>
@@ -745,12 +852,18 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     }
 
     if (screen.phase === "seed-reveal") {
-      return <SeedRevealPhase kind={selectedKind ?? bag.id} onDone={() => setGrow("plant")} />;
+      return (
+        <div className="relative min-h-[100dvh]">
+          {interruptUi}
+          <SeedRevealPhase kind={selectedKind ?? bag.id} onDone={() => setGrow("plant")} />
+        </div>
+      );
     }
 
     if (screen.phase === "plant") {
       return (
         <div className="relative flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+          {interruptUi}
           <DuoButton
             tone="green"
             size="xl"
@@ -786,6 +899,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (screen.phase === "question") {
       return (
         <div className="relative">
+          {interruptUi}
           <QuestionPanel
             title={locale === "en" ? prompt.en : prompt.ja}
             hint={tx("身の回りのことからアイデアを出そう", "Ideas from everyday life")}
@@ -813,19 +927,22 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
     if (screen.phase === "title") {
       return (
-        <QuestionPanel
-          title={tx("このアイデアのタイトルを決めてください", "Give this idea a title")}
-          value={title}
-          onChange={setTitle}
-          placeholder={tx("短いタイトル", "Short title")}
-          buttonLabel={tx("完了", "Done")}
-          onSubmit={() => {
-            setGrowStage(0);
-            setGrow("growing");
-          }}
-          multiline={false}
-          maxLength={40}
-        />
+        <div className="relative">
+          {interruptUi}
+          <QuestionPanel
+            title={tx("このアイデアのタイトルを決めてください", "Give this idea a title")}
+            value={title}
+            onChange={setTitle}
+            placeholder={tx("短いタイトル", "Short title")}
+            buttonLabel={tx("完了", "Done")}
+            onSubmit={() => {
+              setGrowStage(0);
+              setGrow("growing");
+            }}
+            multiline={false}
+            maxLength={40}
+          />
+        </div>
       );
     }
 
