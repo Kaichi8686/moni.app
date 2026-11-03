@@ -19,8 +19,13 @@ const MoniHomeApp = dynamic(
   { ssr: false, loading: LandingFallback },
 );
 
+function safeNextPath(raw: string | null): string | null {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
 /**
- * Thin entry: guests stay on the landing page only.
+ * Thin entry: guests stay on the landing page only (auth is an LP overlay).
  * Logged-in users are sent to /projects (or legacy ?tab= home shell).
  */
 export default function HomePage() {
@@ -29,6 +34,8 @@ export default function HomePage() {
   const [authReady, setAuthReady] = useState(!supabaseEnabled);
   const [session, setSession] = useState<Session | null>(null);
   const [showLandingPage, setShowLandingPage] = useState(false);
+  const [initialAuthMode, setInitialAuthMode] = useState<"signin" | "signup" | null>(null);
+  const [afterAuthPath, setAfterAuthPath] = useState<string | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -36,6 +43,10 @@ export default function HomePage() {
       if (params.get("about") === "1" || params.get("landing") === "1") {
         setShowLandingPage(true);
       }
+      const auth = params.get("auth");
+      if (auth === "signup") setInitialAuthMode("signup");
+      else if (auth === "1" || auth === "signin" || auth === "login") setInitialAuthMode("signin");
+      setAfterAuthPath(safeNextPath(params.get("next")));
       setClientReady(true);
     });
   }, []);
@@ -93,9 +104,9 @@ export default function HomePage() {
       return;
     }
     if (!tab && !mentor) {
-      router.replace(HOME_PROJECTS_HREF);
+      router.replace(afterAuthPath ?? HOME_PROJECTS_HREF);
     }
-  }, [router, showLandingPage, clientReady, authReady, session]);
+  }, [router, showLandingPage, clientReady, authReady, session, afterAuthPath]);
 
   if ((!clientReady || !authReady) && !showLandingPage) {
     return <LandingFallback />;
@@ -106,22 +117,15 @@ export default function HomePage() {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
+        initialAuthMode={session ? null : initialAuthMode}
         onStart={() => {
           setShowLandingPage(false);
-          if (session) {
-            router.push(resolveAppEntryHref());
-            return;
-          }
-          router.push("/login");
+          router.push(resolveAppEntryHref());
         }}
-        onPreview={() => {
-          // 未ログインのプレビュー侵入は不可。中を見るにはログインへ。
+        onAuthenticated={() => {
           setShowLandingPage(false);
-          if (session) {
-            router.push(resolveAppEntryHref());
-            return;
-          }
-          router.push("/login");
+          setInitialAuthMode(null);
+          router.replace(afterAuthPath ?? resolveAppEntryHref());
         }}
       />
     );

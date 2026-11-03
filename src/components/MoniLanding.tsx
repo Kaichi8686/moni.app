@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FolderKanban,
@@ -10,22 +9,25 @@ import {
   Rocket,
   Users,
 } from "lucide-react";
+import { AuthModal } from "@/components/auth/AuthModal";
 import { LandingFlowTimeline, type FlowStep } from "@/components/landing/LandingFlowTimeline";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
+type AuthMode = "signin" | "signup";
+
 type MoniLandingProps = {
+  /** ログイン済みで LP を見ているとき「アプリに戻る」。ゲストの CTA は LP 内 AuthModal。 */
   onStart: () => void;
-  onPreview: () => void;
+  /** ゲストが LP 上で認証完了したとき（親がアプリへ遷移） */
+  onAuthenticated?: () => void;
   resumeMode?: boolean;
   onMount?: () => void;
+  /** マウント時に AuthModal を開く（例: ログアウト後・/?auth=1） */
+  initialAuthMode?: AuthMode | null;
 };
-
-const SIGNUP_HREF_PLACEHOLDER = "/login"; // TODO: 本番の新規登録URLに差し替え
 
 const ctaPrimaryClass =
   "group inline-flex min-h-[40px] touch-manipulation items-center justify-center gap-1.5 rounded-md bg-sky-600 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-sky-500 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:px-5 sm:text-sm";
-const ctaSecondaryClass =
-  "inline-flex min-h-[40px] touch-manipulation items-center justify-center rounded-md border border-zinc-200 bg-white px-4 text-[13px] font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60 focus-visible:ring-offset-2 sm:text-sm";
 const ctaHeroPrimaryClass =
   "group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-600 px-6 text-[15px] font-semibold text-white shadow-sm transition hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/35 focus-visible:ring-offset-2 sm:w-auto sm:min-w-[200px]";
 
@@ -168,11 +170,24 @@ function AppShot({
   );
 }
 
-export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }: MoniLandingProps) {
+export function MoniLanding({
+  onStart,
+  onAuthenticated,
+  resumeMode = false,
+  onMount,
+  initialAuthMode = null,
+}: MoniLandingProps) {
   const { t, locale, setLocale } = useI18n();
   const [navSolid, setNavSolid] = useState(false);
+  const [authOpen, setAuthOpen] = useState(Boolean(initialAuthMode));
+  const [authMode, setAuthMode] = useState<AuthMode>(initialAuthMode ?? "signup");
   const onMountRef = useRef(onMount);
   onMountRef.current = onMount;
+
+  const openAuth = useCallback((mode: AuthMode) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  }, []);
 
   const onScroll = useCallback(() => {
     setNavSolid(window.scrollY > 18);
@@ -193,13 +208,20 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
     onMountRef.current?.();
   }, []);
 
+  useEffect(() => {
+    if (!initialAuthMode) return;
+    setAuthMode(initialAuthMode);
+    setAuthOpen(true);
+  }, [initialAuthMode]);
+
   const ja = locale === "ja";
   const heroAudience = ja
     ? "高校生・大学生のビジネスアイデア実現チーム向け"
     : "For student teams turning business ideas into reality";
   const heroHook = ja ? "アイデアに舞台を" : "Give ideas a stage";
   const primary = ja ? "無料で始める" : "Start free";
-  const secondary = ja ? "ログインして中を見る" : "Log in to explore";
+  /** ゲスト CTA は LP 内ログイン。resume 時だけアプリへ戻る。 */
+  const handlePrimary = resumeMode ? onStart : () => openAuth("signup");
 
   const stats = ja
     ? [
@@ -490,7 +512,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
               </button>
             </div>
 
-            <button type="button" className={ctaPrimaryClass} onClick={onStart}>
+            <button type="button" className={ctaPrimaryClass} onClick={handlePrimary}>
               {resumeMode ? t("landingCtaResume") : primary}
               {!resumeMode ? (
                 <span className="transition group-hover:translate-x-0.5" aria-hidden>
@@ -521,19 +543,11 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
               {!resumeMode ? (
                 <>
                   <div className="mt-9 flex max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:items-center">
-                    <button
-                      type="button"
-                      className={ctaHeroPrimaryClass}
-                      onClick={onStart}
-                      data-signup-href={SIGNUP_HREF_PLACEHOLDER}
-                    >
+                    <button type="button" className={ctaHeroPrimaryClass} onClick={handlePrimary}>
                       {primary}
                       <span className="transition group-hover:translate-x-0.5" aria-hidden>
                         →
                       </span>
-                    </button>
-                    <button type="button" className={ctaSecondaryClass} onClick={onPreview}>
-                      {secondary}
                     </button>
                   </div>
                   <p className="mt-4 text-[12px] text-zinc-400">
@@ -692,7 +706,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
 
             {!resumeMode ? (
               <div className="mt-10 flex justify-start">
-                <button type="button" className={ctaHeroPrimaryClass} onClick={onStart}>
+                <button type="button" className={ctaHeroPrimaryClass} onClick={handlePrimary}>
                   {primary}
                   <span className="transition group-hover:translate-x-0.5" aria-hidden>
                     →
@@ -827,25 +841,16 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                   {t("landingCtaResume")}
                 </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-500 px-8 text-[15px] font-semibold text-white transition hover:bg-sky-400"
-                    onClick={onStart}
-                  >
-                    {primary}
-                    <span className="transition group-hover:translate-x-0.5" aria-hidden>
-                      →
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-zinc-400 underline-offset-4 transition hover:text-white hover:underline"
-                    onClick={onPreview}
-                  >
-                    {secondary}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="group inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-md bg-sky-500 px-8 text-[15px] font-semibold text-white transition hover:bg-sky-400"
+                  onClick={handlePrimary}
+                >
+                  {primary}
+                  <span className="transition group-hover:translate-x-0.5" aria-hidden>
+                    →
+                  </span>
+                </button>
               )}
             </div>
           </div>
@@ -872,23 +877,30 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                   {t("landingCtaResume")}
                 </button>
               ) : (
-                <>
-                  <Link href="/login" className="transition hover:text-zinc-700 hover:underline">
-                    {ja ? "ログイン" : "Log in"}
-                  </Link>
-                  <button
-                    type="button"
-                    className="transition hover:text-zinc-700 hover:underline"
-                    onClick={onPreview}
-                  >
-                    {ja ? "ログインして中を見る" : "Log in to explore"}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="transition hover:text-zinc-700 hover:underline"
+                  onClick={() => openAuth("signin")}
+                >
+                  {ja ? "ログイン" : "Log in"}
+                </button>
               )}
             </div>
           </div>
         </footer>
       </main>
+
+      {!resumeMode && authOpen ? (
+        <AuthModal
+          key={authMode}
+          mode={authMode}
+          onClose={() => setAuthOpen(false)}
+          onAuthenticated={() => {
+            setAuthOpen(false);
+            onAuthenticated?.();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

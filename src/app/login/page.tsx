@@ -1,80 +1,35 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect } from "react";
-import { AuthModal } from "@/components/auth/AuthModal";
-import { supabase, supabaseEnabled } from "@/lib/supabase";
-import { resolveAppEntryHref } from "@/lib/navigation/homeProjects";
-import { resolveOnboardingCompleted } from "@/lib/profile/onboardingStatus";
+import { Suspense } from "react";
 
-function safeNextPath(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return resolveAppEntryHref();
-  return raw;
-}
-
-function LoginPageContent() {
+/**
+ * ログインは LP 上の AuthModal で行う。
+ * /login への直リンク・旧導線は LP に寄せる（バツでタブ画面に出ないように）。
+ */
+function LoginRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const mode = searchParams.get("mode") === "signup" ? "signup" : "signin";
-  const afterAuth = safeNextPath(searchParams.get("next"));
-
-  const goHome = useCallback(() => {
-    router.push("/");
-  }, [router]);
-
-  /** 未オンボーディングなら / へ（OnboardingGate が即ウィザード表示）。完了済みなら本来の遷移先へ。 */
-  const goApp = useCallback(() => {
-    void (async () => {
-      if (!supabase) {
-        router.replace(afterAuth);
-        return;
-      }
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user.id;
-      if (!uid) {
-        router.replace(afterAuth);
-        return;
-      }
-      const done = await resolveOnboardingCompleted(supabase, uid);
-      router.replace(done ? afterAuth : "/");
-    })();
-  }, [afterAuth, router]);
 
   useEffect(() => {
-    if (!supabase || !supabaseEnabled) return;
-    void supabase.auth.getSession().then(({ data }) => {
-      if (data.session) goApp();
-    });
-  }, [goApp]);
+    const mode = searchParams.get("mode") === "signup" ? "signup" : "signin";
+    const next = searchParams.get("next");
+    const params = new URLSearchParams();
+    params.set("auth", mode);
+    if (next && next.startsWith("/") && !next.startsWith("//")) {
+      params.set("next", next);
+    }
+    router.replace(`/?${params.toString()}`);
+  }, [router, searchParams]);
 
-  if (!supabaseEnabled || !supabase) {
-    return (
-      <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-4 px-4 py-10">
-        <p className="text-sm text-rose-700">
-          Supabase が未設定です。`.env.local` に `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定してください。
-        </p>
-        <Link href="/" className="text-sm font-semibold text-zinc-800 hover:underline">
-          ホームへ戻る
-        </Link>
-      </main>
-    );
-  }
-
-  return (
-    <main className="relative min-h-[100dvh] bg-[#f7f6f3]">
-      <p className="pointer-events-none absolute inset-x-0 top-[18%] text-center font-[family-name:var(--font-geist-sans)] text-3xl font-medium tracking-[-0.06em] text-zinc-900/15">
-        moni
-      </p>
-      <AuthModal mode={mode} onClose={goHome} onAuthenticated={goApp} />
-    </main>
-  );
+  return <main className="min-h-[100dvh] bg-[#fafaf8]" aria-busy="true" />;
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<main className="flex min-h-[50vh] items-center justify-center bg-[#f7f6f3] text-sm text-zinc-600">読み込み中…</main>}>
-      <LoginPageContent />
+    <Suspense fallback={<main className="min-h-[100dvh] bg-[#fafaf8]" aria-busy="true" />}>
+      <LoginRedirect />
     </Suspense>
   );
 }

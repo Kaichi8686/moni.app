@@ -2629,6 +2629,8 @@ export function MoniHomeApp() {
     } catch {
       /* ignore */
     }
+    // タブ画面ではなく LP へ（ログインは LP 上のモーダル）
+    router.replace("/");
   }
 
   useEffect(() => {
@@ -3988,20 +3990,12 @@ export function MoniHomeApp() {
         onStart={() => {
           trackOpsEvent(session ? "landing_resume_close" : "landing_cta_register");
           setShowLandingPage(false);
-          if (session) {
-            router.push(resolveAppEntryHref());
-            return;
-          }
-          router.push("/login");
+          router.push(resolveAppEntryHref());
         }}
-        onPreview={() => {
-          trackOpsEvent(session ? "landing_resume_preview" : "landing_cta_preview");
+        onAuthenticated={() => {
+          trackOpsEvent("landing_cta_register");
           setShowLandingPage(false);
-          if (session) {
-            router.push(resolveAppEntryHref());
-            return;
-          }
-          router.push("/login");
+          router.replace(resolveAppEntryHref());
         }}
       />
     );
