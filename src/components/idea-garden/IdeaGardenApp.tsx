@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, MoreVertical, Trash2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { IdeaStreakBadge } from "@/components/idea-garden/IdeaStreakBadge";
@@ -943,25 +943,60 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   if (screen.kind === "grow") {
     const bag = SEED_BAGS[bagIndex]!;
 
-    if (screen.phase === "pick-bag") {
+    // 袋選び ↔ フォーカスで layoutId 共有するため、両フェーズを同じ LayoutGroup で包む
+    if (screen.phase === "pick-bag" || screen.phase === "bag-focus") {
+      const kind = selectedKind ?? bag.id;
       return (
-        <div className="flex min-h-[calc(100dvh-7rem)] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F0FFF4] to-[#FFF8E7] px-4 pb-6 pt-4">
-          <h1 className="text-center text-[22px] font-extrabold text-[#3C3C3C]">
-            {tx("花を咲かせる種を選ぼう", "Pick a seed to bloom")}
-          </h1>
-          <p className="mt-1 text-center text-[13px] font-semibold text-zinc-500">
-            {tx("袋をタップして選ぶ", "Tap a bag to choose")}
-          </p>
+        <LayoutGroup id="idea-seed-bag">
+          {screen.phase === "pick-bag" ? (
+            <div className="flex min-h-[calc(100dvh-7rem)] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F0FFF4] to-[#FFF8E7] px-4 pb-6 pt-4">
+              <h1 className="text-center text-[22px] font-extrabold text-[#3C3C3C]">
+                {tx("花を咲かせる種を選ぼう", "Pick a seed to bloom")}
+              </h1>
+              <p className="mt-1 text-center text-[13px] font-semibold text-zinc-500">
+                {tx("袋をタップして選ぶ", "Tap a bag to choose")}
+              </p>
 
-          <SeedBagCarousel
-            index={bagIndex}
-            onIndexChange={setBagIndex}
-            onSelect={(kind) => {
-              setSelectedKind(kind);
-              setGrow("bag-focus");
-            }}
-          />
-        </div>
+              <SeedBagCarousel
+                index={bagIndex}
+                onIndexChange={setBagIndex}
+                onSelect={(k) => {
+                  setSelectedKind(k);
+                  setGrow("bag-focus");
+                }}
+              />
+            </div>
+          ) : (
+            <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#E8F8FF] to-[#F0FFF4] px-6">
+              {interruptUi}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2, duration: 0.4 }}
+                className="mb-6 text-center text-[15px] font-extrabold text-[#3C3C3C]"
+              >
+                {tx("もう一度タップして種を出そう", "Tap again to open the bag")}
+              </motion.p>
+              <motion.div
+                layoutId={`idea-seed-bag-${kind}`}
+                transition={{ type: "spring", stiffness: 220, damping: 24, mass: 0.95 }}
+                className="flex items-center justify-center"
+              >
+                <motion.button
+                  type="button"
+                  data-testid="garden-bag-focus"
+                  animate={reduceMotion() ? undefined : { rotate: [-2.5, 2.5, -2.5] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                  whileTap={{ scale: 1.04 }}
+                  onClick={() => setGrow("seed-reveal")}
+                  className="outline-none"
+                >
+                  <SeedBagArt kind={kind} selected className="h-72 w-56" />
+                </motion.button>
+              </motion.div>
+            </div>
+          )}
+        </LayoutGroup>
       );
     }
 
@@ -982,29 +1017,6 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           <div className="mt-auto w-64">
             <EmptyPotArt showSeed className="h-64 w-full" />
           </div>
-        </div>
-      );
-    }
-
-    if (screen.phase === "bag-focus") {
-      const kind = selectedKind ?? bag.id;
-      return (
-        <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-[#E8F8FF] to-[#F0FFF4] px-6">
-          {interruptUi}
-          <p className="mb-6 text-center text-[15px] font-extrabold text-[#3C3C3C]">
-            {tx("もう一度タップして種を出そう", "Tap again to open the bag")}
-          </p>
-          <motion.button
-            type="button"
-            data-testid="garden-bag-focus"
-            animate={reduceMotion() ? undefined : { rotate: [-2.5, 2.5, -2.5] }}
-            transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-            whileTap={{ scale: 1.08 }}
-            onClick={() => setGrow("seed-reveal")}
-            className="outline-none"
-          >
-            <SeedBagArt kind={kind} selected className="h-72 w-56" />
-          </motion.button>
         </div>
       );
     }

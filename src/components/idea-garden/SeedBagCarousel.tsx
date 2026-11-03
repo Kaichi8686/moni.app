@@ -50,6 +50,8 @@ function BagSlot({
     return 1;
   });
 
+  const isCenter = off === 0;
+
   return (
     <div
       className="absolute flex shrink-0 items-center justify-center"
@@ -59,17 +61,25 @@ function BagSlot({
       }}
     >
       <motion.div style={{ scale, opacity }} className="flex origin-center items-center justify-center">
-        <button
+        <motion.button
           type="button"
           disabled={busy}
           onClick={() => {
             if (Math.abs(off * SLOT + x.get()) < SLOT * 0.45) onSelect();
           }}
-          className="relative z-10 shrink-0 outline-none transition active:scale-95 disabled:pointer-events-none"
+          className="relative z-10 shrink-0 outline-none disabled:pointer-events-none"
           aria-label={label}
+          whileTap={isCenter ? { scale: 1.04 } : undefined}
         >
-          <SeedBagArt kind={kind} selected className="h-56 w-44" />
-        </button>
+          {/* 中央だけ layoutId — 選択後フォーカス画面へ滑らかに拡大 */}
+          <motion.div
+            layoutId={isCenter ? `idea-seed-bag-${kind}` : undefined}
+            transition={{ type: "spring", stiffness: 220, damping: 24, mass: 0.95 }}
+            className="flex items-center justify-center"
+          >
+            <SeedBagArt kind={kind} selected className="h-56 w-44" />
+          </motion.div>
+        </motion.button>
       </motion.div>
     </div>
   );
