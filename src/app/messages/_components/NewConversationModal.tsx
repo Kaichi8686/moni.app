@@ -207,7 +207,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                 avatarUrl={u.avatar_url}
                 size="sm"
               />
-              <span className="text-sm font-medium text-zinc-900">{u.display_name}</span>
+              <span className="text-base font-bold tracking-tight text-zinc-900">{u.display_name}</span>
             </button>
           </li>
         ))
@@ -382,7 +382,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                           avatarUrl={u.avatar_url}
                           size="sm"
                         />
-                        <span className="flex-1 text-sm font-medium text-zinc-900">{u.display_name}</span>
+                        <span className="flex-1 text-base font-bold tracking-tight text-zinc-900">{u.display_name}</span>
                         <span
                           className={`flex h-6 w-6 items-center justify-center rounded-full border ${
                             selected ? "border-emerald-500 bg-emerald-500 text-white" : "border-zinc-300 text-transparent"

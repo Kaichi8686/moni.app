@@ -15,7 +15,7 @@ export function ConversationHeader({ title, subtitle, onTitleClick }: Props) {
   const { tx } = useI18n();
   const titleEl = (
     <>
-      <h1 className="truncate text-base font-semibold text-zinc-900">{title}</h1>
+      <h1 className="truncate text-lg font-bold tracking-tight text-zinc-900">{title}</h1>
       {subtitle ? <p className="truncate text-xs text-zinc-500">{subtitle}</p> : null}
     </>
   );

@@ -521,11 +521,7 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={`truncate text-sm ${
-                isUnread ? "font-bold text-zinc-900" : "font-medium text-zinc-800"
-              }`}
-            >
+            <span className="truncate text-base font-bold tracking-tight text-zinc-900">
               {title}
             </span>
             {conversation.type === "project" ? (
