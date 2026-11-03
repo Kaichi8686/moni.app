@@ -207,7 +207,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                 avatarUrl={u.avatar_url}
                 size="sm"
               />
-              <span className="text-base font-bold tracking-tight text-zinc-900">{u.display_name}</span>
+              <span className="text-base font-semibold tracking-tight text-zinc-900">{u.display_name}</span>
             </button>
           </li>
         ))
