@@ -133,7 +133,7 @@ function ProjectsHomeViewInner() {
     return (
       <div
         id="moni-app"
-        className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-white pt-[env(safe-area-inset-top,0px)] text-zinc-500"
+        className="projects-soft-lilac-bg relative flex min-h-[100dvh] flex-col items-center justify-center pt-[env(safe-area-inset-top,0px)] text-zinc-500"
       >
         <p className="text-sm font-medium">{tx("プロジェクトを開いています…", "Opening project…")}</p>
       </div>
@@ -143,7 +143,7 @@ function ProjectsHomeViewInner() {
   return (
     <div
       id="moni-app"
-      className="relative flex min-h-[100dvh] flex-col bg-white pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
+      className="projects-soft-lilac-bg relative flex min-h-[100dvh] flex-col pt-[env(safe-area-inset-top,0px)] text-zinc-900 antialiased"
     >
       <div className="relative mx-auto flex w-full max-w-none flex-1 flex-col pb-bottom-nav">
         <AppBrandHeader
@@ -183,7 +183,7 @@ export function ProjectsHomeView() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[100dvh] items-center justify-center bg-white text-sm text-zinc-500">
+        <div className="projects-soft-lilac-bg flex min-h-[100dvh] items-center justify-center text-sm text-zinc-500">
           Loading…
         </div>
       }

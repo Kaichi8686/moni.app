@@ -411,14 +411,20 @@ export function ProjectTabGlide({
     <div
       className={
         fillViewport
-          ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
+          ? "projects-soft-lilac-bg flex min-h-0 flex-1 flex-col overflow-hidden"
           : "flex min-h-[min(72vh,720px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 shadow-sm"
       }
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+          fillViewport ? "bg-transparent" : "bg-white"
+        }`}
+      >
         <header
-          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 bg-white/90 px-3 backdrop-blur-sm sm:px-5 ${
-            fillViewport ? "py-1.5" : "px-4 py-2.5 lg:px-6"
+          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 px-3 backdrop-blur-sm sm:px-5 ${
+            fillViewport
+              ? "border-violet-100/60 bg-white/55 py-1.5"
+              : "bg-white/90 px-4 py-2.5 lg:px-6"
           }`}
         >
           {!fillViewport ? (
