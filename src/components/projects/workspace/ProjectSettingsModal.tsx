@@ -559,14 +559,6 @@ export function ProjectSettingsModal({
             <div className="space-y-2 rounded-lg border border-[#E5E7EB] bg-[#F7F8F8] p-3">
               <p className="text-[12px] font-semibold text-[#374151]">{tx("プロジェクトの詳細", "Project details")}</p>
               <label className="block text-[12px] font-medium text-[#6B7280]">
-                {tx("このプロジェクトのゴール", "Project goal")}
-                <textarea
-                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
-                  value={editBrief.projectGoal}
-                  onChange={(e) => setEditBrief((b) => ({ ...b, projectGoal: e.target.value }))}
-                />
-              </label>
-              <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx(
                   "どのようなことを解決したくてこのプロジェクトを思いついたか",
                   "What problem made you think of this project?",
@@ -575,6 +567,14 @@ export function ProjectSettingsModal({
                   className="mt-1 min-h-[4rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
                   value={editBrief.problemMotivation}
                   onChange={(e) => setEditBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[12px] font-medium text-[#6B7280]">
+                {tx("このプロジェクトのゴール", "Project goal")}
+                <textarea
+                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  value={editBrief.projectGoal}
+                  onChange={(e) => setEditBrief((b) => ({ ...b, projectGoal: e.target.value }))}
                 />
               </label>
               <label className="block text-[12px] font-medium text-[#6B7280]">

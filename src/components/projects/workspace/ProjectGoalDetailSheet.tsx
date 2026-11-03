@@ -95,7 +95,7 @@ export function ProjectGoalDetailSheet({
               className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
             >
               <PenLine className="h-4 w-4" aria-hidden />
-              {tx("ゴールときっかけを編集", "Edit goal and motivation")}
+              {tx("きっかけとゴールを編集", "Edit motivation and goal")}
             </button>
           </div>
         ) : null}

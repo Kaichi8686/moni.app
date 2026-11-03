@@ -82,8 +82,8 @@ export function ProjectBriefSection() {
     if (!trimmed.problemMotivation || !trimmed.projectGoal) {
       setError(
         tx(
-          "ゴールときっかけの両方を入力してください。",
-          "Please fill in both the goal and the motivation.",
+          "きっかけとゴールの両方を入力してください。",
+          "Please fill in both the motivation and the goal.",
         ),
       );
       return;
@@ -137,10 +137,10 @@ export function ProjectBriefSection() {
             <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
               {isFirstFill
                 ? tx(
-                    "まず、ゴールとなぜ始めたかを書いておきましょう。ロードマップの土台になります。",
-                    "Start by writing the goal and why you began. It becomes the base for your roadmap.",
+                    "まず、なぜ始めたかとゴールを書いておきましょう。ロードマップの土台になります。",
+                    "Start by writing why you began and the goal. It becomes the base for your roadmap.",
                   )
-                : tx("ゴールときっかけを編集できます。", "You can edit the goal and motivation.")}
+                : tx("きっかけとゴールを編集できます。", "You can edit the motivation and goal.")}
             </p>
           </div>
           {filled ? (
@@ -162,22 +162,6 @@ export function ProjectBriefSection() {
         <div className="mt-4 space-y-3">
           <label className="block">
             <span className="text-[12px] font-semibold text-zinc-700">
-              {tx("このプロジェクトのゴール", "Project goal")}
-            </span>
-            <textarea
-              className="mt-1.5 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-              rows={2}
-              placeholder={tx(
-                "例: 文化祭までに、クラス全員が見られる告知アプリを公開する",
-                "e.g. Ship a notice app the whole class can use by the school festival",
-              )}
-              value={draft.projectGoal}
-              onChange={(e) => setDraft((b) => ({ ...b, projectGoal: e.target.value }))}
-              disabled={saving}
-            />
-          </label>
-          <label className="block">
-            <span className="text-[12px] font-semibold text-zinc-700">
               {tx(
                 "どのようなことを解決したくてこのプロジェクトを思いついたか",
                 "What problem made you think of this project?",
@@ -192,6 +176,22 @@ export function ProjectBriefSection() {
               )}
               value={draft.problemMotivation}
               onChange={(e) => setDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
+              disabled={saving}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[12px] font-semibold text-zinc-700">
+              {tx("このプロジェクトのゴール", "Project goal")}
+            </span>
+            <textarea
+              className="mt-1.5 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+              rows={2}
+              placeholder={tx(
+                "例: 文化祭までに、クラス全員が見られる告知アプリを公開する",
+                "e.g. Ship a notice app the whole class can use by the school festival",
+              )}
+              value={draft.projectGoal}
+              onChange={(e) => setDraft((b) => ({ ...b, projectGoal: e.target.value }))}
               disabled={saving}
             />
           </label>

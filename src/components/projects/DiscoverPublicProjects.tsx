@@ -427,16 +427,6 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
                       if (hasProjectBriefContent(brief)) {
                         return (
                           <>
-                            {brief.projectGoal ? (
-                              <div>
-                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                                  {tx("このプロジェクトのゴール", "Project goal")}
-                                </dt>
-                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
-                                  {brief.projectGoal}
-                                </dd>
-                              </div>
-                            ) : null}
                             {brief.problemMotivation ? (
                               <div>
                                 <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
@@ -447,6 +437,16 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
                                 </dt>
                                 <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
                                   {brief.problemMotivation}
+                                </dd>
+                              </div>
+                            ) : null}
+                            {brief.projectGoal ? (
+                              <div>
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                  {tx("このプロジェクトのゴール", "Project goal")}
+                                </dt>
+                                <dd className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-800">
+                                  {brief.projectGoal}
                                 </dd>
                               </div>
                             ) : null}
