@@ -10,31 +10,32 @@ type Size = "md" | "lg" | "xl";
  * 上面はフラット一色 / 奥行きはぼかしなしの下帯 box-shadow / 押すと沈む
  */
 const TONES: Record<Tone, { face: string; text: string; lip: Record<Size, string> }> = {
+  // 蜜柑っぽいオレンジ（赤みの強い珊瑚ではなく黄み寄り）
   orange: {
-    face: "bg-[#FF5C35]",
+    face: "bg-[#FF9600]",
     text: "text-white",
     lip: {
-      md: "shadow-[0_4px_0_#C2410C]",
-      lg: "shadow-[0_5px_0_#C2410C]",
-      xl: "shadow-[0_6px_0_#C2410C]",
+      md: "shadow-[0_4px_0_#D97706]",
+      lg: "shadow-[0_5px_0_#D97706]",
+      xl: "shadow-[0_6px_0_#D97706]",
     },
   },
   green: {
-    face: "bg-[#FF5C35]",
+    face: "bg-[#FF9600]",
     text: "text-white",
     lip: {
-      md: "shadow-[0_4px_0_#C2410C]",
-      lg: "shadow-[0_5px_0_#C2410C]",
-      xl: "shadow-[0_6px_0_#C2410C]",
+      md: "shadow-[0_4px_0_#D97706]",
+      lg: "shadow-[0_5px_0_#D97706]",
+      xl: "shadow-[0_6px_0_#D97706]",
     },
   },
   gold: {
-    face: "bg-[#FF5C35]",
+    face: "bg-[#FF9600]",
     text: "text-white",
     lip: {
-      md: "shadow-[0_4px_0_#C2410C]",
-      lg: "shadow-[0_5px_0_#C2410C]",
-      xl: "shadow-[0_6px_0_#C2410C]",
+      md: "shadow-[0_4px_0_#D97706]",
+      lg: "shadow-[0_5px_0_#D97706]",
+      xl: "shadow-[0_6px_0_#D97706]",
     },
   },
   sky: {
