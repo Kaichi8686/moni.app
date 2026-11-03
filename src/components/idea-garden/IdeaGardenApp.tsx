@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { IdeaStreakBadge } from "@/components/idea-garden/IdeaStreakBadge";
+import { IdeaStreakCalendar } from "@/components/idea-garden/IdeaStreakCalendar";
 import { InterruptControl } from "@/components/idea-garden/InterruptMenu";
 import { QuestionPanel } from "@/components/idea-garden/QuestionPanel";
 import { SeedBagCarousel } from "@/components/idea-garden/SeedBagCarousel";
@@ -131,6 +132,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
   // shelf
   const [weekIndex, setWeekIndex] = useState(0);
+  const [streakCalendarOpen, setStreakCalendarOpen] = useState(false);
 
   const persist = useCallback(
     (next: PlantedIdea[], draft: GardenDraft | null = null) => {
@@ -560,6 +562,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     const canStartSunday =
       isSunday() && !goldDoneThisWeek(plants, currentWeekKey) && sundayCandidates.length > 0;
     const streak = ideaStreakDays(plants);
+    const plantedDateKeys = plants.map((p) => p.dateKey);
 
     return (
       <div className="min-h-[calc(100dvh-7rem)] bg-gradient-to-b from-[#EAF8FF] to-[#F4F4F5]">
@@ -573,7 +576,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           headerSlot={
             <div className="pt-1 text-center">
               <div className="flex justify-center">
-                <IdeaStreakBadge days={streak} />
+                <IdeaStreakBadge days={streak} onClick={() => setStreakCalendarOpen(true)} />
               </div>
               <h1 className="mt-3 text-[22px] font-extrabold tracking-tight text-[#3C3C3C]">
                 {tx("あなたのアイデアの棚", "Your idea shelf")}
@@ -607,6 +610,12 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               ) : null}
             </div>
           }
+        />
+        <IdeaStreakCalendar
+          open={streakCalendarOpen}
+          onClose={() => setStreakCalendarOpen(false)}
+          plantedDateKeys={plantedDateKeys}
+          streakDays={streak}
         />
       </div>
     );
