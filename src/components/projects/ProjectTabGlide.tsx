@@ -144,8 +144,6 @@ export function ProjectTabGlide({
     visibility: "public" as "public" | "private",
     category: "探究",
     tags: "",
-    recruitment_target: "",
-    recruitment_message: "",
     thumbnail_url: "",
   });
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
@@ -275,8 +273,6 @@ export function ProjectTabGlide({
       tags: form.tags.split(/[,、]/).map((x) => x.trim()).filter(Boolean),
       thumbnail_url: defaultPhoto,
       visibility: form.visibility,
-      recruitment_target: form.recruitment_target.trim(),
-      recruitment_message: form.recruitment_message.trim(),
     };
     const payloadCandidates: Array<Record<string, unknown>> = [
       fullPayload,
@@ -381,8 +377,6 @@ export function ProjectTabGlide({
       category: "探究",
       tags: "",
       visibility: "public",
-      recruitment_target: "",
-      recruitment_message: "",
       thumbnail_url: "",
     });
     setShowAdvancedFields(false);
@@ -685,25 +679,6 @@ export function ProjectTabGlide({
                 <option value="public">公開</option>
                 <option value="private">非公開</option>
               </select>
-              <div className="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5">
-                <p className="text-xs font-semibold text-emerald-900">欲しい人材（任意）</p>
-                <p className="text-[11px] leading-relaxed text-emerald-800/80">
-                  入力すると探すタブの公開プロジェクトに「仲間募集」として表示されます。作成後も概要から探せます。
-                </p>
-                <input
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-                  placeholder="例: デザイナー、エンジニア、マーケ"
-                  value={form.recruitment_target}
-                  onChange={(e) => setForm((f) => ({ ...f, recruitment_target: e.target.value }))}
-                />
-                <textarea
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-                  rows={2}
-                  placeholder="募集文・一緒にやりたいこと（任意）"
-                  value={form.recruitment_message}
-                  onChange={(e) => setForm((f) => ({ ...f, recruitment_message: e.target.value }))}
-                />
-              </div>
               <button
                 type="button"
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-xs font-semibold text-zinc-600"
