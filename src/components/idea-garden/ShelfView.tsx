@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { FlowerArt } from "@/components/idea-garden/illustrations/FlowerArt";
 import { formatWeekLabel, weekdayLabel } from "@/lib/idea-garden/calendar";
@@ -15,6 +15,8 @@ type Props = {
   plants: PlantedIdea[];
   headerSlot?: ReactNode;
   onPlantClick?: (plant: PlantedIdea) => void;
+  /** 丸囲みプラス → 新しい種袋選びへ */
+  onAddClick?: () => void;
 };
 
 export function ShelfView({
@@ -24,6 +26,7 @@ export function ShelfView({
   plants,
   headerSlot,
   onPlantClick,
+  onAddClick,
 }: Props) {
   const { tx, locale } = useI18n();
   const weekKey = weekKeys[weekIndex] ?? weekKeys[0]!;
@@ -36,13 +39,17 @@ export function ShelfView({
     if (weekIndex > 0) onWeekIndex(weekIndex - 1);
   };
 
-  // Arrange up to 6 plants on 3 shelves (2 per row), gold ones preferred mid
+  // Arrange up to 5 plants + plus slot on 3 shelves (2 per row)
   const sorted = [...plants].sort(
     (a, b) => Number(b.gold) - Number(a.gold) || a.dateKey.localeCompare(b.dateKey),
   );
-  const rows: PlantedIdea[][] = [[], [], []];
-  sorted.forEach((p, i) => {
-    rows[Math.min(2, Math.floor(i / 2))]!.push(p);
+  type Slot = { type: "plant"; plant: PlantedIdea } | { type: "add" };
+  const items: Slot[] = sorted.slice(0, 5).map((plant) => ({ type: "plant" as const, plant }));
+  if (onAddClick) items.push({ type: "add" });
+
+  const rows: Slot[][] = [[], [], []];
+  items.forEach((item, i) => {
+    rows[Math.min(2, Math.floor(i / 2))]!.push(item);
   });
 
   return (
@@ -95,55 +102,78 @@ export function ShelfView({
               <div className="flex min-h-[132px] items-end justify-around px-2 pb-2">
                 {row.length === 0 ? (
                   <p className="mb-8 text-[12px] font-bold text-white/70">
-                    {ri === 0 && plants.length === 0 ? tx("まだ花がないよ", "No flowers yet") : ""}
+                    {ri === 0 && plants.length === 0 && !onAddClick
+                      ? tx("まだ花がないよ", "No flowers yet")
+                      : ""}
                   </p>
                 ) : (
-                  row.map((plant) => (
-                    <motion.button
-                      key={plant.id}
-                      type="button"
-                      layout
-                      initial={{ opacity: 0, y: 12, scale: 0.9 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      whileTap={{ scale: 0.94 }}
-                      onClick={() => onPlantClick?.(plant)}
-                      className="relative flex w-[42%] flex-col items-center outline-none"
-                      aria-label={plant.title}
-                    >
-                      {plant.gold ? (
-                        <div className="pointer-events-none absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 gap-2">
-                          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-                            <path
-                              d="M8 0 L9.5 6 L16 8 L9.5 10 L8 16 L6.5 10 L0 8 L6.5 6 Z"
-                              fill="#FEF08A"
-                              stroke="#F59E0B"
-                              strokeWidth="0.8"
-                            />
-                          </svg>
-                          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
-                            <path
-                              d="M8 0 L9.5 6 L16 8 L9.5 10 L8 16 L6.5 10 L0 8 L6.5 6 Z"
-                              fill="#FDE68A"
-                              stroke="#D97706"
-                              strokeWidth="0.8"
-                            />
-                          </svg>
-                        </div>
-                      ) : null}
-                      <FlowerArt
-                        kind={plant.flowerKind}
-                        gold={plant.gold}
-                        stage={4}
-                        className="h-[120px] w-[100px] drop-shadow-md"
-                      />
-                      <p className="mt-0.5 max-w-full truncate text-center text-[11px] font-extrabold text-[#3C3C3C]">
-                        {plant.title}
-                      </p>
-                      <p className="text-[10px] font-bold text-[#5B4636]">
-                        {weekdayLabel(plant.weekday, locale === "en" ? "en" : "ja")}
-                      </p>
-                    </motion.button>
-                  ))
+                  row.map((slot) =>
+                    slot.type === "add" ? (
+                      <motion.button
+                        key="add-slot"
+                        type="button"
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        whileTap={{ scale: 0.94 }}
+                        onClick={onAddClick}
+                        className="relative mb-6 flex w-[42%] flex-col items-center outline-none"
+                        aria-label={tx("アイデアを追加", "Add an idea")}
+                      >
+                        <span className="inline-flex h-[72px] w-[72px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706]">
+                          <Plus className="h-9 w-9" strokeWidth={3} />
+                        </span>
+                        <p className="mt-2 text-center text-[11px] font-extrabold text-[#3C3C3C]">
+                          {tx("追加", "Add")}
+                        </p>
+                      </motion.button>
+                    ) : (
+                      <motion.button
+                        key={slot.plant.id}
+                        type="button"
+                        layout
+                        initial={{ opacity: 0, y: 12, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        whileTap={{ scale: 0.94 }}
+                        onClick={() => onPlantClick?.(slot.plant)}
+                        className="relative flex w-[42%] flex-col items-center outline-none"
+                        aria-label={slot.plant.title}
+                      >
+                        {slot.plant.gold ? (
+                          <div className="pointer-events-none absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+                            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
+                              <path
+                                d="M8 0 L9.5 6 L16 8 L9.5 10 L8 16 L6.5 10 L0 8 L6.5 6 Z"
+                                fill="#FEF08A"
+                                stroke="#F59E0B"
+                                strokeWidth="0.8"
+                              />
+                            </svg>
+                            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+                              <path
+                                d="M8 0 L9.5 6 L16 8 L9.5 10 L8 16 L6.5 10 L0 8 L6.5 6 Z"
+                                fill="#FDE68A"
+                                stroke="#D97706"
+                                strokeWidth="0.8"
+                              />
+                            </svg>
+                          </div>
+                        ) : null}
+                        <FlowerArt
+                          kind={slot.plant.flowerKind}
+                          gold={slot.plant.gold}
+                          stage={4}
+                          className="h-[120px] w-[100px] drop-shadow-md"
+                        />
+                        <p className="mt-0.5 max-w-full truncate text-center text-[11px] font-extrabold text-[#3C3C3C]">
+                          {slot.plant.title}
+                        </p>
+                        <p className="text-[10px] font-bold text-[#5B4636]">
+                          {weekdayLabel(slot.plant.weekday, locale === "en" ? "en" : "ja")}
+                        </p>
+                      </motion.button>
+                    ),
+                  )
                 )}
               </div>
               <div className="relative mx-1 h-3 rounded-md bg-[#A67C52] shadow-[0_4px_0_#7A5230]">
