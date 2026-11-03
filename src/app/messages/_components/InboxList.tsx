@@ -36,8 +36,6 @@ function getOpenedDirectServerSnapshot(): string {
   return "";
 }
 
-type InboxFilter = "all" | "unread" | "groups" | "projects";
-
 function safeTimeAgo(iso: string, locale: "ja" | "en"): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -68,7 +66,6 @@ export function InboxList() {
   const { locale, tx } = useI18n();
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<InboxFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -289,9 +286,6 @@ export function InboxList() {
         return c.type === "group" || c.type === "project";
       });
     }
-    if (filter === "unread") list = list.filter((c) => c.unreadCount > 0);
-    if (filter === "groups") list = list.filter((c) => c.type === "group");
-    if (filter === "projects") list = list.filter((c) => c.type === "project");
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter((c) => {
@@ -314,7 +308,6 @@ export function InboxList() {
     return list;
   }, [
     conversations,
-    filter,
     searchQuery,
     locale,
     scopedProjectId,
@@ -350,18 +343,6 @@ export function InboxList() {
         "Group chat and member DMs appear here.",
       );
     }
-    if (filter === "projects") {
-      return tx(
-        "プロジェクトのグループチャットはまだありません。参加中のプロジェクトがあれば自動で表示されます。",
-        "No project group chats yet. Joined projects appear here automatically.",
-      );
-    }
-    if (filter === "unread") {
-      return tx("未読のトークはありません。", "No unread chats.");
-    }
-    if (filter === "groups") {
-      return tx("グループトークはまだありません。", "No group chats yet.");
-    }
     return tx(
       "まだトークがありません。上の「フォロー中の人とチャット」から始められます。",
       "No chats yet. Start from “Chat with people you follow” above.",
@@ -393,25 +374,6 @@ export function InboxList() {
           />
         </div>
       </div>
-
-      {!scopedProjectId ? (
-        <div className="border-b px-4 py-2">
-          <label className="sr-only" htmlFor="inbox-filter">
-            {tx("フィルタ", "Filter")}
-          </label>
-          <select
-            id="inbox-filter"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as InboxFilter)}
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-[15px] text-zinc-800"
-          >
-            <option value="all">{tx("すべて", "All")}</option>
-            <option value="unread">{tx("未読", "Unread")}</option>
-            <option value="projects">{tx("プロジェクトグループ", "Project groups")}</option>
-            <option value="groups">{tx("グループ", "Groups")}</option>
-          </select>
-        </div>
-      ) : null}
 
       <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
         {!userId ? (
@@ -521,11 +483,7 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={`truncate text-sm ${
-                isUnread ? "font-bold text-zinc-900" : "font-medium text-zinc-800"
-              }`}
-            >
+            <span className="truncate text-base font-bold tracking-tight text-zinc-900">
               {title}
             </span>
             {conversation.type === "project" ? (
