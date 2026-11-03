@@ -43,8 +43,8 @@ export function hasProjectBriefContent(brief: ProjectBrief): boolean {
 export function composeProjectDescription(brief: ProjectBrief): string {
   const t = trimProjectBrief(brief);
   const parts: string[] = [];
-  if (t.problemMotivation) parts.push(`${SECTION_MARKERS.problemMotivation}\n${t.problemMotivation}`);
   if (t.projectGoal) parts.push(`${SECTION_MARKERS.projectGoal}\n${t.projectGoal}`);
+  if (t.problemMotivation) parts.push(`${SECTION_MARKERS.problemMotivation}\n${t.problemMotivation}`);
   if (t.whatToDo) parts.push(`${SECTION_MARKERS.whatToDo}\n${t.whatToDo}`);
   return parts.join("\n\n");
 }

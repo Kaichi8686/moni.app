@@ -505,17 +505,17 @@ export function ProjectsWorkspace({ projectId }: Props) {
               <input className={input} placeholder="カテゴリ" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} />
               <textarea
                 className={`${input} sm:col-span-2`}
-                rows={3}
-                placeholder="どのようなことを解決したくてこのプロジェクトを思いついたか"
-                value={brief.problemMotivation}
-                onChange={(e) => setBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
-              />
-              <textarea
-                className={`${input} sm:col-span-2`}
                 rows={2}
                 placeholder="このプロジェクトのゴール"
                 value={brief.projectGoal}
                 onChange={(e) => setBrief((b) => ({ ...b, projectGoal: e.target.value }))}
+              />
+              <textarea
+                className={`${input} sm:col-span-2`}
+                rows={3}
+                placeholder="どのようなことを解決したくてこのプロジェクトを思いついたか"
+                value={brief.problemMotivation}
+                onChange={(e) => setBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
               />
               <textarea
                 className={`${input} sm:col-span-2`}

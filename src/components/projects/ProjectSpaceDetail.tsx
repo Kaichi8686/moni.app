@@ -1003,18 +1003,18 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           return (
             <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">プロジェクトの詳細</h2>
+              {brief.projectGoal ? (
+                <div>
+                  <h3 className="text-[11px] font-semibold text-zinc-500">このプロジェクトのゴール</h3>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.projectGoal}</p>
+                </div>
+              ) : null}
               {brief.problemMotivation ? (
                 <div>
                   <h3 className="text-[11px] font-semibold text-zinc-500">
                     どのようなことを解決したくてこのプロジェクトを思いついたか
                   </h3>
                   <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.problemMotivation}</p>
-                </div>
-              ) : null}
-              {brief.projectGoal ? (
-                <div>
-                  <h3 className="text-[11px] font-semibold text-zinc-500">このプロジェクトのゴール</h3>
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{brief.projectGoal}</p>
                 </div>
               ) : null}
               {brief.whatToDo ? (
@@ -1830,19 +1830,19 @@ export function ProjectSpaceDetail({ projectId }: Props) {
             <div className="mt-3 space-y-2 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
               <p className="text-xs font-semibold text-zinc-700">プロジェクトの詳細</p>
               <label className="block text-[11px] font-semibold text-zinc-600">
-                どのようなことを解決したくてこのプロジェクトを思いついたか
-                <textarea
-                  className="mt-1 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                  value={editBriefDraft.problemMotivation}
-                  onChange={(e) => setEditBriefDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
-                />
-              </label>
-              <label className="block text-[11px] font-semibold text-zinc-600">
                 このプロジェクトのゴール
                 <textarea
                   className="mt-1 min-h-[3rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
                   value={editBriefDraft.projectGoal}
                   onChange={(e) => setEditBriefDraft((b) => ({ ...b, projectGoal: e.target.value }))}
+                />
+              </label>
+              <label className="block text-[11px] font-semibold text-zinc-600">
+                どのようなことを解決したくてこのプロジェクトを思いついたか
+                <textarea
+                  className="mt-1 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                  value={editBriefDraft.problemMotivation}
+                  onChange={(e) => setEditBriefDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
                 />
               </label>
               <label className="block text-[11px] font-semibold text-zinc-600">
