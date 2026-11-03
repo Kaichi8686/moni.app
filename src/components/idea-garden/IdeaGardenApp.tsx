@@ -28,10 +28,12 @@ import {
   plantsForWeek,
   saveGarden,
   upsertPlant,
+  usableDraft,
   weekKeysDesc,
 } from "@/lib/idea-garden/storage";
 import type {
   FlowerKind,
+  GardenDraft,
   GardenScreen,
   GrowPhase,
   PlantedIdea,
@@ -118,15 +120,17 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   const [target, setTarget] = useState("");
   const [situation, setSituation] = useState("");
   const [gildProgress, setGildProgress] = useState(0);
+  /** 育てる押下時のうっすら画面切替 */
+  const [sceneVeil, setSceneVeil] = useState<"idle" | "in" | "out">("idle");
 
   // shelf
   const [weekIndex, setWeekIndex] = useState(0);
 
   const persist = useCallback(
-    (next: PlantedIdea[]) => {
+    (next: PlantedIdea[], draft: GardenDraft | null = null) => {
       setPlants(next);
       // 個人専用ストレージ（アカウントごと / ゲストごと）。共有しない。
-      saveGarden({ version: 1, plants: next }, ownerId);
+      saveGarden({ version: 1, plants: next, draft }, ownerId);
     },
     [ownerId],
   );
@@ -137,10 +141,33 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     const hydrateFor = (uid: string | null) => {
       const state = loadGarden(uid);
       if (cancelled) return;
+      const draft = usableDraft(state.plants, state.draft);
       setOwnerId(uid);
       setPlants(state.plants);
-      setScreen(initialScreen(state.plants));
       setWeekIndex(0);
+      if (draft) {
+        setScreen(draft.screen);
+        setBagIndex(draft.bagIndex);
+        setSelectedKind(draft.selectedKind);
+        setAnswer(draft.answer);
+        setTitle(draft.title);
+        setSundayIndex(draft.sundayIndex);
+        setSundayPickId(draft.sundayPickId);
+        setTarget(draft.target);
+        setSituation(draft.situation);
+        if (draft.screen.kind === "grow" && draft.screen.phase === "celebrate") {
+          setGrowStage(4);
+          setShowCelebrateText(true);
+          setShowContinueBtn(true);
+        }
+        if (draft.screen.kind === "sunday" && draft.screen.phase === "celebrate") {
+          setGildProgress(2);
+          setShowCelebrateText(true);
+          setShowContinueBtn(true);
+        }
+      } else {
+        setScreen(initialScreen(state.plants));
+      }
       setHydrated(true);
     };
 
@@ -163,6 +190,44 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     };
   }, []);
 
+  // 途中離脱からの再開用：進行中フローを個人ストレージへ都度保存
+  useEffect(() => {
+    if (!hydrated) return;
+    if (screen.kind !== "grow" && screen.kind !== "sunday") return;
+    saveGarden(
+      {
+        version: 1,
+        plants,
+        draft: {
+          dateKey: tokyoDateKey(),
+          screen,
+          bagIndex,
+          selectedKind,
+          answer,
+          title,
+          sundayIndex,
+          sundayPickId,
+          target,
+          situation,
+        },
+      },
+      ownerId,
+    );
+  }, [
+    hydrated,
+    screen,
+    bagIndex,
+    selectedKind,
+    answer,
+    title,
+    sundayIndex,
+    sundayPickId,
+    target,
+    situation,
+    plants,
+    ownerId,
+  ]);
+
   const immersive =
     screen.kind === "detail"
       ? true
@@ -184,6 +249,19 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
   const setGrow = (phase: GrowPhase) => setScreen({ kind: "grow", phase });
   const setSunday = (phase: SundayPhase) => setScreen({ kind: "sunday", phase });
+
+  const goQuestionWithVeil = () => {
+    if (reduceMotion()) {
+      setGrow("question");
+      return;
+    }
+    setSceneVeil("in");
+    window.setTimeout(() => {
+      setGrow("question");
+      setSceneVeil("out");
+      window.setTimeout(() => setSceneVeil("idle"), 420);
+    }, 340);
+  };
 
   const growPhase = screen.kind === "grow" ? screen.phase : null;
   const sundayPhase = screen.kind === "sunday" ? screen.phase : null;
@@ -267,7 +345,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       gold: false,
       createdAt: new Date().toISOString(),
     };
-    persist(upsertPlant(plants, plant));
+    persist(upsertPlant(plants, plant), null);
     void createMyIdea({
       title: plant.title,
       memo: plant.answer,
@@ -300,7 +378,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           }
         : p,
     );
-    persist(next);
+    persist(next, null);
     setWeekIndex(0);
     setScreen({ kind: "shelf" });
     setTarget("");
@@ -672,11 +750,12 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
     if (screen.phase === "plant") {
       return (
-        <div className="flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
+        <div className="relative flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
           <DuoButton
             tone="green"
-            className="mt-[22vh] min-w-[240px] !py-5 text-[20px] sm:mt-[18vh]"
-            onClick={() => setGrow("question")}
+            size="xl"
+            className="mt-[22vh] min-w-[260px] sm:mt-[18vh]"
+            onClick={goQuestionWithVeil}
           >
             {tx("育てる", "Grow")}
           </DuoButton>
@@ -688,21 +767,47 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           >
             <EmptyPotArt showSeed className="h-64 w-full" />
           </motion.div>
+          <AnimatePresence>
+            {sceneVeil === "in" ? (
+              <motion.div
+                key="grow-veil-in"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#F4FFE8]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.88 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.34, ease: "easeInOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
         </div>
       );
     }
 
     if (screen.phase === "question") {
       return (
-        <QuestionPanel
-          title={locale === "en" ? prompt.en : prompt.ja}
-          hint={tx("身の回りのことからアイデアを出そう", "Ideas from everyday life")}
-          value={answer}
-          onChange={setAnswer}
-          placeholder={tx("自由に書いてみよう", "Write freely…")}
-          buttonLabel={tx("次へ", "Next")}
-          onSubmit={() => setGrow("title")}
-        />
+        <div className="relative">
+          <QuestionPanel
+            title={locale === "en" ? prompt.en : prompt.ja}
+            hint={tx("身の回りのことからアイデアを出そう", "Ideas from everyday life")}
+            value={answer}
+            onChange={setAnswer}
+            placeholder={tx("自由に書いてみよう", "Write freely…")}
+            buttonLabel={tx("次へ", "Next")}
+            onSubmit={() => setGrow("title")}
+          />
+          <AnimatePresence>
+            {sceneVeil === "out" ? (
+              <motion.div
+                key="grow-veil-out"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#F4FFE8]"
+                initial={{ opacity: 0.88 }}
+                animate={{ opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
+        </div>
       );
     }
 

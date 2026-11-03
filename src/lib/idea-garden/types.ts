@@ -23,11 +23,6 @@ export type PlantedIdea = {
   goldAt?: string;
 };
 
-export type GardenState = {
-  version: 1;
-  plants: PlantedIdea[];
-};
-
 /** 月曜〜土曜の育成フロー段階 */
 export type GrowPhase =
   | "pick-bag"
@@ -53,6 +48,27 @@ export type GardenScreen =
   | { kind: "detail"; plantId: string }
   | { kind: "grow"; phase: GrowPhase }
   | { kind: "sunday"; phase: SundayPhase };
+
+/** 途中離脱からの再開用（その日限り・個人専用） */
+export type GardenDraft = {
+  dateKey: string;
+  screen: GardenScreen;
+  bagIndex: number;
+  selectedKind: FlowerKind | null;
+  answer: string;
+  title: string;
+  sundayIndex: number;
+  sundayPickId: string | null;
+  target: string;
+  situation: string;
+};
+
+export type GardenState = {
+  version: 1;
+  plants: PlantedIdea[];
+  /** 進行中のフロー。完了したら null */
+  draft?: GardenDraft | null;
+};
 
 export type SeedBagDef = {
   id: FlowerKind;
