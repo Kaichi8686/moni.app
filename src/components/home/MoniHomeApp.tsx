@@ -1078,6 +1078,8 @@ export function MoniHomeApp() {
       if (!showLandingPage) setShowLandingPage(true);
       return;
     }
+    // 未ログインは LP のみ。タブ系クエリでもアプリへ入れない。
+    if (!session) return;
     if (tab === "projects") {
       router.replace(HOME_PROJECTS_HREF);
       return;
@@ -1095,10 +1097,7 @@ export function MoniHomeApp() {
       return;
     }
     if (!tab && !mentor) {
-      // ログイン済みだけプロジェクトへ。未ログインは / に留まりランディングを表示
-      if (session) {
-        router.replace(HOME_PROJECTS_HREF);
-      }
+      router.replace(HOME_PROJECTS_HREF);
       return;
     }
     if (tab === "articles" || tab === "mentor" || tab === "chat") {
@@ -1121,13 +1120,7 @@ export function MoniHomeApp() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
-        setHasEnteredApp(true);
-      }
-    } catch {
-      /* ignore */
-    }
+    // 未ログインの「プレビュー侵入」は不可。sessionStorage フラグではアプリに入れない。
     const params = new URLSearchParams(window.location.search);
     if (params.get("about") === "1" || params.get("landing") === "1") {
       setShowLandingPage(true);
@@ -3987,7 +3980,7 @@ export function MoniHomeApp() {
     return <main className="min-h-screen bg-zinc-50" aria-busy="true" />;
   }
 
-  if (showLandingPage || (clientReady && authReady && !session && !hasEnteredApp)) {
+  if (showLandingPage || (clientReady && authReady && !session)) {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
@@ -3999,16 +3992,16 @@ export function MoniHomeApp() {
             router.push(resolveAppEntryHref());
             return;
           }
-          setHasEnteredApp(true);
           router.push("/login");
         }}
         onPreview={() => {
           trackOpsEvent(session ? "landing_resume_preview" : "landing_cta_preview");
           setShowLandingPage(false);
-          if (!session) {
-            setHasEnteredApp(true);
-            setAuthMessage("");
+          if (session) {
+            router.push(resolveAppEntryHref());
+            return;
           }
+          router.push("/login");
         }}
       />
     );

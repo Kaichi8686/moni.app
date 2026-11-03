@@ -199,7 +199,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
     : "For student teams turning business ideas into reality";
   const heroHook = ja ? "アイデアに舞台を" : "Give ideas a stage";
   const primary = ja ? "無料で始める" : "Start free";
-  const secondary = ja ? "中身を先に見る" : "Preview the app";
+  const secondary = ja ? "ログインして中を見る" : "Log in to explore";
 
   const stats = ja
     ? [
@@ -881,7 +881,7 @@ export function MoniLanding({ onStart, onPreview, resumeMode = false, onMount }:
                     className="transition hover:text-zinc-700 hover:underline"
                     onClick={onPreview}
                   >
-                    {ja ? "アプリを先に見る" : "Preview app"}
+                    {ja ? "ログインして中を見る" : "Log in to explore"}
                   </button>
                 </>
               )}

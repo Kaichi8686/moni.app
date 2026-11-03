@@ -20,27 +20,18 @@ const MoniHomeApp = dynamic(
 );
 
 /**
- * Thin entry: guests stay on the landing chunk; the heavy home shell loads only
- * after preview / in-app use. Logged-in users are sent to /projects without
- * downloading the home monolith.
+ * Thin entry: guests stay on the landing page only.
+ * Logged-in users are sent to /projects (or legacy ?tab= home shell).
  */
 export default function HomePage() {
   const router = useRouter();
   const [clientReady, setClientReady] = useState(false);
   const [authReady, setAuthReady] = useState(!supabaseEnabled);
   const [session, setSession] = useState<Session | null>(null);
-  const [hasEnteredApp, setHasEnteredApp] = useState(false);
   const [showLandingPage, setShowLandingPage] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => {
-      try {
-        if (window.sessionStorage.getItem("moni-has-entered-app") === "1") {
-          setHasEnteredApp(true);
-        }
-      } catch {
-        /* ignore */
-      }
       const params = new URLSearchParams(window.location.search);
       if (params.get("about") === "1" || params.get("landing") === "1") {
         setShowLandingPage(true);
@@ -72,14 +63,15 @@ export default function HomePage() {
     };
   }, []);
 
-  const entered = hasEnteredApp || Boolean(session);
-
   useEffect(() => {
     if (!clientReady || !authReady) return;
     const params = new URLSearchParams(window.location.search);
     if (showLandingPage || params.get("landing") === "1" || params.get("about") === "1") {
       return;
     }
+
+    // 未ログインは LP のみ。タブ系クエリでもアプリへ飛ばさない。
+    if (!session) return;
 
     const tab = params.get("tab");
     const community = params.get("community");
@@ -100,8 +92,7 @@ export default function HomePage() {
       router.replace(HOME_PROJECTS_HREF);
       return;
     }
-    // Logged-in users leave `/` for projects; guests stay for the landing.
-    if (!tab && !mentor && session) {
+    if (!tab && !mentor) {
       router.replace(HOME_PROJECTS_HREF);
     }
   }, [router, showLandingPage, clientReady, authReady, session]);
@@ -110,7 +101,8 @@ export default function HomePage() {
     return <LandingFallback />;
   }
 
-  if (showLandingPage || (clientReady && authReady && !session && !entered)) {
+  // 未ログインは常に LP。ログイン済みでも ?landing=1 / ?about=1 なら説明を表示。
+  if (showLandingPage || !session) {
     return (
       <MoniLanding
         resumeMode={Boolean(session)}
@@ -120,24 +112,16 @@ export default function HomePage() {
             router.push(resolveAppEntryHref());
             return;
           }
-          setHasEnteredApp(true);
-          try {
-            window.sessionStorage.setItem("moni-has-entered-app", "1");
-          } catch {
-            /* ignore */
-          }
           router.push("/login");
         }}
         onPreview={() => {
+          // 未ログインのプレビュー侵入は不可。中を見るにはログインへ。
           setShowLandingPage(false);
-          if (!session) {
-            setHasEnteredApp(true);
-            try {
-              window.sessionStorage.setItem("moni-has-entered-app", "1");
-            } catch {
-              /* ignore */
-            }
+          if (session) {
+            router.push(resolveAppEntryHref());
+            return;
           }
+          router.push("/login");
         }}
       />
     );
