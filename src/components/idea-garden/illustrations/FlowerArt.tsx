@@ -262,22 +262,26 @@ export function GrowingPlantArt({ kind, stage = 4, gold, className = "" }: Flowe
         strokeLinecap="round"
       />
 
-      {/* leaves — 茎の伸びに合わせてゆるく上がる */}
+      {/* leaves — その場でうっすら出現（スライドなし） */}
       <AnimatePresence>
         {stage >= 2 ? (
           <motion.g key="leaves" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.g
-              initial={{ scale: 0.5, y: 12 }}
-              animate={{ scale: 1, y: -(stemH * 0.45) }}
-              transition={softSpring}
+              initial={{ opacity: 0, scale: 0.94, y: -(stemH * 0.45) }}
+              animate={{ opacity: 1, scale: 1, y: -(stemH * 0.45) }}
+              transition={{ opacity: { duration: 0.55, ease: "easeOut" }, scale: softAppear, y: softSpring }}
               style={{ originX: "78px", originY: "178px" }}
             >
               <ellipse cx="78" cy="178" rx="18" ry="9" fill={leaf} transform="rotate(-28 78 178)" />
             </motion.g>
             <motion.g
-              initial={{ scale: 0.5, y: 12 }}
-              animate={{ scale: 1, y: -(stemH * 0.6) }}
-              transition={softSpring}
+              initial={{ opacity: 0, scale: 0.94, y: -(stemH * 0.6) }}
+              animate={{ opacity: 1, scale: 1, y: -(stemH * 0.6) }}
+              transition={{
+                opacity: { duration: 0.55, ease: "easeOut", delay: 0.06 },
+                scale: { ...softAppear, delay: 0.06 },
+                y: softSpring,
+              }}
               style={{ originX: "122px", originY: "178px" }}
             >
               <ellipse cx="122" cy="178" rx="18" ry="9" fill={leaf} transform="rotate(28 122 178)" />
@@ -286,30 +290,34 @@ export function GrowingPlantArt({ kind, stage = 4, gold, className = "" }: Flowe
         ) : null}
       </AnimatePresence>
 
-      {/* bud → bloom */}
+      {/* bud → bloom — その場でうっすら */}
       <AnimatePresence mode="wait">
         {stage === 3 ? (
-          <motion.ellipse
+          <motion.g
             key="bud"
-            cx="100"
-            initial={{ opacity: 0, scale: 0.4, cy: 178 - stemH + 8 }}
-            animate={{ opacity: 1, scale: 1, cy: 178 - stemH - 6 }}
-            exit={{ opacity: 0, scale: 1.15 }}
-            transition={softAppear}
-            rx="14"
-            ry="18"
-            fill={petal}
-            stroke={petalDark}
-            strokeWidth="3"
-            style={{ originX: "100px", originY: `${178 - stemH}px` }}
-          />
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ opacity: { duration: 0.5, ease: "easeOut" }, scale: softAppear }}
+            style={{ originX: "100px", originY: `${178 - stemH - 6}px` }}
+          >
+            <ellipse
+              cx="100"
+              cy={178 - stemH - 6}
+              rx="14"
+              ry="18"
+              fill={petal}
+              stroke={petalDark}
+              strokeWidth="3"
+            />
+          </motion.g>
         ) : null}
         {stage >= 4 ? (
           <g key="bloom" transform={`translate(100 ${178 - stemH})`}>
             <motion.g
-              initial={{ opacity: 0, scale: 0.35 }}
+              initial={{ opacity: 0, scale: 0.88 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: "spring", stiffness: 55, damping: 12, mass: 0.85 }}
+              transition={{ opacity: { duration: 0.55, ease: "easeOut" }, scale: softAppear }}
             >
               <BloomHead
                 kind={kind}
