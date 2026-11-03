@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { QuestionPanel } from "@/components/idea-garden/QuestionPanel";
+import { SeedBagCarousel } from "@/components/idea-garden/SeedBagCarousel";
 import { ShelfView } from "@/components/idea-garden/ShelfView";
 import { EmptyPotArt } from "@/components/idea-garden/illustrations/EmptyPotArt";
 import { FlowerArt } from "@/components/idea-garden/illustrations/FlowerArt";
@@ -631,52 +632,14 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             {tx("袋をタップして選ぶ", "Tap a bag to choose")}
           </p>
 
-          <div className="relative mt-8 flex flex-1 items-center justify-center">
-            <button
-              type="button"
-              className="absolute left-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-md"
-              onClick={() => setBagIndex((i) => (i - 1 + SEED_BAGS.length) % SEED_BAGS.length)}
-              aria-label={tx("前の袋", "Previous bag")}
-            >
-              <ChevronLeft />
-            </button>
-
-            <div className="flex w-full items-center justify-center gap-3 overflow-hidden">
-              <SeedBagArt
-                kind={SEED_BAGS[(bagIndex - 1 + SEED_BAGS.length) % SEED_BAGS.length]!.id}
-                className="h-36 w-28 shrink-0 opacity-40 scale-90"
-              />
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.96 }}
-                onClick={() => {
-                  setSelectedKind(bag.id);
-                  setGrow("bag-focus");
-                }}
-                className="relative z-10 shrink-0"
-                aria-label={locale === "en" ? bag.labelEn : bag.labelJa}
-              >
-                <SeedBagArt kind={bag.id} selected className="h-56 w-44" />
-              </motion.button>
-              <SeedBagArt
-                kind={SEED_BAGS[(bagIndex + 1) % SEED_BAGS.length]!.id}
-                className="h-36 w-28 shrink-0 opacity-40 scale-90"
-              />
-            </div>
-
-            <button
-              type="button"
-              className="absolute right-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-md"
-              onClick={() => setBagIndex((i) => (i + 1) % SEED_BAGS.length)}
-              aria-label={tx("次の袋", "Next bag")}
-            >
-              <ChevronRight />
-            </button>
-          </div>
-
-          <p className="mt-2 text-center text-[16px] font-extrabold text-[#3C3C3C]">
-            {locale === "en" ? bag.labelEn : bag.labelJa}
-          </p>
+          <SeedBagCarousel
+            index={bagIndex}
+            onIndexChange={setBagIndex}
+            onSelect={(kind) => {
+              setSelectedKind(kind);
+              setGrow("bag-focus");
+            }}
+          />
         </div>
       );
     }
