@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { FlowerArt } from "@/components/idea-garden/illustrations/FlowerArt";
-import { formatWeekLabel, weekdayLabel } from "@/lib/idea-garden/calendar";
+import { formatWeekLabel } from "@/lib/idea-garden/calendar";
 import type { PlantedIdea } from "@/lib/idea-garden/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -23,6 +23,46 @@ type Props = {
   onAddClick?: () => void;
 };
 
+type Slot =
+  | { type: "plant"; plant: PlantedIdea }
+  | { type: "add" }
+  | { type: "empty" };
+
+/**
+ * プラスは常に左上 (0,0)。
+ * 花は下段から左→右、段が埋まったら一段上へ（古いほど下、新しいほど上）。
+ */
+function buildShelfRows(plants: PlantedIdea[], showAdd: boolean): Slot[][] {
+  const sorted = [...plants].sort((a, b) => {
+    const byCreated = a.createdAt.localeCompare(b.createdAt);
+    if (byCreated !== 0) return byCreated;
+    return a.dateKey.localeCompare(b.dateKey) || a.id.localeCompare(b.id);
+  });
+
+  const plantCount = sorted.length;
+  const occupied = plantCount + (showAdd ? 1 : 0);
+  const rowCount = Math.max(MIN_ROWS, Math.ceil(Math.max(occupied, 1) / COLS));
+  const rows: Slot[][] = Array.from({ length: rowCount }, () =>
+    Array.from({ length: COLS }, () => ({ type: "empty" as const })),
+  );
+
+  if (showAdd) {
+    rows[0]![0] = { type: "add" };
+  }
+
+  // 下段左から上へ。プラス枠 (0,0) はスキップ
+  let pi = 0;
+  for (let ri = rowCount - 1; ri >= 0 && pi < plantCount; ri--) {
+    for (let ci = 0; ci < COLS && pi < plantCount; ci++) {
+      if (ri === 0 && ci === 0 && showAdd) continue;
+      rows[ri]![ci] = { type: "plant", plant: sorted[pi]! };
+      pi += 1;
+    }
+  }
+
+  return rows;
+}
+
 export function ShelfView({
   weekKeys,
   weekIndex,
@@ -35,6 +75,7 @@ export function ShelfView({
   const { tx, locale } = useI18n();
   const weekKey = weekKeys[weekIndex] ?? weekKeys[0]!;
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const goPrev = () => {
     if (weekIndex < weekKeys.length - 1) onWeekIndex(weekIndex + 1);
@@ -43,18 +84,15 @@ export function ShelfView({
     if (weekIndex > 0) onWeekIndex(weekIndex - 1);
   };
 
-  // 全花 + プラス。段あたり3つ。足りなければ空段を足し、多い分は縦スクロール。
-  const sorted = [...plants].sort(
-    (a, b) => Number(b.gold) - Number(a.gold) || a.dateKey.localeCompare(b.dateKey),
-  );
-  type Slot = { type: "plant"; plant: PlantedIdea } | { type: "add" };
-  const items: Slot[] = sorted.map((plant) => ({ type: "plant" as const, plant }));
-  if (onAddClick) items.push({ type: "add" });
+  const showAdd = Boolean(onAddClick);
+  const rows = buildShelfRows(plants, showAdd);
 
-  const rowCount = Math.max(MIN_ROWS, Math.ceil(Math.max(items.length, 1) / COLS));
-  const rows: Slot[][] = Array.from({ length: rowCount }, (_, ri) =>
-    items.slice(ri * COLS, ri * COLS + COLS),
-  );
+  // 見える範囲は下段寄り（最初の花が下の棚に来る）
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [plants.length, weekIndex, showAdd]);
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col px-4 pb-4 pt-2">
@@ -98,7 +136,6 @@ export function ShelfView({
           if (!end) return;
           const dx = end.clientX - start.x;
           const dy = end.clientY - start.y;
-          // 縦スクロールと区別：横が大きく動いたときだけ週送り
           if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
           if (dx > 0) goPrev();
           else goNext();
@@ -106,46 +143,54 @@ export function ShelfView({
       >
         <div className="pointer-events-none absolute inset-0 z-[1] rounded-[1.6rem] shadow-[inset_0_0_0_10px_#A67C52]" />
 
-        <div className="relative max-h-[min(58vh,480px)] overflow-y-auto overscroll-y-contain px-2 pb-5 pt-6 [-webkit-overflow-scrolling:touch]">
+        <div
+          ref={scrollerRef}
+          className="relative max-h-[min(58vh,480px)] overflow-y-auto overscroll-y-contain px-2 pb-5 pt-6 [-webkit-overflow-scrolling:touch]"
+        >
           <div className="relative space-y-1">
             {rows.map((row, ri) => (
               <div key={ri} className="relative">
-                <div className="grid min-h-[118px] grid-cols-3 items-end gap-1 px-1 pb-2">
-                  {row.length === 0 ? (
+                <div className="grid min-h-[148px] grid-cols-3 items-end gap-0.5 px-0.5 pb-1">
+                  {row.every((s) => s.type === "empty") ? (
                     <p className="col-span-3 mb-8 text-center text-[12px] font-bold text-white/70">
-                      {ri === 0 && plants.length === 0 && !onAddClick
+                      {ri === rows.length - 1 && plants.length === 0 && !showAdd
                         ? tx("まだ花がないよ", "No flowers yet")
                         : ""}
                     </p>
                   ) : (
-                    row.map((slot) =>
-                      slot.type === "add" ? (
-                        <motion.button
-                          key="add-slot"
-                          type="button"
-                          layout
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          onClick={onAddClick}
-                          className="relative mb-5 flex w-full flex-col items-center outline-none [&:active_.plus-face]:translate-y-[4px] [&:active_.plus-face]:shadow-none"
-                          aria-label={tx("アイデアを追加", "Add an idea")}
-                        >
-                          {/* DuoButton と同じ：下帯シャドウ + 押すと沈んで影が消える */}
-                          <span
-                            className={[
-                              "plus-face inline-flex h-[64px] w-[64px] items-center justify-center rounded-full",
-                              "border-[4px] border-[#FF9600] bg-white text-[#FF9600]",
-                              "shadow-[0_4px_0_#D97706]",
-                              "transition-[transform,box-shadow] duration-75 ease-out",
-                            ].join(" ")}
+                    row.map((slot, ci) => {
+                      if (slot.type === "empty") {
+                        return <div key={`empty-${ri}-${ci}`} />;
+                      }
+                      if (slot.type === "add") {
+                        return (
+                          <motion.button
+                            key="add-slot"
+                            type="button"
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            onClick={onAddClick}
+                            className="relative mb-4 flex w-full flex-col items-center outline-none [&:active_.plus-face]:translate-y-[4px] [&:active_.plus-face]:shadow-none"
+                            aria-label={tx("アイデアを追加", "Add an idea")}
                           >
-                            <Plus className="h-8 w-8" strokeWidth={3} />
-                          </span>
-                          <p className="mt-2 text-center text-[11px] font-extrabold text-[#3C3C3C]">
-                            {tx("追加", "Add")}
-                          </p>
-                        </motion.button>
-                      ) : (
+                            <span
+                              className={[
+                                "plus-face inline-flex h-[68px] w-[68px] items-center justify-center rounded-full",
+                                "border-[4px] border-[#FF9600] bg-white text-[#FF9600]",
+                                "shadow-[0_4px_0_#D97706]",
+                                "transition-[transform,box-shadow] duration-75 ease-out",
+                              ].join(" ")}
+                            >
+                              <Plus className="h-8 w-8" strokeWidth={3} />
+                            </span>
+                            <p className="mt-2 text-center text-[11px] font-extrabold text-[#3C3C3C]">
+                              {tx("追加", "Add")}
+                            </p>
+                          </motion.button>
+                        );
+                      }
+                      return (
                         <motion.button
                           key={slot.plant.id}
                           type="button"
@@ -158,7 +203,7 @@ export function ShelfView({
                           aria-label={slot.plant.title}
                         >
                           {slot.plant.gold ? (
-                            <div className="pointer-events-none absolute -top-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+                            <div className="pointer-events-none absolute -top-1 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
                               <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
                                 <path
                                   d="M8 0 L9.5 6 L16 8 L9.5 10 L8 16 L6.5 10 L0 8 L6.5 6 Z"
@@ -181,17 +226,14 @@ export function ShelfView({
                             kind={slot.plant.flowerKind}
                             gold={slot.plant.gold}
                             stage={4}
-                            className="h-[100px] w-[84px] drop-shadow-md"
+                            className="h-[132px] w-[112px] drop-shadow-md"
                           />
-                          <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[10px] font-extrabold text-[#3C3C3C]">
+                          <p className="mt-0.5 max-w-full truncate px-0.5 text-center text-[11px] font-extrabold text-[#3C3C3C]">
                             {slot.plant.title}
                           </p>
-                          <p className="text-[9px] font-bold text-[#5B4636]">
-                            {weekdayLabel(slot.plant.weekday, locale === "en" ? "en" : "ja")}
-                          </p>
                         </motion.button>
-                      ),
-                    )
+                      );
+                    })
                   )}
                 </div>
                 <div className="relative mx-1 h-3 rounded-md bg-[#A67C52] shadow-[0_4px_0_#7A5230]">
@@ -205,8 +247,8 @@ export function ShelfView({
 
       <p className="mt-3 text-center text-[12px] font-semibold text-zinc-500">
         {tx(
-          "左右で週を切替・下にスクロールで棚を伸ばす",
-          "Swipe sideways for weeks · scroll down for more shelves",
+          "左右で週を切替・上にスクロールで棚を伸ばす",
+          "Swipe sideways for weeks · scroll up for more shelves",
         )}
       </p>
     </div>
