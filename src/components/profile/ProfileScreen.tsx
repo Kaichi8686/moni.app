@@ -6,10 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { BadgeRow } from "@/components/profile/BadgeRow";
 import { computeMoniTier } from "@/lib/gamification/moniTier";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
-import { StoryHighlights } from "@/components/profile/StoryHighlights";
 import { loadProfileGamification } from "@/lib/gamification/profileGamification";
 import { syncUserBadges } from "@/lib/gamification/syncBadges";
 import type { ProfileGamification } from "@/lib/gamification/profileGamification";
@@ -19,10 +17,9 @@ import {
   hasPendingFollowRequest,
   isFollowingUser,
   loadFollowList,
-  loadProfileProjects,
   loadProfileView,
 } from "@/lib/profile/profileData";
-import type { ProfileProjectHighlight, ProfileView } from "@/lib/profile/types";
+import type { ProfileView } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
@@ -35,7 +32,6 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   const { tx } = useI18n();
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileView | null>(null);
-  const [projects, setProjects] = useState<ProfileProjectHighlight[]>([]);
   const [gamification, setGamification] = useState<ProfileGamification | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -69,12 +65,8 @@ export function ProfileScreen({ userId: propUserId }: Props) {
           setError(tx("プロフィールが見つかりません", "Profile not found"));
           return;
         }
-        const [projectList, gam] = await Promise.all([
-          loadProfileProjects(supabase, targetId),
-          loadProfileGamification(supabase, targetId),
-        ]);
+        const gam = await loadProfileGamification(supabase, targetId);
         setProfile(view);
-        setProjects(projectList);
         if (uid === targetId && gam.gamificationReady) {
           try {
             const synced = await syncUserBadges(supabase, targetId, gam.activityStreak, gam.badges);
@@ -273,7 +265,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             moniTier={
               gamification?.gamificationReady
                 ? computeMoniTier({
-                    projectCount: projects.length,
+                    projectCount: 0,
                     milestoneCount: 0,
                     streak: gamification.activityStreak,
                     badges: gamification.badges,
@@ -281,18 +273,6 @@ export function ProfileScreen({ userId: propUserId }: Props) {
                 : null
             }
           />
-          {gamification?.gamificationReady ? <BadgeRow badges={gamification.badges} /> : null}
-          {!gamification?.gamificationReady && isOwnProfile ? (
-            <div className="mx-4 mt-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-600 sm:mx-5">
-              {tx("バッジ・ストリークを使うには Supabase で", "To use badges and streaks, run")}{" "}
-              <code className="rounded bg-zinc-200/80 px-1 font-mono text-[11px]">apply_user_gamification.sql</code>{" "}
-              {tx("を実行してください。", "in Supabase.")}
-            </div>
-          ) : null}
-
-          <div className="border-t border-zinc-200 [animation:project-sheet-fade-in_180ms_ease]">
-            <StoryHighlights projects={projects} isOwnProfile={isOwnProfile} />
-          </div>
         </div>
       ) : null}
 
