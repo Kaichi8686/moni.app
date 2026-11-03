@@ -29,6 +29,7 @@ export type GrowPhase =
   | "bag-focus"
   | "seed-reveal"
   | "plant"
+  | "paused"
   | "question"
   | "title"
   | "growing"
@@ -53,6 +54,10 @@ export type GardenScreen =
 export type GardenDraft = {
   dateKey: string;
   screen: GardenScreen;
+  /** 記録して中断中。タブありの植木鉢＋続ける画面 */
+  paused?: boolean;
+  /** 続けるで戻る画面 */
+  resumeScreen?: GardenScreen | null;
   bagIndex: number;
   selectedKind: FlowerKind | null;
   answer: string;

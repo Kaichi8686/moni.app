@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { animate, motion, useMotionValue } from "framer-motion";
+import { animate, motion, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SeedBagArt } from "@/components/idea-garden/illustrations/SeedBagArt";
 import { SEED_BAGS } from "@/lib/idea-garden/seedBags";
 import type { FlowerKind } from "@/lib/idea-garden/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
-/** 中央スロット幅（袋 + 余白）。スライド量に使う */
-const SLOT = 176;
+/** スロット間隔。横の袋が途切れない幅に */
+const SLOT = 152;
 
 type Props = {
   index: number;
@@ -22,7 +22,60 @@ function wrap(i: number) {
   return ((i % n) + n) % n;
 }
 
-/** 種袋カルーセル — 矢印でぬるっと流れる */
+function BagSlot({
+  off,
+  kind,
+  x,
+  busy,
+  onSelect,
+  label,
+}: {
+  off: number;
+  kind: FlowerKind;
+  x: MotionValue<number>;
+  busy: boolean;
+  onSelect: () => void;
+  label: string;
+}) {
+  // スライド中から中央距離に応じて拡大／縮小
+  const scale = useTransform(x, (latest) => {
+    const dist = Math.abs(off * SLOT + latest);
+    const t = Math.max(0, Math.min(1, 1 - dist / SLOT));
+    return 0.68 + 0.32 * t;
+  });
+  const opacity = useTransform(x, (latest) => {
+    const dist = Math.abs(off * SLOT + latest);
+    if (dist >= SLOT * 2.4) return 0.18;
+    if (dist >= SLOT * 0.55) return 0.45;
+    return 1;
+  });
+
+  return (
+    <div
+      className="absolute flex shrink-0 items-center justify-center"
+      style={{
+        width: SLOT,
+        transform: `translateX(${off * SLOT}px)`,
+      }}
+    >
+      <motion.div style={{ scale, opacity }} className="flex origin-center items-center justify-center">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (Math.abs(off * SLOT + x.get()) < SLOT * 0.45) onSelect();
+          }}
+          className="relative z-10 shrink-0 outline-none transition active:scale-95 disabled:pointer-events-none"
+          aria-label={label}
+        >
+          <SeedBagArt kind={kind} selected className="h-56 w-44" />
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
+/** 種袋カルーセル — スライド中から中央は大きく・外れは小さく */
 export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   const { tx, locale } = useI18n();
   const x = useMotionValue(0);
@@ -35,9 +88,9 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
     const target = -dir * SLOT;
     void animate(x, target, {
       type: "spring",
-      stiffness: 280,
-      damping: 32,
-      mass: 0.85,
+      stiffness: 320,
+      damping: 34,
+      mass: 0.75,
     }).then(() => {
       onIndexChange(wrap(index + dir));
       x.set(0);
@@ -45,7 +98,6 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
     });
   };
 
-  // 中央前後を多めに描画して、スライド中も途切れないようにする
   const offsets = [-2, -1, 0, 1, 2] as const;
 
   return (
@@ -60,49 +112,28 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
         <ChevronLeft />
       </button>
 
-      <div className="relative w-full max-w-[22rem] overflow-hidden">
-        <motion.div
-          className="relative mx-auto flex h-56 w-full items-center justify-center"
-          style={{ x }}
-        >
-          {offsets.map((off) => {
-            const kind = SEED_BAGS[wrap(index + off)]!.id;
-            const isCenter = off === 0;
-            const far = Math.abs(off) >= 2;
-            return (
-              <div
-                key={off}
-                className="absolute flex shrink-0 items-center justify-center"
-                style={{
-                  width: SLOT,
-                  transform: `translateX(${off * SLOT}px)`,
-                }}
-              >
-                {isCenter ? (
-                  <motion.button
-                    type="button"
-                    whileTap={busy ? undefined : { scale: 0.96 }}
-                    disabled={busy}
-                    onClick={() => onSelect(kind)}
-                    className="relative z-10 shrink-0 outline-none"
-                    aria-label={
-                      locale === "en"
-                        ? SEED_BAGS[wrap(index)]!.labelEn
-                        : SEED_BAGS[wrap(index)]!.labelJa
-                    }
-                  >
-                    <SeedBagArt kind={kind} selected className="h-56 w-44" />
-                  </motion.button>
-                ) : (
-                  <SeedBagArt
-                    kind={kind}
-                    className={`h-36 w-28 shrink-0 scale-90 ${far ? "opacity-0" : "opacity-40"}`}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </motion.div>
+      <div className="relative w-full max-w-[26rem] px-1">
+        <div className="relative mx-auto h-56 w-full overflow-x-clip overflow-y-visible">
+          <motion.div
+            className="relative mx-auto flex h-56 w-full items-center justify-center"
+            style={{ x }}
+          >
+            {offsets.map((off) => {
+              const meta = SEED_BAGS[wrap(index + off)]!;
+              return (
+                <BagSlot
+                  key={off}
+                  off={off}
+                  kind={meta.id}
+                  x={x}
+                  busy={busy}
+                  onSelect={() => onSelect(meta.id)}
+                  label={locale === "en" ? meta.labelEn : meta.labelJa}
+                />
+              );
+            })}
+          </motion.div>
+        </div>
       </div>
 
       <button
@@ -119,7 +150,7 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
         key={bag.id}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22 }}
+        transition={{ duration: 0.18 }}
         className="mt-3 text-center text-[16px] font-extrabold text-[#3C3C3C]"
       >
         {locale === "en" ? bag.labelEn : bag.labelJa}
