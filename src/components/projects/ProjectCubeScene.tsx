@@ -549,8 +549,8 @@ export function ProjectCubeCarousel({
     if (!loading) return null;
     return (
       <div className="relative h-full min-h-0 w-full flex-1" aria-busy>
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_40%,#f4f4f5_0%,#ffffff_70%)]">
-          <div className="h-[min(36vmin,300px)] w-[min(36vmin,300px)] animate-pulse rounded-3xl bg-zinc-200/70" />
+        <div className="projects-soft-lilac-bg absolute inset-0 flex flex-col items-center justify-center">
+          <div className="h-[min(36vmin,300px)] w-[min(36vmin,300px)] animate-pulse rounded-3xl bg-violet-100/50" />
           <p className="mt-4 text-xs text-zinc-400">読み込み中…</p>
         </div>
       </div>
@@ -560,7 +560,7 @@ export function ProjectCubeCarousel({
   return (
     <div className="relative h-full min-h-0 w-full flex-1 overflow-hidden">
       <div
-        className="absolute inset-0 touch-none overflow-hidden bg-[radial-gradient(ellipse_at_50%_38%,#f1f5f9_0%,#ffffff_62%,#fafafa_100%)]"
+        className="projects-soft-lilac-bg absolute inset-0 touch-none overflow-hidden"
         {...bind()}
         style={{ touchAction: "none" }}
       >
@@ -585,7 +585,7 @@ export function ProjectCubeCarousel({
           <ChevronRight className="h-6 w-6" aria-hidden />
         </button>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white via-white/90 to-transparent px-4 pb-3 pt-16 text-center">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white via-[#faf9fd]/92 to-transparent px-4 pb-3 pt-16 text-center">
           <p className="text-2xl font-bold tracking-tight text-zinc-900 drop-shadow-sm sm:text-3xl">
             {meta ? meta.name : "新規プロジェクト"}
           </p>
