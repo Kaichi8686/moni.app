@@ -96,7 +96,7 @@ export function SettingsList() {
           icon: Lock,
           label: tx("ログイン", "Log in"),
           description: tx("アカウントの切り替え", "Switch account"),
-          href: "/login",
+          href: "/?auth=signin",
           color: "#059669",
         },
       ],
@@ -136,7 +136,8 @@ export function SettingsList() {
 
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
-    router.push("/login");
+    // タブ画面ではなく LP へ（ログインは LP 上のモーダル）
+    router.replace("/");
   }
 
   return (
