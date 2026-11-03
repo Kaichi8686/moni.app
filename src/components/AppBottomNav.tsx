@@ -32,6 +32,7 @@ import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 
 function getClusterUnlockedSnapshot(): boolean {
   return readProjectClusterUnlocked();
@@ -319,6 +320,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const tab = searchParams.get("tab");
   const segment = searchParams.get("segment");
   const { t, locale } = useI18n();
+  const keyboardOpen = useVirtualKeyboardOpen();
   const [mailUnread, setMailUnread] = useState(0);
   const [openPref, setOpenPref] = useState(() => readStoredProjectClusterOpen() ?? false);
   const [seenRouteKey, setSeenRouteKey] = useState("");
@@ -530,7 +532,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   return (
     <nav
-      className={`app-bottom-nav ${className ?? ""}`.trim()}
+      className={`app-bottom-nav ${keyboardOpen ? "is-keyboard-open" : ""} ${className ?? ""}`.trim()}
+      aria-hidden={keyboardOpen || undefined}
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>

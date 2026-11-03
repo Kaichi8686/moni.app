@@ -168,7 +168,7 @@ export function ProjectBriefSection() {
               )}
             </span>
             <textarea
-              className="mt-1.5 min-h-[5rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+              className="mt-1.5 min-h-[5rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
               rows={3}
               placeholder={tx(
                 "例: 学校の行事告知がバラバラで、みんな見逃しがちだった",
@@ -184,7 +184,7 @@ export function ProjectBriefSection() {
               {tx("このプロジェクトのゴール", "Project goal")}
             </span>
             <textarea
-              className="mt-1.5 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+              className="mt-1.5 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
               rows={2}
               placeholder={tx(
                 "例: 文化祭までに、クラス全員が見られる告知アプリを公開する",
