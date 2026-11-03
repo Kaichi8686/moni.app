@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 
 /**
- * Detects mobile soft keyboard via visualViewport shrink (and focused text fields).
- * Used to hide fixed chrome (bottom nav) so it doesn't cover inputs.
+ * Detects mobile soft keyboard by visualViewport shrink vs a closed baseline.
+ * Focus alone is not enough: iOS often keeps focus after the keyboard closes,
+ * which previously left the bottom nav stuck hidden.
  */
 export function useVirtualKeyboardOpen(thresholdPx = 120): boolean {
   const [open, setOpen] = useState(false);
@@ -25,34 +26,51 @@ export function useVirtualKeyboardOpen(thresholdPx = 120): boolean {
       return el.isContentEditable;
     };
 
-    const readViewportOpen = () => {
-      const vv = window.visualViewport;
-      if (!vv) return false;
-      const covered = window.innerHeight - vv.height - vv.offsetTop;
-      return covered > thresholdPx;
-    };
+    const viewportHeight = () => window.visualViewport?.height ?? window.innerHeight;
 
-    const isCoarsePointer = () => window.matchMedia("(pointer: coarse)").matches;
+    /** Largest height seen while keyboard is considered closed. */
+    let closedBaseline = viewportHeight();
 
     const sync = () => {
-      const viewportOpen = readViewportOpen();
-      // iOS can keep visualViewport tall with interactive-widget; hide on text focus for touch devices.
-      const focusedOnTouch = isCoarsePointer() && isTextField(document.activeElement);
-      setOpen(viewportOpen || focusedOnTouch);
+      const h = viewportHeight();
+      const focused = isTextField(document.activeElement);
+
+      if (!focused) {
+        closedBaseline = Math.max(closedBaseline, h);
+        setOpen(false);
+        return;
+      }
+
+      // Grow baseline if viewport recovered (keyboard dismissed while focus remains).
+      if (h > closedBaseline) closedBaseline = h;
+
+      const shrunk = closedBaseline - h > thresholdPx;
+      setOpen(shrunk);
     };
 
     const onFocusIn = (e: FocusEvent) => {
-      if (isCoarsePointer() && isTextField(e.target)) setOpen(true);
+      if (!isTextField(e.target)) return;
+      // Snapshot closed height just before keyboard animates in.
+      closedBaseline = Math.max(closedBaseline, viewportHeight());
+      // Defer: keyboard height usually lands after focus.
+      window.setTimeout(sync, 120);
+      window.setTimeout(sync, 320);
     };
+
     const onFocusOut = () => {
-      // Delay so focus moving between fields doesn't flicker the nav.
       window.setTimeout(sync, 80);
+    };
+
+    const onOrientation = () => {
+      closedBaseline = viewportHeight();
+      setOpen(false);
     };
 
     const vv = window.visualViewport;
     vv?.addEventListener("resize", sync);
     vv?.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", onOrientation);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     sync();
@@ -61,6 +79,7 @@ export function useVirtualKeyboardOpen(thresholdPx = 120): boolean {
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", onOrientation);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
     };
