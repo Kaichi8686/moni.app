@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { IdeaStreakBadge } from "@/components/idea-garden/IdeaStreakBadge";
 import { InterruptControl } from "@/components/idea-garden/InterruptMenu";
 import { QuestionPanel } from "@/components/idea-garden/QuestionPanel";
 import { SeedBagCarousel } from "@/components/idea-garden/SeedBagCarousel";
@@ -24,6 +25,7 @@ import { dailyPromptFor } from "@/lib/idea-garden/prompts";
 import { SEED_BAGS } from "@/lib/idea-garden/seedBags";
 import {
   goldDoneThisWeek,
+  ideaStreakDays,
   loadGarden,
   plantForDate,
   plantsForWeek,
@@ -324,6 +326,22 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   const setGrow = (phase: GrowPhase) => setScreen({ kind: "grow", phase });
   const setSunday = (phase: SundayPhase) => setScreen({ kind: "sunday", phase });
 
+  /** 棚の＋ → 袋選びから追加（1日1回制限を超えて追加可） */
+  const startAddIdea = () => {
+    setPaused(false);
+    setResumeScreen(null);
+    setInterruptOpen(false);
+    setSelectedKind(null);
+    setAnswer("");
+    setTitle("");
+    setBagIndex(0);
+    setGrowStage(0);
+    setShowCelebrateText(false);
+    setShowContinueBtn(false);
+    setSceneVeil("idle");
+    setGrow("pick-bag");
+  };
+
   const goQuestionWithVeil = () => {
     if (reduceMotion()) {
       setGrow("question");
@@ -536,11 +554,12 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     );
   }
 
-  /* ——— SHELF (個人専用・1日1花) ——— */
+  /* ——— SHELF (個人専用) ——— */
   if (screen.kind === "shelf") {
     const canStartGrow = isGrowDay() && !plantForDate(plants, tokyoDateKey());
     const canStartSunday =
       isSunday() && !goldDoneThisWeek(plants, currentWeekKey) && sundayCandidates.length > 0;
+    const streak = ideaStreakDays(plants);
 
     return (
       <div className="min-h-[calc(100dvh-7rem)] bg-gradient-to-b from-[#EAF8FF] to-[#F4F4F5]">
@@ -550,19 +569,23 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           onWeekIndex={setWeekIndex}
           plants={weekPlants}
           onPlantClick={(plant) => setScreen({ kind: "detail", plantId: plant.id })}
+          onAddClick={weekIndex === 0 ? startAddIdea : undefined}
           headerSlot={
             <div className="pt-1 text-center">
-              <h1 className="text-[22px] font-extrabold tracking-tight text-[#3C3C3C]">
+              <div className="flex justify-center">
+                <IdeaStreakBadge days={streak} />
+              </div>
+              <h1 className="mt-3 text-[22px] font-extrabold tracking-tight text-[#3C3C3C]">
                 {tx("あなたのアイデアの棚", "Your idea shelf")}
               </h1>
               <p className="mt-1 text-[13px] font-semibold text-zinc-500">
                 {isSunday()
                   ? tx("日曜は自分のお気に入りを深掘りしよう", "Deepen your own favorite on Sundays")
-                  : tx("自分だけの毎日ひとつ。他人とは共有されません", "One private seed a day — yours only")}
+                  : tx("＋からいつでもアイデアを追加できるよ", "Tap + anytime to add another idea")}
               </p>
               {canStartGrow ? (
                 <div className="mt-4">
-                  <DuoButton tone="orange" onClick={() => setGrow("pick-bag")}>
+                  <DuoButton tone="orange" onClick={startAddIdea}>
                     {tx("今日の種を選ぶ", "Pick today’s seed")}
                   </DuoButton>
                 </div>

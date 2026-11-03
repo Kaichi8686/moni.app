@@ -1,5 +1,5 @@
 import type { GardenDraft, GardenScreen, GardenState, GrowPhase, PlantedIdea, SundayPhase } from "@/lib/idea-garden/types";
-import { isGrowDay, isSunday, tokyoDateKey, weekKeyFor } from "@/lib/idea-garden/calendar";
+import { addDaysToDateKey, tokyoDateKey, weekKeyFor } from "@/lib/idea-garden/calendar";
 
 /** レガシー（ユーザー未分離）キー — 初回だけ個人キーへ移行 */
 export const GARDEN_STORAGE_KEY_LEGACY = "moni.ideaGarden.v1";
@@ -107,12 +107,34 @@ export function stabilizeDraftScreen(screen: GardenScreen): GardenScreen {
   return screen;
 }
 
-/** 今日の途中下書きが有効なら返す（完了済みなら無効） */
+/**
+ * アイデア出した連続日数（東京暦・Duolingo風）。
+ * 今日未実施なら昨日から遡って数える。
+ */
+export function ideaStreakDays(plants: PlantedIdea[]): number {
+  const days = new Set(plants.map((p) => p.dateKey));
+  if (days.size === 0) return 0;
+  const today = tokyoDateKey();
+  let cursor = days.has(today) ? today : addDaysToDateKey(today, -1);
+  if (!days.has(cursor)) return 0;
+  let streak = 0;
+  while (days.has(cursor)) {
+    streak += 1;
+    cursor = addDaysToDateKey(cursor, -1);
+  }
+  return streak;
+}
+
+/** 今日の途中下書きが有効なら返す（完了時は draft=null で消す） */
 export function usableDraft(plants: PlantedIdea[], draft: GardenDraft | null | undefined): GardenDraft | null {
   if (!draft || draft.dateKey !== tokyoDateKey()) return null;
 
-  if (isGrowDay() && plantForDate(plants, tokyoDateKey())) return null;
-  if (isSunday() && goldDoneThisWeek(plants, weekKeyFor())) return null;
+  // 日曜ゴールド完了後は sunday 下書きだけ無効（棚の＋からの種袋フローは同日でも再開可）
+  const sundayDone = goldDoneThisWeek(plants, weekKeyFor());
+  const isSundayDraft =
+    draft.screen.kind === "sunday" ||
+    (Boolean(draft.paused) && draft.resumeScreen?.kind === "sunday");
+  if (sundayDone && isSundayDraft) return null;
 
   if (draft.paused) {
     return {
