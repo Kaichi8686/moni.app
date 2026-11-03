@@ -60,8 +60,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: "#fafaf8",
-  /** Helps mobile keyboards resize layout instead of overlaying inputs */
-  interactiveWidget: "resizes-content",
+  /**
+   * overlays-content: keyboard covers the bottom without shrinking the layout.
+   * resizes-content lifts position:fixed bottom nav above the keyboard and can leave
+   * it stuck mid-screen after the iOS “dismiss keyboard” button (focus remains).
+   */
+  interactiveWidget: "overlays-content",
 };
 
 export const metadata: Metadata = {

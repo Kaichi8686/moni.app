@@ -176,6 +176,12 @@ export function ProjectBriefSection() {
               )}
               value={draft.problemMotivation}
               onChange={(e) => setDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
+              onFocus={(e) => {
+                const el = e.currentTarget;
+                window.setTimeout(() => {
+                  el.scrollIntoView({ block: "center", behavior: "smooth" });
+                }, 50);
+              }}
               disabled={saving}
             />
           </label>
@@ -192,6 +198,12 @@ export function ProjectBriefSection() {
               )}
               value={draft.projectGoal}
               onChange={(e) => setDraft((b) => ({ ...b, projectGoal: e.target.value }))}
+              onFocus={(e) => {
+                const el = e.currentTarget;
+                window.setTimeout(() => {
+                  el.scrollIntoView({ block: "center", behavior: "smooth" });
+                }, 50);
+              }}
               disabled={saving}
             />
           </label>
