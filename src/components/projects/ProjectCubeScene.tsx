@@ -17,11 +17,16 @@ import { rememberLastProject } from "@/lib/workspace/lastProject";
 const ACTIVE_SPIN_PER_FRAME = 0.003;
 /** 256 keeps faces sharp enough while cutting GPU/CPU texture cost in half. */
 const FACE_TEX_SIZE = 256;
-/** Soft rounded cube — matches the floating carousel look. */
-const CUBE_SIZE = 1.9;
-const CUBE_RADIUS = 0.22;
+/** Soft rounded cube — sized so neighbors peek faintly at the sides. */
+const CUBE_SIZE = 1.42;
+const CUBE_RADIUS = 0.16;
 const CUBE_SMOOTHNESS = 3;
-const CUBE_SPACING = 2.85;
+const CUBE_SPACING = 2.05;
+const ACTIVE_Z = 0.12;
+const INACTIVE_Z = -0.85;
+const INACTIVE_SCALE = 0.74;
+/** Brand orange for the “new project” plus cube (`--startup-accent`). */
+const CREATE_CUBE_BG = "#ff5c35";
 const INACTIVE_TINT = new THREE.Color("#c4c4c4");
 const ACTIVE_TINT = new THREE.Color("#ffffff");
 
@@ -75,14 +80,13 @@ function paintFaceFallback(ctx: CanvasRenderingContext2D, opts: FacePaintOpts & 
   ctx.fillRect(0, 0, s, s);
   if (opts.photoPending) return;
 
-  const vignette = ctx.createRadialGradient(mid, 220 * scale, 40 * scale, mid, mid, 320 * scale);
-  vignette.addColorStop(0, "rgba(255,255,255,0.18)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.22)");
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, s, s);
-
   if (opts.create) {
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    const glow = ctx.createRadialGradient(mid, 220 * scale, 40 * scale, mid, mid, 320 * scale);
+    glow.addColorStop(0, "rgba(255,255,255,0.22)");
+    glow.addColorStop(1, "rgba(0,0,0,0.08)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "rgba(255,255,255,0.96)";
     ctx.lineWidth = 36 * scale;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -93,6 +97,12 @@ function paintFaceFallback(ctx: CanvasRenderingContext2D, opts: FacePaintOpts & 
     ctx.stroke();
     return;
   }
+
+  const vignette = ctx.createRadialGradient(mid, 220 * scale, 40 * scale, mid, mid, 320 * scale);
+  vignette.addColorStop(0, "rgba(255,255,255,0.18)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.22)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, s, s);
 
   const icon = opts.icon?.trim() || "";
   if (icon) paintEmojiOrLetter(ctx, icon, true);
@@ -133,7 +143,7 @@ function createFaceTextureCanvas(opts: FacePaintOpts) {
 
 function faceOptsForItem(item: CubeItem): FacePaintOpts {
   if (item.kind === "create") {
-    return { bg: "#27272a", create: true };
+    return { bg: CREATE_CUBE_BG, create: true };
   }
   const p = item.project;
   return {
@@ -335,7 +345,7 @@ function ProjectCubeMesh({
       0.08,
     );
     g.position.y = THREE.MathUtils.lerp(g.position.y, bob, 0.1);
-    g.position.z = THREE.MathUtils.lerp(g.position.z, active ? 0.15 : -1.35, 0.08);
+    g.position.z = THREE.MathUtils.lerp(g.position.z, active ? ACTIVE_Z : INACTIVE_Z, 0.08);
 
     if (active) {
       g.rotation.y += ACTIVE_SPIN_PER_FRAME;
@@ -349,7 +359,7 @@ function ProjectCubeMesh({
 
     const pressTarget = pressed.current ? 0.9 : 1;
     tapScale.current += (pressTarget - tapScale.current) * 0.22;
-    const targetScale = (active ? 1 : 0.68) * tapScale.current;
+    const targetScale = (active ? 1 : INACTIVE_SCALE) * tapScale.current;
     g.scale.setScalar(THREE.MathUtils.lerp(g.scale.x, targetScale, 0.15));
 
     /* Three.js materials are mutated each frame for fade/tint (not React state). */
@@ -388,7 +398,7 @@ function ProjectCubeMesh({
   }
 
   return (
-    <group ref={group} position={[CUBE_SPACING * side, 0, active ? 0.15 : -1.35]}>
+    <group ref={group} position={[CUBE_SPACING * side, 0, active ? ACTIVE_Z : INACTIVE_Z]}>
       <RoundedBox
         ref={meshRef}
         args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]}
@@ -449,11 +459,11 @@ function SceneCubes({
       ))}
 
       <ContactShadows
-        position={[0, -1.35, 0]}
-        opacity={0.32}
-        scale={14}
+        position={[0, -1.05, 0]}
+        opacity={0.3}
+        scale={12}
         blur={2.2}
-        far={4.2}
+        far={3.6}
         resolution={256}
         color="#1a1a1a"
       />
@@ -540,7 +550,7 @@ export function ProjectCubeCarousel({
     return (
       <div className="relative h-full min-h-0 w-full flex-1" aria-busy>
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_40%,#f4f4f5_0%,#ffffff_70%)]">
-          <div className="h-[min(48vmin,420px)] w-[min(48vmin,420px)] animate-pulse rounded-3xl bg-zinc-200/70" />
+          <div className="h-[min(36vmin,300px)] w-[min(36vmin,300px)] animate-pulse rounded-3xl bg-zinc-200/70" />
           <p className="mt-4 text-xs text-zinc-400">読み込み中…</p>
         </div>
       </div>
@@ -559,7 +569,7 @@ export function ProjectCubeCarousel({
           shadows
           dpr={[1, 1.25]}
           frameloop={tabVisible ? "always" : "never"}
-          camera={{ position: [0, 0.35, 5.35], fov: 38, near: 0.1, far: 40 }}
+          camera={{ position: [0, 0.28, 5.9], fov: 36, near: 0.1, far: 40 }}
           gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
           style={{ background: "transparent" }}
         >
