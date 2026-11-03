@@ -478,7 +478,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (!plant) {
       return (
         <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#EAF8FF] px-6">
-          <DuoButton tone="green" onClick={() => setScreen({ kind: "shelf" })}>
+          <DuoButton tone="orange" onClick={() => setScreen({ kind: "shelf" })}>
             {tx("棚に戻る", "Back to shelf")}
           </DuoButton>
         </div>
@@ -562,14 +562,14 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               </p>
               {canStartGrow ? (
                 <div className="mt-4">
-                  <DuoButton tone="green" onClick={() => setGrow("pick-bag")}>
+                  <DuoButton tone="orange" onClick={() => setGrow("pick-bag")}>
                     {tx("今日の種を選ぶ", "Pick today’s seed")}
                   </DuoButton>
                 </div>
               ) : null}
               {canStartSunday ? (
                 <div className="mt-4">
-                  <DuoButton tone="gold" onClick={() => setSunday("start")}>
+                  <DuoButton tone="orange" onClick={() => setSunday("start")}>
                     {tx("花を見つける", "Find a flower")}
                   </DuoButton>
                 </div>
@@ -607,7 +607,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               {tx("お気に入りを選んで、プロジェクトに育てる", "Pick a favorite and deepen it")}
             </p>
             <DuoButton
-              tone="gold"
+              tone="orange"
               fullWidth
               className="mt-8"
               onClick={() => {
@@ -670,7 +670,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
           </div>
           <div className="mx-auto mt-auto w-full max-w-md pt-6">
             <DuoButton
-              tone="gold"
+              tone="orange"
               fullWidth
               onClick={() => {
                 setSundayPickId(cur.id);
@@ -770,7 +770,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 className="absolute bottom-10 left-5 right-5 mx-auto max-w-md"
               >
-                <DuoButton tone="gold" fullWidth onClick={finishSunday}>
+                <DuoButton tone="orange" fullWidth onClick={finishSunday}>
                   {tx("来週も頑張る", "Keep it up next week")}
                 </DuoButton>
               </motion.div>
@@ -814,7 +814,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             {tx("続きから育てよう", "Continue growing")}
           </p>
           <DuoButton
-            tone="green"
+            tone="orange"
             size="xl"
             className="mt-[18vh] min-w-[260px]"
             onClick={continuePaused}
@@ -865,7 +865,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
         <div className="relative flex min-h-[100dvh] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
           {interruptUi}
           <DuoButton
-            tone="green"
+            tone="orange"
             size="xl"
             className="mt-[22vh] min-w-[260px] sm:mt-[18vh]"
             onClick={goQuestionWithVeil}
@@ -973,7 +973,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 className="w-full max-w-md"
               >
-                <DuoButton tone="green" fullWidth onClick={finishGrow}>
+                <DuoButton tone="orange" fullWidth onClick={finishGrow}>
                   {tx("明日も頑張る", "I'll try again tomorrow")}
                 </DuoButton>
               </motion.div>

@@ -47,7 +47,7 @@ export function InterruptControl({ open, onOpen, onClose, onSaveAndPause, onAbor
               )}
             </p>
             <div className="mt-5 flex flex-col gap-3">
-              <DuoButton tone="green" fullWidth onClick={onSaveAndPause}>
+              <DuoButton tone="orange" fullWidth onClick={onSaveAndPause}>
                 {tx("記録して中断", "Save & pause")}
               </DuoButton>
               <DuoButton tone="zinc" fullWidth onClick={onAbort}>

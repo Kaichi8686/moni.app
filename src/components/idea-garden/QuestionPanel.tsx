@@ -57,7 +57,7 @@ export function QuestionPanel({
         </div>
 
         <DuoButton
-          tone="green"
+          tone="orange"
           fullWidth
           disabled={!can}
           onClick={onSubmit}
