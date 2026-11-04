@@ -8,13 +8,22 @@ import { ContestHeader } from "@/components/contest/ContestHeader";
 import { IdeaDetailModal } from "@/components/contest/IdeaDetailModal";
 import { IdeaGallery } from "@/components/contest/IdeaGallery";
 import { IdeaSubmissionModal } from "@/components/contest/IdeaSubmissionModal";
-import { loadActiveContest, loadContestIdeas, toggleIdeaLike } from "@/lib/contest/api";
+import { loadActiveContest, loadContestById, loadContestIdeas, toggleIdeaLike } from "@/lib/contest/api";
 import type { Contest, ContestGallerySort, ContestIdea } from "@/lib/contest/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
-export function ContestApp() {
+type Props = {
+  /** Ideaタブ内埋め込み（ナビ二重を避ける） */
+  embedded?: boolean;
+  contestId?: string | null;
+  onBack?: () => void;
+  /** 入室直後に投稿モーダルを開く */
+  autoOpenSubmit?: boolean;
+};
+
+export function ContestApp({ embedded = false, contestId = null, onBack, autoOpenSubmit = false }: Props) {
   const { tx } = useI18n();
   const [uid, setUid] = useState<string | null>(null);
   const [contest, setContest] = useState<Contest | null>(null);
@@ -54,13 +63,18 @@ export function ContestApp() {
     let cancelled = false;
     void (async () => {
       try {
-        const [{ data }, active] = await Promise.all([supabase.auth.getSession(), loadActiveContest(supabase)]);
+        const { data } = await supabase.auth.getSession();
         if (cancelled) return;
         const userId = data.session?.user.id ?? null;
         setUid(userId);
+        const active = contestId
+          ? await loadContestById(supabase, contestId)
+          : await loadActiveContest(supabase);
+        if (cancelled) return;
         setContest(active.contest);
         setDemo(active.demo);
         await reloadGallery(active.contest, userId, "popular");
+        if (autoOpenSubmit && userId) setApplyOpen(true);
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : "failed");
       } finally {
@@ -70,7 +84,7 @@ export function ContestApp() {
     return () => {
       cancelled = true;
     };
-  }, [reloadGallery]);
+  }, [reloadGallery, contestId, autoOpenSubmit]);
 
   useEffect(() => {
     if (!contest || !supabase) return;
@@ -120,36 +134,50 @@ export function ContestApp() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#fafaf8] pb-bottom-nav text-zinc-900">
-      <AppBrandHeader
-        left={
-          <Link
-            href={HOME_PROJECTS_HREF}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-600 hover:bg-zinc-100"
-            aria-label={tx("戻る", "Back")}
+    <div className={`${embedded ? "min-h-0" : "min-h-[100dvh] pb-bottom-nav"} bg-[#fafaf8] text-zinc-900`}>
+      {embedded ? (
+        <div className="mx-auto flex max-w-lg items-center gap-2 px-4 py-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex min-h-10 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100"
           >
-            ←
-          </Link>
-        }
-        right={
-          <Link href="/discover" className="rounded-lg px-2 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100">
-            {tx("発見", "Discover")}
-          </Link>
-        }
-      />
+            ← {tx("ロビーに戻る", "Back to lobby")}
+          </button>
+        </div>
+      ) : (
+        <AppBrandHeader
+          left={
+            <Link
+              href={HOME_PROJECTS_HREF}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-zinc-600 hover:bg-zinc-100"
+              aria-label={tx("戻る", "Back")}
+            >
+              ←
+            </Link>
+          }
+          right={
+            <Link href="/discover" className="rounded-lg px-2 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100">
+              {tx("発見", "Discover")}
+            </Link>
+          }
+        />
+      )}
 
       <main className="mx-auto w-full max-w-lg space-y-5 px-4 py-4 sm:px-5">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-            {tx("コミュニティイベント", "Community event")}
-          </p>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight text-zinc-950">
-            {tx("アイデアコンテスト", "Idea Contest")}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {tx("自由な形式で解決アイデアを発表しよう", "Share solutions in any format you like")}
-          </p>
-        </div>
+        {!embedded ? (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+              {tx("コミュニティイベント", "Community event")}
+            </p>
+            <h1 className="mt-1 text-xl font-semibold tracking-tight text-zinc-950">
+              {tx("アイデアコンテスト", "Idea Contest")}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              {tx("自由な形式で解決アイデアを発表しよう", "Share solutions in any format you like")}
+            </p>
+          </div>
+        ) : null}
 
         {err ? <p className="text-sm text-rose-600">{err}</p> : null}
 
@@ -202,7 +230,7 @@ export function ContestApp() {
         </div>
       ) : null}
 
-      <AppBottomNav />
+      {embedded ? null : <AppBottomNav />}
     </div>
   );
 }

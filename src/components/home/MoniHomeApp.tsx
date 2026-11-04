@@ -5026,7 +5026,7 @@ export function MoniHomeApp() {
         >
           <div className="flex min-h-0 flex-1 flex-col">
             <Link
-              href="/contest"
+              href="/idea?spark=contest"
               className="mb-3 block shrink-0 overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-white to-[#EEF0FF] p-3.5 shadow-sm transition active:scale-[0.99]"
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-600">
