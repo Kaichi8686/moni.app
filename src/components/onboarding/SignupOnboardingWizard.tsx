@@ -13,27 +13,26 @@ import {
   parseBirthday,
 } from "@/lib/profile/birthday";
 import { countryLabel, sortedCountries } from "@/lib/profile/countries";
-import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
-import { normalizeTagList } from "@/lib/profile/skillsTraits";
+import { GENDER_OPTIONS, isProfileGender } from "@/lib/profile/gender";
+import {
+  emptyOnboardingDraft,
+  inferOnboardingStep,
+  mergeOnboardingDraft,
+  readOnboardingProgress,
+  writeOnboardingProgress,
+  type OnboardingDraft,
+  type OnboardingStep,
+} from "@/lib/profile/onboardingDraft";
+import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { parseInterestFields } from "@/lib/profile/interestFields";
 import { writeLocalOnboardingDone } from "@/lib/profile/onboardingStatus";
 import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 
-export type OnboardingDraft = {
-  birthday: string;
-  gender: ProfileGender | "";
-  country: string;
-  nickname: string;
-  avatarUrl: string | null;
-  skills: string[];
-  traits: string[];
-  interestFields: string[];
-  socialIssues: string[];
-};
+export type { OnboardingDraft };
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type Step = OnboardingStep;
 
 type Props = {
   session: Session;
@@ -44,58 +43,67 @@ type Props = {
 const TOTAL_STEPS = 7;
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
+function initialProgress(
+  userId: string,
+  initialNickname: string,
+): { step: Step; draft: OnboardingDraft; fromLocal: boolean } {
+  const saved = readOnboardingProgress(userId, initialNickname);
+  if (saved) return { step: saved.step, draft: saved.draft, fromLocal: true };
+  return { step: 1, draft: emptyOnboardingDraft(initialNickname), fromLocal: false };
+}
+
 export function SignupOnboardingWizard({ session, initialNickname = "", onComplete }: Props) {
   const { locale, tx } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>(1);
+  const restoredRef = useRef(initialProgress(session.user.id, initialNickname));
+  const [step, setStep] = useState<Step>(restoredRef.current.step);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [countryQuery, setCountryQuery] = useState("");
-  const [draft, setDraft] = useState<OnboardingDraft>({
-    birthday: "",
-    gender: "",
-    country: "",
-    nickname: initialNickname,
-    avatarUrl: null,
-    skills: [],
-    traits: [],
-    interestFields: [],
-    socialIssues: [],
-  });
+  const [draft, setDraft] = useState<OnboardingDraft>(restoredRef.current.draft);
+
+  // 途中離脱しても同じ端末なら再開できるよう、ステップと下書きを都度保存する
+  useEffect(() => {
+    writeOnboardingProgress(session.user.id, { step, draft });
+  }, [session.user.id, step, draft]);
 
   useEffect(() => {
     if (!supabase) return;
+    const hadLocalProgress = restoredRef.current.fromLocal;
+    let cancelled = false;
     void supabase
       .from("profiles")
       .select("display_name,avatar_url,birthday,gender,country,skills,traits,interest_fields,social_issues")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (!data) return;
+        if (cancelled || !data) return;
         const genderRaw = (data as { gender?: string | null }).gender;
         const birthdayRaw = (data as { birthday?: string | null }).birthday;
-        setDraft((prev) => ({
-          ...prev,
-          nickname:
-            prev.nickname ||
-            ((data.display_name as string | null)?.trim() ?? "") ||
-            initialNickname,
-          avatarUrl: (data.avatar_url as string | null) ?? prev.avatarUrl,
-          birthday: prev.birthday || (typeof birthdayRaw === "string" ? birthdayRaw.slice(0, 10) : ""),
-          gender: prev.gender || (isProfileGender(genderRaw) ? genderRaw : ""),
-          country: prev.country || ((data.country as string | null) ?? ""),
-          interestFields:
-            prev.interestFields.length > 0
-              ? prev.interestFields
-              : parseInterestFields((data as { interest_fields?: unknown }).interest_fields),
-          socialIssues:
-            prev.socialIssues.length > 0
-              ? prev.socialIssues
-              : parseSocialIssues((data as { social_issues?: unknown }).social_issues),
-        }));
+        const fromDb: Partial<OnboardingDraft> = {
+          nickname: ((data.display_name as string | null)?.trim() ?? "") || initialNickname,
+          avatarUrl: (data.avatar_url as string | null) ?? null,
+          birthday: typeof birthdayRaw === "string" ? birthdayRaw.slice(0, 10) : "",
+          gender: isProfileGender(genderRaw) ? genderRaw : "",
+          country: (data.country as string | null) ?? "",
+          skills: normalizeTagList(parseStringTagArray((data as { skills?: unknown }).skills), 3),
+          traits: normalizeTagList(parseStringTagArray((data as { traits?: unknown }).traits), 3),
+          interestFields: parseInterestFields((data as { interest_fields?: unknown }).interest_fields),
+          socialIssues: parseSocialIssues((data as { social_issues?: unknown }).social_issues),
+        };
+        setDraft((prev) => mergeOnboardingDraft(prev, fromDb));
+        // localStorage に進捗が無いときだけ、DB の入力状況からステップを推定
+        if (!hadLocalProgress) {
+          setStep(
+            inferOnboardingStep(mergeOnboardingDraft(emptyOnboardingDraft(initialNickname), fromDb)),
+          );
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [session.user.id, initialNickname]);
 
   const countries = useMemo(() => sortedCountries(locale), [locale]);
@@ -151,6 +159,56 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
       if (cameraRef.current) cameraRef.current.value = "";
+    }
+  }
+
+  /** 完了前でも「次へ」のたびに確定済み項目を DB へ書き、別端末・キャッシュクリア後も再開しやすくする */
+  async function persistStepProgress(completedStep: Step, nextDraft: OnboardingDraft = draft) {
+    if (!supabase) return;
+    const payload: Record<string, unknown> = {};
+    if (completedStep === 1) {
+      const birthday = parseBirthday(nextDraft.birthday);
+      if (birthday && isProfileGender(nextDraft.gender)) {
+        payload.birthday = birthday;
+        payload.age = ageFromBirthday(birthday);
+        payload.gender = nextDraft.gender;
+      }
+    } else if (completedStep === 2) {
+      if (nextDraft.country.length === 2) payload.country = nextDraft.country;
+    } else if (completedStep === 3) {
+      const nickname = nextDraft.nickname.trim();
+      if (nickname) payload.display_name = nickname;
+    } else if (completedStep === 5) {
+      payload.skills = normalizeTagList(nextDraft.skills, 3);
+      payload.traits = normalizeTagList(nextDraft.traits, 3);
+    } else if (completedStep === 6) {
+      payload.interest_fields = parseInterestFields(nextDraft.interestFields);
+    }
+    if (Object.keys(payload).length === 0) return;
+
+    let { error: upErr } = await supabase.from("profiles").update(payload).eq("id", session.user.id);
+    if (upErr && completedStep === 1) {
+      // gender カラム未適用環境向けフォールバック
+      const fallback: Record<string, unknown> = {};
+      if ("birthday" in payload) fallback.birthday = payload.birthday;
+      if ("age" in payload) fallback.age = payload.age;
+      const res = await supabase.from("profiles").update(fallback).eq("id", session.user.id);
+      upErr = res.error;
+    }
+    if (upErr && completedStep === 6) {
+      // interest_fields 未適用なら無視（最終保存のフォールバックに任せる）
+      return;
+    }
+    if (upErr) {
+      // 途中保存失敗でもウィザードは止めない（localStorage 側が一次ソース）
+      console.warn("[onboarding] step progress save failed", upErr.message);
+    }
+    if (completedStep === 3 && typeof payload.display_name === "string") {
+      try {
+        await supabase.auth.updateUser({ data: { display_name: payload.display_name } });
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -257,6 +315,8 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
       return;
     }
     if (step < TOTAL_STEPS) {
+      const completed = step;
+      void persistStepProgress(completed);
       setStep((s) => (s + 1) as Step);
       return;
     }
@@ -622,7 +682,9 @@ export function SignupOnboardingWizard({ session, initialNickname = "", onComple
               type="button"
               disabled={saving}
               onClick={() => {
-                setDraft((d) => ({ ...d, interestFields: [] }));
+                const next = { ...draft, interestFields: [] as string[] };
+                setDraft(next);
+                void persistStepProgress(6, next);
                 setStep(7);
               }}
               className="text-center text-[12px] font-medium text-zinc-500 underline-offset-2 hover:underline disabled:opacity-40"
