@@ -436,11 +436,11 @@ export function RoadmapMapEditor() {
       ) : null}
 
       <RoadmapPath
-        segmentCleared={steps.map((step, orderIndex) => {
-          const currentIndex = steps.findIndex((item) => item.status !== "completed");
-          const cursor = currentIndex >= 0 ? currentIndex : 0;
-          return step.status === "completed" || orderIndex < cursor;
-        })}
+        /** 編集画面はマスも棒もすべてオレンジ（進行状況のグレー分けをしない） */
+        segmentCleared={Array.from(
+          { length: Math.max(steps.length + (showPathCreate ? 1 : 0) - 1, 0) },
+          () => true,
+        )}
       >
         {steps.map((step, orderIndex) => {
           const stepNumber = orderIndex + 1;
