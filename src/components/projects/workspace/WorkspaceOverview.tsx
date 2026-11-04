@@ -22,7 +22,7 @@ import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmap
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
-import { isIssueSubmitted } from "@/lib/workspace/issueWork";
+import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
@@ -136,7 +136,7 @@ export default function WorkspaceOverview() {
         sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex),
   );
 
-  /** 今取り組んでいるマスの課題だけ（過去・灰色マスには出さない） */
+  /** 今取り組んでいるマスの課題だけ・提出期限が近い順（過去・灰色マスには出さない） */
   const selectedPhaseTasks = useMemo(() => {
     if (!selectedPhaseId || !selectedPhaseIsCurrent) return [];
     return sortIssuesByDueDate(
@@ -149,8 +149,14 @@ export default function WorkspaceOverview() {
       ),
     )
       .slice(0, 3)
-      .map((issue) => ({ id: issue.id, title: issue.title }));
-  }, [issues, selectedPhaseId, selectedPhaseIsCurrent]);
+      .map((issue) => ({
+        id: issue.id,
+        title: issue.title,
+        dueLabel: issue.dueDate
+          ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`)
+          : undefined,
+      }));
+  }, [issues, selectedPhaseId, selectedPhaseIsCurrent, tx]);
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;

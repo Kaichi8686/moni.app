@@ -18,6 +18,8 @@ export type RoadmapPhaseInfo = {
 export type RoadmapPhaseTaskPreview = {
   id: string;
   title: string;
+  /** 提出期限の表示用（近い順で並べたあとの補助テキスト） */
+  dueLabel?: string;
 };
 
 type Props = {
@@ -285,7 +287,12 @@ export function RoadmapPhaseInfoSheet({
                           onClick={() => onSelectTask?.(task.id)}
                           className="!justify-start !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug"
                         >
-                          <span className="line-clamp-2">{task.title}</span>
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="line-clamp-2">{task.title}</span>
+                            {task.dueLabel ? (
+                              <span className="text-[11px] font-semibold text-orange-800/75">{task.dueLabel}</span>
+                            ) : null}
+                          </span>
                         </DuoButton>
                       ))}
                     </div>
