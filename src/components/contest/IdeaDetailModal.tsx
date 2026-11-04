@@ -66,8 +66,8 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
       aria-labelledby="idea-detail-title"
     >
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-200 bg-white shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
+      <div className="relative z-10 max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-[var(--shadow-lg)]">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur">
           <div className="flex min-w-0 items-center gap-2.5">
             <MemberAvatarBubble
               userId={idea.author.id}
@@ -77,14 +77,14 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
               className="!h-9 !w-9 !text-sm"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-zinc-900">{idea.author.displayName}</p>
+              <p className="truncate text-sm font-medium text-zinc-900">{idea.author.displayName}</p>
               <p className="text-[11px] text-zinc-400">{formatPostedAt(idea.createdAt, locale)}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-zinc-500 hover:bg-zinc-100"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-zinc-100"
             aria-label={tx("閉じる", "Close")}
           >
             <X className="h-4 w-4" />
@@ -97,7 +97,7 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
           </h2>
 
           {idea.appeal ? (
-            <blockquote className="rounded-xl border border-orange-100 bg-orange-50/70 px-3.5 py-2.5 text-sm text-orange-950/85">
+            <blockquote className="rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-700">
               {idea.appeal}
             </blockquote>
           ) : null}
@@ -106,19 +106,19 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
 
           {idea.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={idea.imageUrl} alt="" className="w-full rounded-xl object-cover ring-1 ring-zinc-100" />
+            <img src={idea.imageUrl} alt="" className="w-full rounded-xl border border-zinc-200 object-cover" />
           ) : null}
 
           {idea.roadmap ? (
-            <div className="rounded-xl border border-[#D8DCFF] bg-[#F7F8FF] p-3.5">
-              <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5E6AD2]">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3.5">
+              <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700">
                 <Map className="h-3.5 w-3.5" aria-hidden />
                 {idea.roadmap.title}
               </p>
               <ol className="space-y-1.5">
                 {idea.roadmap.steps.map((s, i) => (
                   <li key={i} className="flex gap-2 text-sm text-zinc-700">
-                    <span className="font-bold text-orange-500">{i + 1}.</span>
+                    <span className="font-semibold tabular-nums text-zinc-400">{i + 1}.</span>
                     <span>
                       {s.title}
                       {s.detail ? <span className="text-zinc-400"> — {s.detail}</span> : null}
@@ -134,7 +134,7 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
               href={idea.externalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50"
             >
               <ExternalLink className="h-4 w-4" aria-hidden />
               {tx("リンクを開く", "Open link")}
@@ -142,19 +142,19 @@ export function IdeaDetailModal({ idea, onClose, onToggleLike, canLike = true }:
           ) : null}
         </div>
 
-        <div className="sticky bottom-0 border-t border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur">
+        <div className="sticky bottom-0 border-t border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur">
           <button
             type="button"
             disabled={!canLike}
             onClick={() => void onToggleLike(idea)}
-            className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition active:scale-[0.99] disabled:opacity-50 ${
+            className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[13px] font-medium transition disabled:opacity-50 ${
               idea.likedByMe
-                ? "bg-orange-500 text-white shadow-[0_4px_0_#C2410C]"
-                : "bg-zinc-900 text-white shadow-[0_4px_0_#18181b]"
+                ? "border border-zinc-900 bg-zinc-900 text-white"
+                : "border border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50"
             }`}
           >
-            <ChevronUp className="h-5 w-5" aria-hidden />
-            {tx("共感した", "Upvote")}
+            <ChevronUp className="h-4 w-4" aria-hidden />
+            {tx("共感", "Upvote")}
             <span className="tabular-nums opacity-90">{idea.likeCount}</span>
           </button>
         </div>

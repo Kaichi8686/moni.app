@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Lightbulb, Filter } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { ArrowUpRight, Clock3, Lightbulb, RefreshCw } from "lucide-react";
 import { daysLeft, loadContestLobby, type ContestLobbyItem } from "@/lib/contest/api";
+import { DEMO_CONTEST, DEMO_CONTEST_SECONDARY } from "@/lib/contest/demo";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+
+const DEMO_LOBBY_ITEMS: ContestLobbyItem[] = [
+  { ...DEMO_CONTEST, ideaCount: 3 },
+  { ...DEMO_CONTEST_SECONDARY, ideaCount: 1 },
+];
 
 type LobbyFilter = "active" | "ended";
 
@@ -15,11 +20,11 @@ type Props = {
   onCreate?: (contestId: string) => void;
 };
 
-function categoryEmoji(category: string): string {
-  if (category === "habits") return "📱";
-  if (category === "school") return "📚";
-  if (category === "work") return "💼";
-  return "💡";
+function categoryGlyph(category: string): string {
+  if (category === "habits") return "H";
+  if (category === "school") return "S";
+  if (category === "work") return "W";
+  return "I";
 }
 
 export function ContestLobby({ onEnter, onCreate }: Props) {
@@ -31,6 +36,7 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
 
   const reload = useCallback(async (next: LobbyFilter) => {
     if (!supabase || !supabaseEnabled) {
+      setItems(next === "ended" ? [] : DEMO_LOBBY_ITEMS);
       setLoading(false);
       return;
     }
@@ -51,10 +57,14 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
   }, [filter, reload]);
 
   return (
-    <div className="relative min-h-[calc(100dvh-7rem)] bg-gradient-to-b from-[#FFF8EF] via-[#F7F4FF] to-[#EEF8FF] pb-28">
+    <div className="relative min-h-[calc(100dvh-7rem)] bg-zinc-50 pb-28">
       <div className="mx-auto max-w-lg px-4 pt-3">
-        <div className="mb-3 flex items-center gap-2">
-          <div className="grid flex-1 grid-cols-2 gap-1 rounded-2xl bg-white/80 p-1 shadow-[var(--shadow-sm)] ring-1 ring-zinc-200/70">
+        <div className="mb-4 flex items-center gap-2">
+          <div
+            role="tablist"
+            aria-label={tx("コンテストの状態", "Contest status")}
+            className="grid flex-1 grid-cols-2 rounded-lg border border-zinc-200 bg-white p-0.5"
+          >
             {(
               [
                 ["active", tx("開催中", "Live")],
@@ -64,11 +74,13 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
               <button
                 key={id}
                 type="button"
+                role="tab"
+                aria-selected={filter === id}
                 onClick={() => setFilter(id)}
-                className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
+                className={`min-h-9 rounded-md text-[13px] font-medium tracking-tight transition ${
                   filter === id
-                    ? "bg-[#FF9600] text-white shadow-[0_3px_0_#D97706]"
-                    : "text-zinc-500 hover:text-zinc-700"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-500 hover:text-zinc-800"
                 }`}
               >
                 {label}
@@ -77,78 +89,76 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
           </div>
           <button
             type="button"
-            className="inline-flex h-11 items-center gap-1 rounded-xl bg-white/80 px-3 text-xs font-bold text-zinc-600 shadow-[var(--shadow-sm)] ring-1 ring-zinc-200/70"
-            aria-label={tx("絞り込み", "Filter")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-800"
+            aria-label={tx("更新", "Refresh")}
             onClick={() => void reload(filter)}
           >
-            <Filter className="h-3.5 w-3.5" aria-hidden />
-            {tx("更新", "Refresh")}
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
 
         {err ? <p className="mb-2 text-sm text-rose-600">{err}</p> : null}
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl bg-white/70" />
+              <div key={i} className="h-[4.75rem] animate-pulse rounded-xl border border-zinc-200 bg-white" />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-4 py-12 text-center">
-            <p className="text-sm font-semibold text-zinc-700">
+          <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-14 text-center">
+            <p className="text-sm font-medium text-zinc-700">
               {filter === "ended"
                 ? tx("終了したコンテストはまだありません", "No ended contests yet")
                 : tx("開催中のコンテストはまだありません", "No live contests yet")}
             </p>
           </div>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-2.5">
             {items.map((c) => {
               const left = daysLeft(c.endAt);
               const live = c.status === "active" && left > 0;
               return (
                 <li key={c.id}>
-                  <article className="flex items-stretch gap-3 rounded-2xl border border-white/80 bg-white/95 p-3 shadow-[var(--shadow-sm)] ring-1 ring-zinc-100">
+                  <article className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3.5 transition hover:border-zinc-300">
                     <div
-                      className="flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFF3D6] to-[#EEF0FF] text-3xl shadow-inner"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-[13px] font-semibold tracking-wide text-zinc-600"
                       aria-hidden
                     >
-                      {categoryEmoji(c.category)}
+                      {categoryGlyph(c.category)}
                     </div>
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <h3 className="line-clamp-2 text-[14px] font-extrabold leading-snug tracking-tight text-zinc-900">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="line-clamp-2 text-[14px] font-semibold leading-snug tracking-tight text-zinc-900">
                         {c.title}
                       </h3>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                            live ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-500"
-                          }`}
-                        >
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-zinc-500">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${live ? "bg-emerald-500" : "bg-zinc-300"}`}
+                            aria-hidden
+                          />
                           {live ? tx("開催中", "Live") : tx("終了", "Ended")}
                         </span>
                         {live ? (
-                          <span className="text-[11px] font-semibold text-orange-600">
-                            {tx(`残り ${left}日`, `${left}d left`)}
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <Clock3 className="h-3 w-3" aria-hidden />
+                            {tx(`${left}日`, `${left}d`)}
                           </span>
                         ) : null}
+                        <span className="tabular-nums">
+                          {c.ideaCount}
+                          {tx("件", "")}
+                        </span>
                       </div>
-                      <p className="mt-1 text-[12px] font-medium text-zinc-500">
-                        {tx("投稿", "Posts")}{" "}
-                        <span className="font-extrabold text-[#FF9600]">{c.ideaCount}</span>
-                        {tx("件", "")}
-                      </p>
                     </div>
-                    <div className="flex shrink-0 items-center">
-                      <button
-                        type="button"
-                        onClick={() => onEnter(c.id)}
-                        className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-xl bg-[#34C759] px-3 text-[13px] font-extrabold text-white shadow-[0_3px_0_#248A3D] transition active:translate-y-[3px] active:shadow-none"
-                      >
-                        {tx("入室", "Enter")}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onEnter(c.id)}
+                      className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-medium text-zinc-800 transition hover:border-zinc-300 hover:bg-zinc-50 active:bg-zinc-100"
+                    >
+                      {tx("入室", "Enter")}
+                      <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400" aria-hidden />
+                    </button>
                   </article>
                 </li>
               );
@@ -159,11 +169,10 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-nav-clearance)+0.5rem)] z-30 flex justify-center px-4">
         <div className="pointer-events-auto w-full max-w-lg">
-          <DuoButton
+          <button
             type="button"
-            fullWidth
-            size="lg"
-            className="gap-2 shadow-lg"
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-[13px] font-medium text-white transition hover:bg-zinc-800 active:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={items.length === 0}
             onClick={() => {
               const first = items[0];
               if (!first) return;
@@ -172,8 +181,8 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
             }}
           >
             <Lightbulb className="h-4 w-4" aria-hidden />
-            {tx("アイデアを発表する", "Share an idea")}
-          </DuoButton>
+            {tx("発表する", "Share")}
+          </button>
         </div>
       </div>
     </div>

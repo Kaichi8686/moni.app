@@ -139,21 +139,29 @@ function IdeaHubInner() {
   const showSparkToggle = view === "mine" && !gardenImmersive;
 
   const sparkToggle = showSparkToggle ? (
-    <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
+    <div
+      role="tablist"
+      aria-label={tx("モード切替", "Mode switch")}
+      className="grid grid-cols-2 rounded-lg border border-zinc-200 bg-white/95 p-0.5 backdrop-blur"
+    >
       <button
         type="button"
+        role="tab"
+        aria-selected={sparkMode === "grow"}
         onClick={() => setSparkMode("grow")}
-        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
-          sparkMode === "grow" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        className={`min-h-9 rounded-md text-[13px] font-medium tracking-tight transition ${
+          sparkMode === "grow" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
         }`}
       >
-        {tx("花を育てる", "Grow a flower")}
+        {tx("花を育てる", "Grow")}
       </button>
       <button
         type="button"
+        role="tab"
+        aria-selected={sparkMode === "contest"}
         onClick={() => setSparkMode("contest")}
-        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
-          sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        className={`min-h-9 rounded-md text-[13px] font-medium tracking-tight transition ${
+          sparkMode === "contest" ? "bg-zinc-900 text-white" : "text-zinc-500 hover:text-zinc-800"
         }`}
       >
         {tx("コンテスト", "Contest")}
@@ -165,10 +173,10 @@ function IdeaHubInner() {
     <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
       {/* コンテスト側: 通常ヘッダー + トグル */}
       {view === "mine" && sparkMode === "contest" ? (
-        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-          <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
+        <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-2.5 pt-1">
             <AppBrandHeader bare />
-            <div className="mt-1">{sparkToggle}</div>
+            <div className="mt-2">{sparkToggle}</div>
           </div>
         </header>
       ) : null}
@@ -237,7 +245,7 @@ function IdeaHubInner() {
             <button
               type="button"
               onClick={goHome}
-              className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+              className="mb-2 text-[13px] font-medium text-zinc-600 hover:text-zinc-900"
             >
               {tx("← アイデアの棚に戻る", "← Back to idea shelf")}
             </button>
@@ -252,7 +260,7 @@ function IdeaHubInner() {
             <button
               type="button"
               onClick={goHome}
-              className="mb-2 text-[13px] font-semibold text-violet-700 hover:underline"
+              className="mb-2 text-[13px] font-medium text-zinc-600 hover:text-zinc-900"
             >
               {tx("← アイデアの棚に戻る", "← Back to idea shelf")}
             </button>
@@ -266,9 +274,9 @@ function IdeaHubInner() {
           type="button"
           onClick={() => openAi("consult")}
           aria-label={tx("AIを開く", "Open AI")}
-          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition hover:bg-violet-500 md:bottom-8"
+          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-800 shadow-[var(--shadow-sm)] transition hover:border-zinc-300 hover:bg-zinc-50 md:bottom-8"
         >
-          <Sparkles className="h-6 w-6" aria-hidden />
+          <Sparkles className="h-5 w-5" aria-hidden />
         </button>
       ) : null}
 
