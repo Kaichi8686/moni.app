@@ -13,7 +13,10 @@ import type { Session } from "@supabase/supabase-js";
 
 const SignupOnboardingWizard = dynamic(
   () => import("@/components/onboarding/SignupOnboardingWizard").then((m) => m.SignupOnboardingWizard),
-  { loading: () => <main className="min-h-[100dvh] bg-[#f6f5f2]" aria-busy="true" /> },
+  {
+    ssr: false,
+    loading: () => <main className="min-h-[100dvh] bg-[#f6f5f2]" aria-busy="true" />,
+  },
 );
 
 function shouldBypassOnboarding(pathname: string): boolean {

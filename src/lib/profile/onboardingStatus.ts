@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { clearOnboardingProgress } from "@/lib/profile/onboardingDraft";
 
 export function onboardingLocalStorageKey(userId: string): string {
   return `moni-onboarding-complete-${userId}`;
@@ -17,6 +18,7 @@ export function writeLocalOnboardingDone(userId: string): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(onboardingLocalStorageKey(userId), "1");
+    clearOnboardingProgress(userId);
   } catch {
     /* ignore quota / private mode */
   }
