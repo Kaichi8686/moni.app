@@ -63,10 +63,6 @@ export function RoadmapMapEditor() {
   const [proposed, setProposed] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
-  /** パス末尾の＋が見えている間は FAB を出さない（初期は隠す） */
-  const [createNodeInView, setCreateNodeInView] = useState(true);
-  const createNodeInViewRef = useRef(true);
-  const createNodeRef = useRef<HTMLDivElement | null>(null);
 
   const projectBrief = useMemo(
     () =>
@@ -152,86 +148,6 @@ export function RoadmapMapEditor() {
     roadmapHref,
     router,
   ]);
-
-  const showPathCreate = roadmap.canEdit && !createSpaceOpen;
-
-  useEffect(() => {
-    if (!showPathCreate) {
-      createNodeInViewRef.current = false;
-      setCreateNodeInView(false);
-      return;
-    }
-
-    let alive = true;
-    let settleTimer = 0;
-    let raf = 0;
-    let resizeObserver: ResizeObserver | null = null;
-
-    const apply = (nextInView: boolean) => {
-      if (!alive || nextInView === createNodeInViewRef.current) return;
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        if (!alive) return;
-        createNodeInViewRef.current = nextInView;
-        setCreateNodeInView(nextInView);
-      }, 90);
-    };
-
-    /** ＋マスが画面内（FAB 帯を除く）にどれだけ見えるかで判定。IO の取りこぼしを避ける */
-    const measure = () => {
-      const el = createNodeRef.current;
-      if (!el) {
-        // まだ測れないときは FAB を出して見逃しを防ぐ
-        apply(false);
-        return;
-      }
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight || 1;
-      const fabZone = Math.min(128, Math.max(88, vh * 0.16));
-      const viewTop = 0;
-      const viewBottom = vh - fabZone;
-      const overlap = Math.max(0, Math.min(rect.bottom, viewBottom) - Math.max(rect.top, viewTop));
-      const ratio = rect.height > 0 ? overlap / rect.height : 0;
-      const wasInView = createNodeInViewRef.current;
-      if (wasInView) {
-        if (ratio < 0.18) apply(false);
-      } else if (ratio >= 0.42) {
-        apply(true);
-      }
-    };
-
-    const scheduleMeasure = () => {
-      window.cancelAnimationFrame(raf);
-      raf = window.requestAnimationFrame(measure);
-    };
-
-    // 初期は一度測る（デフォルトで隠したままにしない）
-    measure();
-    const boot = window.requestAnimationFrame(() => {
-      measure();
-      const el = createNodeRef.current;
-      if (!el || !alive) return;
-      resizeObserver = new ResizeObserver(scheduleMeasure);
-      resizeObserver.observe(el);
-    });
-    const retryA = window.setTimeout(scheduleMeasure, 80);
-    const retryB = window.setTimeout(scheduleMeasure, 250);
-
-    window.addEventListener("scroll", scheduleMeasure, true);
-    window.addEventListener("resize", scheduleMeasure);
-
-    return () => {
-      alive = false;
-      window.cancelAnimationFrame(boot);
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(settleTimer);
-      window.clearTimeout(retryA);
-      window.clearTimeout(retryB);
-      window.removeEventListener("scroll", scheduleMeasure, true);
-      window.removeEventListener("resize", scheduleMeasure);
-      resizeObserver?.disconnect();
-    };
-  }, [showPathCreate, steps.length]);
 
   function openCreateChooser() {
     if (!roadmap.canEdit || busy) return;
@@ -493,9 +409,8 @@ export function RoadmapMapEditor() {
   }
 
   const hasSteps = steps.length > 0;
-  const createFabAllowed =
+  const showCreateFab =
     roadmap.canEdit && !createSpaceOpen && !selectedId && mode === "manual";
-  const showCreateFab = createFabAllowed && !createNodeInView;
 
   return (
     <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-5 px-1 pb-28 pt-1">
@@ -523,7 +438,7 @@ export function RoadmapMapEditor() {
                   "マスをタップして名前・絵・ゴール・詳細を編集できます。",
                   "Tap a step to edit its name, icon, goal, and details.",
                 )
-              : tx("右下のマス作成、または＋のマスから最初のステップを追加しよう。", "Add the first step from Create step or the + node.")}
+              : tx("右下のマス作成から最初のステップを追加しよう。", "Add the first step from Create step.")}
           </p>
         </div>
       </div>
@@ -627,10 +542,7 @@ export function RoadmapMapEditor() {
 
       <RoadmapPath
         /** 編集画面はマスも棒もすべてオレンジ（進行状況のグレー分けをしない） */
-        segmentCleared={Array.from(
-          { length: Math.max(steps.length + (showPathCreate ? 1 : 0) - 1, 0) },
-          () => true,
-        )}
+        segmentCleared={Array.from({ length: Math.max(steps.length - 1, 0) }, () => true)}
       >
         {steps.map((step, orderIndex) => {
           const stepNumber = orderIndex + 1;
@@ -652,25 +564,6 @@ export function RoadmapMapEditor() {
             </RoadmapPathItem>
           );
         })}
-
-        {showPathCreate ? (
-          <RoadmapPathItem index={steps.length}>
-            <div ref={createNodeRef} data-roadmap-create-node className="flex w-full justify-center">
-              <RoadmapPathNode
-                tone="create"
-                disabled={busy}
-                onClick={openCreateChooser}
-                aria-label={
-                  steps.length === 0
-                    ? tx("ロードマップを作成する", "Create roadmap")
-                    : tx("次のステップを追加", "Add the next step")
-                }
-              >
-                <RoadmapStepMark index={steps.length} tone="create" />
-              </RoadmapPathNode>
-            </div>
-          </RoadmapPathItem>
-        ) : null}
       </RoadmapPath>
 
       {error || roadmap.error ? (
@@ -686,22 +579,14 @@ export function RoadmapMapEditor() {
         {tx("この地図を、歩き始める", "Start walking this map")}
       </button>
 
-      {createFabAllowed ? (
-        <div
-          className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 transition-[opacity,transform] duration-200 ease-out md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))] ${
-            showCreateFab
-              ? "pointer-events-auto translate-y-0 opacity-100"
-              : "pointer-events-none translate-y-2 opacity-0"
-          }`}
-          aria-hidden={!showCreateFab}
-        >
+      {showCreateFab ? (
+        <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))]">
           <DuoButton
             type="button"
             tone="orange"
             size="md"
             onClick={openCreateChooser}
-            disabled={busy || !showCreateFab}
-            tabIndex={showCreateFab ? 0 : -1}
+            disabled={busy}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
             aria-label={tx("マスを作成", "Create step")}
           >
