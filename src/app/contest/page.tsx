@@ -1,5 +1,6 @@
-import { ContestApp } from "@/components/contest/ContestApp";
+import { redirect } from "next/navigation";
 
+/** 旧URL互換 → AIタブのコンテスト側へ */
 export default function ContestPage() {
-  return <ContestApp />;
+  redirect("/idea?spark=contest");
 }
