@@ -88,55 +88,71 @@ function BagSlot({
   );
 }
 
-/** 種袋カルーセル — 矢印連打可・名前即時・指スワイプ */
+/** 種袋カルーセル — 矢印連打可・名前即時・指スワイプは一方向のみ */
 export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   const { tx, locale } = useI18n();
   const x = useMotionValue(0);
+  /** 描画中の中央インデックス（スワイプ着地まで据え置き） */
   const [displayIndex, setDisplayIndex] = useState(index);
+  /** 名前表示用（コミット瞬間に更新） */
+  const [labelIndex, setLabelIndex] = useState(index);
   const displayIndexRef = useRef(displayIndex);
   displayIndexRef.current = displayIndex;
+  const settlingRef = useRef(false);
 
   useEffect(() => {
     setDisplayIndex(index);
+    setLabelIndex(index);
   }, [index]);
 
-  const bag = SEED_BAGS[displayIndex]!;
+  const bag = SEED_BAGS[labelIndex]!;
 
-  /** インデックスを先に更新 → 名前即時反映。矢印はロックしない */
+  /** 矢印: インデックス先更新 → 名前即時。ロックなし */
   const slide = (dir: -1 | 1) => {
+    if (settlingRef.current) {
+      // スワイプ着地中でも矢印は効かせる：着地を打ち切って切替
+      x.stop();
+      settlingRef.current = false;
+    }
     const from = displayIndexRef.current;
     const next = wrap(from + dir);
     displayIndexRef.current = next;
     setDisplayIndex(next);
+    setLabelIndex(next);
     onIndexChange(next);
     x.stop();
-    // 新中央が dir 側から入ってくるように、一度ずらしてから 0 へ
     x.set(dir * SLOT);
     void animate(x, 0, SPRING);
+  };
+
+  /**
+   * 指スワイプ: ドラッグ位置から ±SLOT までそのまま進めて着地。
+   * インデックス付け替えは着地後に静かに行う（一度戻る演出を出さない）。
+   */
+  const settleSwipe = (dir: -1 | 1) => {
+    const next = wrap(displayIndexRef.current + dir);
+    setLabelIndex(next);
+    onIndexChange(next);
+    settlingRef.current = true;
+    x.stop();
+    void animate(x, -dir * SLOT, SPRING).then(() => {
+      // -SLOT + 旧index の見た目 ＝ 0 + 新index。ジャンプなしで付け替え
+      displayIndexRef.current = next;
+      setDisplayIndex(next);
+      x.set(0);
+      settlingRef.current = false;
+    });
   };
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     const dx = info.offset.x;
     const vx = info.velocity.x;
     if (dx < -SLOT * 0.22 || vx < -450) {
-      // 左へフリック → 次の袋。ドラッグ中の x を補正してから着地
-      const next = wrap(displayIndexRef.current + 1);
-      displayIndexRef.current = next;
-      setDisplayIndex(next);
-      onIndexChange(next);
-      x.stop();
-      x.set(x.get() + SLOT);
-      void animate(x, 0, SPRING);
+      settleSwipe(1);
       return;
     }
     if (dx > SLOT * 0.22 || vx > 450) {
-      const next = wrap(displayIndexRef.current - 1);
-      displayIndexRef.current = next;
-      setDisplayIndex(next);
-      onIndexChange(next);
-      x.stop();
-      x.set(x.get() - SLOT);
-      void animate(x, 0, SPRING);
+      settleSwipe(-1);
       return;
     }
     void animate(x, 0, SPRING);
@@ -162,7 +178,8 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
             style={{ x }}
             drag="x"
             dragConstraints={{ left: -SLOT, right: SLOT }}
-            dragElastic={0.18}
+            dragElastic={0.12}
+            dragMomentum={false}
             onDragEnd={onDragEnd}
           >
             {offsets.map((off) => {
@@ -191,7 +208,6 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
         <ChevronRight />
       </button>
 
-      {/* 花が変わったらすぐ名前も更新（フェード待ちなし） */}
       <p className="mt-3 text-center text-[16px] font-extrabold text-[#3C3C3C]">
         {locale === "en" ? bag.labelEn : bag.labelJa}
       </p>
