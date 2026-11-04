@@ -509,7 +509,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onPic
               >
                 <RoadmapPathNode
                   tone="upcoming"
-                  currentHalo={index === currentIndex}
+                  sparkle={index === currentIndex}
                   selected={Boolean(linked) || sameRow}
                   className="!w-auto"
                   aria-label={step.title}

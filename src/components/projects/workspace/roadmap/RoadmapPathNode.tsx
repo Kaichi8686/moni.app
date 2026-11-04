@@ -6,10 +6,8 @@ export type RoadmapPathNodeTone = "active" | "done" | "upcoming" | "create";
 
 type Props = {
   tone?: RoadmapPathNodeTone;
-  /** 進行中マスの周囲キラキラ */
+  /** 進行中マスの周囲キラキラ（メインタブと同じ） */
   sparkle?: boolean;
-  /** いま取り組んでいるマスを囲むオレンジの外枠（編集・作成画面用） */
-  currentHalo?: boolean;
   selected?: boolean;
   disabled?: boolean;
   children?: ReactNode;
@@ -41,7 +39,6 @@ const TONE_LIP: Record<RoadmapPathNodeTone, string> = {
 export function RoadmapPathNode({
   tone = "active",
   sparkle = false,
-  currentHalo = false,
   selected = false,
   disabled = false,
   children,
@@ -75,23 +72,15 @@ export function RoadmapPathNode({
       ) : null}
       <span
         className={`absolute inset-0 flex items-center justify-center rounded-full transition-[transform,box-shadow] duration-75 ease-out group-active:translate-y-[6px] group-active:shadow-none ${face} ${lip} ${
-          // 進行中外枠があるときは選択リングと重ねない
-          !currentHalo && selected
+          selected
             ? tone === "upcoming"
               ? "ring-4 ring-zinc-300/80"
               : "ring-4 ring-orange-300/60"
-            : !currentHalo && sparkle
+            : sparkle
               ? "ring-[5px] ring-[#FFD84D]/70"
               : ""
         }`}
       >
-        {/* マス本体の子にして同心円＋押下時も一緒に動く。すき間は狭く1本だけ */}
-        {currentHalo ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -inset-[5px] rounded-full border-[3px] border-[#FF9600]"
-          />
-        ) : null}
         <span
           aria-hidden
           className="pointer-events-none absolute inset-[10%] rounded-full"
