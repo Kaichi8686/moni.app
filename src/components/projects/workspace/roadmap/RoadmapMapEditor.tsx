@@ -366,31 +366,24 @@ export function RoadmapMapEditor() {
       ) : null}
 
       {roadmap.canEdit ? (
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setMode("manual")}
-            className={`min-h-[48px] rounded-2xl border px-3 text-sm font-semibold transition ${
-              mode === "manual" ? "border-orange-500 bg-orange-500 text-white" : "border-zinc-200 bg-white text-zinc-700"
+        <button
+          type="button"
+          onClick={() => setMode((current) => (current === "ai" ? "manual" : "ai"))}
+          className={`inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
+            mode === "ai"
+              ? "border-violet-600 bg-violet-600 text-white"
+              : "border-violet-200 bg-violet-50 text-violet-800"
+          }`}
+        >
+          <span
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+              mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"
             }`}
           >
-            {tx("マスを編集", "Edit steps")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("ai")}
-            className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
-              mode === "ai"
-                ? "border-violet-600 bg-violet-600 text-white"
-                : "border-violet-200 bg-violet-50 text-violet-800"
-            }`}
-          >
-            <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"}`}>
-              <Sparkles className="h-4 w-4" aria-hidden />
-            </span>
-            {tx("AIで作る", "AI draft")}
-          </button>
-        </div>
+            <Sparkles className="h-4 w-4" aria-hidden />
+          </span>
+          {mode === "ai" ? tx("AIを閉じる", "Close AI") : tx("AIで作る", "AI draft")}
+        </button>
       ) : null}
 
       {mode === "ai" ? (
