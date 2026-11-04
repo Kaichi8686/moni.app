@@ -20,7 +20,7 @@ export function ProjectGoalBanner({ projectName, goal, className = "", onClick }
   if (!goalText) return null;
 
   const eyebrow = tx(`「${name}」のゴール`, `Goal of “${name}”`);
-  const openLabel = tx("ゴールときっかけを見る", "View goal and motivation");
+  const openLabel = tx("ゴールときっかけを開く", "Open goal and motivation");
 
   const face = (
     <>

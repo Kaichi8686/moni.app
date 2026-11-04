@@ -6,6 +6,8 @@ import { ArrowLeft, Map, Plus, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
+import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -16,6 +18,8 @@ import {
   resolveRoadmapMarkId,
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
+import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -34,7 +38,13 @@ export function RoadmapMapEditor() {
   const { tx } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { projectId, reload: workspaceReload } = useProjectWorkspace();
+  const {
+    projectId,
+    project,
+    coachingContext,
+    canEdit: workspaceCanEdit,
+    reload: workspaceReload,
+  } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [draftIcon, setDraftIcon] = useState<RoadmapMarkId>("star");
@@ -46,9 +56,21 @@ export function RoadmapMapEditor() {
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   /** パス末尾の＋が見えている間は FAB を出さない（初期は隠す） */
   const [createNodeInView, setCreateNodeInView] = useState(true);
   const createNodeRef = useRef<HTMLDivElement | null>(null);
+
+  const projectBrief = useMemo(
+    () =>
+      resolveProjectBrief({
+        coachingContext,
+        description: project?.description,
+      }),
+    [coachingContext, project?.description],
+  );
+  const projectGoal = projectBrief.projectGoal.trim();
+  const problemMotivation = projectBrief.problemMotivation.trim();
 
   /** 地図編集と概要タブのフェーズ一覧を同じ DB 状態に揃える */
   async function syncReload() {
@@ -280,6 +302,14 @@ export function RoadmapMapEditor() {
         </div>
       </div>
 
+      {project && projectGoal ? (
+        <ProjectGoalBanner
+          projectName={project.name}
+          goal={projectGoal}
+          onClick={() => setGoalDetailOpen(true)}
+        />
+      ) : null}
+
       {roadmap.canEdit ? (
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -493,6 +523,43 @@ export function RoadmapMapEditor() {
         onClose={() => setAdding(false)}
         onSubmit={addStep}
       />
+
+      {project && projectGoal ? (
+        <ProjectGoalDetailSheet
+          open={goalDetailOpen}
+          onClose={() => setGoalDetailOpen(false)}
+          projectName={project.name}
+          goal={projectGoal}
+          problemMotivation={problemMotivation}
+          canEdit={workspaceCanEdit}
+          onSave={
+            workspaceCanEdit
+              ? async ({ goal, problemMotivation: motivation }) => {
+                  try {
+                    await persistProjectMotivationAndGoal({
+                      projectId,
+                      coachingContext,
+                      description: project.description,
+                      problemMotivation: motivation,
+                      projectGoal: goal,
+                    });
+                  } catch (e) {
+                    if (e instanceof Error && e.message === "BRIEF_INCOMPLETE") {
+                      throw new Error(
+                        tx(
+                          "きっかけとゴールの両方を入力してください。",
+                          "Please fill in both the motivation and the goal.",
+                        ),
+                      );
+                    }
+                    throw e;
+                  }
+                  await workspaceReload();
+                }
+              : undefined
+          }
+        />
+      ) : null}
     </div>
   );
 }

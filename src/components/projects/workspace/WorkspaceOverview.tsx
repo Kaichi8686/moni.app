@@ -22,6 +22,7 @@ import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/Roadmap
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import { supabase } from "@/lib/supabase";
@@ -472,9 +473,32 @@ export default function WorkspaceOverview() {
           goal={projectGoal}
           problemMotivation={problemMotivation}
           canEdit={canEdit}
-          onEdit={() => {
-            window.dispatchEvent(new Event("moni:edit-project-brief"));
-          }}
+          onSave={
+            canEdit
+              ? async ({ goal, problemMotivation: motivation }) => {
+                  try {
+                    await persistProjectMotivationAndGoal({
+                      projectId,
+                      coachingContext,
+                      description: project.description,
+                      problemMotivation: motivation,
+                      projectGoal: goal,
+                    });
+                  } catch (e) {
+                    if (e instanceof Error && e.message === "BRIEF_INCOMPLETE") {
+                      throw new Error(
+                        tx(
+                          "きっかけとゴールの両方を入力してください。",
+                          "Please fill in both the motivation and the goal.",
+                        ),
+                      );
+                    }
+                    throw e;
+                  }
+                  await wsReload();
+                }
+              : undefined
+          }
         />
       ) : null}
 
