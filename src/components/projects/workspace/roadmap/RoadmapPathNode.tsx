@@ -55,14 +55,14 @@ export function RoadmapPathNode({
   const body = (
     <span
       data-roadmap-node
-      className={`relative mx-auto block h-[72px] w-[72px] transition-transform duration-150 group-active:translate-y-[4px] sm:h-[80px] sm:w-[80px] ${
+      className={`relative mx-auto block h-[72px] w-[72px] transition-transform duration-75 ease-out group-active:translate-y-[6px] sm:h-[80px] sm:w-[80px] ${
         sparkle ? "roadmap-node-sparkle" : ""
       }`}
     >
       {currentHalo ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute -inset-[11px] rounded-full border-[3px] border-[#F97316] shadow-[0_0_0_3px_rgba(249,115,22,0.18)]"
+          className="pointer-events-none absolute -inset-[15px] rounded-full border-[3.5px] border-[#FF9600] shadow-[0_0_0_4px_rgba(255,150,0,0.22)]"
         />
       ) : null}
       {sparkle ? (
@@ -79,9 +79,13 @@ export function RoadmapPathNode({
           <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-10" aria-hidden />
         </>
       ) : null}
-      <span aria-hidden className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full ${base}`} />
+      {/* 奥行き帯：押すと DuoButton 同様に潰れる */}
       <span
-        className={`absolute inset-x-0 bottom-[6px] top-0 flex items-center justify-center rounded-full ${face} ${
+        aria-hidden
+        className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full transition-[top] duration-75 ease-out group-active:top-0 ${base}`}
+      />
+      <span
+        className={`absolute inset-x-0 bottom-[6px] top-0 flex items-center justify-center rounded-full transition-[bottom] duration-75 ease-out group-active:bottom-0 ${face} ${
           selected
             ? tone === "upcoming"
               ? "ring-4 ring-zinc-300/80"

@@ -14,7 +14,8 @@ import {
 const PATH_OFFSETS_PX = [0, -28, -40, -28, 0, 28, 40, 28] as const;
 const NODE_SIZE = 80;
 const ROW_GAP = 40;
-const TOP_PAD = 12;
+/** 進行中マスの外枠が切れないよう余白を確保 */
+const TOP_PAD = 20;
 const STEP_Y = NODE_SIZE + ROW_GAP;
 const TRACK_WIDTH = 360;
 /** 本線マスから横置きマスまでの距離（CreateSpace と同じ） */
