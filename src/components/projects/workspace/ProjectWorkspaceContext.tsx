@@ -1157,9 +1157,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
   const isRecruitPage =
     pathname === `/projects/${projectId}/recruit` || pathname?.startsWith(`/projects/${projectId}/recruit/`);
-  /** ロードマップ編集（templates は除く）はヘッダーなしの編集画面 */
-  const isRoadmapEditPage =
-    pathname === `/projects/${projectId}/roadmap` || pathname === `/projects/${projectId}/roadmap/`;
+  /** ロードマップ編集（/roadmap/templates は除く）はヘッダー・タブなし */
+  const isRoadmapEditPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/roadmap\/?$/));
   const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage;
 
   useEffect(() => {
