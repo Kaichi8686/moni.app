@@ -137,18 +137,23 @@ export function RoadmapPhaseEditSheet({
   }
 
   async function handleIconChange(nextIcon: RoadmapMarkId) {
-    if (locked) return;
+    if (locked || !phase) return;
+    const previousIcon = iconDraft;
     setIconDraft(nextIcon);
     const nextTitle = titleDraft.trim() || phase.title;
-    await persistValues(
-      {
-        title: nextTitle,
-        goal: goalDraft.trim(),
-        description: descriptionDraft.trim(),
-        icon: nextIcon,
-      },
-      false,
-    );
+    try {
+      await persistValues(
+        {
+          title: nextTitle,
+          goal: goalDraft.trim(),
+          description: descriptionDraft.trim(),
+          icon: nextIcon,
+        },
+        false,
+      );
+    } catch {
+      setIconDraft(previousIcon);
+    }
   }
 
   async function handleSave() {
