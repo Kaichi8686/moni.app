@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Map, Plus, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
@@ -106,6 +106,12 @@ export function RoadmapMapEditor() {
     () => (selectedId ? steps.find((step) => step.id === selectedId) ?? null : null),
     [selectedId, steps],
   );
+  /** reload の一瞬 steps が空でもシートを閉じない */
+  const selectedStepRef = useRef(selectedStep);
+  if (selectedStep) selectedStepRef.current = selectedStep;
+  const sheetStep =
+    selectedStep ??
+    (selectedId && selectedStepRef.current?.id === selectedId ? selectedStepRef.current : null);
 
   const overviewHref = `/projects/${projectId}/overview`;
 
@@ -586,23 +592,23 @@ export function RoadmapMapEditor() {
       ) : null}
 
       <RoadmapPhaseEditSheet
-        open={Boolean(selectedStep) && roadmap.canEdit && !createSpaceOpen}
+        open={Boolean(selectedId) && Boolean(sheetStep) && roadmap.canEdit && !createSpaceOpen}
         phase={
-          selectedStep
+          sheetStep
             ? {
-                id: selectedStep.id,
-                title: selectedStep.title,
-                goal: selectedStep.goal,
-                description: selectedStep.description,
-                icon: selectedStep.icon,
+                id: sheetStep.id,
+                title: sheetStep.title,
+                goal: sheetStep.goal,
+                description: sheetStep.description,
+                icon: sheetStep.icon,
                 stepNumber: (() => {
-                  const mainAt = mainSteps.findIndex((item) => item.id === selectedStep.id);
+                  const mainAt = mainSteps.findIndex((item) => item.id === sheetStep.id);
                   if (mainAt >= 0) return mainAt + 1;
-                  if (selectedStep.sideOf) {
-                    const parentAt = mainSteps.findIndex((item) => item.id === selectedStep.sideOf);
+                  if (sheetStep.sideOf) {
+                    const parentAt = mainSteps.findIndex((item) => item.id === sheetStep.sideOf);
                     if (parentAt >= 0) return parentAt + 1;
                   }
-                  return steps.findIndex((item) => item.id === selectedStep.id) + 1;
+                  return steps.findIndex((item) => item.id === sheetStep.id) + 1;
                 })(),
               }
             : null
@@ -610,11 +616,14 @@ export function RoadmapMapEditor() {
         busy={busy}
         onClose={() => setSelectedId(null)}
         onSave={async (patch) => {
-          if (!selectedStep) return;
-          setBusy(true);
+          const targetId = sheetStep?.id ?? selectedId;
+          if (!targetId) {
+            throw new Error(tx("保存できませんでした", "Couldn’t save"));
+          }
           setError("");
           try {
-            await roadmap.updatePhase(selectedStep.id, {
+            // busy を立てない：アイコン即保存でシートがロック／閉じるのを防ぐ
+            await roadmap.updatePhase(targetId, {
               title: patch.title,
               goal: patch.goal,
               description: patch.description,
@@ -626,14 +635,12 @@ export function RoadmapMapEditor() {
               e instanceof Error ? e.message : tx("保存できませんでした", "Couldn’t save"),
             );
             throw e;
-          } finally {
-            setBusy(false);
           }
         }}
         onDelete={
-          selectedStep
+          sheetStep
             ? async () => {
-                await removeStep(selectedStep.id);
+                await removeStep(sheetStep.id);
               }
             : undefined
         }

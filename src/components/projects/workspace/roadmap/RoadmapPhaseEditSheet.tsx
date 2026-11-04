@@ -77,6 +77,7 @@ export function RoadmapPhaseEditSheet({
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [iconDraft, setIconDraft] = useState<RoadmapMarkId>("star");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
 
@@ -90,6 +91,7 @@ export function RoadmapPhaseEditSheet({
     setGoalDraft(phase.goal ?? "");
     setDescriptionDraft(phase.description ?? "");
     setIconDraft(resolveRoadmapMarkId(phase.icon, (phase.stepNumber ?? 1) - 1));
+    setSaveError("");
     // phase の中身は open / phaseId 切替時だけ取り込む
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid reset on parent re-render
   }, [open, phaseId]);
@@ -128,16 +130,24 @@ export function RoadmapPhaseEditSheet({
 
   async function persistValues(next: RoadmapPhaseEditValues, closeAfter: boolean) {
     setSaving(true);
+    setSaveError("");
     try {
       await onSave(next);
       if (closeAfter) onClose();
+    } catch (e) {
+      setSaveError(
+        e instanceof Error ? e.message : tx("保存できませんでした", "Couldn’t save"),
+      );
+      throw e;
     } finally {
       setSaving(false);
     }
   }
 
   async function handleIconChange(nextIcon: RoadmapMarkId) {
-    if (locked || !phase) return;
+    // busy（削除など親の重い処理）中だけ拒否。saving 中でも別アイコンは選べる
+    if (!phase || busy) return;
+    if (nextIcon === iconDraft) return;
     const previousIcon = iconDraft;
     setIconDraft(nextIcon);
     const nextTitle = titleDraft.trim() || phase.title;
@@ -256,7 +266,7 @@ export function RoadmapPhaseEditSheet({
           <RoadmapMarkPicker
             value={iconDraft}
             onChange={(id) => void handleIconChange(id)}
-            disabled={locked}
+            disabled={busy}
             label={tx("マスの絵", "Step icon")}
           />
           <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
@@ -293,6 +303,11 @@ export function RoadmapPhaseEditSheet({
         </div>
 
         <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {saveError ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {saveError}
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={locked || !titleDraft.trim()}
