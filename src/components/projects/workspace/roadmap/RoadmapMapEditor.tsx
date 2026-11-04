@@ -12,11 +12,13 @@ import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectG
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
+import { RoadmapAddModeChooser } from "@/components/projects/workspace/roadmap/RoadmapAddModeChooser";
 import {
   RoadmapCreateSpace,
   type CreateSpaceDraft,
 } from "@/components/projects/workspace/roadmap/RoadmapCreateSpace";
 import { RoadmapPhaseEditSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseEditSheet";
+import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
 import {
   RoadmapStepMark,
   resolveRoadmapMarkId,
@@ -51,6 +53,8 @@ export function RoadmapMapEditor() {
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [createChooserOpen, setCreateChooserOpen] = useState(false);
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aiInput, setAiInput] = useState("");
@@ -127,11 +131,17 @@ export function RoadmapMapEditor() {
     } catch {
       stored = false;
     }
-    const shouldOpen = addFromUrl || stored;
-    setCreateSpaceOpen(shouldOpen);
-    // ストレージだけ残っている場合は URL も揃える
-    if (stored && !addFromUrl) {
-      router.replace(createSpaceHref, { scroll: false });
+    // 横追加の途中なら作成空間を復元
+    if (stored) {
+      setCreateSpaceOpen(true);
+      if (!addFromUrl) router.replace(createSpaceHref, { scroll: false });
+      return;
+    }
+    setCreateSpaceOpen(false);
+    // ?add=1 は追加方法の選択を開く（ロードマップ編集画面内）
+    if (addFromUrl) {
+      setCreateChooserOpen(true);
+      router.replace(roadmapHref, { scroll: false });
     }
   }, [
     addFromUrl,
@@ -139,6 +149,7 @@ export function RoadmapMapEditor() {
     roadmap.loading,
     createSpaceStorageKey,
     createSpaceHref,
+    roadmapHref,
     router,
   ]);
 
@@ -222,10 +233,19 @@ export function RoadmapMapEditor() {
     };
   }, [showPathCreate, steps.length]);
 
+  function openCreateChooser() {
+    if (!roadmap.canEdit || busy) return;
+    setSelectedId(null);
+    setMode("manual");
+    setCreateChooserOpen(true);
+  }
+
   function openCreateSpace() {
     if (!roadmap.canEdit || busy) return;
     setSelectedId(null);
     setMode("manual");
+    setCreateChooserOpen(false);
+    setCreateSheetOpen(false);
     setCreateSpaceOpen(true);
     persistCreateSpaceOpen(true);
   }
@@ -233,6 +253,41 @@ export function RoadmapMapEditor() {
   function closeCreateSpace() {
     setCreateSpaceOpen(false);
     persistCreateSpaceOpen(false);
+  }
+
+  function openCreateBelowSheet() {
+    if (!roadmap.canEdit || busy) return;
+    setCreateChooserOpen(false);
+    setCreateSheetOpen(true);
+  }
+
+  async function createStepBelow(values: {
+    title: string;
+    goal: string;
+    description: string;
+    icon: string;
+  }) {
+    if (!roadmap.canEdit) return;
+    setBusy(true);
+    setError("");
+    try {
+      const start = new Date();
+      await roadmap.createPhase({
+        title: values.title,
+        goal: values.goal,
+        description: values.description,
+        icon: values.icon,
+        startDate: start.toISOString(),
+        endDate: addDays(start, 14).toISOString(),
+        status: steps.length === 0 ? "in_progress" : "planned",
+      });
+      await workspaceReload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
+      throw e;
+    } finally {
+      setBusy(false);
+    }
   }
 
   function insertIndexForDraft(
@@ -589,7 +644,7 @@ export function RoadmapMapEditor() {
               <RoadmapPathNode
                 tone="create"
                 disabled={busy}
-                onClick={openCreateSpace}
+                onClick={openCreateChooser}
                 aria-label={
                   steps.length === 0
                     ? tx("ロードマップを作成する", "Create roadmap")
@@ -629,7 +684,7 @@ export function RoadmapMapEditor() {
             type="button"
             tone="orange"
             size="md"
-            onClick={openCreateSpace}
+            onClick={openCreateChooser}
             disabled={busy || !showCreateFab}
             tabIndex={showCreateFab ? 0 : -1}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
@@ -674,6 +729,21 @@ export function RoadmapMapEditor() {
               }
             : undefined
         }
+      />
+
+      <RoadmapAddModeChooser
+        open={createChooserOpen && roadmap.canEdit && !createSpaceOpen}
+        onClose={() => setCreateChooserOpen(false)}
+        onChooseBelow={openCreateBelowSheet}
+        onChooseSide={openCreateSpace}
+      />
+
+      <RoadmapStepCreateSheet
+        open={createSheetOpen && roadmap.canEdit && !createSpaceOpen}
+        busy={busy}
+        initialIcon={resolveRoadmapMarkId(undefined, steps.length)}
+        onClose={() => setCreateSheetOpen(false)}
+        onSubmit={createStepBelow}
       />
 
       {createSpaceOpen && roadmap.canEdit ? (

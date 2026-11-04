@@ -18,13 +18,18 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
-import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
+import {
+  RoadmapStepMark,
+  resolveRoadmapMarkId,
+} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
+import { addDays } from "date-fns";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -103,6 +108,8 @@ export default function WorkspaceOverview() {
   });
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
   const photoUrl = projectMeta?.thumbnail_url?.trim() || "";
   const backgroundUrl = projectMeta?.background_url?.trim() || "";
@@ -329,7 +336,11 @@ export default function WorkspaceOverview() {
               <RoadmapPathNode
                 tone="create"
                 sparkle
-                onClick={() => router.push(`${roadmapEditHref}?add=1`)}
+                disabled={!canEdit || !roadmap.canEdit || createBusy}
+                onClick={() => {
+                  if (!canEdit || !roadmap.canEdit) return;
+                  setCreateSheetOpen(true);
+                }}
                 aria-label={tx("ロードマップを作成する", "Create roadmap")}
               >
                 <RoadmapStepMark index={0} tone="create" />
@@ -349,6 +360,31 @@ export default function WorkspaceOverview() {
           canEdit={false}
         />
       ) : null}
+
+      <RoadmapStepCreateSheet
+        open={createSheetOpen}
+        busy={createBusy}
+        initialIcon={resolveRoadmapMarkId(undefined, 0)}
+        onClose={() => setCreateSheetOpen(false)}
+        onSubmit={async (values) => {
+          setCreateBusy(true);
+          try {
+            const start = new Date();
+            await roadmap.createPhase({
+              title: values.title,
+              goal: values.goal,
+              description: values.description,
+              icon: values.icon,
+              startDate: start.toISOString(),
+              endDate: addDays(start, 14).toISOString(),
+              status: "in_progress",
+            });
+            await wsReload();
+          } finally {
+            setCreateBusy(false);
+          }
+        }}
+      />
 
       <RoadmapPhaseInfoSheet
         open={Boolean(selectedPhaseLive)}
