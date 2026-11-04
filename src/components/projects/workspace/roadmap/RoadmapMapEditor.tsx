@@ -118,49 +118,75 @@ export function RoadmapMapEditor() {
       setCreateNodeInView(false);
       return;
     }
-    createNodeInViewRef.current = true;
-    setCreateNodeInView(true);
-    let observer: IntersectionObserver | null = null;
+
+    let alive = true;
     let settleTimer = 0;
-    const frame = window.requestAnimationFrame(() => {
-      const el = createNodeRef.current;
-      if (!el) return;
-      /**
-       * しきい値付近で FAB がチカチカしないようヒステリシス:
-       * - ＋が見えている扱い → ほぼ画面外になるまで維持
-       * - ＋が見えていない扱い → しっかり見えてから「見えている」に切替
-       */
-      observer = new IntersectionObserver(
-        (entries) => {
-          const entry = entries[0];
-          if (!entry) return;
-          const ratio = entry.intersectionRatio;
-          const wasInView = createNodeInViewRef.current;
-          let next = wasInView;
-          if (wasInView) {
-            if (!entry.isIntersecting || ratio < 0.08) next = false;
-          } else if (entry.isIntersecting && ratio >= 0.5) {
-            next = true;
-          }
-          if (next === wasInView) return;
-          window.clearTimeout(settleTimer);
-          settleTimer = window.setTimeout(() => {
-            createNodeInViewRef.current = next;
-            setCreateNodeInView(next);
-          }, 140);
-        },
-        {
-          root: null,
-          threshold: [0, 0.08, 0.2, 0.35, 0.5, 0.75, 1],
-          rootMargin: "0px 0px -12% 0px",
-        },
-      );
-      observer.observe(el);
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
+    let raf = 0;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const apply = (nextInView: boolean) => {
+      if (!alive || nextInView === createNodeInViewRef.current) return;
       window.clearTimeout(settleTimer);
-      observer?.disconnect();
+      settleTimer = window.setTimeout(() => {
+        if (!alive) return;
+        createNodeInViewRef.current = nextInView;
+        setCreateNodeInView(nextInView);
+      }, 90);
+    };
+
+    /** ＋マスが画面内（FAB 帯を除く）にどれだけ見えるかで判定。IO の取りこぼしを避ける */
+    const measure = () => {
+      const el = createNodeRef.current;
+      if (!el) {
+        // まだ測れないときは FAB を出して見逃しを防ぐ
+        apply(false);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const fabZone = Math.min(128, Math.max(88, vh * 0.16));
+      const viewTop = 0;
+      const viewBottom = vh - fabZone;
+      const overlap = Math.max(0, Math.min(rect.bottom, viewBottom) - Math.max(rect.top, viewTop));
+      const ratio = rect.height > 0 ? overlap / rect.height : 0;
+      const wasInView = createNodeInViewRef.current;
+      if (wasInView) {
+        if (ratio < 0.18) apply(false);
+      } else if (ratio >= 0.42) {
+        apply(true);
+      }
+    };
+
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(measure);
+    };
+
+    // 初期は一度測る（デフォルトで隠したままにしない）
+    measure();
+    const boot = window.requestAnimationFrame(() => {
+      measure();
+      const el = createNodeRef.current;
+      if (!el || !alive) return;
+      resizeObserver = new ResizeObserver(scheduleMeasure);
+      resizeObserver.observe(el);
+    });
+    const retryA = window.setTimeout(scheduleMeasure, 80);
+    const retryB = window.setTimeout(scheduleMeasure, 250);
+
+    window.addEventListener("scroll", scheduleMeasure, true);
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      alive = false;
+      window.cancelAnimationFrame(boot);
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(settleTimer);
+      window.clearTimeout(retryA);
+      window.clearTimeout(retryB);
+      window.removeEventListener("scroll", scheduleMeasure, true);
+      window.removeEventListener("resize", scheduleMeasure);
+      resizeObserver?.disconnect();
     };
   }, [showPathCreate, steps.length]);
 
