@@ -189,10 +189,15 @@ export function useRoadmapProject(projectId: string) {
       endDate: string;
       status?: PhaseStatus;
       icon?: string;
+      /** 横置きの親マス */
+      sideOf?: string | null;
+      /** -1 左 / 1 右（sideOf があるとき） */
+      lane?: number | null;
     }) => {
-      if (!supabase || !canEdit) return;
+      if (!supabase) throw new Error("Supabase に接続できません");
+      if (!canEdit) throw new Error("編集権限がありません");
       const maxOrder = phases.reduce((m, p) => Math.max(m, p.order), -1);
-      const base = {
+      const base: Record<string, unknown> = {
         project_id: projectId,
         title: input.title.trim(),
         goal: (input.goal ?? "").trim(),
@@ -203,11 +208,20 @@ export function useRoadmapProject(projectId: string) {
         color: "amber",
         order: maxOrder + 1,
       };
+      if (input.sideOf) {
+        base.side_of = input.sideOf;
+        base.lane = input.lane === -1 || input.lane === 1 ? input.lane : 1;
+      }
       const withIcon = { ...base, icon: (input.icon ?? "star").trim() || "star" };
       let { error: err } = await supabase.from("project_phases").insert(withIcon);
       // icon 列未適用の環境ではフォールバック
       if (err && /icon/i.test(err.message)) {
         ({ error: err } = await supabase.from("project_phases").insert(base));
+      }
+      if (err && input.sideOf && /side_of|lane|column|schema cache|42703/i.test(err.message)) {
+        throw new Error(
+          "横置きマスを保存できません。Supabase で apply_roadmap_phase_side.sql を実行してください。",
+        );
       }
       if (err) throw new Error(err.message);
       await reload();

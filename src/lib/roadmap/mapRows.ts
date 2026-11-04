@@ -12,6 +12,8 @@ export type PhaseRowDb = {
   color: string;
   icon?: string | null;
   order: number;
+  side_of?: string | null;
+  lane?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -88,6 +90,8 @@ export function nestPhasesWithTasks(phaseRows: PhaseRowDb[], taskRows: PhaseTask
       color: mapColor(row.color),
       icon: row.icon?.trim() || undefined,
       order: row.order,
+      sideOf: row.side_of?.trim() || undefined,
+      lane: typeof row.lane === "number" ? row.lane : undefined,
       tasks: byPhase.get(row.id) ?? [],
     }))
     .sort((a, b) => a.order - b.order);

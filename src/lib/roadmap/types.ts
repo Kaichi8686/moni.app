@@ -33,6 +33,10 @@ export type RoadmapPhase = {
   /** マス内アイコン（star / book / flag など） */
   icon?: string;
   order: number;
+  /** 横置きの親マス id（未設定 = 本線） */
+  sideOf?: string;
+  /** 本線からの左右: -1 左 / 0 本線 / 1 右 */
+  lane?: number;
   tasks: PhaseTask[];
 };
 

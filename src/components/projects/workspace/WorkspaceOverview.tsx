@@ -25,6 +25,7 @@ import {
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
+import { splitRoadmapPathLayout, normalizeLane } from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
@@ -124,25 +125,31 @@ export default function WorkspaceOverview() {
     const source = roadmap.phases.length > 0 ? roadmap.phases : workspacePhases;
     return [...source].sort((a, b) => a.order - b.order);
   }, [roadmap.phases, workspacePhases]);
+  const { main: mainPhases, bySideOf } = useMemo(
+    () => splitRoadmapPathLayout(sortedPhases),
+    [sortedPhases],
+  );
   const selectedPhaseLive = selectedPhaseId
     ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
     : null;
-  /** order 順のまま表示（完了を末尾に回すと「いまここ」が先頭に残り、進んだように見えない） */
-  const displayPhases = sortedPhases;
+  /** 本線だけを縦に数え、横置きは親行にぶら下げる */
+  const displayPhases = mainPhases;
   const visiblePhases = useMemo(
     () => (roadmapExpanded ? displayPhases : displayPhases.slice(0, ROADMAP_VISIBLE_LIMIT)),
     [displayPhases, roadmapExpanded],
   );
   const hiddenPhaseCount = Math.max(0, displayPhases.length - visiblePhases.length);
 
-  const inProgressIndex = sortedPhases.findIndex((phase) => phase.status === "in_progress");
-  const firstOpenIndex = sortedPhases.findIndex((phase) => phase.status !== "completed");
+  const inProgressIndex = mainPhases.findIndex((phase) => phase.status === "in_progress");
+  const firstOpenIndex = mainPhases.findIndex((phase) => phase.status !== "completed");
   const currentIndex = Math.max(0, inProgressIndex >= 0 ? inProgressIndex : firstOpenIndex);
   const selectedPhaseIsCurrent = Boolean(
     selectedPhaseLive &&
       selectedPhaseLive.status !== "completed" &&
       (selectedPhaseLive.status === "in_progress" ||
-        sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex),
+        mainPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex ||
+        (selectedPhaseLive.sideOf != null &&
+          mainPhases.findIndex((item) => item.id === selectedPhaseLive.sideOf) === currentIndex)),
   );
 
   /**
@@ -286,19 +293,53 @@ export default function WorkspaceOverview() {
           <>
             <RoadmapPath
               segmentCleared={visiblePhases.map((phase) => {
-                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                const index = mainPhases.findIndex((item) => item.id === phase.id);
                 return phase.status === "completed" || index < currentIndex;
               })}
             >
               {visiblePhases.map((phase, visibleIndex) => {
-                const index = sortedPhases.findIndex((item) => item.id === phase.id);
+                const index = mainPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
                 const current = phase.status === "in_progress" || (!complete && index === currentIndex);
                 /** 先のマスは灰色（中身は開ける） */
                 const upcoming = !complete && !current && index > currentIndex;
                 const tone = complete ? "done" : upcoming ? "upcoming" : "active";
+                const sidePhases = bySideOf.get(phase.id) ?? [];
                 return (
-                  <RoadmapPathItem key={phase.id} index={visibleIndex}>
+                  <RoadmapPathItem
+                    key={phase.id}
+                    index={visibleIndex}
+                    sides={sidePhases
+                      .map((side) => {
+                        const lane = normalizeLane(side.lane);
+                        if (lane !== -1 && lane !== 1) return null;
+                        const sideComplete = side.status === "completed";
+                        const sideCurrent = side.status === "in_progress";
+                        const sideTone = sideComplete
+                          ? ("done" as const)
+                          : sideCurrent
+                            ? ("active" as const)
+                            : upcoming
+                              ? ("upcoming" as const)
+                              : ("active" as const);
+                        return {
+                          key: side.id,
+                          lane,
+                          children: (
+                            <RoadmapPathNode
+                              tone={sideTone}
+                              sparkle={sideCurrent}
+                              selected={selectedPhaseId === side.id}
+                              onClick={() => setSelectedPhaseId(side.id)}
+                              aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
+                            >
+                              <RoadmapStepMark markId={side.icon} index={index} tone={sideTone} />
+                            </RoadmapPathNode>
+                          ),
+                        };
+                      })
+                      .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot))}
+                  >
                     <RoadmapPathNode
                       tone={tone}
                       sparkle={current}
@@ -395,30 +436,37 @@ export default function WorkspaceOverview() {
                 title: selectedPhaseLive.title,
                 goal: selectedPhaseLive.goal,
                 description: selectedPhaseLive.description,
-                stepNumber: sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) + 1,
+                stepNumber: (() => {
+                  const mainAt = mainPhases.findIndex((item) => item.id === selectedPhaseLive.id);
+                  if (mainAt >= 0) return mainAt + 1;
+                  if (selectedPhaseLive.sideOf) {
+                    const parentAt = mainPhases.findIndex((item) => item.id === selectedPhaseLive.sideOf);
+                    if (parentAt >= 0) return parentAt + 1;
+                  }
+                  return 1;
+                })(),
                 alreadyDone: selectedPhaseLive.status === "completed",
               }
             : null
         }
         onClose={() => setSelectedPhaseId(null)}
         canEdit={false}
-        canAchieve={Boolean(
-          roadmap.canEdit &&
-            selectedPhaseLive &&
-            selectedPhaseLive.status !== "completed" &&
-            (selectedPhaseLive.status === "in_progress" ||
-              sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex),
-        )}
+        canAchieve={Boolean(roadmap.canEdit && selectedPhaseIsCurrent)}
         onAchieve={async () => {
           if (!selectedPhaseLive) return;
           if (!roadmap.canEdit) {
             throw new Error(tx("編集権限がありません", "You don’t have permission to edit"));
           }
-          const idx = sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id);
-          const next = idx >= 0 ? sortedPhases[idx + 1] : undefined;
           await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
-          if (next && next.status !== "completed") {
-            await roadmap.updatePhase(next.id, { status: "in_progress" });
+          // 本線マスを達成したときだけ次の本線へ進める（横置きは親行の進捗を奪わない）
+          if (!selectedPhaseLive.sideOf) {
+            const idx = mainPhases.findIndex((item) => item.id === selectedPhaseLive.id);
+            const next = idx >= 0
+              ? mainPhases.slice(idx + 1).find((item) => item.status !== "completed")
+              : undefined;
+            if (next) {
+              await roadmap.updatePhase(next.id, { status: "in_progress" });
+            }
           }
           await wsReload();
           setSelectedPhaseId(null);

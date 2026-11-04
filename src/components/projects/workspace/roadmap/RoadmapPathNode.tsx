@@ -8,6 +8,8 @@ type Props = {
   tone?: RoadmapPathNodeTone;
   /** 進行中マスの周囲キラキラ */
   sparkle?: boolean;
+  /** いま取り組んでいるマスを囲むオレンジの外枠（編集・作成画面用） */
+  currentHalo?: boolean;
   selected?: boolean;
   disabled?: boolean;
   children?: ReactNode;
@@ -39,6 +41,7 @@ const TONE_BASE: Record<RoadmapPathNodeTone, string> = {
 export function RoadmapPathNode({
   tone = "active",
   sparkle = false,
+  currentHalo = false,
   selected = false,
   disabled = false,
   children,
@@ -56,6 +59,12 @@ export function RoadmapPathNode({
         sparkle ? "roadmap-node-sparkle" : ""
       }`}
     >
+      {currentHalo ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -inset-[11px] rounded-full border-[3px] border-[#F97316] shadow-[0_0_0_3px_rgba(249,115,22,0.18)]"
+        />
+      ) : null}
       {sparkle ? (
         <>
           <span className="roadmap-sparkle roadmap-sparkle-1" aria-hidden />
