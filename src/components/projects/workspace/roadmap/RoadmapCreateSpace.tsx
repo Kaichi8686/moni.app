@@ -120,6 +120,23 @@ function linksForAnchor(steps: CreateSpaceExistingStep[], anchorIndex: number) {
   };
 }
 
+/** 棒の付け替え後の挿入位置 */
+function insertAtFromLinks(
+  steps: CreateSpaceExistingStep[],
+  prevId: string | null,
+  nextId: string | null,
+) {
+  if (prevId) {
+    const prevAt = steps.findIndex((step) => step.id === prevId);
+    if (prevAt >= 0) return prevAt + 1;
+  }
+  if (nextId) {
+    const nextAt = steps.findIndex((step) => step.id === nextId);
+    if (nextAt >= 0) return nextAt;
+  }
+  return steps.length;
+}
+
 /**
  * マス作成専用空間：
  * - 現存マスはメインタブと同じ蛇行＋棒（右寄せ）
@@ -133,7 +150,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
   const [draft, setDraft] = useState<CreateSpaceDraft | null>(null);
   const [anchorIndex, setAnchorIndex] = useState(0);
   const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
-  const [draggingMasu, setDraggingMasu] = useState(false);
+  const [dragKind, setDragKind] = useState<"masu" | "prev" | "next" | null>(null);
   const [dragY, setDragY] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -237,30 +254,52 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
   function clearDraft() {
     clearIntroTimers();
     setIntroPhase("idle");
-    setDraggingMasu(false);
+    setDragKind(null);
     setDragY(null);
     setDraft(null);
   }
 
   useEffect(() => {
-    if (!draggingMasu || !draft || introPhase !== "ready") return;
+    if (!dragKind || !draft || introPhase !== "ready") return;
 
     const onMove = (event: PointerEvent) => {
       const root = rootRef.current;
       if (!root) return;
       const localY = event.clientY - root.getBoundingClientRect().top;
-      setDragY(localY);
-      const nearest = nearestIndexFromY(localY);
-      const snapY = existingCenter(nearest).y;
-      if (Math.abs(localY - snapY) <= SNAP_PX) {
-        applyAnchor(nearest);
-        setDragY(snapY);
+
+      if (dragKind === "masu") {
+        setDragY(localY);
+        const nearest = nearestIndexFromY(localY);
+        const snapY = existingCenter(nearest).y;
+        if (Math.abs(localY - snapY) <= SNAP_PX) {
+          applyAnchor(nearest);
+          setDragY(snapY);
+        }
+        return;
       }
+
+      // 棒を掴んで上下 → 近い現存マスへ接続先を付け替え
+      const nearest = nearestIndexFromY(localY);
+      const target = existingSteps[nearest];
+      if (!target) return;
+      setDraft((prev) => {
+        if (!prev) return prev;
+        if (dragKind === "prev") {
+          if (target.id === prev.nextId) return prev;
+          const prevId = target.id;
+          return { ...prev, prevId, insertAt: insertAtFromLinks(existingSteps, prevId, prev.nextId) };
+        }
+        if (target.id === prev.prevId) return prev;
+        const nextId = target.id;
+        return { ...prev, nextId, insertAt: insertAtFromLinks(existingSteps, prev.prevId, nextId) };
+      });
     };
 
     const onUp = () => {
-      if (dragY != null) applyAnchor(nearestIndexFromY(dragY));
-      setDraggingMasu(false);
+      if (dragKind === "masu" && dragY != null) {
+        applyAnchor(nearestIndexFromY(dragY));
+      }
+      setDragKind(null);
       setDragY(null);
     };
 
@@ -272,7 +311,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [draggingMasu, draft, introPhase, dragY, nearestIndexFromY, applyAnchor]);
+  }, [dragKind, draft, introPhase, dragY, nearestIndexFromY, applyAnchor, existingSteps]);
 
   async function handleConfirm() {
     if (!draft) {
@@ -327,11 +366,11 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
 
   const draftCenter = useMemo(() => {
     const snapped = draftCenterForAnchor(anchorIndex, existingSteps.length);
-    if (draggingMasu && dragY != null) {
+    if (dragKind === "masu" && dragY != null) {
       return { x: snapped.x, y: dragY };
     }
     return snapped;
-  }, [anchorIndex, existingSteps.length, draggingMasu, dragY]);
+  }, [anchorIndex, existingSteps.length, dragKind, dragY]);
 
   const prevTarget = draft?.prevId ? existingById.get(draft.prevId) : null;
   const nextTarget = draft?.nextId ? existingById.get(draft.nextId) : null;
@@ -351,8 +390,8 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
           {tx(
-            "いまのステップと同じ位置から始まります。上下にスライドして場所を変えられます。先頭では上の棒、末尾では下の棒は出ません。",
-            "Starts at your current step. Slide to move. No upper bar at the first step, no lower bar at the last.",
+            "いまのステップと同じ位置から始まります。マスや棒を上下にスライドして場所・接続を変えられます。先頭では上の棒、末尾では下の棒は出ません。",
+            "Starts at your current step. Slide the masu or bars to reconnect. No upper bar at the first step, no lower bar at the last.",
           )}
         </p>
 
@@ -361,7 +400,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
           className="relative mx-auto mt-5"
           style={{ width: CREATE_TRACK_W, minHeight: contentHeight }}
         >
-          {/* 棒はすべて現存マスより下（z-0） */}
+          {/* 灰棒は最下層 */}
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
             width={CREATE_TRACK_W}
@@ -379,29 +418,62 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 strokeLinejoin="round"
               />
             ) : null}
-            {draft
-              ? (["prev", "next"] as const).map((end) => {
-                  const target = end === "prev" ? prevTarget : nextTarget;
-                  if (!target) return null;
-                  const visible = end === "prev" ? showPrevBar : showNextBar;
-                  if (!visible) return null;
-                  const drawing = end === "prev" ? introPhase === "prevBar" : introPhase === "nextBar";
-                  const to = existingCenter(target.index);
-                  return (
+          </svg>
+
+          {/* オレンジ棒：現存マスより下。棒自体を掴んで付け替え */}
+          {draft ? (
+            <svg
+              className={`absolute left-0 top-0 z-[1] overflow-visible ${
+                interactive ? "touch-none" : "pointer-events-none"
+              }`}
+              width={CREATE_TRACK_W}
+              height={contentHeight}
+              viewBox={`0 0 ${CREATE_TRACK_W} ${contentHeight}`}
+              aria-hidden
+            >
+              {(["prev", "next"] as const).map((end) => {
+                const target = end === "prev" ? prevTarget : nextTarget;
+                if (!target) return null;
+                const visible = end === "prev" ? showPrevBar : showNextBar;
+                if (!visible) return null;
+                const drawing = end === "prev" ? introPhase === "prevBar" : introPhase === "nextBar";
+                const to = existingCenter(target.index);
+                const d = barPathTopToBottom(draftCenter, to);
+                return (
+                  <g key={`${draft.id}-${end}-${drawing ? "draw" : "solid"}-${target.id}`}>
+                    {/* 当たり判定用の太い透明ストローク */}
+                    {interactive ? (
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={28}
+                        strokeLinecap="round"
+                        className="cursor-grab active:cursor-grabbing"
+                        style={{ pointerEvents: "stroke" }}
+                        onPointerDown={(event) => {
+                          if (busy || saving) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDragKind(end);
+                        }}
+                      />
+                    ) : null}
                     <path
-                      key={`${draft.id}-${end}-${drawing ? "draw" : "solid"}-${target.id}`}
-                      d={barPathTopToBottom(draftCenter, to)}
+                      d={d}
                       pathLength={1}
                       fill="none"
                       stroke="#F97316"
                       strokeWidth={12}
                       strokeLinecap="round"
                       className={drawing ? "roadmap-create-bar-draw" : undefined}
+                      style={{ pointerEvents: "none" }}
                     />
-                  );
-                })
-              : null}
-          </svg>
+                  </g>
+                );
+              })}
+            </svg>
+          ) : null}
 
           {/* 現存マス（棒の上） */}
           {existingSteps.map((step, index) => {
@@ -427,7 +499,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             );
           })}
 
-          {/* 追加マス（左レーン） */}
+          {/* 追加マス（左レーン）— 登場中も色はそのまま（半透明にしない） */}
           {draft ? (
             <div
               className={`absolute z-[3] touch-none ${masuIntroClass} ${
@@ -443,7 +515,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 if (!interactive || busy || saving) return;
                 event.preventDefault();
                 (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-                setDraggingMasu(true);
+                setDragKind("masu");
                 const root = rootRef.current;
                 if (!root) return;
                 setDragY(event.clientY - root.getBoundingClientRect().top);
@@ -451,9 +523,9 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             >
               <RoadmapPathNode
                 tone="create"
-                sparkle={interactive && !draggingMasu}
+                sparkle={interactive && dragKind !== "masu"}
                 selected
-                disabled={introPlaying || busy || saving}
+                disabled={busy || saving}
                 className="!w-auto pointer-events-none"
                 aria-label={tx("追加マス", "New step")}
               >

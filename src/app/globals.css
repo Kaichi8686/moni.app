@@ -1140,11 +1140,9 @@ html.moni-landing-active {
 /* マス作成空間：選択時の登場 → 棒描画 → パルス */
 @keyframes roadmap-create-masu-appear {
   from {
-    opacity: 0;
     transform: scale(0.72);
   }
   to {
-    opacity: 1;
     transform: scale(1);
   }
 }
