@@ -525,7 +525,7 @@ export function RoadmapMapEditor() {
                     children: (
                       <RoadmapPathNode
                         tone={sideTone}
-                        currentHalo={side.status === "in_progress"}
+                        sparkle={side.status === "in_progress"}
                         selected={selectedId === side.id}
                         onClick={() => {
                           setSelectedId((current) => (current === side.id ? null : side.id));
@@ -541,7 +541,7 @@ export function RoadmapMapEditor() {
             >
               <RoadmapPathNode
                 tone={tone}
-                currentHalo={isCurrent && step.status !== "completed"}
+                sparkle={isCurrent && step.status !== "completed"}
                 selected={expanded}
                 onClick={() => {
                   setSelectedId((current) => (current === step.id ? null : step.id));
