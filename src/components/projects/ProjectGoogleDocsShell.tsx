@@ -16,6 +16,7 @@ import { a4MinHeightForWidth } from "@/lib/projects/documents";
 
 const PAGE_MAX_WIDTH = 680;
 const PAGE_MIN_HEIGHT = a4MinHeightForWidth(PAGE_MAX_WIDTH);
+const AUTOSAVE_MS = 800;
 
 function escapeHtml(s: string): string {
   return s
@@ -91,14 +92,22 @@ function ToolBtn({
   );
 }
 
+export type DocumentSavePayload = {
+  title: string;
+  content: string;
+};
+
 type Props = {
   activeDocId: string | null;
   documents: Array<{ id: string; content: string }>;
   docTitle: string;
   onDocTitleChange: (title: string) => void;
   onDocContentChange: (html: string) => void;
-  onSave: () => void | Promise<void>;
+  /** 自動保存。title/content の最新値を渡す（親 state の遅延を避ける） */
+  onSave: (payload: DocumentSavePayload) => void | Promise<void>;
   saving?: boolean;
+  /** false のとき自動保存しない（閲覧のみ） */
+  autoSave?: boolean;
   wordCount: number;
   updatedByLabel: string;
   sidebar?: ReactNode;
@@ -114,6 +123,7 @@ export function ProjectGoogleDocsShell({
   onDocContentChange,
   onSave,
   saving,
+  autoSave = true,
   wordCount,
   updatedByLabel,
   sidebar,
@@ -122,12 +132,36 @@ export function ProjectGoogleDocsShell({
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const documentsRef = useRef(documents);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleRef = useRef(docTitle);
+  const contentRef = useRef("");
+  const activeDocIdRef = useRef(activeDocId);
+  const onSaveRef = useRef(onSave);
+  const savingRef = useRef(false);
+  const dirtyRef = useRef(false);
   const [saveHint, setSaveHint] = useState("保存済み");
 
   useEffect(() => {
     documentsRef.current = documents;
   }, [documents]);
+
+  useEffect(() => {
+    titleRef.current = docTitle;
+  }, [docTitle]);
+
+  useEffect(() => {
+    activeDocIdRef.current = activeDocId;
+  }, [activeDocId]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  useEffect(() => {
+    savingRef.current = Boolean(saving);
+    if (saving) setSaveHint("保存中…");
+  }, [saving]);
 
   const exec = useCallback((command: string, value?: string) => {
     editorRef.current?.focus();
@@ -139,39 +173,107 @@ export function ProjectGoogleDocsShell({
     }
   }, []);
 
-  const flushToParent = useCallback(() => {
+  const readEditorHtml = useCallback(() => {
     const el = editorRef.current;
-    if (!el) return;
-    onDocContentChange(sanitizeHtml(el.innerHTML));
-  }, [onDocContentChange]);
+    if (!el) return contentRef.current;
+    return sanitizeHtml(el.innerHTML);
+  }, []);
+
+  const persistNow = useCallback(async () => {
+    if (!autoSave) return;
+    const id = activeDocIdRef.current;
+    if (!id || savingRef.current) return;
+    if (!dirtyRef.current) return;
+
+    const payload: DocumentSavePayload = {
+      title: titleRef.current,
+      content: readEditorHtml(),
+    };
+    contentRef.current = payload.content;
+    onDocContentChange(payload.content);
+    dirtyRef.current = false;
+    setSaveHint("保存中…");
+    try {
+      await onSaveRef.current(payload);
+      setSaveHint("保存済み");
+    } catch {
+      dirtyRef.current = true;
+      setSaveHint("保存に失敗 · 再試行します");
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = setTimeout(() => {
+        void persistNow();
+      }, AUTOSAVE_MS);
+    }
+  }, [autoSave, onDocContentChange, readEditorHtml]);
+
+  const scheduleAutoSave = useCallback(() => {
+    if (!autoSave || activeDocIdRef.current === null) return;
+    dirtyRef.current = true;
+    setSaveHint("編集中…");
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      saveDebounceRef.current = null;
+      void persistNow();
+    }, AUTOSAVE_MS);
+  }, [autoSave, persistNow]);
+
+  const flushToParent = useCallback(() => {
+    const html = readEditorHtml();
+    contentRef.current = html;
+    onDocContentChange(html);
+  }, [onDocContentChange, readEditorHtml]);
 
   const scheduleFlush = useCallback(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
+    if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
+    flushDebounceRef.current = setTimeout(() => {
       flushToParent();
-      debounceRef.current = null;
+      flushDebounceRef.current = null;
+      scheduleAutoSave();
     }, 400);
-  }, [flushToParent]);
+  }, [flushToParent, scheduleAutoSave]);
 
-  useEffect(() => () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    },
+    [],
+  );
+
+  // アンマウント / ドキュメント切替前に未保存分を送る
+  useEffect(() => {
+    return () => {
+      if (!autoSave || !dirtyRef.current || !activeDocIdRef.current) return;
+      const payload: DocumentSavePayload = {
+        title: titleRef.current,
+        content: readEditorHtml(),
+      };
+      void onSaveRef.current(payload);
+    };
+  }, [autoSave, activeDocId, readEditorHtml]);
 
   useLayoutEffect(() => {
     const el = editorRef.current;
     if (!el || activeDocId === null) return;
     const row = documentsRef.current.find((d) => d.id === activeDocId);
-    el.innerHTML = initialHtmlFromStored(row?.content ?? "");
+    const html = initialHtmlFromStored(row?.content ?? "");
+    el.innerHTML = html;
+    contentRef.current = sanitizeHtml(html);
+    dirtyRef.current = false;
     queueMicrotask(() => setSaveHint("保存済み"));
   }, [activeDocId]);
 
   useEffect(() => {
     const el = editorRef.current;
     if (!el || activeDocId === null) return;
+    if (dirtyRef.current) return;
     const row = documentsRef.current.find((d) => d.id === activeDocId);
     if (!row?.content?.trim()) return;
     const visuallyEmpty = !el.textContent?.replace(/\u00a0/g, "").trim();
-    if (visuallyEmpty) el.innerHTML = initialHtmlFromStored(row.content);
+    if (visuallyEmpty) {
+      el.innerHTML = initialHtmlFromStored(row.content);
+      contentRef.current = sanitizeHtml(el.innerHTML);
+    }
   }, [documents, activeDocId]);
 
   const onEditorInput = useCallback(() => {
@@ -179,11 +281,19 @@ export function ProjectGoogleDocsShell({
     setSaveHint("編集中…");
   }, [scheduleFlush]);
 
-  const handleSave = useCallback(async () => {
+  const onTitleChange = useCallback(
+    (value: string) => {
+      titleRef.current = value;
+      onDocTitleChange(value);
+      scheduleAutoSave();
+    },
+    [onDocTitleChange, scheduleAutoSave],
+  );
+
+  const onEditorBlur = useCallback(() => {
     flushToParent();
-    await onSave();
-    setSaveHint("保存済み");
-  }, [flushToParent, onSave]);
+    if (dirtyRef.current) void persistNow();
+  }, [flushToParent, persistNow]);
 
   const onStyleChange = (e: FormEvent<HTMLSelectElement>) => {
     const v = e.currentTarget.value;
@@ -192,11 +302,15 @@ export function ProjectGoogleDocsShell({
     else if (v === "h2") exec("formatBlock", "<h2>");
     else if (v === "h3") exec("formatBlock", "<h3>");
     e.currentTarget.value = "p";
+    scheduleAutoSave();
   };
 
   const insertLink = () => {
     const url = typeof window !== "undefined" ? window.prompt("リンクの URL", "https://") : null;
-    if (url) exec("createLink", url);
+    if (url) {
+      exec("createLink", url);
+      scheduleAutoSave();
+    }
   };
 
   const statusLine = useMemo(() => {
@@ -268,23 +382,21 @@ export function ProjectGoogleDocsShell({
           <ToolBtn title="リンク" onClick={insertLink} disabled={activeDocId === null}>
             🔗
           </ToolBtn>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving || activeDocId === null}
-            className="ml-auto rounded-md bg-[#5E6AD2] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
-          >
-            {saving ? "保存中…" : "保存"}
-          </button>
+          <p className="ml-auto px-2 text-[11px] font-medium text-[#6B7280]" aria-live="polite">
+            {activeDocId === null ? "" : saveHint}
+          </p>
         </div>
 
         <div className="border-b border-[#E5E7EB] bg-white px-3 py-2">
           <input
             className="w-full border-0 bg-transparent text-lg font-semibold text-[#1A1A1A] outline-none placeholder:text-[#9CA3AF]"
             value={docTitle}
-            onChange={(e) => onDocTitleChange(e.target.value)}
+            onChange={(e) => onTitleChange(e.target.value)}
+            onBlur={() => {
+              if (dirtyRef.current) void persistNow();
+            }}
             placeholder="無題のドキュメント"
-            disabled={activeDocId === null}
+            disabled={activeDocId === null || !autoSave}
             aria-label="タイトル"
           />
         </div>
@@ -302,10 +414,10 @@ export function ProjectGoogleDocsShell({
                 role="textbox"
                 aria-multiline
                 tabIndex={0}
-                contentEditable
+                contentEditable={autoSave}
                 suppressContentEditableWarning
                 onInput={onEditorInput}
-                onBlur={() => flushToParent()}
+                onBlur={onEditorBlur}
                 className="gdocs-editor-body w-full outline-none"
                 style={{
                   minHeight: PAGE_MIN_HEIGHT,

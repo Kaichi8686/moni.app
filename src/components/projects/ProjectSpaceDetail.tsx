@@ -665,24 +665,28 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     }
   }
 
-  async function saveDocument() {
+  async function saveDocument(payload?: { title: string; content: string }) {
     if (!supabase || !uid || !activeDocId) return;
     setDocSaving(true);
     try {
-      const title = docTitle.trim() || "無題";
+      const title = (payload?.title ?? docTitle).trim() || "無題";
+      const content = payload?.content ?? docContent;
       const now = new Date().toISOString();
       const { error } = await supabase
         .from("project_documents")
-        .update({ title, content: docContent, updated_by: uid, updated_at: now })
+        .update({ title, content, updated_by: uid, updated_at: now })
         .eq("id", activeDocId);
-      if (error) setActionErr(error.message);
-      else {
-        setDocuments((prev) =>
-          prev.map((d) =>
-            d.id === activeDocId ? { ...d, title, content: docContent, updated_at: now, updated_by: uid } : d,
-          ),
-        );
+      if (error) {
+        setActionErr(error.message);
+        throw new Error(error.message);
       }
+      setDocTitle(title);
+      setDocContent(content);
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === activeDocId ? { ...d, title, content, updated_at: now, updated_by: uid } : d,
+        ),
+      );
     } finally {
       setDocSaving(false);
     }
@@ -1454,7 +1458,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
           docTitle={docTitle}
           onDocTitleChange={setDocTitle}
           onDocContentChange={setDocContent}
-          onSave={() => saveDocument()}
+          onSave={(payload) => saveDocument(payload)}
           saving={docSaving}
           wordCount={docWordCount}
           updatedByLabel={
