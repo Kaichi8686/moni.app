@@ -121,11 +121,22 @@ export function parseCustomTaskGenres(raw: unknown): CustomTaskGenreDef[] {
       typeof o.hintEn === "string" && o.hintEn.trim() ? o.hintEn.trim().slice(0, 60) : undefined;
     const colorKey =
       typeof o.colorKey === "string" && o.colorKey.trim() ? o.colorKey.trim().slice(0, 32) : undefined;
+    const phaseIdRaw = typeof o.phaseId === "string" ? o.phaseId.trim() : "";
+    const phaseId = phaseIdRaw.length > 0 ? phaseIdRaw.slice(0, 64) : undefined;
     seen.add(id);
-    out.push({ id, labelJa, labelEn, hintJa, hintEn, colorKey });
+    out.push({ id, labelJa, labelEn, hintJa, hintEn, colorKey, phaseId });
     if (out.length >= MAX_CUSTOM_TASK_GENRES) break;
   }
   return out;
+}
+
+/** ジャンルがこのステップ向けか（legacy の phaseId なしはどのステップでも使える） */
+export function customGenreMatchesPhase(
+  def: CustomTaskGenreDef,
+  phaseId: string | null,
+): boolean {
+  if (!def.phaseId) return true;
+  return def.phaseId === phaseId;
 }
 
 function colorForCustom(def: CustomTaskGenreDef, index: number): Pick<GenreDisplayMeta, "chip" | "iconBg"> {
@@ -174,6 +185,26 @@ export function listProjectTaskGenres(
     out.push(raw);
   }
   return out;
+}
+
+/**
+ * ステップに紐づくジャンル一覧。
+ * - ビルトイン（そのステップで課題を作る導線）
+ * - そのステップ向け／legacy（phaseId なし）のカスタムジャンル
+ * - そのステップの課題で使われているオーファンジャンル
+ */
+export function listStepTaskGenres(
+  phaseId: string | null,
+  customs: CustomTaskGenreDef[],
+  issues: Iterable<{ genre: string; phaseId?: string }>,
+): TaskGenre[] {
+  const phaseIssueGenres: string[] = [];
+  for (const issue of issues) {
+    if ((issue.phaseId ?? null) !== phaseId) continue;
+    phaseIssueGenres.push(issue.genre);
+  }
+  const customsForStep = customs.filter((def) => customGenreMatchesPhase(def, phaseId));
+  return listProjectTaskGenres(customsForStep, phaseIssueGenres);
 }
 
 export function nextCustomColorKey(existingCount: number): string {
