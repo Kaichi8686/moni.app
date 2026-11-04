@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ProjectGoogleDocsShell,
+  type ProjectGoogleDocsShellHandle,
+} from "@/components/projects/ProjectGoogleDocsShell";
 import { DocumentsHomeList } from "@/components/projects/workspace/DocumentsHomeList";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
@@ -30,6 +33,8 @@ export default function WorkspaceDocuments() {
   const [docCreating, setDocCreating] = useState(false);
   const [docSaving, setDocSaving] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [leavingEditor, setLeavingEditor] = useState(false);
+  const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
 
   const memberNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -115,15 +120,29 @@ export default function WorkspaceDocuments() {
     }
   }
 
-  function backToList() {
-    setViewMode("list");
-    if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
-      window.history.back();
+  const backToList = useCallback(async () => {
+    if (leavingEditor) return;
+    setLeavingEditor(true);
+    try {
+      if (canEdit) {
+        try {
+          await editorShellRef.current?.flushAndSave();
+        } catch {
+          // 保存失敗でも一覧へ戻す（シェル側でヒント表示済み）
+        }
+      }
+      setViewMode("list");
+      if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
+        window.history.back();
+      }
+    } finally {
+      setLeavingEditor(false);
     }
-  }
+  }, [canEdit, leavingEditor]);
 
   useEffect(() => {
     const onPopState = () => {
+      // ブラウザ戻る: シェル unmount 時の flush 保存に任せる
       setViewMode("list");
     };
     window.addEventListener("popstate", onPopState);
@@ -133,13 +152,13 @@ export default function WorkspaceDocuments() {
   useEffect(() => {
     registerBackHandler(() => {
       if (viewMode === "editor") {
-        backToList();
+        void backToList();
         return true;
       }
       return false;
     });
     return () => registerBackHandler(null);
-  }, [viewMode, registerBackHandler]);
+  }, [viewMode, registerBackHandler, backToList]);
 
   async function createDocument() {
     setActionErr("");
@@ -257,6 +276,7 @@ export default function WorkspaceDocuments() {
         <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionErr}</p>
       ) : null}
       <ProjectGoogleDocsShell
+        ref={editorShellRef}
         activeDocId={activeDocId}
         documents={documents.map((d) => ({ id: d.id, content: d.content ?? "" }))}
         docTitle={docTitle}
@@ -270,7 +290,12 @@ export default function WorkspaceDocuments() {
           activeDoc?.updated_by ? (memberNames[activeDoc.updated_by] ?? "メンバー") : "—"
         }
         hideSidebar
-        onBack={backToList}
+        onBack={() => {
+          setViewMode("list");
+          if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
+            window.history.back();
+          }
+        }}
       />
     </div>
   );

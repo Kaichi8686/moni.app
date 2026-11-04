@@ -3,8 +3,10 @@
 import DOMPurify from "dompurify";
 import { ArrowLeft } from "lucide-react";
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -97,6 +99,11 @@ export type DocumentSavePayload = {
   content: string;
 };
 
+export type ProjectGoogleDocsShellHandle = {
+  /** デバウンス待ちを捨てて最新内容を即保存（戻る前など） */
+  flushAndSave: () => Promise<void>;
+};
+
 type Props = {
   activeDocId: string | null;
   documents: Array<{ id: string; content: string }>;
@@ -115,21 +122,24 @@ type Props = {
   onBack?: () => void;
 };
 
-export function ProjectGoogleDocsShell({
-  activeDocId,
-  documents,
-  docTitle,
-  onDocTitleChange,
-  onDocContentChange,
-  onSave,
-  saving,
-  autoSave = true,
-  wordCount,
-  updatedByLabel,
-  sidebar,
-  hideSidebar = false,
-  onBack,
-}: Props) {
+export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, Props>(function ProjectGoogleDocsShell(
+  {
+    activeDocId,
+    documents,
+    docTitle,
+    onDocTitleChange,
+    onDocContentChange,
+    onSave,
+    saving,
+    autoSave = true,
+    wordCount,
+    updatedByLabel,
+    sidebar,
+    hideSidebar = false,
+    onBack,
+  },
+  ref,
+) {
   const editorRef = useRef<HTMLDivElement>(null);
   const documentsRef = useRef(documents);
   const flushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,6 +151,7 @@ export function ProjectGoogleDocsShell({
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
   const [saveHint, setSaveHint] = useState("保存済み");
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -223,6 +234,55 @@ export function ProjectGoogleDocsShell({
     onDocContentChange(html);
   }, [onDocContentChange, readEditorHtml]);
 
+  /** デバウンスをキャンセルし、エディタ最新内容を親へ反映して保存する */
+  const flushAndSave = useCallback(async () => {
+    if (flushDebounceRef.current) {
+      clearTimeout(flushDebounceRef.current);
+      flushDebounceRef.current = null;
+    }
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+    const html = readEditorHtml();
+    if (html !== contentRef.current) {
+      dirtyRef.current = true;
+    }
+    contentRef.current = html;
+    onDocContentChange(html);
+    if (!autoSave || !activeDocIdRef.current) return;
+    // 保存中でも戻る前に最新を送る（親側で上書き）
+    if (dirtyRef.current) {
+      const payload: DocumentSavePayload = {
+        title: titleRef.current,
+        content: html,
+      };
+      dirtyRef.current = false;
+      setSaveHint("保存中…");
+      try {
+        await onSaveRef.current(payload);
+        setSaveHint("保存済み");
+      } catch {
+        dirtyRef.current = true;
+        setSaveHint("保存に失敗 · 再試行します");
+        throw new Error("document save failed");
+      }
+    }
+  }, [autoSave, onDocContentChange, readEditorHtml]);
+
+  useImperativeHandle(ref, () => ({ flushAndSave }), [flushAndSave]);
+
+  const handleBack = useCallback(async () => {
+    if (!onBack || leaving) return;
+    setLeaving(true);
+    try {
+      await flushAndSave();
+    } catch {
+      // 保存失敗でも一覧へは戻す（ヒントは flushAndSave 内で更新済み）
+    }
+    onBack();
+  }, [flushAndSave, leaving, onBack]);
+
   const scheduleFlush = useCallback(() => {
     if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
     flushDebounceRef.current = setTimeout(() => {
@@ -240,15 +300,18 @@ export function ProjectGoogleDocsShell({
     [],
   );
 
-  // アンマウント / ドキュメント切替前に未保存分を送る
+  // アンマウント / ドキュメント切替前に未保存分を送る（デバウンス待ちも含む）
   useEffect(() => {
     return () => {
-      if (!autoSave || !dirtyRef.current || !activeDocIdRef.current) return;
-      const payload: DocumentSavePayload = {
+      if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+      if (!autoSave || !activeDocIdRef.current) return;
+      const html = readEditorHtml();
+      if (!dirtyRef.current && html === contentRef.current) return;
+      void onSaveRef.current({
         title: titleRef.current,
-        content: readEditorHtml(),
-      };
-      void onSaveRef.current(payload);
+        content: html,
+      });
     };
   }, [autoSave, activeDocId, readEditorHtml]);
 
@@ -337,8 +400,9 @@ export function ProjectGoogleDocsShell({
           {onBack ? (
             <button
               type="button"
-              onClick={onBack}
-              className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4]"
+              onClick={() => void handleBack()}
+              disabled={leaving}
+              className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-50"
               aria-label="ドキュメント一覧に戻る"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -435,4 +499,4 @@ export function ProjectGoogleDocsShell({
       </div>
     </section>
   );
-}
+});
