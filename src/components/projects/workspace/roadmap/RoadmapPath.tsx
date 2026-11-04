@@ -18,8 +18,24 @@ const TOP_PAD = 12;
 const STEP_Y = NODE_SIZE + ROW_GAP;
 const TRACK_WIDTH = 360;
 
+/** 作成空間などでも同じ並びを使うための公開定数 */
+export const ROADMAP_PATH_LAYOUT = {
+  nodeSize: NODE_SIZE,
+  rowGap: ROW_GAP,
+  topPad: TOP_PAD,
+  stepY: STEP_Y,
+  trackWidth: TRACK_WIDTH,
+} as const;
+
 export function roadmapPathOffsetX(index: number): number {
   return PATH_OFFSETS_PX[index % PATH_OFFSETS_PX.length] ?? 0;
+}
+
+export function roadmapPathNodeCenter(index: number): { x: number; y: number } {
+  return {
+    x: TRACK_WIDTH / 2 + roadmapPathOffsetX(index),
+    y: TOP_PAD + index * STEP_Y + NODE_SIZE / 2,
+  };
 }
 
 type Point = { x: number; y: number };

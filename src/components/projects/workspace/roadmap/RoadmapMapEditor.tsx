@@ -102,13 +102,45 @@ export function RoadmapMapEditor() {
     if (steps.some((step) => step.id === phaseIdFromUrl)) setSelectedId(phaseIdFromUrl);
   }, [phaseIdFromUrl, steps]);
 
-  /** 概要の作成マスから ?add=1 で来たら、マス作成空間を開く */
+  /** ?add=1 と sessionStorage で作成空間を維持（離脱して戻っても編集画面に落ちない） */
   const addFromUrl = searchParams.get("add") === "1";
+  const createSpaceStorageKey = `moni-roadmap-create:${projectId}`;
+
+  const roadmapHref = `/projects/${projectId}/roadmap`;
+  const createSpaceHref = `${roadmapHref}?add=1`;
+
+  function persistCreateSpaceOpen(open: boolean) {
+    try {
+      if (open) window.sessionStorage.setItem(createSpaceStorageKey, "1");
+      else window.sessionStorage.removeItem(createSpaceStorageKey);
+    } catch {
+      /* ignore */
+    }
+    router.replace(open ? createSpaceHref : roadmapHref, { scroll: false });
+  }
+
   useEffect(() => {
-    if (!addFromUrl || !roadmap.canEdit || roadmap.loading) return;
-    setCreateSpaceOpen(true);
-    router.replace(`/projects/${projectId}/roadmap`, { scroll: false });
-  }, [addFromUrl, roadmap.canEdit, roadmap.loading, projectId, router]);
+    if (!roadmap.canEdit || roadmap.loading) return;
+    let stored = false;
+    try {
+      stored = window.sessionStorage.getItem(createSpaceStorageKey) === "1";
+    } catch {
+      stored = false;
+    }
+    const shouldOpen = addFromUrl || stored;
+    setCreateSpaceOpen(shouldOpen);
+    // ストレージだけ残っている場合は URL も揃える
+    if (stored && !addFromUrl) {
+      router.replace(createSpaceHref, { scroll: false });
+    }
+  }, [
+    addFromUrl,
+    roadmap.canEdit,
+    roadmap.loading,
+    createSpaceStorageKey,
+    createSpaceHref,
+    router,
+  ]);
 
   const showPathCreate = roadmap.canEdit && !createSpaceOpen;
 
@@ -195,6 +227,12 @@ export function RoadmapMapEditor() {
     setSelectedId(null);
     setMode("manual");
     setCreateSpaceOpen(true);
+    persistCreateSpaceOpen(true);
+  }
+
+  function closeCreateSpace() {
+    setCreateSpaceOpen(false);
+    persistCreateSpaceOpen(false);
   }
 
   function insertIndexForDraft(
@@ -644,7 +682,7 @@ export function RoadmapMapEditor() {
             order: step.order,
           }))}
           busy={busy}
-          onClose={() => setCreateSpaceOpen(false)}
+          onClose={closeCreateSpace}
           onConfirm={confirmCreateSpaceDrafts}
         />
       ) : null}

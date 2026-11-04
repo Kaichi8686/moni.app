@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import {
+  ROADMAP_PATH_LAYOUT,
+  roadmapPathNodeCenter,
+  roadmapPathOffsetX,
+} from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import {
   RoadmapStepMark,
@@ -36,71 +41,70 @@ type Props = {
   onConfirm: (drafts: CreateSpaceDraft[]) => Promise<void>;
 };
 
-const NODE = 72;
-const EXISTING_X = 72;
-const DRAFT_X = 260;
-const TOP = 28;
-const GAP = 108;
-const TRACK_W = 360;
+const { nodeSize: NODE, topPad: TOP, stepY: STEP_Y, trackWidth: TRACK_W } = ROADMAP_PATH_LAYOUT;
+/** 追加マスは同じ行の右側にずらして置く（メインの蛇行と並んでも被りにくい） */
+const DRAFT_SIDE_GAP = 92;
+const SNAP_PX = 46;
 
-/** 選択時イントロ: マス出現 → 上棒 → 下棒 → パルス → 操作可 */
 type IntroPhase = "idle" | "masu" | "prevBar" | "nextBar" | "pulse" | "ready";
+type DragKind = "masu" | "prev" | "next" | null;
 
 const INTRO_MASU_MS = 320;
 const INTRO_BAR_MS = 420;
 const INTRO_PULSE_MS = 380;
 
-function centerOf(index: number, columnX: number) {
-  return {
-    x: columnX + NODE / 2,
-    y: TOP + index * GAP + NODE / 2,
-  };
+function newDraftId() {
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** 高い端 → 低い端の順で path を作り、上から下へ描画できるようにする */
-function barPathTopToBottom(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-) {
+function barPathTopToBottom(a: { x: number; y: number }, b: { x: number; y: number }) {
   const start = a.y <= b.y ? a : b;
   const end = a.y <= b.y ? b : a;
   return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
 }
 
-function newDraftId() {
-  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+function draftCenterForAnchor(anchorIndex: number, existingCount: number) {
+  const pathCenter =
+    existingCount > 0
+      ? roadmapPathNodeCenter(Math.min(Math.max(anchorIndex, 0), existingCount - 1))
+      : { x: TRACK_W / 2, y: TOP + NODE / 2 };
+  // 行の右側。蛇行オフセットが大きいときは少し内側へ
+  const side =
+    existingCount > 0
+      ? Math.sign(roadmapPathOffsetX(Math.min(Math.max(anchorIndex, 0), existingCount - 1)) || 1) >= 0
+        ? 1
+        : -1
+      : 1;
+  return {
+    x: pathCenter.x + side * DRAFT_SIDE_GAP,
+    y: pathCenter.y,
+  };
 }
 
-function buildInitialDrafts(existing: CreateSpaceExistingStep[]): CreateSpaceDraft[] {
-  const count = Math.max(3, 1);
-  return Array.from({ length: count }, (_, index) => {
-    const prev = existing[existing.length - 1 + index] ?? existing[existing.length - 1] ?? null;
-    // 追加列はいったん末尾接続の候補として並べる（後で棒スライドで付け替え）
-    return {
-      id: newDraftId(),
-      icon: resolveRoadmapMarkId(undefined, existing.length + index),
-      prevId: prev?.id ?? null,
-      nextId: null,
-      done: false,
-    };
-  });
+function linksForAnchor(steps: CreateSpaceExistingStep[], anchorIndex: number) {
+  if (steps.length === 0) return { prevId: null as string | null, nextId: null as string | null };
+  const clamped = Math.min(Math.max(anchorIndex, 0), steps.length - 1);
+  // 「このステップの直後に入れる」＝上棒=そのマス、下棒=次のマス
+  const prevId = steps[clamped]?.id ?? null;
+  const nextId = steps[clamped + 1]?.id ?? null;
+  return { prevId, nextId };
 }
 
 /**
  * マス作成専用空間：
- * - 現存マスは灰色
- * - 追加マスはオレンジ列。押すと光り、他の追加は消え、上下の棒が出る
- * - 棒の先をスライドして、どの現存マスとつなぐか変えられる
- * - 1マスの接続が終わるまで次の追加マスには進めない
+ * - 現存マスはメインタブと同じ蛇行＋棒
+ * - 追加マスは1つ。指で上下にスライドし、近い行へスナップ
+ * - 上下2本の棒の先をスライドして接続先を変えられる
  */
 export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onConfirm }: Props) {
   const { tx } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const introTimersRef = useRef<number[]>([]);
-  const [drafts, setDrafts] = useState<CreateSpaceDraft[]>(() => buildInitialDrafts(existingSteps));
-  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CreateSpaceDraft | null>(null);
+  const [anchorIndex, setAnchorIndex] = useState(0);
   const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
-  const [dragEnd, setDragEnd] = useState<"prev" | "next" | null>(null);
+  const [dragKind, setDragKind] = useState<DragKind>(null);
+  const [dragY, setDragY] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -110,26 +114,27 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
     return map;
   }, [existingSteps]);
 
+  const contentHeight = Math.max(
+    TOP + Math.max(existingSteps.length, 1) * STEP_Y - (STEP_Y - NODE) + 48,
+    360,
+  );
+
   const clearIntroTimers = useCallback(() => {
     introTimersRef.current.forEach((id) => window.clearTimeout(id));
     introTimersRef.current = [];
   }, []);
 
   const runSelectionIntro = useCallback(
-    (draft: CreateSpaceDraft) => {
+    (next: CreateSpaceDraft) => {
       clearIntroTimers();
       setIntroPhase("masu");
-
-      const hasPrev = Boolean(draft.prevId && existingById.has(draft.prevId));
-      const hasNext = Boolean(draft.nextId && existingById.has(draft.nextId));
-
+      const hasPrev = Boolean(next.prevId && existingById.has(next.prevId));
+      const hasNext = Boolean(next.nextId && existingById.has(next.nextId));
       const schedule = (ms: number, fn: () => void) => {
         const id = window.setTimeout(fn, ms);
         introTimersRef.current.push(id);
       };
-
       let elapsed = INTRO_MASU_MS;
-
       if (hasPrev) {
         schedule(elapsed, () => setIntroPhase("prevBar"));
         elapsed += INTRO_BAR_MS;
@@ -138,7 +143,6 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         schedule(elapsed, () => setIntroPhase("nextBar"));
         elapsed += INTRO_BAR_MS;
       }
-
       schedule(elapsed, () => setIntroPhase("pulse"));
       elapsed += INTRO_PULSE_MS;
       schedule(elapsed, () => setIntroPhase("ready"));
@@ -148,67 +152,110 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
 
   useEffect(() => () => clearIntroTimers(), [clearIntroTimers]);
 
-  const activeIndex = drafts.findIndex((draft) => draft.id === activeDraftId);
-  const activeDraft = activeIndex >= 0 ? drafts[activeIndex] : null;
-
-  /** 完了済みの直後の未完了だけ作業可能 */
-  const unlockedIndex = drafts.findIndex((draft) => !draft.done);
-  const workIndex = unlockedIndex < 0 ? drafts.length : unlockedIndex;
-
-  useEffect(() => {
-    // 既存が変わったら未確定ドラフトだけ付け替え候補を更新しない（選択中を壊さない）
-  }, [existingSteps]);
-
-  const contentHeight = Math.max(
-    TOP + Math.max(existingSteps.length, drafts.length, 1) * GAP + 48,
-    420,
-  );
-
-  const findNearestExisting = useCallback(
-    (clientX: number, clientY: number) => {
-      const root = rootRef.current;
-      if (!root) return null;
-      const rootRect = root.getBoundingClientRect();
-      const localX = clientX - rootRect.left;
-      const localY = clientY - rootRect.top;
-      let bestId: string | null = null;
+  const nearestIndexFromY = useCallback(
+    (localY: number) => {
+      if (existingSteps.length === 0) return 0;
+      let best = 0;
       let bestDist = Number.POSITIVE_INFINITY;
-      existingSteps.forEach((step, index) => {
-        const c = centerOf(index, EXISTING_X);
-        const dx = c.x - localX;
-        const dy = c.y - localY;
-        const d = Math.hypot(dx, dy);
+      existingSteps.forEach((_, index) => {
+        const y = roadmapPathNodeCenter(index).y;
+        const d = Math.abs(y - localY);
         if (d < bestDist) {
           bestDist = d;
-          bestId = step.id;
+          best = index;
         }
       });
-      // 近すぎるときだけ吸着
-      return bestDist <= 88 ? bestId : null;
+      return best;
     },
     [existingSteps],
   );
 
+  const applyAnchor = useCallback(
+    (index: number, keepCustomLinks = false) => {
+      const clamped =
+        existingSteps.length === 0 ? 0 : Math.min(Math.max(index, 0), existingSteps.length - 1);
+      setAnchorIndex(clamped);
+      const links = linksForAnchor(existingSteps, clamped);
+      setDraft((prev) => {
+        if (!prev) return prev;
+        if (keepCustomLinks) return prev;
+        return { ...prev, prevId: links.prevId, nextId: links.nextId };
+      });
+    },
+    [existingSteps],
+  );
+
+  function spawnDraft() {
+    if (busy || saving || draft) return;
+    const startAnchor = Math.max(0, existingSteps.length - 1);
+    const links = linksForAnchor(existingSteps, startAnchor);
+    const next: CreateSpaceDraft = {
+      id: newDraftId(),
+      icon: resolveRoadmapMarkId(undefined, existingSteps.length),
+      prevId: links.prevId,
+      nextId: links.nextId,
+      done: false,
+    };
+    setAnchorIndex(startAnchor);
+    setDraft(next);
+    setError("");
+    runSelectionIntro(next);
+  }
+
+  function clearDraft() {
+    clearIntroTimers();
+    setIntroPhase("idle");
+    setDragKind(null);
+    setDragY(null);
+    setDraft(null);
+  }
+
   useEffect(() => {
-    if (!dragEnd || !activeDraftId) return;
+    if (!dragKind || !draft || introPhase !== "ready") return;
 
     const onMove = (event: PointerEvent) => {
-      const nearest = findNearestExisting(event.clientX, event.clientY);
-      if (!nearest) return;
-      setDrafts((prev) =>
-        prev.map((draft) => {
-          if (draft.id !== activeDraftId) return draft;
-          if (dragEnd === "prev") {
-            if (nearest === draft.nextId) return draft;
-            return { ...draft, prevId: nearest };
-          }
-          if (nearest === draft.prevId) return draft;
-          return { ...draft, nextId: nearest };
-        }),
-      );
+      const root = rootRef.current;
+      if (!root) return;
+      const rootRect = root.getBoundingClientRect();
+      const localY = event.clientY - rootRect.top;
+
+      if (dragKind === "masu") {
+        setDragY(localY);
+        const nearest = nearestIndexFromY(localY);
+        const snapY = roadmapPathNodeCenter(nearest).y;
+        if (Math.abs(localY - snapY) <= SNAP_PX) {
+          applyAnchor(nearest, false);
+          setDragY(snapY);
+        }
+        return;
+      }
+
+      // 棒の先：上下に動かし、近い現存マスへスナップ
+      const nearest = nearestIndexFromY(localY);
+      const target = existingSteps[nearest];
+      if (!target) return;
+      setDraft((prev) => {
+        if (!prev) return prev;
+        if (dragKind === "prev") {
+          if (target.id === prev.nextId) return prev;
+          return { ...prev, prevId: target.id };
+        }
+        if (target.id === prev.prevId) return prev;
+        return { ...prev, nextId: target.id };
+      });
     };
 
-    const onUp = () => setDragEnd(null);
+    const onUp = () => {
+      if (dragKind === "masu") {
+        const y = dragY;
+        if (y != null) {
+          applyAnchor(nearestIndexFromY(y), false);
+        }
+      }
+      setDragKind(null);
+      setDragY(null);
+    };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
@@ -217,41 +264,28 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [dragEnd, activeDraftId, findNearestExisting]);
+  }, [dragKind, draft, introPhase, dragY, nearestIndexFromY, applyAnchor, existingSteps]);
 
-  function selectDraft(draftId: string) {
-    const index = drafts.findIndex((draft) => draft.id === draftId);
-    if (index < 0 || index > workIndex) return;
-    const draft = drafts[index];
-    if (!draft || draft.done) return;
-    if (introPhase !== "idle" && introPhase !== "ready") return;
-    if (draftId === activeDraftId && introPhase === "ready") return;
-    setDragEnd(null);
-    setActiveDraftId(draftId);
-    runSelectionIntro(draft);
-  }
-
-  function clearSelection() {
-    clearIntroTimers();
-    setIntroPhase("idle");
-    setActiveDraftId(null);
-    setDragEnd(null);
-  }
-
-  function markActiveDone() {
-    if (!activeDraft) return;
+  async function handleConfirm() {
+    if (!draft) {
+      setError(tx("追加するマスがありません。＋で追加してください", "No step to add. Tap + first."));
+      return;
+    }
     if (introPhase !== "ready") return;
-    if (!activeDraft.prevId && !activeDraft.nextId && existingSteps.length > 0) {
+    if (!draft.prevId && !draft.nextId && existingSteps.length > 0) {
       setError(tx("上下どちらかの棒を現存マスにつないでください", "Connect at least one bar to an existing step"));
       return;
     }
+    setSaving(true);
     setError("");
-    clearIntroTimers();
-    setIntroPhase("idle");
-    setDrafts((prev) =>
-      prev.map((draft) => (draft.id === activeDraft.id ? { ...draft, done: true } : draft)),
-    );
-    setActiveDraftId(null);
+    try {
+      await onConfirm([{ ...draft, done: true }]);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("追加に失敗しました", "Couldn’t add steps"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const introPlaying = introPhase !== "idle" && introPhase !== "ready";
@@ -261,7 +295,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
     introPhase === "pulse" ||
     introPhase === "ready";
   const showNextBar = introPhase === "nextBar" || introPhase === "pulse" || introPhase === "ready";
-  const showHandles = introPhase === "ready";
+  const interactive = introPhase === "ready";
   const masuIntroClass =
     introPhase === "masu"
       ? "roadmap-create-masu-appear"
@@ -269,45 +303,33 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         ? "roadmap-create-masu-pulse"
         : "";
 
-  function addDraftColumn() {
-    setDrafts((prev) => {
-      const lastDoneOrTail = prev[prev.length - 1];
-      const fallbackPrev =
-        lastDoneOrTail?.prevId ??
-        existingSteps[existingSteps.length - 1]?.id ??
-        null;
-      return [
-        ...prev,
-        {
-          id: newDraftId(),
-          icon: resolveRoadmapMarkId(undefined, existingSteps.length + prev.length),
-          prevId: fallbackPrev,
-          nextId: null,
-          done: false,
-        },
-      ];
-    });
-  }
-
-  async function handleConfirm() {
-    const ready = drafts.filter((draft) => draft.done);
-    if (ready.length === 0) {
-      setError(tx("接続を完了したマスがありません", "No connected steps to add yet"));
-      return;
+  const existingCenters = useMemo(
+    () => existingSteps.map((_, index) => roadmapPathNodeCenter(index)),
+    [existingSteps],
+  );
+  const existingPathD = useMemo(() => {
+    if (existingCenters.length < 2) return "";
+    const first = existingCenters[0];
+    if (!first) return "";
+    let d = `M ${first.x} ${first.y}`;
+    for (let i = 1; i < existingCenters.length; i++) {
+      const p = existingCenters[i];
+      if (!p) continue;
+      d += ` L ${p.x} ${p.y}`;
     }
-    setSaving(true);
-    setError("");
-    try {
-      await onConfirm(ready);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("追加に失敗しました", "Couldn’t add steps"));
-    } finally {
-      setSaving(false);
-    }
-  }
+    return d;
+  }, [existingCenters]);
 
-  const showingSelection = Boolean(activeDraft);
+  const draftCenter = useMemo(() => {
+    const snapped = draftCenterForAnchor(anchorIndex, existingSteps.length);
+    if (dragKind === "masu" && dragY != null) {
+      return { x: snapped.x, y: dragY };
+    }
+    return snapped;
+  }, [anchorIndex, existingSteps.length, dragKind, dragY]);
+
+  const prevTarget = draft?.prevId ? existingById.get(draft.prevId) : null;
+  const nextTarget = draft?.nextId ? existingById.get(draft.nextId) : null;
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-white">
@@ -324,8 +346,8 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
           {tx(
-            "オレンジの追加マスを1つ選び、上下の棒をスライドして現存マスとつなぎます。1つ終わるまで次には進めません。",
-            "Pick one orange step, slide the bars to existing steps. Finish one before the next.",
+            "＋でマスを1つ追加し、指で上下にスライドして同じ行に吸着させます。上下の棒もスライドして接続先を変えられます。",
+            "Add one step with +, slide it to snap onto a row, then slide the bars to reconnect.",
           )}
         </p>
 
@@ -334,21 +356,41 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
           className="relative mx-auto mt-5"
           style={{ width: TRACK_W, minHeight: contentHeight }}
         >
-          {/* 現存マス（灰色） */}
+          {/* 現存パスの棒（メインタブと同じ並び） */}
+          {existingPathD ? (
+            <svg
+              className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
+              width={TRACK_W}
+              height={contentHeight}
+              viewBox={`0 0 ${TRACK_W} ${contentHeight}`}
+              aria-hidden
+            >
+              <path
+                d={existingPathD}
+                fill="none"
+                stroke="#D4D4D8"
+                strokeWidth={14}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : null}
+
+          {/* 現存マス */}
           {existingSteps.map((step, index) => {
-            const c = centerOf(index, EXISTING_X);
+            const c = roadmapPathNodeCenter(index);
             const linked =
-              activeDraft &&
-              (activeDraft.prevId === step.id || activeDraft.nextId === step.id);
+              draft && (draft.prevId === step.id || draft.nextId === step.id);
+            const sameRow = Boolean(draft) && index === anchorIndex;
             return (
               <div
                 key={step.id}
-                className="absolute"
+                className="absolute z-[1]"
                 style={{ left: c.x - NODE / 2, top: c.y - NODE / 2, width: NODE, height: NODE }}
               >
                 <RoadmapPathNode
                   tone="upcoming"
-                  selected={Boolean(linked)}
+                  selected={Boolean(linked) || sameRow}
                   className="!w-auto"
                   aria-label={step.title}
                 >
@@ -358,109 +400,131 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             );
           })}
 
-          {/* 追加マス列 */}
-          {drafts.map((draft, index) => {
-            if (showingSelection && draft.id !== activeDraftId) return null;
-            const locked = index > workIndex;
-            const c = centerOf(index, DRAFT_X);
-            const isActive = draft.id === activeDraftId;
-            return (
-              <div
-                key={draft.id}
-                className={`absolute z-[1] ${isActive ? masuIntroClass : ""}`}
-                style={{ left: c.x - NODE / 2, top: c.y - NODE / 2, width: NODE, height: NODE }}
+          {/* 追加マス（1つ） */}
+          {draft ? (
+            <div
+              className={`absolute z-[2] touch-none ${masuIntroClass} ${
+                interactive ? "cursor-grab active:cursor-grabbing" : ""
+              }`}
+              style={{
+                left: draftCenter.x - NODE / 2,
+                top: draftCenter.y - NODE / 2,
+                width: NODE,
+                height: NODE,
+              }}
+              onPointerDown={(event) => {
+                if (!interactive || busy || saving) return;
+                event.preventDefault();
+                (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+                setDragKind("masu");
+                const root = rootRef.current;
+                if (!root) return;
+                setDragY(event.clientY - root.getBoundingClientRect().top);
+              }}
+            >
+              <RoadmapPathNode
+                tone="create"
+                sparkle={interactive && dragKind !== "masu"}
+                selected
+                disabled={introPlaying || busy || saving}
+                className="!w-auto pointer-events-none"
+                aria-label={tx("追加マス", "New step")}
               >
-                <RoadmapPathNode
-                  tone={draft.done ? "done" : "create"}
-                  sparkle={isActive && !introPlaying}
-                  selected={isActive || draft.done}
-                  disabled={locked || draft.done || busy || saving || introPlaying}
-                  className="!w-auto"
-                  onClick={() => selectDraft(draft.id)}
-                  aria-label={tx(`追加マス ${index + 1}`, `New step ${index + 1}`)}
-                >
-                  <RoadmapStepMark
-                    markId={draft.icon}
-                    index={existingSteps.length + index}
-                    tone={draft.done ? "done" : "create"}
-                  />
-                </RoadmapPathNode>
-              </div>
-            );
-          })}
+                <RoadmapStepMark markId={draft.icon} index={existingSteps.length} tone="create" />
+              </RoadmapPathNode>
+            </div>
+          ) : null}
 
-          {/* 選択中の上下棒（上→下へ描画） */}
-          {activeDraft ? (
+          {/* 追加マスの上下棒 */}
+          {draft ? (
             <svg
-              className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
+              className="pointer-events-none absolute left-0 top-0 z-[1] overflow-visible"
               width={TRACK_W}
               height={contentHeight}
               viewBox={`0 0 ${TRACK_W} ${contentHeight}`}
               aria-hidden
             >
               {(["prev", "next"] as const).map((end) => {
-                const targetId = end === "prev" ? activeDraft.prevId : activeDraft.nextId;
-                if (!targetId) return null;
-                const target = existingById.get(targetId);
+                const target = end === "prev" ? prevTarget : nextTarget;
                 if (!target) return null;
                 const visible = end === "prev" ? showPrevBar : showNextBar;
                 if (!visible) return null;
                 const drawing = end === "prev" ? introPhase === "prevBar" : introPhase === "nextBar";
-                const from = centerOf(activeIndex, DRAFT_X);
-                const to = centerOf(target.index, EXISTING_X);
+                const to = roadmapPathNodeCenter(target.index);
                 return (
-                  <g key={end}>
-                    <path
-                      key={`${activeDraft.id}-${end}-${drawing ? "draw" : "solid"}`}
-                      d={barPathTopToBottom(from, to)}
-                      pathLength={1}
-                      fill="none"
-                      stroke="#F97316"
-                      strokeWidth={12}
-                      strokeLinecap="round"
-                      className={drawing ? "roadmap-create-bar-draw" : undefined}
-                    />
-                  </g>
+                  <path
+                    key={`${draft.id}-${end}-${drawing ? "draw" : "solid"}-${target.id}`}
+                    d={barPathTopToBottom(draftCenter, to)}
+                    pathLength={1}
+                    fill="none"
+                    stroke="#F97316"
+                    strokeWidth={12}
+                    strokeLinecap="round"
+                    className={drawing ? "roadmap-create-bar-draw" : undefined}
+                  />
                 );
               })}
             </svg>
           ) : null}
 
-          {/* 棒の先（ドラッグハンドル）— イントロ完了後に表示 */}
-          {activeDraft
+          {/* 棒ハンドル */}
+          {draft && interactive
             ? (["prev", "next"] as const).map((end) => {
-                const targetId = end === "prev" ? activeDraft.prevId : activeDraft.nextId;
-                const target = targetId ? existingById.get(targetId) : null;
-                const from = centerOf(activeIndex, DRAFT_X);
+                const target = end === "prev" ? prevTarget : nextTarget;
                 const handle = target
-                  ? centerOf(target.index, EXISTING_X)
+                  ? roadmapPathNodeCenter(target.index)
                   : {
-                      x: from.x - 70,
-                      y: end === "prev" ? from.y - 56 : from.y + 56,
+                      x: draftCenter.x - 56,
+                      y: end === "prev" ? draftCenter.y - 52 : draftCenter.y + 52,
                     };
                 return (
                   <button
                     key={`handle-${end}`}
                     type="button"
-                    className={`absolute z-[2] h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${
-                      dragEnd === end ? "bg-orange-600" : "bg-orange-400"
-                    } ${showHandles ? "roadmap-create-handle-in" : "roadmap-create-handle-hidden"}`}
+                    className={`absolute z-[3] h-7 w-7 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full border-2 border-white shadow roadmap-create-handle-in ${
+                      dragKind === end ? "bg-orange-600" : "bg-orange-400"
+                    }`}
                     style={{ left: handle.x, top: handle.y }}
                     aria-label={
                       end === "prev"
                         ? tx("上の棒をスライド", "Slide upper bar")
                         : tx("下の棒をスライド", "Slide lower bar")
                     }
-                    disabled={!showHandles}
                     onPointerDown={(event) => {
-                      if (!showHandles) return;
                       event.preventDefault();
-                      setDragEnd(end);
+                      event.stopPropagation();
+                      setDragKind(end);
                     }}
                   />
                 );
               })
             : null}
+
+          {/* パス末尾の＋は1つだけ（追加マス未作成時） */}
+          {!draft ? (
+            <div
+              className="absolute z-[1]"
+              style={{
+                left:
+                  TRACK_W / 2 +
+                  roadmapPathOffsetX(existingSteps.length) -
+                  NODE / 2,
+                top: TOP + existingSteps.length * STEP_Y,
+                width: NODE,
+                height: NODE,
+              }}
+            >
+              <RoadmapPathNode
+                tone="create"
+                className="!w-auto"
+                onClick={spawnDraft}
+                disabled={busy || saving}
+                aria-label={tx("マスを追加", "Add step")}
+              >
+                <Plus className="h-8 w-8 text-white" strokeWidth={2.75} aria-hidden />
+              </RoadmapPathNode>
+            </div>
+          ) : null}
         </div>
 
         {error ? (
@@ -470,7 +534,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
 
       <div className="fixed inset-x-0 bottom-0 z-[75] border-t border-zinc-100 bg-white/95 px-4 pt-3 backdrop-blur-sm pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex w-full max-w-lg flex-col gap-2">
-          {activeDraft ? (
+          {draft ? (
             <>
               <DuoButton
                 type="button"
@@ -478,44 +542,31 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 size="md"
                 fullWidth
                 disabled={busy || saving || introPlaying}
-                onClick={markActiveDone}
+                onClick={() => void handleConfirm()}
                 className="gap-2 !text-[15px]"
               >
                 <Check className="h-4 w-4" aria-hidden />
-                {tx("このマスの接続を完了", "Finish this connection")}
+                {saving
+                  ? tx("反映中…", "Saving…")
+                  : tx("このマスをロードマップへ", "Add this step to roadmap")}
               </DuoButton>
-              <DuoButton type="button" tone="zinc" size="md" fullWidth onClick={clearSelection} className="!text-[15px]">
-                {tx("選択をやめる", "Deselect")}
+              <DuoButton type="button" tone="zinc" size="md" fullWidth onClick={clearDraft} className="!text-[15px]">
+                {tx("追加をやめる", "Cancel adding")}
               </DuoButton>
             </>
           ) : (
-            <>
-              <DuoButton
-                type="button"
-                tone="peach"
-                size="md"
-                fullWidth
-                disabled={busy || saving}
-                onClick={addDraftColumn}
-                className="gap-2 !text-[15px]"
-              >
-                <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
-                {tx("列にマスを追加", "Add another in the column")}
-              </DuoButton>
-              <DuoButton
-                type="button"
-                tone="orange"
-                size="md"
-                fullWidth
-                disabled={busy || saving || drafts.every((draft) => !draft.done)}
-                onClick={() => void handleConfirm()}
-                className="!text-[15px]"
-              >
-                {saving
-                  ? tx("反映中…", "Saving…")
-                  : tx("つなぎ終えたマスをロードマップへ", "Add finished steps to roadmap")}
-              </DuoButton>
-            </>
+            <DuoButton
+              type="button"
+              tone="peach"
+              size="md"
+              fullWidth
+              disabled={busy || saving}
+              onClick={spawnDraft}
+              className="gap-2 !text-[15px]"
+            >
+              <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
+              {tx("マスを追加", "Add a step")}
+            </DuoButton>
           )}
         </div>
       </div>
