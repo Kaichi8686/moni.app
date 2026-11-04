@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus, StickyNote } from "lucide-react";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
@@ -52,6 +53,10 @@ function stepLabel(
   if (!phase) return tx("不明なステップ", "Unknown step");
   return `STEP ${index + 1}・${phase.title}`;
 }
+
+/** アイデアタブと同系のリスト用 Duo ボタン */
+const LIST_DUO =
+  "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
 
 export default function WorkspaceIssues() {
   const { tx, locale } = useI18n();
@@ -517,8 +522,11 @@ export default function WorkspaceIssues() {
           </span>
         </button>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        <button
+        <DuoButton
           type="button"
+          tone="orange"
+          size="lg"
+          fullWidth
           disabled={!canEdit || submitted}
           onClick={() => {
             if (boardSaveTimer.current) {
@@ -530,10 +538,10 @@ export default function WorkspaceIssues() {
               submittedAt: new Date().toISOString(),
             });
           }}
-          className="min-h-[52px] w-full rounded-full bg-orange-500 text-base font-bold text-white disabled:opacity-50"
+          className="!text-[16px]"
         >
           {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-        </button>
+        </DuoButton>
       </div>
     );
   }
@@ -572,10 +580,10 @@ export default function WorkspaceIssues() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-white"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
               aria-label={tx("課題を追加", "Add task")}
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
             </button>
           ) : null}
         </div>
@@ -616,47 +624,45 @@ export default function WorkspaceIssues() {
                 />
               </label>
             </div>
-            <button type="submit" className="min-h-[44px] w-full rounded-xl bg-zinc-900 text-sm font-semibold text-white">
+            <DuoButton type="submit" tone="orange" size="md" fullWidth className="!text-[15px]">
               {tx("追加する", "Add")}
-            </button>
+            </DuoButton>
           </form>
         ) : null}
-        <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+        <div className="flex flex-col gap-2.5">
           {rows.map((issue) => {
             const submitted = isIssueSubmitted(issue);
             return (
-              <li key={issue.id}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setScreen({ kind: "task", phaseId, genre: activeGenre, issueId: issue.id })
-                  }
-                  className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-zinc-900">{issue.title}</span>
-                    <span className="mt-0.5 block truncate text-xs text-zinc-500">
-                      {[
-                        assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee"),
-                        issue.beginAt
-                          ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`)
-                          : "",
-                        issue.dueDate
-                          ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`)
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
+              <DuoButton
+                key={issue.id}
+                type="button"
+                tone={submitted ? "zinc" : "peach"}
+                size="md"
+                fullWidth
+                onClick={() =>
+                  setScreen({ kind: "task", phaseId, genre: activeGenre, issueId: issue.id })
+                }
+                className={LIST_DUO}
+              >
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="line-clamp-2">{issue.title}</span>
+                  <span className={`truncate text-[11px] font-semibold ${submitted ? "text-zinc-500" : "text-orange-800/75"}`}>
+                    {[
+                      assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee"),
+                      issue.dueDate
+                        ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`)
+                        : "",
+                      submitted ? tx("提出済み", "Submitted") : tx("未提出", "Not submitted"),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
-                  <span className={`shrink-0 text-xs font-semibold ${submitted ? "text-emerald-600" : "text-zinc-400"}`}>
-                    {submitted ? tx("提出", "Submitted") : tx("未提出", "Not submitted")}
-                  </span>
-                </button>
-              </li>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+              </DuoButton>
             );
           })}
-        </ul>
+        </div>
         {rows.length === 0 ? (
           <p className="text-center text-sm text-zinc-500">{tx("まだ課題はありません", "No tasks yet")}</p>
         ) : null}
@@ -702,21 +708,23 @@ export default function WorkspaceIssues() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           {canEdit ? (
-            <button
+            <DuoButton
               type="button"
+              tone="orange"
+              size="md"
               onClick={() => {
                 setError("");
                 setAddingGenre((v) => !v);
               }}
-              className="ml-auto inline-flex min-h-[40px] items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+              className="ml-auto !gap-1 !px-3 !py-2.5 !text-[13px]"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4" aria-hidden />
               {tx("ジャンルを追加", "Add genre")}
-            </button>
+            </DuoButton>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             disabled={prevStepId === undefined}
@@ -724,10 +732,10 @@ export default function WorkspaceIssues() {
               if (prevStepId === undefined) return;
               goToNeighbor(prevStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("前のステップ", "Previous step")}
           >
-            <ChevronLeft className="h-5 w-5" aria-hidden />
+            <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2.5} />
           </button>
           <div className="min-w-0 flex-1 text-center">
             <p className="text-[11px] font-bold tracking-[0.12em] text-zinc-400">{tx("ステップ", "STEP")}</p>
@@ -743,10 +751,10 @@ export default function WorkspaceIssues() {
               if (nextStepId === undefined) return;
               goToNeighbor(nextStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("次のステップ", "Next step")}
           >
-            <ChevronRight className="h-5 w-5" aria-hidden />
+            <ChevronRight className="h-5 w-5" aria-hidden strokeWidth={2.5} />
           </button>
         </div>
 
@@ -771,63 +779,69 @@ export default function WorkspaceIssues() {
               placeholder={tx("説明（任意）", "Description (optional)")}
               className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
             />
-            <div className="flex gap-2">
-              <button
+            <div className="flex gap-2.5">
+              <DuoButton
                 type="button"
+                tone="zinc"
+                size="md"
                 onClick={() => {
                   setAddingGenre(false);
                   setDraftGenreLabel("");
                   setDraftGenreHint("");
                   setError("");
                 }}
-                className="min-h-[44px] flex-1 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-700"
+                className="flex-1 !text-[15px]"
               >
                 {tx("キャンセル", "Cancel")}
-              </button>
-              <button
+              </DuoButton>
+              <DuoButton
                 type="submit"
+                tone="orange"
+                size="md"
                 disabled={savingGenre || !draftGenreLabel.trim()}
-                className="min-h-[44px] flex-[2] rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:opacity-40"
+                className="flex-[2] !text-[15px]"
               >
                 {savingGenre ? tx("追加中…", "Adding…") : tx("追加する", "Add")}
-              </button>
+              </DuoButton>
             </div>
           </form>
         ) : null}
 
-        <ul className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+        <div className="flex flex-col gap-2.5">
           {stepGenres.map((genre) => {
             const meta = resolveGenreMeta(genre, customGenres);
             const Icon = meta.icon;
             const openCount = openCountFor(phaseId, genre);
             return (
-              <li key={genre} className="border-b border-zinc-100 last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => setScreen({ kind: "genre", phaseId, genre })}
-                  className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50"
-                >
-                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
-                    <Icon className="h-4 w-4" />
+              <DuoButton
+                key={genre}
+                type="button"
+                tone="peach"
+                size="md"
+                fullWidth
+                onClick={() => setScreen({ kind: "genre", phaseId, genre })}
+                className={LIST_DUO}
+              >
+                <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
+                  <span className="truncate text-[11px] font-semibold text-orange-800/75">
+                    {locale === "en" ? meta.hintEn : meta.hintJa}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-zinc-900">
-                      {locale === "en" ? meta.en : meta.ja}
-                    </span>
-                    <span className="block truncate text-xs text-zinc-500">
-                      {locale === "en" ? meta.hintEn : meta.hintJa}
-                    </span>
+                </span>
+                {openCount > 0 ? (
+                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                    {openCount}
                   </span>
-                  {openCount > 0 ? (
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
-                      {openCount}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
+                ) : (
+                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                )}
+              </DuoButton>
             );
           })}
-        </ul>
+        </div>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       </div>
     );
@@ -852,83 +866,96 @@ export default function WorkspaceIssues() {
           )}
         </p>
       ) : (
-        <ul className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+        <div className="flex flex-col gap-2.5">
           {sortedPhases.map((phase, index) => {
             const openCount = openCountFor(phase.id);
             const inProgress = phase.status === "in_progress";
             return (
-              <li key={phase.id} className="border-b border-zinc-100 last:border-b-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddingGenre(false);
-                    setScreen({ kind: "step", phaseId: phase.id });
-                  }}
-                  className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50"
+              <DuoButton
+                key={phase.id}
+                type="button"
+                tone={inProgress ? "orange" : "peach"}
+                size="md"
+                fullWidth
+                onClick={() => {
+                  setAddingGenre(false);
+                  setScreen({ kind: "step", phaseId: phase.id });
+                }}
+                className={LIST_DUO}
+              >
+                <span
+                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold ${
+                    inProgress
+                      ? "bg-white/25 text-white"
+                      : "bg-[#FF9600] text-white shadow-[0_2px_0_#D97706]"
+                  }`}
                 >
-                  <span
-                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
-                      inProgress ? "bg-orange-500 text-white" : "bg-zinc-100 text-zinc-700"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[11px] font-bold tracking-[0.1em] text-zinc-400">
-                      STEP {index + 1}
-                      {inProgress ? (
-                        <span className="ml-2 tracking-normal text-orange-600">
-                          {tx("いまここ", "Current")}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="block truncate text-sm font-semibold text-zinc-900">{phase.title}</span>
-                    {phase.goal ? (
-                      <span className="mt-0.5 block truncate text-xs text-zinc-500">{phase.goal}</span>
+                  {index + 1}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className={`text-[11px] font-extrabold tracking-[0.1em] ${inProgress ? "text-white/80" : "text-orange-800/70"}`}>
+                    STEP {index + 1}
+                    {inProgress ? (
+                      <span className="ml-2 tracking-normal">{tx("いまここ", "Current")}</span>
                     ) : null}
                   </span>
-                  {openCount > 0 ? (
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
-                      {openCount}
+                  <span className="truncate">{phase.title}</span>
+                  {phase.goal ? (
+                    <span className={`truncate text-[11px] font-semibold ${inProgress ? "text-white/75" : "text-orange-800/75"}`}>
+                      {phase.goal}
                     </span>
                   ) : null}
-                </button>
-              </li>
+                </span>
+                {openCount > 0 ? (
+                  <span
+                    className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold ${
+                      inProgress
+                        ? "bg-white text-[#FF9600]"
+                        : "bg-[#FF4B4B] text-white shadow-[0_2px_0_#C43232]"
+                    }`}
+                  >
+                    {openCount}
+                  </span>
+                ) : (
+                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                )}
+              </DuoButton>
             );
           })}
-        </ul>
+        </div>
       )}
 
       {unlinkedCount > 0 || sortedPhases.length === 0 ? (
-        <ul className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          <li>
-            <button
-              type="button"
-              onClick={() => {
-                setAddingGenre(false);
-                setScreen({ kind: "step", phaseId: null });
-              }}
-              className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50"
-            >
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-200 text-xs font-bold text-zinc-600">
-                —
+        <div className="flex flex-col gap-2.5">
+          <DuoButton
+            type="button"
+            tone="zinc"
+            size="md"
+            fullWidth
+            onClick={() => {
+              setAddingGenre(false);
+              setScreen({ kind: "step", phaseId: null });
+            }}
+            className={LIST_DUO}
+          >
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-300 text-xs font-extrabold text-zinc-700">
+              —
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate">{tx("ステップ未設定", "No step")}</span>
+              <span className="truncate text-[11px] font-semibold text-zinc-500">
+                {tx("ロードマップにまだついていない課題", "Tasks not linked to a roadmap step")}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-zinc-900">
-                  {tx("ステップ未設定", "No step")}
-                </span>
-                <span className="block truncate text-xs text-zinc-500">
-                  {tx("ロードマップにまだついていない課題", "Tasks not linked to a roadmap step")}
-                </span>
+            </span>
+            {unlinkedCount > 0 ? (
+              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                {unlinkedCount}
               </span>
-              {unlinkedCount > 0 ? (
-                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
-                  {unlinkedCount}
-                </span>
-              ) : null}
-            </button>
-          </li>
-        </ul>
+            ) : (
+              <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+            )}
+          </DuoButton>
+        </div>
       ) : null}
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
