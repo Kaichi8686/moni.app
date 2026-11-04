@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
-  Camera,
   FileText,
-  ImagePlus,
   PenLine,
   PenTool,
   Sparkles,
@@ -24,14 +22,10 @@ import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmap
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
-import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
-import { supabase } from "@/lib/supabase";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
 import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
-
-const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
@@ -111,23 +105,15 @@ export default function WorkspaceOverview() {
   const projectGoal = projectBrief.projectGoal.trim();
   const problemMotivation = projectBrief.problemMotivation.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const bgInputRef = useRef<HTMLInputElement>(null);
   const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
     projectId,
     open: false,
   });
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [bgPreview, setBgPreview] = useState<string | null>(null);
-  const [photoUploading, setPhotoUploading] = useState(false);
-  const [bgUploading, setBgUploading] = useState(false);
-  const [photoError, setPhotoError] = useState("");
-  const [bgError, setBgError] = useState("");
   const roadmapExpanded = expandState.open && expandState.projectId === projectId;
-  const photoUrl = (photoPreview ?? projectMeta?.thumbnail_url)?.trim() || "";
-  const backgroundUrl = (bgPreview ?? projectMeta?.background_url)?.trim() || "";
+  const photoUrl = projectMeta?.thumbnail_url?.trim() || "";
+  const backgroundUrl = projectMeta?.background_url?.trim() || "";
 
   /**
    * 「すべて見る」地図ページと同じ project_phases を使う。
@@ -162,69 +148,6 @@ export default function WorkspaceOverview() {
       ).slice(0, 3),
     [issues, uid],
   );
-
-  async function uploadWithToken(
-    endpoint: "/api/upload-project-image" | "/api/upload-project-background",
-    file: File,
-  ): Promise<string> {
-    if (!supabase) throw new Error(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
-    const { data: session } = await supabase.auth.getSession();
-    const token = session.session?.access_token;
-    if (!token) throw new Error(tx("ログインが必要です", "Login required"));
-    const body = new FormData();
-    body.append("file", file);
-    body.append("projectId", projectId);
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body,
-    });
-    const json = (await res.json()) as { publicUrl?: string; backgroundUrl?: string; error?: string };
-    if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
-    return json.backgroundUrl ?? json.publicUrl ?? "";
-  }
-
-  async function handlePhotoUpload(file: File | null) {
-    if (!file || !canEdit) return;
-    const validationErr = validateProjectImageFile(file);
-    if (validationErr) {
-      setPhotoError(validationErr);
-      return;
-    }
-    setPhotoUploading(true);
-    setPhotoError("");
-    try {
-      const url = await uploadWithToken("/api/upload-project-image", file);
-      setPhotoPreview(url || null);
-      await wsReload();
-    } catch (e) {
-      setPhotoError(e instanceof Error ? e.message : tx("写真の変更に失敗しました", "Couldn’t change photo"));
-    } finally {
-      setPhotoUploading(false);
-      if (photoInputRef.current) photoInputRef.current.value = "";
-    }
-  }
-
-  async function handleBackgroundUpload(file: File | null) {
-    if (!file || !canEdit) return;
-    const validationErr = validateProjectImageFile(file);
-    if (validationErr) {
-      setBgError(validationErr);
-      return;
-    }
-    setBgUploading(true);
-    setBgError("");
-    try {
-      const url = await uploadWithToken("/api/upload-project-background", file);
-      setBgPreview(url || null);
-      await wsReload();
-    } catch (e) {
-      setBgError(e instanceof Error ? e.message : tx("背景の変更に失敗しました", "Couldn’t change background"));
-    } finally {
-      setBgUploading(false);
-      if (bgInputRef.current) bgInputRef.current.value = "";
-    }
-  }
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
@@ -261,36 +184,6 @@ export default function WorkspaceOverview() {
             className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent"
             aria-hidden
           />
-          {canEdit ? (
-            <>
-              <input
-                ref={bgInputRef}
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                onChange={(e) => void handleBackgroundUpload(e.target.files?.[0] ?? null)}
-              />
-              <button
-                type="button"
-                disabled={bgUploading}
-                onClick={() => bgInputRef.current?.click()}
-                className="absolute bottom-3 right-3 z-10 inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-white/30 bg-black/45 px-3 text-[12px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/55 disabled:opacity-50"
-                aria-label={
-                  backgroundUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")
-                }
-                title={
-                  backgroundUrl ? tx("背景を変更", "Change background") : tx("背景を追加", "Add background")
-                }
-              >
-                {backgroundUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
-                {bgUploading
-                  ? tx("アップロード中…", "Uploading…")
-                  : backgroundUrl
-                    ? tx("背景を変更", "Change")
-                    : tx("背景を追加", "Add")}
-              </button>
-            </>
-          ) : null}
         </div>
 
         <div className="px-4 pb-5 sm:px-5 md:px-6">
@@ -307,35 +200,6 @@ export default function WorkspaceOverview() {
                     </div>
                   )}
                 </div>
-                {canEdit ? (
-                  <>
-                    <input
-                      ref={photoInputRef}
-                      type="file"
-                      accept={IMAGE_ACCEPT}
-                      className="hidden"
-                      onChange={(e) => void handlePhotoUpload(e.target.files?.[0] ?? null)}
-                    />
-                    <button
-                      type="button"
-                      disabled={photoUploading}
-                      onClick={() => photoInputRef.current?.click()}
-                      className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 disabled:opacity-50"
-                      aria-label={
-                        photoUrl
-                          ? tx("プロジェクト写真を変更", "Change project photo")
-                          : tx("プロジェクト写真を追加", "Add project photo")
-                      }
-                      title={
-                        photoUrl
-                          ? tx("プロジェクト写真を変更", "Change project photo")
-                          : tx("プロジェクト写真を追加", "Add project photo")
-                      }
-                    >
-                      {photoUrl ? <Camera className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
-                    </button>
-                  </>
-                ) : null}
               </div>
               <div className="min-w-0 flex-1 pb-0.5 pt-10">
                 <div className="flex items-start justify-between gap-3">
@@ -371,8 +235,6 @@ export default function WorkspaceOverview() {
                 aria-valuenow={progress}
               />
             </div>
-            {bgError ? <p className="mt-2 text-xs text-rose-600">{bgError}</p> : null}
-            {photoError ? <p className="mt-2 text-xs text-rose-600">{photoError}</p> : null}
           </div>
         </div>
       </section>
