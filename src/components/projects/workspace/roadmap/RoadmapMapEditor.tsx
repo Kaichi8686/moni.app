@@ -60,6 +60,7 @@ export function RoadmapMapEditor() {
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   /** パス末尾の＋が見えている間は FAB を出さない（初期は隠す） */
   const [createNodeInView, setCreateNodeInView] = useState(true);
+  const createNodeInViewRef = useRef(true);
   const createNodeRef = useRef<HTMLDivElement | null>(null);
 
   const projectBrief = useMemo(
@@ -113,25 +114,52 @@ export function RoadmapMapEditor() {
 
   useEffect(() => {
     if (!showPathCreate) {
+      createNodeInViewRef.current = false;
       setCreateNodeInView(false);
       return;
     }
+    createNodeInViewRef.current = true;
     setCreateNodeInView(true);
     let observer: IntersectionObserver | null = null;
+    let settleTimer = 0;
     const frame = window.requestAnimationFrame(() => {
       const el = createNodeRef.current;
       if (!el) return;
+      /**
+       * しきい値付近で FAB がチカチカしないようヒステリシス:
+       * - ＋が見えている扱い → ほぼ画面外になるまで維持
+       * - ＋が見えていない扱い → しっかり見えてから「見えている」に切替
+       */
       observer = new IntersectionObserver(
         (entries) => {
           const entry = entries[0];
-          setCreateNodeInView(Boolean(entry?.isIntersecting));
+          if (!entry) return;
+          const ratio = entry.intersectionRatio;
+          const wasInView = createNodeInViewRef.current;
+          let next = wasInView;
+          if (wasInView) {
+            if (!entry.isIntersecting || ratio < 0.08) next = false;
+          } else if (entry.isIntersecting && ratio >= 0.5) {
+            next = true;
+          }
+          if (next === wasInView) return;
+          window.clearTimeout(settleTimer);
+          settleTimer = window.setTimeout(() => {
+            createNodeInViewRef.current = next;
+            setCreateNodeInView(next);
+          }, 140);
         },
-        { root: null, threshold: 0.35, rootMargin: "0px 0px -8% 0px" },
+        {
+          root: null,
+          threshold: [0, 0.08, 0.2, 0.35, 0.5, 0.75, 1],
+          rootMargin: "0px 0px -12% 0px",
+        },
       );
       observer.observe(el);
     });
     return () => {
       window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
       observer?.disconnect();
     };
   }, [showPathCreate, steps.length]);
@@ -269,8 +297,8 @@ export function RoadmapMapEditor() {
   }
 
   const hasSteps = steps.length > 0;
-  const showCreateFab =
-    roadmap.canEdit && !adding && !selectedId && mode === "manual" && !createNodeInView;
+  const createFabAllowed = roadmap.canEdit && !adding && !selectedId && mode === "manual";
+  const showCreateFab = createFabAllowed && !createNodeInView;
 
   return (
     <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-5 px-1 pb-28 pt-1">
@@ -469,14 +497,22 @@ export function RoadmapMapEditor() {
         {tx("この地図を、歩き始める", "Start walking this map")}
       </button>
 
-      {showCreateFab ? (
-        <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))]">
+      {createFabAllowed ? (
+        <div
+          className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 transition-[opacity,transform] duration-200 ease-out md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))] ${
+            showCreateFab
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-2 opacity-0"
+          }`}
+          aria-hidden={!showCreateFab}
+        >
           <DuoButton
             type="button"
             tone="orange"
             size="md"
             onClick={openCreateSheet}
-            disabled={busy}
+            disabled={busy || !showCreateFab}
+            tabIndex={showCreateFab ? 0 : -1}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
             aria-label={tx("マスを作成", "Create step")}
           >
