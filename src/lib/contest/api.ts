@@ -54,6 +54,95 @@ export function daysLeft(endAt: string, now = Date.now()): number {
   return Math.max(0, Math.ceil((new Date(endAt).getTime() - now) / 86400000));
 }
 
+export type ContestLobbyItem = Contest & { ideaCount: number };
+
+const DEMO_LOBBY: ContestLobbyItem[] = [
+  { ...DEMO_CONTEST, ideaCount: DEMO_IDEAS.length },
+  {
+    id: "demo-contest-2",
+    title: "朝起きられない問題をどうにかしたい",
+    description: "アラームを何度もスヌーズしてしまう朝の習慣を変えるアイデアを募集。",
+    whyText: null,
+    rewardText: null,
+    promptHint: null,
+    category: "habits",
+    startAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+    endAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    status: "active",
+    createdAt: new Date().toISOString(),
+    ideaCount: 5,
+  },
+];
+
+/** ロビー用：開催中〜終了のコンテスト一覧 */
+export async function loadContestLobby(
+  client: SupabaseClient,
+  filter: "active" | "ended" | "all" = "active",
+): Promise<{ items: ContestLobbyItem[]; demo: boolean }> {
+  let q = client
+    .from("contests")
+    .select("id,title,description,why_text,reward_text,prompt_hint,category,start_at,end_at,status,created_at")
+    .order("end_at", { ascending: true })
+    .limit(40);
+
+  if (filter === "active") q = q.eq("status", "active");
+  if (filter === "ended") q = q.eq("status", "ended");
+
+  const { data, error } = await q;
+  if (error) {
+    if (isMissingRelationError(error)) {
+      const items =
+        filter === "ended" ? [] : filter === "all" ? DEMO_LOBBY : DEMO_LOBBY.filter((c) => c.status === "active");
+      return { items, demo: true };
+    }
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  if (!rows.length) {
+    const items =
+      filter === "ended" ? [] : filter === "all" ? DEMO_LOBBY : DEMO_LOBBY.filter((c) => c.status === "active");
+    return { items, demo: true };
+  }
+
+  const contests = rows.map((r) => mapContest(r));
+  const counts = await Promise.all(
+    contests.map(async (c) => {
+      const { count } = await client
+        .from("contest_ideas")
+        .select("id", { count: "exact", head: true })
+        .eq("contest_id", c.id);
+      return count ?? 0;
+    }),
+  );
+
+  return {
+    items: contests.map((c, i) => ({ ...c, ideaCount: counts[i] ?? 0 })),
+    demo: false,
+  };
+}
+
+export async function loadContestById(
+  client: SupabaseClient,
+  contestId: string,
+): Promise<{ contest: Contest; demo: boolean }> {
+  if (contestId === DEMO_CONTEST.id || contestId.startsWith("demo-contest")) {
+    const fromLobby = DEMO_LOBBY.find((c) => c.id === contestId);
+    return { contest: fromLobby ?? DEMO_CONTEST, demo: true };
+  }
+  const { data, error } = await client
+    .from("contests")
+    .select("id,title,description,why_text,reward_text,prompt_hint,category,start_at,end_at,status,created_at")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (error) {
+    if (isMissingRelationError(error)) return { contest: DEMO_CONTEST, demo: true };
+    throw new Error(error.message);
+  }
+  if (!data) return loadActiveContest(client);
+  return { contest: mapContest(data as Record<string, unknown>), demo: false };
+}
+
 export async function loadActiveContest(client: SupabaseClient): Promise<{ contest: Contest; demo: boolean }> {
   const { data, error } = await client
     .from("contests")
@@ -90,8 +179,11 @@ export async function loadContestIdeas(
   userId: string | null,
   sort: ContestGallerySort,
 ): Promise<{ ideas: ContestIdea[]; demo: boolean }> {
-  if (contestId === DEMO_CONTEST.id) {
-    let ideas = DEMO_IDEAS.map((e) => ({ ...e }));
+  if (contestId === DEMO_CONTEST.id || contestId.startsWith("demo-contest")) {
+    let ideas =
+      contestId === DEMO_CONTEST.id || contestId === "demo-contest"
+        ? DEMO_IDEAS.map((e) => ({ ...e, contestId }))
+        : [];
     if (sort === "newest") ideas = [...ideas].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
     else if (sort === "mine") ideas = userId ? ideas.filter((e) => e.userId === userId) : [];
     else ideas = [...ideas].sort((a, b) => b.likeCount - a.likeCount);

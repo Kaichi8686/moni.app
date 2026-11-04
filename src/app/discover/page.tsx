@@ -151,7 +151,7 @@ export default function DiscoverPage() {
 
       <main className="mobile-content-inset mx-auto w-full max-w-none space-y-4 py-4 sm:max-w-lg">
         <Link
-          href="/contest"
+          href="/idea?spark=contest"
           className="block overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-white to-[#EEF0FF] p-4 shadow-sm transition active:scale-[0.99]"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-600">{t("contestNav")}</p>
