@@ -151,7 +151,9 @@ const CLOSED_TABS: NavItem[] = [
     match: (p, tab) =>
       (p === "/" && tab === "chat") ||
       p === "/discover" ||
-      p.startsWith("/discover/"),
+      p.startsWith("/discover/") ||
+      p === "/contest" ||
+      p.startsWith("/contest/"),
   },
 ];
 
