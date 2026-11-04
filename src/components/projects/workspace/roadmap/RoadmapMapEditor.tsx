@@ -239,6 +239,9 @@ export function RoadmapMapEditor() {
     working: Array<{ id: string }>,
     draft: CreateSpaceDraft,
   ): number {
+    if (typeof draft.insertAt === "number" && Number.isFinite(draft.insertAt)) {
+      return Math.min(Math.max(Math.round(draft.insertAt), 0), working.length);
+    }
     if (draft.prevId) {
       const prevAt = working.findIndex((item) => item.id === draft.prevId);
       if (prevAt >= 0) return prevAt + 1;
@@ -680,6 +683,7 @@ export function RoadmapMapEditor() {
             title: step.title,
             icon: step.icon,
             order: step.order,
+            status: step.status,
           }))}
           busy={busy}
           onClose={closeCreateSpace}

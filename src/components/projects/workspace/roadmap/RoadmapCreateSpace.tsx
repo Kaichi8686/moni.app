@@ -21,6 +21,7 @@ export type CreateSpaceExistingStep = {
   title: string;
   icon?: string | null;
   order: number;
+  status?: string;
 };
 
 export type CreateSpaceDraft = {
@@ -30,6 +31,8 @@ export type CreateSpaceDraft = {
   prevId: string | null;
   /** 下側の棒がつながる現存マス */
   nextId: string | null;
+  /** ロードマップへの挿入位置（0..n） */
+  insertAt: number;
   /** 接続作業が完了したか */
   done: boolean;
 };
@@ -79,23 +82,41 @@ function draftCenterForAnchor(anchorIndex: number, existingCount: number) {
   return { x: DRAFT_LANE_X, y };
 }
 
+/** いま取り組んでいるマス（進行中 → 未完了の先頭） */
+function currentStepIndex(steps: CreateSpaceExistingStep[]) {
+  if (steps.length === 0) return 0;
+  const inProgress = steps.findIndex((step) => step.status === "in_progress");
+  if (inProgress >= 0) return inProgress;
+  const firstOpen = steps.findIndex((step) => step.status !== "completed");
+  return Math.max(0, firstOpen >= 0 ? firstOpen : 0);
+}
+
 /**
- * 自分のレーンから「一つ上」と「一つ下」の現存マスへつなぐ。
- * 先頭・末尾は片側だけ。
+ * 自分のレーンから「一つ上」と「一つ下」へつなぐ。
+ * 先頭は上棒なし / 末尾は下棒なし / 1マスだけのときは棒なし。
  */
 function linksForAnchor(steps: CreateSpaceExistingStep[], anchorIndex: number) {
-  if (steps.length === 0) return { prevId: null as string | null, nextId: null as string | null };
+  if (steps.length === 0) {
+    return { prevId: null as string | null, nextId: null as string | null, insertAt: 0 };
+  }
   const last = steps.length - 1;
   const i = Math.min(Math.max(anchorIndex, 0), last);
+
+  if (steps.length === 1) {
+    return { prevId: null, nextId: null, insertAt: 0 };
+  }
   if (i <= 0) {
-    return { prevId: null, nextId: steps[0]?.id ?? null };
+    // 先頭: 上棒なし、下は一つ下
+    return { prevId: null, nextId: steps[1]?.id ?? null, insertAt: 0 };
   }
   if (i >= last) {
-    return { prevId: steps[last]?.id ?? null, nextId: null };
+    // 末尾: 下棒なし、上は一つ上
+    return { prevId: steps[last - 1]?.id ?? null, nextId: null, insertAt: last };
   }
   return {
     prevId: steps[i - 1]?.id ?? null,
     nextId: steps[i + 1]?.id ?? null,
+    insertAt: i,
   };
 }
 
@@ -185,21 +206,26 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         existingSteps.length === 0 ? 0 : Math.min(Math.max(index, 0), existingSteps.length - 1);
       setAnchorIndex(clamped);
       const links = linksForAnchor(existingSteps, clamped);
-      setDraft((prev) => (prev ? { ...prev, prevId: links.prevId, nextId: links.nextId } : prev));
+      setDraft((prev) =>
+        prev
+          ? { ...prev, prevId: links.prevId, nextId: links.nextId, insertAt: links.insertAt }
+          : prev,
+      );
     },
     [existingSteps],
   );
 
   function spawnDraft() {
     if (busy || saving || draft) return;
-    const startAnchor =
-      existingSteps.length <= 2 ? Math.max(0, existingSteps.length - 1) : Math.min(2, existingSteps.length - 1);
+    // いま取り組んでいるマスと同じステップから開始
+    const startAnchor = currentStepIndex(existingSteps);
     const links = linksForAnchor(existingSteps, startAnchor);
     const next: CreateSpaceDraft = {
       id: newDraftId(),
       icon: resolveRoadmapMarkId(undefined, existingSteps.length),
       prevId: links.prevId,
       nextId: links.nextId,
+      insertAt: links.insertAt,
       done: false,
     };
     setAnchorIndex(startAnchor);
@@ -254,10 +280,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
       return;
     }
     if (introPhase !== "ready") return;
-    if (!draft.prevId && !draft.nextId && existingSteps.length > 0) {
-      setError(tx("上下どちらかの棒を現存マスにつないでください", "Connect at least one bar to an existing step"));
-      return;
-    }
+    // 先頭・末尾・1マスだけのときは棒が片側／無しでも挿入位置で追加できる
     setSaving(true);
     setError("");
     try {
@@ -328,8 +351,8 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
           {tx(
-            "＋でマスを1つ追加し、左の広いスペースで上下にスライドして行に吸着させます。棒は一つ上と下のマスにつながります。",
-            "Add one step with +, slide it in the wide left lane to snap onto a row. Bars connect one above and one below.",
+            "いまのステップと同じ位置から始まります。上下にスライドして場所を変えられます。先頭では上の棒、末尾では下の棒は出ません。",
+            "Starts at your current step. Slide to move. No upper bar at the first step, no lower bar at the last.",
           )}
         </p>
 
