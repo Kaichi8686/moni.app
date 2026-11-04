@@ -30,8 +30,12 @@ export type CreateSpaceDraft = {
   prevId: string | null;
   /** 下側の棒がつながる現存マス */
   nextId: string | null;
-  /** ロードマップへの挿入位置（0..n） */
+  /** ロードマップへの挿入位置（0..n）※本線挿入の参考用 */
   insertAt: number;
+  /** 横置きの親マス（本線のその行） */
+  sideOf: string | null;
+  /** 親マスから見て左(-1) / 右(1) */
+  lane: -1 | 1;
   /** 接続作業が完了したか */
   done: boolean;
 };
@@ -40,12 +44,12 @@ type Props = {
   existingSteps: CreateSpaceExistingStep[];
   busy?: boolean;
   onClose: () => void;
-  onConfirm: (drafts: CreateSpaceDraft[]) => Promise<void>;
+  /** 位置が決まったら内容シートを出す（まだ DB には書かない） */
+  onPickPosition: (draft: CreateSpaceDraft) => void;
 };
 
-const { nodeSize: NODE, topPad: TOP, stepY: STEP_Y, trackWidth: TRACK_W } = ROADMAP_PATH_LAYOUT;
-/** メインタブと同じ座標系（中央）。追加マスは行ごとの「広い側」へ */
-const DRAFT_SIDE_GAP = 88;
+const { nodeSize: NODE, topPad: TOP, stepY: STEP_Y, trackWidth: TRACK_W, sideGap: DRAFT_SIDE_GAP } =
+  ROADMAP_PATH_LAYOUT;
 const SNAP_PX = 46;
 
 type IntroPhase = "idle" | "masu" | "prevBar" | "nextBar" | "pulse" | "ready";
@@ -68,6 +72,15 @@ function existingCenter(index: number) {
   return roadmapPathNodeCenter(index);
 }
 
+function laneForAnchor(anchorIndex: number, existingCount: number): -1 | 1 {
+  if (existingCount <= 0) return 1;
+  const i = Math.min(Math.max(anchorIndex, 0), existingCount - 1);
+  const path = existingCenter(i);
+  const leftSpace = path.x - NODE / 2;
+  const rightSpace = TRACK_W - (path.x + NODE / 2);
+  return rightSpace >= leftSpace ? 1 : -1;
+}
+
 /** その行で余白が大きい側（左 or 右）に追加マスを置く */
 function draftCenterForAnchor(anchorIndex: number, existingCount: number) {
   if (existingCount <= 0) {
@@ -75,9 +88,7 @@ function draftCenterForAnchor(anchorIndex: number, existingCount: number) {
   }
   const i = Math.min(Math.max(anchorIndex, 0), existingCount - 1);
   const path = existingCenter(i);
-  const leftSpace = path.x - NODE / 2;
-  const rightSpace = TRACK_W - (path.x + NODE / 2);
-  const side = rightSpace >= leftSpace ? 1 : -1;
+  const side = laneForAnchor(i, existingCount);
   const rawX = path.x + side * DRAFT_SIDE_GAP;
   const minX = NODE / 2 + 4;
   const maxX = TRACK_W - NODE / 2 - 4;
@@ -148,7 +159,7 @@ function insertAtFromLinks(
  * - 追加マスは各行の広い側へ。上下スライドで行に吸着
  * - 棒は一つ上・一つ下へ。現存マスの下に描く
  */
-export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onConfirm }: Props) {
+export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onPickPosition }: Props) {
   const { tx } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const introTimersRef = useRef<number[]>([]);
@@ -157,8 +168,8 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
   const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
   const [dragKind, setDragKind] = useState<"masu" | "prev" | "next" | null>(null);
   const [dragY, setDragY] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const currentIndex = useMemo(() => currentStepIndex(existingSteps), [existingSteps]);
 
   const existingById = useMemo(() => {
     const map = new Map<string, CreateSpaceExistingStep & { index: number }>();
@@ -228,9 +239,18 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         existingSteps.length === 0 ? 0 : Math.min(Math.max(index, 0), existingSteps.length - 1);
       setAnchorIndex(clamped);
       const links = linksForAnchor(existingSteps, clamped);
+      const sideOf = existingSteps[clamped]?.id ?? null;
+      const lane = laneForAnchor(clamped, existingSteps.length);
       setDraft((prev) =>
         prev
-          ? { ...prev, prevId: links.prevId, nextId: links.nextId, insertAt: links.insertAt }
+          ? {
+              ...prev,
+              prevId: links.prevId,
+              nextId: links.nextId,
+              insertAt: links.insertAt,
+              sideOf,
+              lane,
+            }
           : prev,
       );
     },
@@ -238,18 +258,22 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
   );
 
   const spawnDraft = useCallback(() => {
-    if (busy || saving) return;
+    if (busy) return;
     setDraft((current) => {
       if (current) return current;
       // いま取り組んでいるマスと同じステップから開始
       const startAnchor = currentStepIndex(existingSteps);
       const links = linksForAnchor(existingSteps, startAnchor);
+      const sideOf = existingSteps[startAnchor]?.id ?? null;
+      const lane = laneForAnchor(startAnchor, existingSteps.length);
       const next: CreateSpaceDraft = {
         id: newDraftId(),
         icon: resolveRoadmapMarkId(undefined, existingSteps.length),
         prevId: links.prevId,
         nextId: links.nextId,
         insertAt: links.insertAt,
+        sideOf,
+        lane,
         done: false,
       };
       setAnchorIndex(startAnchor);
@@ -257,7 +281,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
       queueMicrotask(() => runSelectionIntro(next));
       return next;
     });
-  }, [busy, saving, existingSteps, runSelectionIntro]);
+  }, [busy, existingSteps, runSelectionIntro]);
 
   // 横追加で開いたらすぐマスを出す（もう一度＋を押させない）
   useEffect(() => {
@@ -318,23 +342,14 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
     };
   }, [dragKind, draft, introPhase, dragY, nearestIndexFromY, applyAnchor, existingSteps]);
 
-  async function handleConfirm() {
+  function handlePickPosition() {
     if (!draft) {
       setError(tx("追加するマスがありません。＋で追加してください", "No step to add. Tap + first."));
       return;
     }
-    if (introPhase !== "ready") return;
-    // 先頭・末尾・1マスだけのときは棒が片側／無しでも挿入位置で追加できる
-    setSaving(true);
+    if (introPhase !== "ready" || busy) return;
     setError("");
-    try {
-      await onConfirm([{ ...draft, done: true }]);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("追加に失敗しました", "Couldn’t add steps"));
-    } finally {
-      setSaving(false);
-    }
+    onPickPosition({ ...draft, done: true });
   }
 
   const introPlaying = introPhase !== "idle" && introPhase !== "ready";
@@ -457,7 +472,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                         className="cursor-grab active:cursor-grabbing"
                         style={{ pointerEvents: "stroke" }}
                         onPointerDown={(event) => {
-                          if (busy || saving) return;
+                          if (busy) return;
                           event.preventDefault();
                           event.stopPropagation();
                           setDragKind(end);
@@ -494,6 +509,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
               >
                 <RoadmapPathNode
                   tone="upcoming"
+                  currentHalo={index === currentIndex}
                   selected={Boolean(linked) || sameRow}
                   className="!w-auto"
                   aria-label={step.title}
@@ -517,7 +533,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 height: NODE,
               }}
               onPointerDown={(event) => {
-                if (!interactive || busy || saving) return;
+                if (!interactive || busy) return;
                 event.preventDefault();
                 (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
                 setDragKind("masu");
@@ -530,7 +546,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 tone="create"
                 sparkle={interactive && dragKind !== "masu"}
                 selected
-                disabled={busy || saving}
+                disabled={busy}
                 className="!w-auto pointer-events-none"
                 aria-label={tx("追加マス", "New step")}
               >
@@ -552,14 +568,12 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             tone="orange"
             size="md"
             fullWidth
-            disabled={!draft || busy || saving || introPlaying}
-            onClick={() => void handleConfirm()}
+            disabled={!draft || busy || introPlaying}
+            onClick={handlePickPosition}
             className="gap-2 !text-[15px]"
           >
             <Check className="h-4 w-4" aria-hidden />
-            {saving
-              ? tx("反映中…", "Saving…")
-              : tx("このマスをロードマップへ", "Add this step to roadmap")}
+            {tx("この位置で内容を決める", "Set details for this spot")}
           </DuoButton>
           <DuoButton type="button" tone="zinc" size="md" fullWidth onClick={onClose} className="!text-[15px]">
             {tx("追加をやめる", "Cancel adding")}

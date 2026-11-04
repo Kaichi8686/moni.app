@@ -8,6 +8,8 @@ type Props = {
   tone?: RoadmapPathNodeTone;
   /** 進行中マスの周囲キラキラ */
   sparkle?: boolean;
+  /** いま取り組んでいるマスを囲むオレンジの外枠（編集・作成画面用） */
+  currentHalo?: boolean;
   selected?: boolean;
   disabled?: boolean;
   children?: ReactNode;
@@ -16,29 +18,30 @@ type Props = {
   "aria-label"?: string;
 };
 
-/** moni オレンジの立体マス */
+/** moni オレンジの立体マス（上面色） */
 const TONE_FACE: Record<RoadmapPathNodeTone, string> = {
-  active: "bg-[#F97316]",
-  done: "bg-[#F97316]",
+  active: "bg-[#FF9600]",
+  done: "bg-[#FF9600]",
   upcoming: "bg-[#E5E5E5]",
-  create: "bg-[#F97316]",
+  create: "bg-[#FF9600]",
 };
 
-const TONE_BASE: Record<RoadmapPathNodeTone, string> = {
-  active: "bg-[#C2410C]",
-  done: "bg-[#C2410C]",
-  upcoming: "bg-[#AFAFAF]",
-  create: "bg-[#C2410C]",
+/** DuoButton と同じくぼかしなしの下帯（押すと消える） */
+const TONE_LIP: Record<RoadmapPathNodeTone, string> = {
+  active: "shadow-[0_6px_0_#D97706]",
+  done: "shadow-[0_6px_0_#D97706]",
+  upcoming: "shadow-[0_6px_0_#AFAFAF]",
+  create: "shadow-[0_6px_0_#D97706]",
 };
 
 /**
- * Duolingo 風の立体円マス（オレンジ）。
- * 名前はマス下に出さず、タップ後の詳細 UI で見せる。
- * Link で包むときは親に `group` を付ける。
+ * Duolingo / アイデアタブ DuoButton と同じ押し心地の立体円マス。
+ * 上面はフラット一色、奥行きは下帯 box-shadow、押すと沈んで影が消える。
  */
 export function RoadmapPathNode({
   tone = "active",
   sparkle = false,
+  currentHalo = false,
   selected = false,
   disabled = false,
   children,
@@ -47,15 +50,21 @@ export function RoadmapPathNode({
   "aria-label": ariaLabel,
 }: Props) {
   const face = TONE_FACE[tone];
-  const base = TONE_BASE[tone];
+  const lip = TONE_LIP[tone];
 
   const body = (
     <span
       data-roadmap-node
-      className={`relative mx-auto block h-[72px] w-[72px] transition-transform duration-150 group-active:translate-y-[4px] sm:h-[80px] sm:w-[80px] ${
+      className={`relative mx-auto block h-[72px] w-[72px] sm:h-[80px] sm:w-[80px] ${
         sparkle ? "roadmap-node-sparkle" : ""
       }`}
     >
+      {currentHalo ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -inset-[15px] rounded-full border-[3.5px] border-[#FF9600] shadow-[0_0_0_4px_rgba(255,150,0,0.22)]"
+        />
+      ) : null}
       {sparkle ? (
         <>
           <span className="roadmap-sparkle roadmap-sparkle-1" aria-hidden />
@@ -70,9 +79,8 @@ export function RoadmapPathNode({
           <span className="roadmap-sparkle roadmap-sparkle-burst roadmap-sparkle-10" aria-hidden />
         </>
       ) : null}
-      <span aria-hidden className={`absolute inset-x-0 bottom-0 top-[6px] rounded-full ${base}`} />
       <span
-        className={`absolute inset-x-0 bottom-[6px] top-0 flex items-center justify-center rounded-full ${face} ${
+        className={`absolute inset-0 flex items-center justify-center rounded-full transition-[transform,box-shadow] duration-75 ease-out group-active:translate-y-[6px] group-active:shadow-none ${face} ${lip} ${
           selected
             ? tone === "upcoming"
               ? "ring-4 ring-zinc-300/80"
@@ -108,7 +116,7 @@ export function RoadmapPathNode({
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className={`group cursor-pointer ${shellClass}`}
+        className={`group cursor-pointer select-none ${shellClass}`}
         aria-label={ariaLabel}
         aria-pressed={selected || undefined}
       >
@@ -117,8 +125,9 @@ export function RoadmapPathNode({
     );
   }
 
+  // ドラッグ用など：親が group を付けて押下演出を使う
   return (
-    <div className={shellClass} aria-label={ariaLabel}>
+    <div className={`group ${shellClass}`} aria-label={ariaLabel}>
       {body}
     </div>
   );

@@ -14,9 +14,12 @@ import {
 const PATH_OFFSETS_PX = [0, -28, -40, -28, 0, 28, 40, 28] as const;
 const NODE_SIZE = 80;
 const ROW_GAP = 40;
-const TOP_PAD = 12;
+/** 進行中マスの外枠が切れないよう余白を確保 */
+const TOP_PAD = 20;
 const STEP_Y = NODE_SIZE + ROW_GAP;
 const TRACK_WIDTH = 360;
+/** 本線マスから横置きマスまでの距離（CreateSpace と同じ） */
+const SIDE_GAP = 88;
 
 /** 作成空間などでも同じ並びを使うための公開定数 */
 export const ROADMAP_PATH_LAYOUT = {
@@ -25,6 +28,7 @@ export const ROADMAP_PATH_LAYOUT = {
   topPad: TOP_PAD,
   stepY: STEP_Y,
   trackWidth: TRACK_WIDTH,
+  sideGap: SIDE_GAP,
 } as const;
 
 export function roadmapPathOffsetX(index: number): number {
@@ -35,6 +39,20 @@ export function roadmapPathNodeCenter(index: number): { x: number; y: number } {
   return {
     x: TRACK_WIDTH / 2 + roadmapPathOffsetX(index),
     y: TOP_PAD + index * STEP_Y + NODE_SIZE / 2,
+  };
+}
+
+export function roadmapPathSideCenter(
+  mainIndex: number,
+  lane: -1 | 1,
+): { x: number; y: number } {
+  const main = roadmapPathNodeCenter(mainIndex);
+  const rawX = main.x + lane * SIDE_GAP;
+  const minX = NODE_SIZE / 2 + 4;
+  const maxX = TRACK_WIDTH - NODE_SIZE / 2 - 4;
+  return {
+    x: Math.min(Math.max(rawX, minX), maxX),
+    y: main.y,
   };
 }
 
@@ -63,14 +81,22 @@ function clearedEndIndex(segmentCleared: boolean[] | undefined, pointCount: numb
   return end;
 }
 
+export type RoadmapPathSideSlot = {
+  key: string;
+  lane: -1 | 1;
+  children: ReactNode;
+};
+
 type ItemProps = {
   index: number;
   children: ReactNode;
   below?: ReactNode;
+  /** 同じ行の横置きマス */
+  sides?: RoadmapPathSideSlot[];
   className?: string;
 };
 
-/** 位置は親が決める。children = マス、below = タップ時パネル */
+/** 位置は親が決める。children = マス、below = タップ時パネル、sides = 横置き */
 export function RoadmapPathItem(_props: ItemProps) {
   return null;
 }
@@ -83,8 +109,9 @@ type Props = {
 
 /**
  * マスと線を同じ座標系で描く。
- * - マス: 中央 + offset
- * - 線: 同じ中心座標を太い直線で接続
+ * - 本線マス: 中央 + offset
+ * - 横置き: 同じ Y で左右へ
+ * - 線: 本線中心を太い直線で接続＋横置きへ短い棒
  */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -111,7 +138,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     if (!root) return;
     const measure = () => {
       const rootTop = root.getBoundingClientRect().top;
-      const discs = root.querySelectorAll<HTMLElement>("[data-roadmap-node]");
+      const discs = root.querySelectorAll<HTMLElement>("[data-roadmap-main-slot]");
       const ys: number[] = [];
       discs.forEach((disc) => {
         const r = disc.getBoundingClientRect();
@@ -135,6 +162,22 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
       y: measuredYs?.[index] ?? TOP_PAD + index * STEP_Y + NODE_SIZE / 2,
     }));
   }, [count, measuredYs]);
+
+  const sideLinks = useMemo(() => {
+    const links: Array<{ from: Point; to: Point; key: string }> = [];
+    items.forEach((item, index) => {
+      const main = points[index];
+      if (!main) return;
+      for (const side of item.props.sides ?? []) {
+        const sidePoint = {
+          x: roadmapPathSideCenter(index, side.lane).x,
+          y: main.y,
+        };
+        links.push({ from: main, to: sidePoint, key: `${item.key ?? index}-${side.key}` });
+      }
+    });
+    return links;
+  }, [items, points]);
 
   const contentHeight = hasBelow && measuredYs && measuredYs.length > 0
     ? Math.max(...measuredYs) + NODE_SIZE / 2 + 24
@@ -173,15 +216,49 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
                 strokeLinejoin="round"
               />
             ) : null}
+            {sideLinks.map((link) => (
+              <path
+                key={link.key}
+                d={`M ${link.from.x} ${link.from.y} L ${link.to.x} ${link.to.y}`}
+                fill="none"
+                stroke="#F97316"
+                strokeWidth={10}
+                strokeLinecap="round"
+              />
+            ))}
+          </svg>
+        ) : null}
+
+        {/* 本線だけでも横棒を描く */}
+        {count <= 1 && sideLinks.length > 0 ? (
+          <svg
+            className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
+            width={TRACK_WIDTH}
+            height={contentHeight}
+            viewBox={`0 0 ${TRACK_WIDTH} ${contentHeight}`}
+            aria-hidden
+          >
+            {sideLinks.map((link) => (
+              <path
+                key={link.key}
+                d={`M ${link.from.x} ${link.from.y} L ${link.to.x} ${link.to.y}`}
+                fill="none"
+                stroke="#F97316"
+                strokeWidth={10}
+                strokeLinecap="round"
+              />
+            ))}
           </svg>
         ) : null}
 
         {items.map((item, index) => {
           const offset = roadmapPathOffsetX(index);
           const top = (measuredYs?.[index] ?? TOP_PAD + index * STEP_Y + NODE_SIZE / 2) - NODE_SIZE / 2;
+          const mainY = top + NODE_SIZE / 2;
           return (
             <div key={item.key ?? `node-${index}`}>
               <div
+                data-roadmap-main-slot
                 className="roadmap-path-node-in absolute z-[1] flex items-center justify-center"
                 style={{
                   top,
@@ -193,6 +270,24 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
               >
                 {item.props.children}
               </div>
+              {(item.props.sides ?? []).map((side) => {
+                const sideCenter = roadmapPathSideCenter(index, side.lane);
+                return (
+                  <div
+                    key={side.key}
+                    className="roadmap-path-node-in absolute z-[1] flex items-center justify-center"
+                    style={{
+                      top: mainY - NODE_SIZE / 2,
+                      left: sideCenter.x - NODE_SIZE / 2,
+                      width: NODE_SIZE,
+                      height: NODE_SIZE,
+                      animationDelay: `${Math.min(index, 5) * 30 + 40}ms`,
+                    }}
+                  >
+                    {side.children}
+                  </div>
+                );
+              })}
             </div>
           );
         })}

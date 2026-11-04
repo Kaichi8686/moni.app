@@ -16,6 +16,8 @@ export type PhaseRowDb = {
   color: string;
   icon?: string | null;
   order: number;
+  side_of?: string | null;
+  lane?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -118,6 +120,8 @@ export function nestPhasesWithIssues(phaseRows: PhaseRowDb[], issues: Issue[]): 
     color: row.color,
     icon: row.icon?.trim() || undefined,
     order: row.order,
+    sideOf: row.side_of?.trim() || undefined,
+    lane: typeof row.lane === "number" ? row.lane : undefined,
     issues: byPhase.get(row.id) ?? [],
   }));
 }

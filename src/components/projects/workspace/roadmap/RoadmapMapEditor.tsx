@@ -25,6 +25,7 @@ import {
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
+import { splitRoadmapPathLayout, normalizeLane } from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -55,6 +56,9 @@ export function RoadmapMapEditor() {
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
+  /** 横追加：位置確定後に内容シートへ渡す下書き */
+  const [pendingSideDraft, setPendingSideDraft] = useState<CreateSpaceDraft | null>(null);
+  const [sideContentSheetOpen, setSideContentSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aiInput, setAiInput] = useState("");
@@ -84,6 +88,19 @@ export function RoadmapMapEditor() {
     () => [...roadmap.phases].sort((a, b) => a.order - b.order),
     [roadmap.phases],
   );
+
+  const { main: mainSteps, bySideOf } = useMemo(
+    () => splitRoadmapPathLayout(steps),
+    [steps],
+  );
+
+  const currentMainIndex = useMemo(() => {
+    const inProgress = mainSteps.findIndex((step) => step.status === "in_progress");
+    if (inProgress >= 0) return inProgress;
+    const firstOpen = mainSteps.findIndex((step) => step.status !== "completed");
+    return Math.max(0, firstOpen >= 0 ? firstOpen : 0);
+  }, [mainSteps]);
+  const hasInProgressMain = mainSteps.some((step) => step.status === "in_progress");
 
   const selectedStep = useMemo(
     () => (selectedId ? steps.find((step) => step.id === selectedId) ?? null : null),
@@ -162,12 +179,16 @@ export function RoadmapMapEditor() {
     setMode("manual");
     setCreateChooserOpen(false);
     setCreateSheetOpen(false);
+    setPendingSideDraft(null);
+    setSideContentSheetOpen(false);
     setCreateSpaceOpen(true);
     persistCreateSpaceOpen(true);
   }
 
   function closeCreateSpace() {
     setCreateSpaceOpen(false);
+    setPendingSideDraft(null);
+    setSideContentSheetOpen(false);
     persistCreateSpaceOpen(false);
   }
 
@@ -175,6 +196,11 @@ export function RoadmapMapEditor() {
     if (!roadmap.canEdit || busy) return;
     setCreateChooserOpen(false);
     setCreateSheetOpen(true);
+  }
+
+  function pickSidePosition(draft: CreateSpaceDraft) {
+    setPendingSideDraft(draft);
+    setSideContentSheetOpen(true);
   }
 
   async function createStepBelow(values: {
@@ -195,7 +221,7 @@ export function RoadmapMapEditor() {
         icon: values.icon,
         startDate: start.toISOString(),
         endDate: addDays(start, 14).toISOString(),
-        status: steps.length === 0 ? "in_progress" : "planned",
+        status: mainSteps.length === 0 ? "in_progress" : "planned",
       });
       await workspaceReload();
     } catch (e) {
@@ -206,105 +232,36 @@ export function RoadmapMapEditor() {
     }
   }
 
-  function insertIndexForDraft(
-    working: Array<{ id: string }>,
-    draft: CreateSpaceDraft,
-  ): number {
-    if (typeof draft.insertAt === "number" && Number.isFinite(draft.insertAt)) {
-      return Math.min(Math.max(Math.round(draft.insertAt), 0), working.length);
-    }
-    if (draft.prevId) {
-      const prevAt = working.findIndex((item) => item.id === draft.prevId);
-      if (prevAt >= 0) return prevAt + 1;
-    }
-    if (draft.nextId) {
-      const nextAt = working.findIndex((item) => item.id === draft.nextId);
-      if (nextAt >= 0) return nextAt;
-    }
-    return working.length;
-  }
-
-  async function confirmCreateSpaceDrafts(doneDrafts: CreateSpaceDraft[]) {
-    if (!roadmap.canEdit || doneDrafts.length === 0) {
+  async function createStepBeside(values: {
+    title: string;
+    goal: string;
+    description: string;
+    icon: string;
+  }) {
+    if (!roadmap.canEdit || !pendingSideDraft) {
       throw new Error(tx("追加できるマスがありません", "Nothing to add"));
-    }
-    if (!supabase) {
-      throw new Error(tx("接続できませんでした", "Couldn’t connect"));
     }
     setBusy(true);
     setError("");
     try {
-      const client = supabase;
-      // 最終的な並びを先に組み立ててから、一時 order → 本番 order で衝突なく書き込む
-      const working = steps
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((step) => ({ id: step.id, icon: step.icon as string | null | undefined }));
-
       const start = new Date();
-      const end = addDays(start, 14);
-      const insertedIds: string[] = [];
-
-      for (const [index, draft] of doneDrafts.entries()) {
-        const at = insertIndexForDraft(
-          working.map((row, order) => ({ id: row.id, order })),
-          draft,
-        );
-        const title = tx(`新しいステップ ${steps.length + index + 1}`, `New step ${steps.length + index + 1}`);
-        const tempOrder = 50_000 + index;
-        const base = {
-          project_id: projectId,
-          title,
-          goal: "",
-          description: "",
-          start_date: start.toISOString(),
-          end_date: end.toISOString(),
-          status: working.length === 0 ? ("in_progress" as const) : ("planned" as const),
-          color: "amber",
-          order: tempOrder,
-          icon: draft.icon,
-        };
-        let { data, error: insertError } = await client
-          .from("project_phases")
-          .insert(base)
-          .select("id")
-          .single();
-        if (insertError && /icon/i.test(insertError.message)) {
-          const { icon: _drop, ...withoutIcon } = base;
-          void _drop;
-          ({ data, error: insertError } = await client
-            .from("project_phases")
-            .insert(withoutIcon)
-            .select("id")
-            .single());
-        }
-        if (insertError || !data?.id) {
-          throw new Error(insertError?.message || tx("ステップを追加できませんでした", "Couldn’t add the step"));
-        }
-        const newId = String(data.id);
-        insertedIds.push(newId);
-        working.splice(at, 0, { id: newId, icon: draft.icon });
-      }
-
-      // 衝突回避のため一度ずらしてから 0..n-1 に整列
-      const TEMP = 100_000;
-      for (const [index, row] of working.entries()) {
-        const { error: tempError } = await client
-          .from("project_phases")
-          .update({ order: TEMP + index })
-          .eq("id", row.id);
-        if (tempError) throw new Error(tempError.message);
-      }
-      for (const [order, row] of working.entries()) {
-        const { error: orderError } = await client
-          .from("project_phases")
-          .update({ order })
-          .eq("id", row.id);
-        if (orderError) throw new Error(orderError.message);
-      }
-
-      void insertedIds;
-      await syncReload();
+      const sideOf = pendingSideDraft.sideOf;
+      // 親が無い（空マップ）ときは本線の先頭として追加
+      await roadmap.createPhase({
+        title: values.title,
+        goal: values.goal,
+        description: values.description,
+        icon: values.icon,
+        startDate: start.toISOString(),
+        endDate: addDays(start, 14).toISOString(),
+        status: steps.length === 0 ? "in_progress" : "planned",
+        sideOf: sideOf || null,
+        lane: sideOf ? pendingSideDraft.lane : 0,
+      });
+      await workspaceReload();
+      setPendingSideDraft(null);
+      setSideContentSheetOpen(false);
+      closeCreateSpace();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
       throw e;
@@ -542,17 +499,49 @@ export function RoadmapMapEditor() {
 
       <RoadmapPath
         /** 編集画面はマスも棒もすべてオレンジ（進行状況のグレー分けをしない） */
-        segmentCleared={Array.from({ length: Math.max(steps.length - 1, 0) }, () => true)}
+        segmentCleared={Array.from({ length: Math.max(mainSteps.length - 1, 0) }, () => true)}
       >
-        {steps.map((step, orderIndex) => {
+        {mainSteps.map((step, orderIndex) => {
           const stepNumber = orderIndex + 1;
           const expanded = selectedId === step.id;
           /** 編集画面では全マスをオレンジで表示（灰色にしない・キラキラなし） */
           const tone = "active" as const;
+          const sidePhases = bySideOf.get(step.id) ?? [];
+          const isCurrent =
+            step.status === "in_progress" ||
+            (!hasInProgressMain && orderIndex === currentMainIndex && step.status !== "completed");
           return (
-            <RoadmapPathItem key={step.id} index={orderIndex}>
+            <RoadmapPathItem
+              key={step.id}
+              index={orderIndex}
+              sides={sidePhases
+                .map((side) => {
+                  const lane = normalizeLane(side.lane);
+                  if (lane !== -1 && lane !== 1) return null;
+                  const sideTone = "active" as const;
+                  return {
+                    key: side.id,
+                    lane,
+                    children: (
+                      <RoadmapPathNode
+                        tone={sideTone}
+                        currentHalo={side.status === "in_progress"}
+                        selected={selectedId === side.id}
+                        onClick={() => {
+                          setSelectedId((current) => (current === side.id ? null : side.id));
+                        }}
+                        aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
+                      >
+                        <RoadmapStepMark markId={side.icon} index={orderIndex} tone={sideTone} />
+                      </RoadmapPathNode>
+                    ),
+                  };
+                })
+                .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot))}
+            >
               <RoadmapPathNode
                 tone={tone}
+                currentHalo={isCurrent && step.status !== "completed"}
                 selected={expanded}
                 onClick={() => {
                   setSelectedId((current) => (current === step.id ? null : step.id));
@@ -606,7 +595,15 @@ export function RoadmapMapEditor() {
                 goal: selectedStep.goal,
                 description: selectedStep.description,
                 icon: selectedStep.icon,
-                stepNumber: steps.findIndex((item) => item.id === selectedStep.id) + 1,
+                stepNumber: (() => {
+                  const mainAt = mainSteps.findIndex((item) => item.id === selectedStep.id);
+                  if (mainAt >= 0) return mainAt + 1;
+                  if (selectedStep.sideOf) {
+                    const parentAt = mainSteps.findIndex((item) => item.id === selectedStep.sideOf);
+                    if (parentAt >= 0) return parentAt + 1;
+                  }
+                  return steps.findIndex((item) => item.id === selectedStep.id) + 1;
+                })(),
               }
             : null
         }
@@ -652,14 +649,14 @@ export function RoadmapMapEditor() {
       <RoadmapStepCreateSheet
         open={createSheetOpen && roadmap.canEdit && !createSpaceOpen}
         busy={busy}
-        initialIcon={resolveRoadmapMarkId(undefined, steps.length)}
+        initialIcon={resolveRoadmapMarkId(undefined, mainSteps.length)}
         onClose={() => setCreateSheetOpen(false)}
         onSubmit={createStepBelow}
       />
 
       {createSpaceOpen && roadmap.canEdit ? (
         <RoadmapCreateSpace
-          existingSteps={steps.map((step) => ({
+          existingSteps={mainSteps.map((step) => ({
             id: step.id,
             title: step.title,
             icon: step.icon,
@@ -668,9 +665,22 @@ export function RoadmapMapEditor() {
           }))}
           busy={busy}
           onClose={closeCreateSpace}
-          onConfirm={confirmCreateSpaceDrafts}
+          onPickPosition={pickSidePosition}
         />
       ) : null}
+
+      <RoadmapStepCreateSheet
+        open={sideContentSheetOpen && Boolean(pendingSideDraft) && roadmap.canEdit}
+        busy={busy}
+        initialIcon={
+          pendingSideDraft?.icon ?? resolveRoadmapMarkId(undefined, steps.length)
+        }
+        onClose={() => {
+          setSideContentSheetOpen(false);
+          setPendingSideDraft(null);
+        }}
+        onSubmit={createStepBeside}
+      />
 
       {project && projectGoal ? (
         <ProjectGoalDetailSheet
