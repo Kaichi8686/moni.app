@@ -80,14 +80,19 @@ export function RoadmapPhaseEditSheet({
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
 
+  /** phase オブジェクト参照ではなく id で同期（親の再生成で下書きが巻き戻らないように） */
+  const phaseId = phase?.id ?? null;
+
   useEffect(() => {
-    if (!phase) return;
+    if (!open || !phase || !phaseId) return;
     setTitleDraft(phase.title);
     setHeaderTitle(phase.title.trim() || phase.title);
     setGoalDraft(phase.goal ?? "");
     setDescriptionDraft(phase.description ?? "");
     setIconDraft(resolveRoadmapMarkId(phase.icon, (phase.stepNumber ?? 1) - 1));
-  }, [phase]);
+    // phase の中身は open / phaseId 切替時だけ取り込む
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid reset on parent re-render
+  }, [open, phaseId]);
 
   useEffect(() => {
     if (open && phase) {
@@ -121,22 +126,44 @@ export function RoadmapPhaseEditSheet({
     onClose();
   }
 
+  async function persistValues(next: RoadmapPhaseEditValues, closeAfter: boolean) {
+    setSaving(true);
+    try {
+      await onSave(next);
+      if (closeAfter) onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleIconChange(nextIcon: RoadmapMarkId) {
+    if (locked) return;
+    setIconDraft(nextIcon);
+    const nextTitle = titleDraft.trim() || phase.title;
+    await persistValues(
+      {
+        title: nextTitle,
+        goal: goalDraft.trim(),
+        description: descriptionDraft.trim(),
+        icon: nextIcon,
+      },
+      false,
+    );
+  }
+
   async function handleSave() {
     const nextTitle = titleDraft.trim();
     if (!nextTitle) return;
     setHeaderTitle(nextTitle);
-    setSaving(true);
-    try {
-      await onSave({
+    await persistValues(
+      {
         title: nextTitle,
         goal: goalDraft.trim(),
         description: descriptionDraft.trim(),
         icon: iconDraft,
-      });
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+      },
+      true,
+    );
   }
 
   async function handleDelete() {
@@ -223,7 +250,7 @@ export function RoadmapPhaseEditSheet({
           </div>
           <RoadmapMarkPicker
             value={iconDraft}
-            onChange={setIconDraft}
+            onChange={(id) => void handleIconChange(id)}
             disabled={locked}
             label={tx("マスの絵", "Step icon")}
           />

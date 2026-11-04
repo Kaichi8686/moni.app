@@ -614,13 +614,24 @@ export function RoadmapMapEditor() {
         onClose={() => setSelectedId(null)}
         onSave={async (patch) => {
           if (!selectedStep) return;
-          await roadmap.updatePhase(selectedStep.id, {
-            title: patch.title,
-            goal: patch.goal,
-            description: patch.description,
-            icon: patch.icon,
-          });
-          await workspaceReload();
+          setBusy(true);
+          setError("");
+          try {
+            await roadmap.updatePhase(selectedStep.id, {
+              title: patch.title,
+              goal: patch.goal,
+              description: patch.description,
+              icon: patch.icon,
+            });
+            await workspaceReload();
+          } catch (e) {
+            setError(
+              e instanceof Error ? e.message : tx("保存できませんでした", "Couldn’t save"),
+            );
+            throw e;
+          } finally {
+            setBusy(false);
+          }
         }}
         onDelete={
           selectedStep

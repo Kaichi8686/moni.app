@@ -154,12 +154,16 @@ export function useRoadmapProject(projectId: string) {
       if (patch.startDate !== undefined) row.start_date = new Date(patch.startDate).toISOString();
       if (patch.endDate !== undefined) row.end_date = new Date(patch.endDate).toISOString();
       if (patch.icon !== undefined) row.icon = patch.icon.trim() || "star";
-      let { error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId);
-      if (err && patch.icon !== undefined && /icon/i.test(err.message)) {
-        delete row.icon;
-        ({ error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId));
+      const { error: err } = await supabase.from("project_phases").update(row).eq("id", phaseId);
+      if (err) {
+        // icon 列未適用でも黙って捨てると「編集したのに戻る」ように見えるので明示エラーにする
+        if (patch.icon !== undefined && /icon|column|schema cache|42703/i.test(err.message)) {
+          throw new Error(
+            "マスの絵を保存できません。Supabase で apply_roadmap_phase_icon.sql を実行してください。",
+          );
+        }
+        throw new Error(err.message);
       }
-      if (err) throw new Error(err.message);
       await reload();
     },
     [canEdit, reload],
