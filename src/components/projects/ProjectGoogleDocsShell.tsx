@@ -148,6 +148,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const contentRef = useRef("");
   const activeDocIdRef = useRef(activeDocId);
   const onSaveRef = useRef(onSave);
+  const persistNowRef = useRef<() => Promise<void>>(async () => {});
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
   const [saveHint, setSaveHint] = useState("保存済み");
@@ -212,10 +213,14 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       setSaveHint("保存に失敗 · 再試行します");
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
       saveDebounceRef.current = setTimeout(() => {
-        void persistNow();
+        void persistNowRef.current();
       }, AUTOSAVE_MS);
     }
   }, [autoSave, onDocContentChange, readEditorHtml]);
+
+  useEffect(() => {
+    persistNowRef.current = persistNow;
+  }, [persistNow]);
 
   const scheduleAutoSave = useCallback(() => {
     if (!autoSave || activeDocIdRef.current === null) return;
@@ -224,9 +229,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     saveDebounceRef.current = setTimeout(() => {
       saveDebounceRef.current = null;
-      void persistNow();
+      void persistNowRef.current();
     }, AUTOSAVE_MS);
-  }, [autoSave, persistNow]);
+  }, [autoSave]);
 
   const flushToParent = useCallback(() => {
     const html = readEditorHtml();
