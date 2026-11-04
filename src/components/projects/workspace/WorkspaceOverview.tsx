@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, type ComponentType } from "react";
 import {
   FileText,
   PenLine,
@@ -20,7 +20,6 @@ import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/Roadmap
 import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
 import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
@@ -78,7 +77,6 @@ function CompactLink({ href, icon: IconComponent, label }: { href: string; icon:
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const {
     project,
     projectMeta,
@@ -92,12 +90,6 @@ export default function WorkspaceOverview() {
     reload: wsReload,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
-
-  useEffect(() => {
-    if (searchParams.get("editBrief") !== "1" || !canEdit) return;
-    window.dispatchEvent(new Event("moni:edit-project-brief"));
-    router.replace(`/projects/${projectId}/overview`, { scroll: false });
-  }, [searchParams, canEdit, projectId, router]);
   const projectBrief = resolveProjectBrief({
     coachingContext,
     description: project?.description,
@@ -334,33 +326,7 @@ export default function WorkspaceOverview() {
           projectName={project.name}
           goal={projectGoal}
           problemMotivation={problemMotivation}
-          canEdit={canEdit}
-          onSave={
-            canEdit
-              ? async ({ goal, problemMotivation: motivation }) => {
-                  try {
-                    await persistProjectMotivationAndGoal({
-                      projectId,
-                      coachingContext,
-                      description: project.description,
-                      problemMotivation: motivation,
-                      projectGoal: goal,
-                    });
-                  } catch (e) {
-                    if (e instanceof Error && e.message === "BRIEF_INCOMPLETE") {
-                      throw new Error(
-                        tx(
-                          "きっかけとゴールの両方を入力してください。",
-                          "Please fill in both the motivation and the goal.",
-                        ),
-                      );
-                    }
-                    throw e;
-                  }
-                  await wsReload();
-                }
-              : undefined
-          }
+          canEdit={false}
         />
       ) : null}
 
