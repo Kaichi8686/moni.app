@@ -29,6 +29,8 @@ type Props = {
   /** 達成してマスを進める（メンバーのみ） */
   canAchieve?: boolean;
   onAchieve?: () => Promise<void>;
+  /** 今取り組んでいるマスでのみ true（過去・灰色マスでは出さない） */
+  showTasks?: boolean;
   /** このマスで今やるべき課題（最大3件想定） */
   tasks?: RoadmapPhaseTaskPreview[];
   onSelectTask?: (taskId: string) => void;
@@ -42,6 +44,7 @@ export function RoadmapPhaseInfoSheet({
   onSave,
   canAchieve = false,
   onAchieve,
+  showTasks = false,
   tasks = [],
   onSelectTask,
 }: Props) {
@@ -265,7 +268,7 @@ export function RoadmapPhaseInfoSheet({
                 )}
               </div>
 
-              {!editable ? (
+              {!editable && showTasks ? (
                 <div>
                   <p className="mb-2 text-xs font-semibold text-zinc-600">
                     {tx("今やるべき課題", "What to do now")}

@@ -22,8 +22,7 @@ import { RoadmapStepMark } from "@/components/projects/workspace/roadmap/roadmap
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
-import { assigneeLabel, isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
-import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
+import { isIssueSubmitted } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
@@ -84,7 +83,6 @@ export default function WorkspaceOverview() {
     issues,
     phases: workspacePhases,
     loading,
-    uid,
     canEdit,
     coachingContext,
     reload: wsReload,
@@ -128,21 +126,19 @@ export default function WorkspaceOverview() {
   );
   const hiddenPhaseCount = Math.max(0, displayPhases.length - visiblePhases.length);
 
-  const upcomingIssues = useMemo(
-    () =>
-      sortIssuesByDueDate(
-        issues.filter(
-          (issue) =>
-            issue.status !== "cancelled" &&
-            !isIssueSubmitted(issue) &&
-            isIssueAssignedTo(issue, uid),
-        ),
-      ).slice(0, 3),
-    [issues, uid],
+  const inProgressIndex = sortedPhases.findIndex((phase) => phase.status === "in_progress");
+  const firstOpenIndex = sortedPhases.findIndex((phase) => phase.status !== "completed");
+  const currentIndex = Math.max(0, inProgressIndex >= 0 ? inProgressIndex : firstOpenIndex);
+  const selectedPhaseIsCurrent = Boolean(
+    selectedPhaseLive &&
+      selectedPhaseLive.status !== "completed" &&
+      (selectedPhaseLive.status === "in_progress" ||
+        sortedPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex),
   );
 
+  /** 今取り組んでいるマスの課題だけ（過去・灰色マスには出さない） */
   const selectedPhaseTasks = useMemo(() => {
-    if (!selectedPhaseId) return [];
+    if (!selectedPhaseId || !selectedPhaseIsCurrent) return [];
     return sortIssuesByDueDate(
       issues.filter(
         (issue) =>
@@ -154,15 +150,12 @@ export default function WorkspaceOverview() {
     )
       .slice(0, 3)
       .map((issue) => ({ id: issue.id, title: issue.title }));
-  }, [issues, selectedPhaseId]);
+  }, [issues, selectedPhaseId, selectedPhaseIsCurrent]);
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
   const completedSteps = sortedPhases.filter((phase) => phase.status === "completed").length;
-  const inProgressIndex = sortedPhases.findIndex((phase) => phase.status === "in_progress");
-  const firstOpenIndex = sortedPhases.findIndex((phase) => phase.status !== "completed");
-  const currentIndex = Math.max(0, inProgressIndex >= 0 ? inProgressIndex : firstOpenIndex);
   const progress =
     sortedPhases.length > 0
       ? Math.round((completedSteps / sortedPhases.length) * 100)
@@ -382,55 +375,13 @@ export default function WorkspaceOverview() {
           await wsReload();
           setSelectedPhaseId(null);
         }}
+        showTasks={selectedPhaseIsCurrent}
         tasks={selectedPhaseTasks}
         onSelectTask={(taskId) => {
           setSelectedPhaseId(null);
           router.push(`/projects/${projectId}/issues?task=${taskId}`);
         }}
       />
-
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("今やるべき課題", "What to do now")}</h2>
-          <Link href={`/projects/${projectId}/issues`} className="text-[12px] font-semibold text-zinc-500 hover:text-zinc-900">
-            {tx("課題一覧", "All issues")}
-          </Link>
-        </div>
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          {upcomingIssues.length > 0 ? (
-            <ul className="list-none divide-y divide-zinc-100">
-              {upcomingIssues.map((issue) => {
-                const assignees = assigneeLabel(issue, project.members, tx("未担当", "Unassigned"));
-                return (
-                  <li key={issue.id}>
-                    <Link
-                      href={`/projects/${projectId}/issues?task=${issue.id}`}
-                      className="flex min-h-[58px] items-center gap-3 px-3.5 py-2.5 hover:bg-zinc-50 sm:px-4"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium text-zinc-800 sm:text-sm">{issue.title}</span>
-                        <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
-                          {[
-                            issue.beginAt ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`) : "",
-                            issue.dueDate ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`) : "",
-                          ].filter(Boolean).join(" · ")}
-                        </span>
-                      </span>
-                      <span className="max-w-[30%] shrink-0 truncate text-[11px] text-zinc-500 sm:text-xs">
-                        {assignees}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="px-4 py-6 text-center text-[13px] text-zinc-500">
-              {tx("あなたの担当課題はありません", "No issues assigned to you")}
-            </p>
-          )}
-        </div>
-      </section>
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
