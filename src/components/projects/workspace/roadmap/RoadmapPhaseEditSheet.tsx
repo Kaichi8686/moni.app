@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   RoadmapMarkPicker,
+  RoadmapStepMark,
   resolveRoadmapMarkId,
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
@@ -34,6 +35,31 @@ type Props = {
   onDelete?: () => Promise<void>;
 };
 
+/** ヘッダー左に出す小さめの立体マス */
+function EditSheetMasuPreview({ markId, index }: { markId: RoadmapMarkId; index: number }) {
+  return (
+    <span
+      data-roadmap-node
+      className="relative block h-12 w-12 shrink-0 sm:h-14 sm:w-14"
+      aria-hidden
+    >
+      <span className="absolute inset-x-0 bottom-0 top-[4px] rounded-full bg-[#C2410C]" />
+      <span className="absolute inset-x-0 bottom-[4px] top-0 flex items-center justify-center rounded-full bg-[#F97316]">
+        <span
+          className="pointer-events-none absolute inset-[10%] rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 28%, rgba(255,255,255,0.42) 0%, transparent 62%)",
+          }}
+        />
+        <span className="relative z-[1] flex scale-[0.72] items-center justify-center sm:scale-[0.78]">
+          <RoadmapStepMark markId={markId} index={index} tone="active" />
+        </span>
+      </span>
+    </span>
+  );
+}
+
 /** 編集画面用：マスの名前・絵・ゴール・詳細を下から出すシート */
 export function RoadmapPhaseEditSheet({
   open,
@@ -45,6 +71,8 @@ export function RoadmapPhaseEditSheet({
 }: Props) {
   const { tx } = useI18n();
   const [titleDraft, setTitleDraft] = useState("");
+  /** ヘッダーに出す確定済みの名前（入力中は即反映しない） */
+  const [headerTitle, setHeaderTitle] = useState("");
   const [goalDraft, setGoalDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [iconDraft, setIconDraft] = useState<RoadmapMarkId>("star");
@@ -55,6 +83,7 @@ export function RoadmapPhaseEditSheet({
   useEffect(() => {
     if (!phase) return;
     setTitleDraft(phase.title);
+    setHeaderTitle(phase.title.trim() || phase.title);
     setGoalDraft(phase.goal ?? "");
     setDescriptionDraft(phase.description ?? "");
     setIconDraft(resolveRoadmapMarkId(phase.icon, (phase.stepNumber ?? 1) - 1));
@@ -79,6 +108,13 @@ export function RoadmapPhaseEditSheet({
   if (!visible || !phase) return null;
 
   const locked = busy || saving;
+  const stepIndex = Math.max((phase.stepNumber ?? 1) - 1, 0);
+  const displayTitle = headerTitle.trim() || tx("名前未設定", "Untitled");
+
+  function commitHeaderTitle() {
+    const next = titleDraft.trim();
+    if (next) setHeaderTitle(next);
+  }
 
   function requestClose() {
     if (locked) return;
@@ -88,6 +124,7 @@ export function RoadmapPhaseEditSheet({
   async function handleSave() {
     const nextTitle = titleDraft.trim();
     if (!nextTitle) return;
+    setHeaderTitle(nextTitle);
     setSaving(true);
     try {
       await onSave({
@@ -143,18 +180,19 @@ export function RoadmapPhaseEditSheet({
         }`}
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
-          <div className="min-w-0">
+        <div className="flex shrink-0 items-center gap-3 border-b border-zinc-100 px-4 py-3">
+          <EditSheetMasuPreview markId={iconDraft} index={stepIndex} />
+          <div className="min-w-0 flex-1">
             {phase.stepNumber != null ? (
               <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {phase.stepNumber}</p>
             ) : null}
             <h2 id="roadmap-phase-edit-sheet-title" className="truncate text-sm font-bold text-zinc-900">
-              {tx("マスを編集", "Edit step")}
+              {displayTitle}
             </h2>
           </div>
           <button
             type="button"
-            className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
+            className="shrink-0 rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
             onClick={requestClose}
             aria-label={tx("閉じる", "Close")}
           >
@@ -171,6 +209,14 @@ export function RoadmapPhaseEditSheet({
               id="roadmap-edit-title"
               value={titleDraft}
               onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={commitHeaderTitle}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitHeaderTitle();
+                  event.currentTarget.blur();
+                }
+              }}
               disabled={locked}
               className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
             />
