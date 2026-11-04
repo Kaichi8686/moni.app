@@ -12,8 +12,6 @@ type Props = {
   loadFollowList: (type: "followers" | "following") => Promise<FollowListUser[]>;
   onToggleFollow: (targetId: string) => Promise<void>;
   viewerId: string | null;
-  /** Optional Duolingo-like streak (fact label, no celebration). */
-  streakDays?: number | null;
 };
 
 function formatStat(n: number) {
@@ -28,7 +26,6 @@ export function ProfileStats({
   loadFollowList,
   onToggleFollow,
   viewerId,
-  streakDays,
 }: Props) {
   const [modal, setModal] = useState<"followers" | "following" | null>(null);
   const { tx } = useI18n();
@@ -66,14 +63,6 @@ export function ProfileStats({
             </div>
           );
         })}
-        {typeof streakDays === "number" ? (
-          <div className="min-h-[36px] flex items-center">
-            <span className="inline-flex items-baseline gap-1">
-              <span className="text-[15px] font-semibold tabular-nums tracking-tight text-zinc-900">{streakDays}</span>
-              <span className="text-[12px] font-medium text-zinc-500">{tx("日連続", "day streak")}</span>
-            </span>
-          </div>
-        ) : null}
       </div>
 
       {modal ? (

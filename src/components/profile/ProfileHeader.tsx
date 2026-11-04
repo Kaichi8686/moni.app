@@ -29,7 +29,6 @@ type Props = {
   viewerId: string | null;
   moniTier?: MoniTier | null;
   profileUserId?: string;
-  streakDays?: number | null;
 };
 
 export function ProfileHeader({
@@ -45,7 +44,6 @@ export function ProfileHeader({
   viewerId,
   moniTier,
   profileUserId,
-  streakDays,
 }: Props) {
   const { locale, tx } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -220,7 +218,6 @@ export function ProfileHeader({
               loadFollowList={loadFollowList}
               onToggleFollow={onToggleFollow}
               viewerId={viewerId}
-              streakDays={streakDays}
             />
           </div>
         </div>

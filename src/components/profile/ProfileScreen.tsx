@@ -259,9 +259,6 @@ export function ProfileScreen({ userId: propUserId }: Props) {
             onBackgroundUpdated={() => void reload()}
             viewerId={viewerId}
             profileUserId={profile.id}
-            streakDays={
-              gamification?.gamificationReady ? gamification.activityStreak : null
-            }
             moniTier={
               gamification?.gamificationReady
                 ? computeMoniTier({
