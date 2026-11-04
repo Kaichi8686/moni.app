@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ImagePlus, Loader2, Map, Link2 } from "lucide-react";
+import { Check, ChevronLeft, ImagePlus, Loader2, Map, Link2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   createRoadmapFromProject,
