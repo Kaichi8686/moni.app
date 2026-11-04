@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, Plus, StickyNote } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
@@ -668,6 +668,23 @@ export default function WorkspaceIssues() {
   if (screen.kind === "step") {
     const phaseId = screen.phaseId;
     const phaseOpen = openCountFor(phaseId);
+    const stepKeys: PhaseKey[] = [
+      ...sortedPhases.map((phase) => phase.id),
+      ...(unlinkedCount > 0 || sortedPhases.length === 0 ? ([null] as PhaseKey[]) : []),
+    ];
+    const stepIndex = stepKeys.findIndex((key) => key === phaseId);
+    const prevStepId = stepIndex > 0 ? stepKeys[stepIndex - 1]! : undefined;
+    const nextStepId = stepIndex >= 0 && stepIndex < stepKeys.length - 1 ? stepKeys[stepIndex + 1]! : undefined;
+
+    function goToNeighbor(nextId: PhaseKey) {
+      setAddingGenre(false);
+      setCreating(false);
+      setError("");
+      setDraftGenreLabel("");
+      setDraftGenreHint("");
+      setScreen({ kind: "step", phaseId: nextId });
+    }
+
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         <div className="flex items-center gap-2">
@@ -679,18 +696,11 @@ export default function WorkspaceIssues() {
               setCreating(false);
               setError("");
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
-            aria-label={tx("戻る", "Back")}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-zinc-100"
+            aria-label={tx("ステップ一覧", "All steps")}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold tracking-[0.12em] text-zinc-400">{tx("ステップ", "STEP")}</p>
-            <h1 className="truncate text-lg font-bold text-zinc-950">{stepLabel(phaseId, sortedPhases, tx)}</h1>
-            <p className="text-xs text-zinc-500">
-              {tx(`未提出 ${phaseOpen}件`, `${phaseOpen} not submitted`)}
-            </p>
-          </div>
           {canEdit ? (
             <button
               type="button"
@@ -698,12 +708,46 @@ export default function WorkspaceIssues() {
                 setError("");
                 setAddingGenre((v) => !v);
               }}
-              className="inline-flex min-h-[40px] items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+              className="ml-auto inline-flex min-h-[40px] items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
             >
               <Plus className="h-4 w-4" />
               {tx("ジャンルを追加", "Add genre")}
             </button>
           ) : null}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={prevStepId === undefined}
+            onClick={() => {
+              if (prevStepId === undefined) return;
+              goToNeighbor(prevStepId);
+            }}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label={tx("前のステップ", "Previous step")}
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+          </button>
+          <div className="min-w-0 flex-1 text-center">
+            <p className="text-[11px] font-bold tracking-[0.12em] text-zinc-400">{tx("ステップ", "STEP")}</p>
+            <h1 className="truncate text-lg font-bold text-zinc-950">{stepLabel(phaseId, sortedPhases, tx)}</h1>
+            <p className="text-xs text-zinc-500">
+              {tx(`未提出 ${phaseOpen}件`, `${phaseOpen} not submitted`)}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={nextStepId === undefined}
+            onClick={() => {
+              if (nextStepId === undefined) return;
+              goToNeighbor(nextStepId);
+            }}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label={tx("次のステップ", "Next step")}
+          >
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          </button>
         </div>
 
         {addingGenre && canEdit ? (
