@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type RoadmapPhaseInfo = {
@@ -14,6 +15,11 @@ export type RoadmapPhaseInfo = {
   alreadyDone?: boolean;
 };
 
+export type RoadmapPhaseTaskPreview = {
+  id: string;
+  title: string;
+};
+
 type Props = {
   phase: RoadmapPhaseInfo | null;
   open: boolean;
@@ -23,6 +29,9 @@ type Props = {
   /** 達成してマスを進める（メンバーのみ） */
   canAchieve?: boolean;
   onAchieve?: () => Promise<void>;
+  /** このマスで今やるべき課題（最大3件想定） */
+  tasks?: RoadmapPhaseTaskPreview[];
+  onSelectTask?: (taskId: string) => void;
 };
 
 export function RoadmapPhaseInfoSheet({
@@ -33,6 +42,8 @@ export function RoadmapPhaseInfoSheet({
   onSave,
   canAchieve = false,
   onAchieve,
+  tasks = [],
+  onSelectTask,
 }: Props) {
   const { tx } = useI18n();
   const [goalDraft, setGoalDraft] = useState("");
@@ -74,6 +85,7 @@ export function RoadmapPhaseInfoSheet({
   const alreadyDone = Boolean(phase.alreadyDone);
   const showAchieve = Boolean(canAchieve && onAchieve && !alreadyDone && !editable);
   const goalText = (phase.goal ?? goalDraft).trim();
+  const previewTasks = tasks.slice(0, 3);
 
   function requestClose() {
     if (busy) return;
@@ -175,36 +187,37 @@ export function RoadmapPhaseInfoSheet({
                   {actionError}
                 </p>
               ) : null}
-              <button
+              <DuoButton
                 type="button"
+                tone="orange"
+                size="md"
+                fullWidth
                 disabled={busy}
                 onClick={() => void handleConfirmAchieve()}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
+                className="gap-2 !text-[15px]"
               >
                 <Check className="h-4 w-4" aria-hidden />
                 {busy ? tx("反映中…", "Updating…") : tx("達成した", "I achieved it")}
-              </button>
-              <button
+              </DuoButton>
+              <DuoButton
                 type="button"
+                tone="zinc"
+                size="md"
+                fullWidth
                 disabled={busy}
                 onClick={() => {
                   setConfirming(false);
                   setActionError("");
                 }}
-                className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
+                className="!text-[15px]"
               >
                 {tx("まだ", "Not yet")}
-              </button>
+              </DuoButton>
             </div>
           </>
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <div>
-                <p className="text-xs font-semibold text-zinc-600">{tx("名前", "Name")}</p>
-                <p className="mt-1 text-base font-bold leading-snug text-zinc-900">{phase.title}</p>
-              </div>
-
               <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
                 <label htmlFor="roadmap-phase-goal" className="block text-xs font-bold text-orange-900">
                   {tx("ゴール", "Goal")}
@@ -251,42 +264,80 @@ export function RoadmapPhaseInfoSheet({
                   <p className="mt-1.5 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
                 )}
               </div>
+
+              {!editable ? (
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-zinc-600">
+                    {tx("今やるべき課題", "What to do now")}
+                  </p>
+                  {previewTasks.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {previewTasks.map((task) => (
+                        <DuoButton
+                          key={task.id}
+                          type="button"
+                          tone="peach"
+                          size="md"
+                          fullWidth
+                          onClick={() => onSelectTask?.(task.id)}
+                          className="!justify-start !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug"
+                        >
+                          <span className="line-clamp-2">{task.title}</span>
+                        </DuoButton>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 px-3 py-3 text-sm text-zinc-500">
+                      {tx("このマスに紐づく課題はまだありません", "No tasks linked to this step yet")}
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
 
-            <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="flex shrink-0 flex-col gap-2.5 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {editable ? (
-                <button
+                <DuoButton
                   type="button"
+                  tone="orange"
+                  size="md"
+                  fullWidth
                   disabled={busy}
                   onClick={() => void handleSave()}
-                  className="min-h-[44px] w-full rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
+                  className="!text-[15px]"
                 >
                   {busy ? tx("保存中…", "Saving…") : tx("ゴールを保存", "Save goal")}
-                </button>
+                </DuoButton>
               ) : null}
               {alreadyDone ? (
-                <p className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl border border-orange-100 bg-orange-50 text-sm font-semibold text-orange-700">
+                <p className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl border border-orange-100 bg-orange-50 text-sm font-bold text-orange-700">
                   <Check className="h-4 w-4" aria-hidden />
                   {tx("達成済み", "Achieved")}
                 </p>
               ) : null}
               {showAchieve ? (
-                <button
+                <DuoButton
                   type="button"
+                  tone="orange"
+                  size="md"
+                  fullWidth
                   disabled={busy}
                   onClick={() => setConfirming(true)}
-                  className="min-h-[44px] w-full rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
+                  className="!text-[15px]"
                 >
                   {tx("達成", "Achieve")}
-                </button>
+                </DuoButton>
               ) : null}
-              <button
+              <DuoButton
                 type="button"
+                tone="zinc"
+                size="md"
+                fullWidth
                 onClick={requestClose}
-                className="min-h-[40px] w-full rounded-2xl text-sm font-medium text-zinc-500 hover:bg-zinc-50"
+                className="!text-[15px]"
               >
                 {tx("閉じる", "Close")}
-              </button>
+              </DuoButton>
             </div>
           </>
         )}

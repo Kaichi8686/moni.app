@@ -141,6 +141,21 @@ export default function WorkspaceOverview() {
     [issues, uid],
   );
 
+  const selectedPhaseTasks = useMemo(() => {
+    if (!selectedPhaseId) return [];
+    return sortIssuesByDueDate(
+      issues.filter(
+        (issue) =>
+          issue.phaseId === selectedPhaseId &&
+          issue.status !== "cancelled" &&
+          issue.status !== "done" &&
+          !isIssueSubmitted(issue),
+      ),
+    )
+      .slice(0, 3)
+      .map((issue) => ({ id: issue.id, title: issue.title }));
+  }, [issues, selectedPhaseId]);
+
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
@@ -366,6 +381,11 @@ export default function WorkspaceOverview() {
           }
           await wsReload();
           setSelectedPhaseId(null);
+        }}
+        tasks={selectedPhaseTasks}
+        onSelectTask={(taskId) => {
+          setSelectedPhaseId(null);
+          router.push(`/projects/${projectId}/issues?task=${taskId}`);
         }}
       />
 

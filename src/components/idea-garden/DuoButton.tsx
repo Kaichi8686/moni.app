@@ -2,7 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type Tone = "green" | "orange" | "gold" | "sky" | "zinc";
+type Tone = "green" | "orange" | "gold" | "peach" | "sky" | "zinc";
 type Size = "md" | "lg" | "xl";
 
 /**
@@ -36,6 +36,16 @@ const TONES: Record<Tone, { face: string; text: string; lip: Record<Size, string
       md: "shadow-[0_4px_0_#D97706]",
       lg: "shadow-[0_5px_0_#D97706]",
       xl: "shadow-[0_6px_0_#D97706]",
+    },
+  },
+  /** 薄いオレンジ（課題カードなど） */
+  peach: {
+    face: "bg-[#FFC46B]",
+    text: "text-[#7C2D12]",
+    lip: {
+      md: "shadow-[0_4px_0_#E89A3C]",
+      lg: "shadow-[0_5px_0_#E89A3C]",
+      xl: "shadow-[0_6px_0_#E89A3C]",
     },
   },
   sky: {
