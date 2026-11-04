@@ -16,6 +16,7 @@ import {
   SHEET_COLORS,
   type IssueWorkspaceBoard,
 } from "@/lib/workspace/issueWorkspaceBoard";
+import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
   createCustomTaskGenreId,
   CUSTOM_TASK_GENRE_LABEL_MAX,
@@ -245,12 +246,16 @@ export default function WorkspaceIssues() {
     return listStepTaskGenres(screen.phaseId, customGenres, openIssues);
   }, [screen, customGenres, openIssues]);
 
+  /** 未提出を先に、その中では提出期限が近い順。提出済みは後ろ。 */
   function issuesFor(phaseId: PhaseKey, genre?: TaskGenre) {
-    return openIssues.filter((issue) => {
+    const filtered = openIssues.filter((issue) => {
       if (phaseKeyOf(issue) !== phaseId) return false;
       if (genre && issue.genre !== genre) return false;
       return true;
     });
+    const open = sortIssuesByDueDate(filtered.filter((issue) => !isIssueSubmitted(issue)));
+    const done = sortIssuesByDueDate(filtered.filter((issue) => isIssueSubmitted(issue)));
+    return [...open, ...done];
   }
 
   function openCountFor(phaseId: PhaseKey, genre?: TaskGenre) {
@@ -808,7 +813,9 @@ export default function WorkspaceIssues() {
         ) : null}
 
         <div className="flex flex-col gap-2.5">
-          {stepGenres.map((genre) => {
+          {[...stepGenres]
+            .sort((a, b) => openCountFor(phaseId, b) - openCountFor(phaseId, a))
+            .map((genre) => {
             const meta = resolveGenreMeta(genre, customGenres);
             const Icon = meta.icon;
             const openCount = openCountFor(phaseId, genre);
