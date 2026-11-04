@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ImagePlus, Loader2, Map, Link2 } from "lucide-react";
+import { Check, ChevronLeft, ImagePlus, Loader2, Map, Link2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   createRoadmapFromProject,
@@ -146,8 +146,16 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
     >
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
       <div className="relative z-10 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
+        <div className="mb-4 flex items-start gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tx("戻る", "Back")}
+            className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+          </button>
+          <div className="min-w-0 flex-1 pt-0.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
               {tx("アイデア応募", "Submit idea")}
             </p>
@@ -155,9 +163,6 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
               {done ? tx("投稿完了！", "Posted!") : tx("自由形式で発表しよう", "Share in any format")}
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-sm font-medium text-zinc-500 hover:bg-zinc-100">
-            ✕
-          </button>
         </div>
 
         {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
