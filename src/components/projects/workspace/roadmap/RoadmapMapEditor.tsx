@@ -302,15 +302,15 @@ export function RoadmapMapEditor() {
 
   return (
     <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-5 px-1 pb-28 pt-1">
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={() => router.push(overviewHref)}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50"
-          aria-label={tx("戻る", "Back")}
-        >
-          <ArrowLeft className="h-5 w-5" aria-hidden />
-        </button>
+      <button
+        type="button"
+        onClick={() => router.push(overviewHref)}
+        className="fixed left-[max(1rem,env(safe-area-inset-left))] top-[max(0.75rem,env(safe-area-inset-top))] z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-800 shadow-sm backdrop-blur-sm transition hover:bg-zinc-50"
+        aria-label={tx("戻る", "Back")}
+      >
+        <ArrowLeft className="h-5 w-5" aria-hidden />
+      </button>
+      <div className="flex items-start gap-3 pl-[3.25rem]">
         <div className="min-w-0 pt-0.5">
           <div className="flex items-center gap-2">
             <Map className="h-6 w-6 shrink-0 text-orange-500" aria-hidden />
