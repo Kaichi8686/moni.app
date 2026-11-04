@@ -12,12 +12,14 @@ import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectG
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
+import {
+  RoadmapCreateSpace,
+  type CreateSpaceDraft,
+} from "@/components/projects/workspace/roadmap/RoadmapCreateSpace";
 import { RoadmapPhaseEditSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseEditSheet";
-import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
 import {
   RoadmapStepMark,
   resolveRoadmapMarkId,
-  type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
@@ -48,8 +50,7 @@ export function RoadmapMapEditor() {
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
-  const [draftIcon, setDraftIcon] = useState<RoadmapMarkId>("star");
-  const [adding, setAdding] = useState(false);
+  const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aiInput, setAiInput] = useState("");
@@ -101,16 +102,15 @@ export function RoadmapMapEditor() {
     if (steps.some((step) => step.id === phaseIdFromUrl)) setSelectedId(phaseIdFromUrl);
   }, [phaseIdFromUrl, steps]);
 
-  /** 概要の作成マスから ?add=1 で来たら、すぐステップ追加シートを開く */
+  /** 概要の作成マスから ?add=1 で来たら、マス作成空間を開く */
   const addFromUrl = searchParams.get("add") === "1";
   useEffect(() => {
     if (!addFromUrl || !roadmap.canEdit || roadmap.loading) return;
-    setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));
-    setAdding(true);
+    setCreateSpaceOpen(true);
     router.replace(`/projects/${projectId}/roadmap`, { scroll: false });
-  }, [addFromUrl, roadmap.canEdit, roadmap.loading, projectId, router, steps.length]);
+  }, [addFromUrl, roadmap.canEdit, roadmap.loading, projectId, router]);
 
-  const showPathCreate = roadmap.canEdit && !adding;
+  const showPathCreate = roadmap.canEdit && !createSpaceOpen;
 
   useEffect(() => {
     if (!showPathCreate) {
@@ -190,35 +190,94 @@ export function RoadmapMapEditor() {
     };
   }, [showPathCreate, steps.length]);
 
-  function openCreateSheet() {
+  function openCreateSpace() {
     if (!roadmap.canEdit || busy) return;
     setSelectedId(null);
-    setDraftIcon(resolveRoadmapMarkId(undefined, steps.length));
-    setAdding(true);
+    setMode("manual");
+    setCreateSpaceOpen(true);
   }
 
-  async function addStep(values: {
-    title: string;
-    goal: string;
-    description: string;
-    icon: RoadmapMarkId;
-  }) {
-    if (!roadmap.canEdit) return;
+  function insertIndexForDraft(
+    working: Array<{ id: string }>,
+    draft: CreateSpaceDraft,
+  ): number {
+    if (draft.prevId) {
+      const prevAt = working.findIndex((item) => item.id === draft.prevId);
+      if (prevAt >= 0) return prevAt + 1;
+    }
+    if (draft.nextId) {
+      const nextAt = working.findIndex((item) => item.id === draft.nextId);
+      if (nextAt >= 0) return nextAt;
+    }
+    return working.length;
+  }
+
+  async function confirmCreateSpaceDrafts(doneDrafts: CreateSpaceDraft[]) {
+    if (!supabase || !roadmap.canEdit || doneDrafts.length === 0) return;
     setBusy(true);
     setError("");
     try {
+      const working = steps
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((step, index) => ({ id: step.id, order: index }));
+      // いったん 0..n-1 に揃える
+      for (const row of working) {
+        const { error: normError } = await supabase
+          .from("project_phases")
+          .update({ order: row.order })
+          .eq("id", row.id);
+        if (normError) throw new Error(normError.message);
+      }
+
       const start = new Date();
       const end = addDays(start, 14);
-      await roadmap.createPhase({
-        title: values.title,
-        goal: values.goal || undefined,
-        description: values.description || undefined,
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        status: "planned",
-        icon: values.icon,
-      });
-      await workspaceReload();
+
+      for (const [index, draft] of doneDrafts.entries()) {
+        const at = insertIndexForDraft(working, draft);
+        for (const row of working) {
+          if (row.order < at) continue;
+          const nextOrder = row.order + 1;
+          const { error: bumpError } = await supabase
+            .from("project_phases")
+            .update({ order: nextOrder })
+            .eq("id", row.id);
+          if (bumpError) throw new Error(bumpError.message);
+          row.order = nextOrder;
+        }
+
+        const title = tx(`新しいステップ ${steps.length + index + 1}`, `New step ${steps.length + index + 1}`);
+        const base = {
+          project_id: projectId,
+          title,
+          goal: "",
+          description: "",
+          start_date: start.toISOString(),
+          end_date: end.toISOString(),
+          status: "planned" as const,
+          color: "amber",
+          order: at,
+          icon: draft.icon,
+        };
+        let { data, error: insertError } = await supabase
+          .from("project_phases")
+          .insert(base)
+          .select("id, order")
+          .single();
+        if (insertError && /icon/i.test(insertError.message)) {
+          const { icon: _drop, ...withoutIcon } = base;
+          void _drop;
+          ({ data, error: insertError } = await supabase
+            .from("project_phases")
+            .insert(withoutIcon)
+            .select("id, order")
+            .single());
+        }
+        if (insertError || !data) throw new Error(insertError?.message || "insert failed");
+        working.splice(at, 0, { id: data.id as string, order: at });
+      }
+
+      await syncReload();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
       throw e;
@@ -323,7 +382,8 @@ export function RoadmapMapEditor() {
   }
 
   const hasSteps = steps.length > 0;
-  const createFabAllowed = roadmap.canEdit && !adding && !selectedId && mode === "manual";
+  const createFabAllowed =
+    roadmap.canEdit && !createSpaceOpen && !selectedId && mode === "manual";
   const showCreateFab = createFabAllowed && !createNodeInView;
 
   return (
@@ -366,31 +426,24 @@ export function RoadmapMapEditor() {
       ) : null}
 
       {roadmap.canEdit ? (
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setMode("manual")}
-            className={`min-h-[48px] rounded-2xl border px-3 text-sm font-semibold transition ${
-              mode === "manual" ? "border-orange-500 bg-orange-500 text-white" : "border-zinc-200 bg-white text-zinc-700"
+        <button
+          type="button"
+          onClick={() => setMode((current) => (current === "ai" ? "manual" : "ai"))}
+          className={`inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
+            mode === "ai"
+              ? "border-violet-600 bg-violet-600 text-white"
+              : "border-violet-200 bg-violet-50 text-violet-800"
+          }`}
+        >
+          <span
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+              mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"
             }`}
           >
-            {tx("マスを編集", "Edit steps")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("ai")}
-            className={`inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-semibold shadow-sm transition ${
-              mode === "ai"
-                ? "border-violet-600 bg-violet-600 text-white"
-                : "border-violet-200 bg-violet-50 text-violet-800"
-            }`}
-          >
-            <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${mode === "ai" ? "bg-white/20" : "bg-violet-600 text-white"}`}>
-              <Sparkles className="h-4 w-4" aria-hidden />
-            </span>
-            {tx("AIで作る", "AI draft")}
-          </button>
-        </div>
+            <Sparkles className="h-4 w-4" aria-hidden />
+          </span>
+          {mode === "ai" ? tx("AIを閉じる", "Close AI") : tx("AIで作る", "AI draft")}
+        </button>
       ) : null}
 
       {mode === "ai" ? (
@@ -479,7 +532,6 @@ export function RoadmapMapEditor() {
                 tone={tone}
                 selected={expanded}
                 onClick={() => {
-                  setAdding(false);
                   setSelectedId((current) => (current === step.id ? null : step.id));
                 }}
                 aria-label={tx(`ステップ ${stepNumber}: ${step.title}`, `Step ${stepNumber}: ${step.title}`)}
@@ -496,7 +548,7 @@ export function RoadmapMapEditor() {
               <RoadmapPathNode
                 tone="create"
                 disabled={busy}
-                onClick={openCreateSheet}
+                onClick={openCreateSpace}
                 aria-label={
                   steps.length === 0
                     ? tx("ロードマップを作成する", "Create roadmap")
@@ -536,7 +588,7 @@ export function RoadmapMapEditor() {
             type="button"
             tone="orange"
             size="md"
-            onClick={openCreateSheet}
+            onClick={openCreateSpace}
             disabled={busy || !showCreateFab}
             tabIndex={showCreateFab ? 0 : -1}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
@@ -549,7 +601,7 @@ export function RoadmapMapEditor() {
       ) : null}
 
       <RoadmapPhaseEditSheet
-        open={Boolean(selectedStep) && roadmap.canEdit}
+        open={Boolean(selectedStep) && roadmap.canEdit && !createSpaceOpen}
         phase={
           selectedStep
             ? {
@@ -583,13 +635,19 @@ export function RoadmapMapEditor() {
         }
       />
 
-      <RoadmapStepCreateSheet
-        open={adding && roadmap.canEdit}
-        busy={busy}
-        initialIcon={draftIcon}
-        onClose={() => setAdding(false)}
-        onSubmit={addStep}
-      />
+      {createSpaceOpen && roadmap.canEdit ? (
+        <RoadmapCreateSpace
+          existingSteps={steps.map((step) => ({
+            id: step.id,
+            title: step.title,
+            icon: step.icon,
+            order: step.order,
+          }))}
+          busy={busy}
+          onClose={() => setCreateSpaceOpen(false)}
+          onConfirm={confirmCreateSpaceDrafts}
+        />
+      ) : null}
 
       {project && projectGoal ? (
         <ProjectGoalDetailSheet
