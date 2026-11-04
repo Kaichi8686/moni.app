@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
@@ -39,14 +39,21 @@ function IdeaHubInner() {
   const qnaBoard = urlTab === "qna" && searchParams.get("view") === "board";
   const view = viewFromTab(urlTab, qnaBoard);
   const aiMode: IdeaPersonalAiMode = urlTab === "excavate" ? "excavate" : "consult";
-  const sparkMode = parseSparkMode(searchParams.get("spark"));
+  const urlSpark = parseSparkMode(searchParams.get("spark"));
 
+  /** URL と独立したローカル状態（切替を確実にする） */
+  const [sparkMode, setSparkModeState] = useState<SparkMode>(urlSpark);
+  const [gardenKey, setGardenKey] = useState(0);
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [gardenImmersive, setGardenImmersive] = useState(false);
   const [contestRoomId, setContestRoomId] = useState<string | null>(null);
   const [contestAutoSubmit, setContestAutoSubmit] = useState(false);
+
+  useEffect(() => {
+    setSparkModeState(urlSpark);
+  }, [urlSpark]);
 
   const replaceParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -79,6 +86,8 @@ function IdeaHubInner() {
       setContestRoomId(null);
       setContestAutoSubmit(false);
       setGardenImmersive(false);
+      setSparkModeState(mode);
+      if (mode === "grow") setGardenKey((k) => k + 1);
       replaceParams((params) => {
         params.delete("tab");
         params.delete("view");
@@ -92,8 +101,17 @@ function IdeaHubInner() {
   const goHome = useCallback(() => {
     setOpenHistoryOnChat(false);
     setStartFreshOnChat(false);
-    replaceTab("mine");
-  }, [replaceTab]);
+    setContestRoomId(null);
+    setContestAutoSubmit(false);
+    setGardenImmersive(false);
+    setSparkModeState("grow");
+    setGardenKey((k) => k + 1);
+    replaceParams((params) => {
+      params.delete("tab");
+      params.delete("view");
+      params.delete("spark");
+    });
+  }, [replaceParams]);
 
   const openAi = useCallback(
     (mode: IdeaPersonalAiMode = "consult") => {
@@ -117,48 +135,63 @@ function IdeaHubInner() {
 
   const inAiChat = view === "chat";
   const hideBottomNav = inAiChat || (view === "mine" && gardenImmersive);
-  const showSparkToggle = view === "mine" && !gardenImmersive && !contestRoomId;
+  /** 花の没入中以外は常にトグル表示（コンテスト詳細中も花へ戻れる） */
+  const showSparkToggle = view === "mine" && !gardenImmersive;
+
+  const sparkToggle = showSparkToggle ? (
+    <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
+      <button
+        type="button"
+        onClick={() => setSparkMode("grow")}
+        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
+          sparkMode === "grow" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        }`}
+      >
+        {tx("花を育てる", "Grow a flower")}
+      </button>
+      <button
+        type="button"
+        onClick={() => setSparkMode("contest")}
+        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
+          sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        }`}
+      >
+        {tx("コンテスト", "Contest")}
+      </button>
+    </div>
+  ) : null;
 
   return (
     <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
-      {view === "mine" || view === "board" || view === "interviews" ? (
-        gardenImmersive && view === "mine" ? null : (
-          <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-            <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
-              <AppBrandHeader bare />
-              {showSparkToggle ? (
-                <div className="mt-1 mb-2 grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setSparkMode("grow")}
-                    className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
-                      sparkMode === "grow"
-                        ? "bg-white text-zinc-900 shadow-sm"
-                        : "text-zinc-500 hover:text-zinc-700"
-                    }`}
-                  >
-                    {tx("花を育てる", "Grow a flower")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSparkMode("contest")}
-                    className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
-                      sparkMode === "contest"
-                        ? "bg-white text-zinc-900 shadow-sm"
-                        : "text-zinc-500 hover:text-zinc-700"
-                    }`}
-                  >
-                    {tx("コンテスト", "Contest")}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </header>
-        )
+      {/* コンテスト側: 通常ヘッダー + トグル */}
+      {view === "mine" && sparkMode === "contest" ? (
+        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
+            <AppBrandHeader bare />
+            <div className="mt-1">{sparkToggle}</div>
+          </div>
+        </header>
+      ) : null}
+
+      {/* 花側: 元の全画面UIを壊さないよう、トグルは浮かせる */}
+      {view === "mine" && sparkMode === "grow" && showSparkToggle ? (
+        <div className="pointer-events-none fixed inset-x-0 top-[max(0.4rem,env(safe-area-inset-top))] z-40 flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-sm">{sparkToggle}</div>
+        </div>
+      ) : null}
+
+      {view === "board" || view === "interviews" ? (
+        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-1 pt-1">
+            <AppBrandHeader bare />
+          </div>
+        </header>
       ) : null}
 
       {view === "mine" && sparkMode === "grow" ? (
-        <IdeaGardenApp onImmersiveChange={setGardenImmersive} />
+        <div className={showSparkToggle ? "pt-14" : undefined}>
+          <IdeaGardenApp key={gardenKey} onImmersiveChange={setGardenImmersive} />
+        </div>
       ) : null}
 
       {view === "mine" && sparkMode === "contest" ? (
