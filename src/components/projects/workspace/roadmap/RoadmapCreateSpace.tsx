@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, Plus } from "lucide-react";
+import { ArrowLeft, Check } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   ROADMAP_PATH_LAYOUT,
   roadmapPathNodeCenter,
-  roadmapPathOffsetX,
 } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import {
@@ -44,12 +43,9 @@ type Props = {
   onConfirm: (drafts: CreateSpaceDraft[]) => Promise<void>;
 };
 
-const { nodeSize: NODE, topPad: TOP, stepY: STEP_Y, trackWidth: PATH_TRACK_W } = ROADMAP_PATH_LAYOUT;
-/** 作成空間は左に広いレーンを確保し、現存パスを右へずらす */
-const PATH_SHIFT_X = 56;
-const CREATE_TRACK_W = PATH_TRACK_W + PATH_SHIFT_X + 8;
-/** 追加マスは左側の広いスペースに固定 */
-const DRAFT_LANE_X = 44 + NODE / 2;
+const { nodeSize: NODE, topPad: TOP, stepY: STEP_Y, trackWidth: TRACK_W } = ROADMAP_PATH_LAYOUT;
+/** メインタブと同じ座標系（中央）。追加マスは行ごとの「広い側」へ */
+const DRAFT_SIDE_GAP = 88;
 const SNAP_PX = 46;
 
 type IntroPhase = "idle" | "masu" | "prevBar" | "nextBar" | "pulse" | "ready";
@@ -68,18 +64,27 @@ function barPathTopToBottom(a: { x: number; y: number }, b: { x: number; y: numb
   return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
 }
 
-/** メインタブと同じ並びの座標を、作成空間用に右へずらす */
 function existingCenter(index: number) {
-  const c = roadmapPathNodeCenter(index);
-  return { x: c.x + PATH_SHIFT_X, y: c.y };
+  return roadmapPathNodeCenter(index);
 }
 
+/** その行で余白が大きい側（左 or 右）に追加マスを置く */
 function draftCenterForAnchor(anchorIndex: number, existingCount: number) {
-  const y =
-    existingCount > 0
-      ? existingCenter(Math.min(Math.max(anchorIndex, 0), existingCount - 1)).y
-      : TOP + NODE / 2;
-  return { x: DRAFT_LANE_X, y };
+  if (existingCount <= 0) {
+    return { x: TRACK_W / 2, y: TOP + NODE / 2 };
+  }
+  const i = Math.min(Math.max(anchorIndex, 0), existingCount - 1);
+  const path = existingCenter(i);
+  const leftSpace = path.x - NODE / 2;
+  const rightSpace = TRACK_W - (path.x + NODE / 2);
+  const side = rightSpace >= leftSpace ? 1 : -1;
+  const rawX = path.x + side * DRAFT_SIDE_GAP;
+  const minX = NODE / 2 + 4;
+  const maxX = TRACK_W - NODE / 2 - 4;
+  return {
+    x: Math.min(Math.max(rawX, minX), maxX),
+    y: path.y,
+  };
 }
 
 /** いま取り組んでいるマス（進行中 → 未完了の先頭） */
@@ -139,9 +144,9 @@ function insertAtFromLinks(
 
 /**
  * マス作成専用空間：
- * - 現存マスはメインタブと同じ蛇行＋棒（右寄せ）
- * - 追加マスは左の広いレーン。上下スライドで行に吸着
- * - 棒はレーンから一つ上・一つ下へ。現存マスの下に描く
+ * - 現存マスはメインタブと同じ中央の蛇行＋棒
+ * - 追加マスは各行の広い側へ。上下スライドで行に吸着
+ * - 棒は一つ上・一つ下へ。現存マスの下に描く
  */
 export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onConfirm }: Props) {
   const { tx } = useI18n();
@@ -232,32 +237,32 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
     [existingSteps],
   );
 
-  function spawnDraft() {
-    if (busy || saving || draft) return;
-    // いま取り組んでいるマスと同じステップから開始
-    const startAnchor = currentStepIndex(existingSteps);
-    const links = linksForAnchor(existingSteps, startAnchor);
-    const next: CreateSpaceDraft = {
-      id: newDraftId(),
-      icon: resolveRoadmapMarkId(undefined, existingSteps.length),
-      prevId: links.prevId,
-      nextId: links.nextId,
-      insertAt: links.insertAt,
-      done: false,
-    };
-    setAnchorIndex(startAnchor);
-    setDraft(next);
-    setError("");
-    runSelectionIntro(next);
-  }
+  const spawnDraft = useCallback(() => {
+    if (busy || saving) return;
+    setDraft((current) => {
+      if (current) return current;
+      // いま取り組んでいるマスと同じステップから開始
+      const startAnchor = currentStepIndex(existingSteps);
+      const links = linksForAnchor(existingSteps, startAnchor);
+      const next: CreateSpaceDraft = {
+        id: newDraftId(),
+        icon: resolveRoadmapMarkId(undefined, existingSteps.length),
+        prevId: links.prevId,
+        nextId: links.nextId,
+        insertAt: links.insertAt,
+        done: false,
+      };
+      setAnchorIndex(startAnchor);
+      setError("");
+      queueMicrotask(() => runSelectionIntro(next));
+      return next;
+    });
+  }, [busy, saving, existingSteps, runSelectionIntro]);
 
-  function clearDraft() {
-    clearIntroTimers();
-    setIntroPhase("idle");
-    setDragKind(null);
-    setDragY(null);
-    setDraft(null);
-  }
+  // 横追加で開いたらすぐマスを出す（もう一度＋を押させない）
+  useEffect(() => {
+    spawnDraft();
+  }, [spawnDraft]);
 
   useEffect(() => {
     if (!dragKind || !draft || introPhase !== "ready") return;
@@ -390,22 +395,22 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
         <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
           {tx(
-            "いまのステップと同じ位置から始まります。マスや棒を上下にスライドして場所・接続を変えられます。先頭では上の棒、末尾では下の棒は出ません。",
-            "Starts at your current step. Slide the masu or bars to reconnect. No upper bar at the first step, no lower bar at the last.",
+            "いまのステップの広い側にマスを置きます。上下にスライドして場所を変え、棒で接続を調整できます。先頭では上の棒、末尾では下の棒は出ません。",
+            "Placed on the wider side of your current step. Slide to move, drag bars to reconnect. No upper bar at the first step, no lower bar at the last.",
           )}
         </p>
 
         <div
           ref={rootRef}
           className="relative mx-auto mt-5"
-          style={{ width: CREATE_TRACK_W, minHeight: contentHeight }}
+          style={{ width: TRACK_W, minHeight: contentHeight }}
         >
           {/* 灰棒は最下層 */}
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
-            width={CREATE_TRACK_W}
+            width={TRACK_W}
             height={contentHeight}
-            viewBox={`0 0 ${CREATE_TRACK_W} ${contentHeight}`}
+            viewBox={`0 0 ${TRACK_W} ${contentHeight}`}
             aria-hidden
           >
             {existingPathD ? (
@@ -426,9 +431,9 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
               className={`absolute left-0 top-0 z-[1] overflow-visible ${
                 interactive ? "touch-none" : "pointer-events-none"
               }`}
-              width={CREATE_TRACK_W}
+              width={TRACK_W}
               height={contentHeight}
-              viewBox={`0 0 ${CREATE_TRACK_W} ${contentHeight}`}
+              viewBox={`0 0 ${TRACK_W} ${contentHeight}`}
               aria-hidden
             >
               {(["prev", "next"] as const).map((end) => {
@@ -499,7 +504,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             );
           })}
 
-          {/* 追加マス（左レーン）— 登場中も色はそのまま（半透明にしない） */}
+          {/* 追加マス（広い側）— 登場中も色はそのまま */}
           {draft ? (
             <div
               className={`absolute z-[3] touch-none ${masuIntroClass} ${
@@ -533,29 +538,6 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
               </RoadmapPathNode>
             </div>
           ) : null}
-
-          {/* パス末尾の＋は1つだけ（追加マス未作成時） */}
-          {!draft ? (
-            <div
-              className="absolute z-[2]"
-              style={{
-                left: PATH_TRACK_W / 2 + PATH_SHIFT_X + roadmapPathOffsetX(existingSteps.length) - NODE / 2,
-                top: TOP + existingSteps.length * STEP_Y,
-                width: NODE,
-                height: NODE,
-              }}
-            >
-              <RoadmapPathNode
-                tone="create"
-                className="!w-auto"
-                onClick={spawnDraft}
-                disabled={busy || saving}
-                aria-label={tx("マスを追加", "Add step")}
-              >
-                <Plus className="h-8 w-8 text-white" strokeWidth={2.75} aria-hidden />
-              </RoadmapPathNode>
-            </div>
-          ) : null}
         </div>
 
         {error ? (
@@ -565,40 +547,23 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
 
       <div className="fixed inset-x-0 bottom-0 z-[75] border-t border-zinc-100 bg-white/95 px-4 pt-3 backdrop-blur-sm pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex w-full max-w-lg flex-col gap-2">
-          {draft ? (
-            <>
-              <DuoButton
-                type="button"
-                tone="orange"
-                size="md"
-                fullWidth
-                disabled={busy || saving || introPlaying}
-                onClick={() => void handleConfirm()}
-                className="gap-2 !text-[15px]"
-              >
-                <Check className="h-4 w-4" aria-hidden />
-                {saving
-                  ? tx("反映中…", "Saving…")
-                  : tx("このマスをロードマップへ", "Add this step to roadmap")}
-              </DuoButton>
-              <DuoButton type="button" tone="zinc" size="md" fullWidth onClick={clearDraft} className="!text-[15px]">
-                {tx("追加をやめる", "Cancel adding")}
-              </DuoButton>
-            </>
-          ) : (
-            <DuoButton
-              type="button"
-              tone="peach"
-              size="md"
-              fullWidth
-              disabled={busy || saving}
-              onClick={spawnDraft}
-              className="gap-2 !text-[15px]"
-            >
-              <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
-              {tx("マスを追加", "Add a step")}
-            </DuoButton>
-          )}
+          <DuoButton
+            type="button"
+            tone="orange"
+            size="md"
+            fullWidth
+            disabled={!draft || busy || saving || introPlaying}
+            onClick={() => void handleConfirm()}
+            className="gap-2 !text-[15px]"
+          >
+            <Check className="h-4 w-4" aria-hidden />
+            {saving
+              ? tx("反映中…", "Saving…")
+              : tx("このマスをロードマップへ", "Add this step to roadmap")}
+          </DuoButton>
+          <DuoButton type="button" tone="zinc" size="md" fullWidth onClick={onClose} className="!text-[15px]">
+            {tx("追加をやめる", "Cancel adding")}
+          </DuoButton>
         </div>
       </div>
     </div>

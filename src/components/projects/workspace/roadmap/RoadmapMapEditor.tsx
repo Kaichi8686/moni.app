@@ -309,40 +309,33 @@ export function RoadmapMapEditor() {
   }
 
   async function confirmCreateSpaceDrafts(doneDrafts: CreateSpaceDraft[]) {
-    if (!supabase || !roadmap.canEdit || doneDrafts.length === 0) return;
+    if (!roadmap.canEdit || doneDrafts.length === 0) {
+      throw new Error(tx("追加できるマスがありません", "Nothing to add"));
+    }
+    if (!supabase) {
+      throw new Error(tx("接続できませんでした", "Couldn’t connect"));
+    }
     setBusy(true);
     setError("");
     try {
+      const client = supabase;
+      // 最終的な並びを先に組み立ててから、一時 order → 本番 order で衝突なく書き込む
       const working = steps
         .slice()
         .sort((a, b) => a.order - b.order)
-        .map((step, index) => ({ id: step.id, order: index }));
-      // いったん 0..n-1 に揃える
-      for (const row of working) {
-        const { error: normError } = await supabase
-          .from("project_phases")
-          .update({ order: row.order })
-          .eq("id", row.id);
-        if (normError) throw new Error(normError.message);
-      }
+        .map((step) => ({ id: step.id, icon: step.icon as string | null | undefined }));
 
       const start = new Date();
       const end = addDays(start, 14);
+      const insertedIds: string[] = [];
 
       for (const [index, draft] of doneDrafts.entries()) {
-        const at = insertIndexForDraft(working, draft);
-        for (const row of working) {
-          if (row.order < at) continue;
-          const nextOrder = row.order + 1;
-          const { error: bumpError } = await supabase
-            .from("project_phases")
-            .update({ order: nextOrder })
-            .eq("id", row.id);
-          if (bumpError) throw new Error(bumpError.message);
-          row.order = nextOrder;
-        }
-
+        const at = insertIndexForDraft(
+          working.map((row, order) => ({ id: row.id, order })),
+          draft,
+        );
         const title = tx(`新しいステップ ${steps.length + index + 1}`, `New step ${steps.length + index + 1}`);
+        const tempOrder = 50_000 + index;
         const base = {
           project_id: projectId,
           title,
@@ -350,29 +343,51 @@ export function RoadmapMapEditor() {
           description: "",
           start_date: start.toISOString(),
           end_date: end.toISOString(),
-          status: "planned" as const,
+          status: working.length === 0 ? ("in_progress" as const) : ("planned" as const),
           color: "amber",
-          order: at,
+          order: tempOrder,
           icon: draft.icon,
         };
-        let { data, error: insertError } = await supabase
+        let { data, error: insertError } = await client
           .from("project_phases")
           .insert(base)
-          .select("id, order")
+          .select("id")
           .single();
         if (insertError && /icon/i.test(insertError.message)) {
           const { icon: _drop, ...withoutIcon } = base;
           void _drop;
-          ({ data, error: insertError } = await supabase
+          ({ data, error: insertError } = await client
             .from("project_phases")
             .insert(withoutIcon)
-            .select("id, order")
+            .select("id")
             .single());
         }
-        if (insertError || !data) throw new Error(insertError?.message || "insert failed");
-        working.splice(at, 0, { id: data.id as string, order: at });
+        if (insertError || !data?.id) {
+          throw new Error(insertError?.message || tx("ステップを追加できませんでした", "Couldn’t add the step"));
+        }
+        const newId = String(data.id);
+        insertedIds.push(newId);
+        working.splice(at, 0, { id: newId, icon: draft.icon });
       }
 
+      // 衝突回避のため一度ずらしてから 0..n-1 に整列
+      const TEMP = 100_000;
+      for (const [index, row] of working.entries()) {
+        const { error: tempError } = await client
+          .from("project_phases")
+          .update({ order: TEMP + index })
+          .eq("id", row.id);
+        if (tempError) throw new Error(tempError.message);
+      }
+      for (const [order, row] of working.entries()) {
+        const { error: orderError } = await client
+          .from("project_phases")
+          .update({ order })
+          .eq("id", row.id);
+        if (orderError) throw new Error(orderError.message);
+      }
+
+      void insertedIds;
       await syncReload();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
