@@ -1157,7 +1157,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const isCoachChat = pathname === `/projects/${projectId}/coach` || pathname?.startsWith(`/projects/${projectId}/coach/`);
   const isRecruitPage =
     pathname === `/projects/${projectId}/recruit` || pathname?.startsWith(`/projects/${projectId}/recruit/`);
-  const isImmersivePage = isCoachChat || isRecruitPage;
+  /** ロードマップ編集（templates は除く）はヘッダーなしの編集画面 */
+  const isRoadmapEditPage =
+    pathname === `/projects/${projectId}/roadmap` || pathname === `/projects/${projectId}/roadmap/`;
+  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1175,7 +1178,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           isRecruitPage ? "flex flex-col" : ""
         }`}
       >
-        {isCoachChat ? null : (
+        {isCoachChat || isRoadmapEditPage ? null : (
         <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
           <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
@@ -1373,7 +1376,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat
+            isCoachChat || isRoadmapEditPage
               ? "min-h-[100dvh]"
               : isRecruitPage
                 ? "min-h-0 flex-1"
@@ -1382,16 +1385,24 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         >
           <main
             className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
-              isCoachChat ? "h-[100dvh]" : isRecruitPage ? "flex min-h-0 flex-1 flex-col" : ""
+              isCoachChat
+                ? "h-[100dvh]"
+                : isRoadmapEditPage
+                  ? "min-h-[100dvh]"
+                  : isRecruitPage
+                    ? "flex min-h-0 flex-1 flex-col"
+                    : ""
             }`}
           >
             <div
               className={
                 isCoachChat
                   ? "h-full"
-                  : isRecruitPage
-                    ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
-                    : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
+                  : isRoadmapEditPage
+                    ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
+                    : isRecruitPage
+                      ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
+                      : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >
               {error && !isCoachChat ? (
