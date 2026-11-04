@@ -59,12 +59,6 @@ export function RoadmapPathNode({
         sparkle ? "roadmap-node-sparkle" : ""
       }`}
     >
-      {currentHalo ? (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -inset-[15px] rounded-full border-[3.5px] border-[#FF9600] shadow-[0_0_0_4px_rgba(255,150,0,0.22)]"
-        />
-      ) : null}
       {sparkle ? (
         <>
           <span className="roadmap-sparkle roadmap-sparkle-1" aria-hidden />
@@ -81,15 +75,23 @@ export function RoadmapPathNode({
       ) : null}
       <span
         className={`absolute inset-0 flex items-center justify-center rounded-full transition-[transform,box-shadow] duration-75 ease-out group-active:translate-y-[6px] group-active:shadow-none ${face} ${lip} ${
-          selected
+          // 進行中外枠があるときは選択リングと重ねない
+          !currentHalo && selected
             ? tone === "upcoming"
               ? "ring-4 ring-zinc-300/80"
               : "ring-4 ring-orange-300/60"
-            : sparkle
+            : !currentHalo && sparkle
               ? "ring-[5px] ring-[#FFD84D]/70"
               : ""
         }`}
       >
+        {/* マス本体の子にして同心円＋押下時も一緒に動く。すき間は狭く1本だけ */}
+        {currentHalo ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -inset-[5px] rounded-full border-[3px] border-[#FF9600]"
+          />
+        ) : null}
         <span
           aria-hidden
           className="pointer-events-none absolute inset-[10%] rounded-full"
