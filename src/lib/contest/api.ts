@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEMO_CONTEST, DEMO_ENTRIES, isMissingRelationError } from "@/lib/contest/demo";
+import { DEMO_CONTEST, DEMO_IDEAS, isMissingRelationError } from "@/lib/contest/demo";
 import type {
   Contest,
-  ContestEntry,
   ContestGallerySort,
+  ContestIdea,
   ContestRoadmap,
   ContestRoadmapStep,
   ContestStatus,
@@ -84,27 +84,27 @@ export async function loadActiveContest(client: SupabaseClient): Promise<{ conte
   return { contest: mapContest(data as Record<string, unknown>), demo: false };
 }
 
-export async function loadContestEntries(
+export async function loadContestIdeas(
   client: SupabaseClient,
   contestId: string,
   userId: string | null,
   sort: ContestGallerySort,
-): Promise<{ entries: ContestEntry[]; demo: boolean }> {
+): Promise<{ ideas: ContestIdea[]; demo: boolean }> {
   if (contestId === DEMO_CONTEST.id) {
-    let entries = DEMO_ENTRIES.map((e) => ({ ...e }));
-    if (sort === "newest") entries = [...entries].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-    if (sort === "mine") entries = userId ? entries.filter((e) => e.userId === userId) : [];
-    else if (sort === "popular") entries = [...entries].sort((a, b) => b.likeCount - a.likeCount);
-    return { entries, demo: true };
+    let ideas = DEMO_IDEAS.map((e) => ({ ...e }));
+    if (sort === "newest") ideas = [...ideas].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    else if (sort === "mine") ideas = userId ? ideas.filter((e) => e.userId === userId) : [];
+    else ideas = [...ideas].sort((a, b) => b.likeCount - a.likeCount);
+    return { ideas, demo: true };
   }
 
   let q = client
-    .from("contest_entries")
-    .select("id,contest_id,user_id,roadmap_id,comment,like_count,created_at")
+    .from("contest_ideas")
+    .select("id,contest_id,user_id,title,content,appeal,roadmap_id,image_url,external_url,like_count,created_at")
     .eq("contest_id", contestId);
 
   if (sort === "mine") {
-    if (!userId) return { entries: [], demo: false };
+    if (!userId) return { ideas: [], demo: false };
     q = q.eq("user_id", userId).order("created_at", { ascending: false });
   } else if (sort === "newest") {
     q = q.order("created_at", { ascending: false });
@@ -115,24 +115,26 @@ export async function loadContestEntries(
   const { data, error } = await q.limit(80);
   if (error) {
     if (isMissingRelationError(error)) {
-      return loadContestEntries(client, DEMO_CONTEST.id, userId, sort);
+      return loadContestIdeas(client, DEMO_CONTEST.id, userId, sort);
     }
     throw new Error(error.message);
   }
 
   const rows = (data ?? []) as Array<Record<string, unknown>>;
-  if (!rows.length) return { entries: [], demo: false };
+  if (!rows.length) return { ideas: [], demo: false };
 
-  const entryIds = rows.map((r) => String(r.id));
-  const roadmapIds = [...new Set(rows.map((r) => String(r.roadmap_id)))];
+  const ideaIds = rows.map((r) => String(r.id));
+  const roadmapIds = [...new Set(rows.map((r) => r.roadmap_id).filter(Boolean).map(String))];
   const authorIds = [...new Set(rows.map((r) => String(r.user_id)))];
 
   const [{ data: roadmaps }, { data: profiles }, likesRes] = await Promise.all([
-    client.from("roadmaps").select("id,user_id,title,steps,source_project_id,created_at").in("id", roadmapIds),
+    roadmapIds.length
+      ? client.from("roadmaps").select("id,user_id,title,steps,source_project_id,created_at").in("id", roadmapIds)
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
     client.from("profiles").select("id,display_name,avatar_url").in("id", authorIds),
     userId
-      ? client.from("contest_entry_likes").select("entry_id").eq("user_id", userId).in("entry_id", entryIds)
-      : Promise.resolve({ data: [] as Array<{ entry_id: string }> }),
+      ? client.from("contest_idea_likes").select("idea_id").eq("user_id", userId).in("idea_id", ideaIds)
+      : Promise.resolve({ data: [] as Array<{ idea_id: string }> }),
   ]);
 
   const roadmapById = new Map(
@@ -148,94 +150,37 @@ export async function loadContestEntries(
       },
     ]),
   );
-  const liked = new Set(((likesRes.data ?? []) as Array<{ entry_id: string }>).map((l) => l.entry_id));
+  const liked = new Set(((likesRes.data ?? []) as Array<{ idea_id: string }>).map((l) => l.idea_id));
 
-  const entries: ContestEntry[] = [];
-  for (const r of rows) {
-    const roadmap = roadmapById.get(String(r.roadmap_id));
-    if (!roadmap) continue;
+  const ideas: ContestIdea[] = rows.map((r) => {
     const uid = String(r.user_id);
-    const author = profileById.get(uid) ?? {
-      id: uid,
-      displayName: "ユーザー",
-      avatarUrl: null,
-    };
-    entries.push({
+    const roadmapId = (r.roadmap_id as string | null) ?? null;
+    return {
       id: String(r.id),
       contestId: String(r.contest_id),
       userId: uid,
-      roadmapId: String(r.roadmap_id),
-      comment: (r.comment as string | null) ?? null,
+      title: String(r.title ?? ""),
+      content: String(r.content ?? ""),
+      appeal: (r.appeal as string | null) ?? null,
+      roadmapId,
+      imageUrl: (r.image_url as string | null) ?? null,
+      externalUrl: (r.external_url as string | null) ?? null,
       likeCount: Number(r.like_count ?? 0),
       createdAt: String(r.created_at),
       likedByMe: liked.has(String(r.id)),
-      author,
-      roadmap,
-    });
-  }
-
-  return { entries, demo: false };
-}
-
-export async function createRoadmap(
-  client: SupabaseClient,
-  userId: string,
-  input: { title: string; steps: ContestRoadmapStep[]; sourceProjectId?: string | null },
-): Promise<ContestRoadmap> {
-  const { data, error } = await client
-    .from("roadmaps")
-    .insert({
-      user_id: userId,
-      title: input.title.trim().slice(0, 120),
-      steps: input.steps,
-      source_project_id: input.sourceProjectId ?? null,
-    })
-    .select("id,user_id,title,steps,source_project_id,created_at")
-    .single();
-  if (error) throw new Error(error.message);
-  return mapRoadmap(data as Record<string, unknown>);
-}
-
-export async function submitContestEntry(
-  client: SupabaseClient,
-  userId: string,
-  input: { contestId: string; roadmapId: string; comment?: string },
-): Promise<void> {
-  const { error } = await client.from("contest_entries").insert({
-    contest_id: input.contestId,
-    user_id: userId,
-    roadmap_id: input.roadmapId,
-    comment: input.comment?.trim().slice(0, 140) || null,
+      author: profileById.get(uid) ?? { id: uid, displayName: "ユーザー", avatarUrl: null },
+      roadmap: roadmapId ? roadmapById.get(roadmapId) ?? null : null,
+    };
   });
-  if (error) throw new Error(error.message);
+
+  return { ideas, demo: false };
 }
 
-export async function toggleEntryLike(
+export async function createRoadmapFromProject(
   client: SupabaseClient,
   userId: string,
-  entryId: string,
-  currentlyLiked: boolean,
-): Promise<void> {
-  if (currentlyLiked) {
-    const { error } = await client
-      .from("contest_entry_likes")
-      .delete()
-      .eq("entry_id", entryId)
-      .eq("user_id", userId);
-    if (error) throw new Error(error.message);
-    return;
-  }
-  const { error } = await client.from("contest_entry_likes").insert({
-    entry_id: entryId,
-    user_id: userId,
-  });
-  if (error) throw new Error(error.message);
-}
-
-export async function loadProjectPhasesAsSteps(
-  client: SupabaseClient,
   projectId: string,
-): Promise<{ title: string; steps: ContestRoadmapStep[] }> {
+): Promise<ContestRoadmap> {
   const [{ data: project }, { data: phases }] = await Promise.all([
     client.from("projects").select("id,name").eq("id", projectId).maybeSingle(),
     client
@@ -246,8 +191,7 @@ export async function loadProjectPhasesAsSteps(
       .limit(12),
   ]);
 
-  const title = String((project as { name?: string } | null)?.name ?? "マイロードマップ");
-  const steps = ((phases ?? []) as Array<{ title?: string; goal?: string | null }>).map((p) => ({
+  let steps: ContestRoadmapStep[] = ((phases ?? []) as Array<{ title?: string; goal?: string | null }>).map((p) => ({
     title: String(p.title ?? "").trim() || "ステップ",
     detail: p.goal ? String(p.goal).trim() : undefined,
   }));
@@ -259,11 +203,87 @@ export async function loadProjectPhasesAsSteps(
       .eq("project_id", projectId)
       .order("position", { ascending: true })
       .limit(12);
-    const legacySteps = ((legacy ?? []) as Array<{ title?: string }>).map((s) => ({
+    steps = ((legacy ?? []) as Array<{ title?: string }>).map((s) => ({
       title: String(s.title ?? "").trim() || "ステップ",
     }));
-    return { title, steps: legacySteps };
   }
 
-  return { title, steps };
+  const title = String((project as { name?: string } | null)?.name ?? "マイロードマップ");
+  const { data, error } = await client
+    .from("roadmaps")
+    .insert({
+      user_id: userId,
+      title: title.slice(0, 120),
+      steps,
+      source_project_id: projectId,
+    })
+    .select("id,user_id,title,steps,source_project_id,created_at")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapRoadmap(data as Record<string, unknown>);
+}
+
+export type SubmitIdeaInput = {
+  contestId: string;
+  title: string;
+  content: string;
+  appeal?: string;
+  roadmapId?: string | null;
+  imageUrl?: string | null;
+  externalUrl?: string | null;
+};
+
+export async function submitContestIdea(
+  client: SupabaseClient,
+  userId: string,
+  input: SubmitIdeaInput,
+): Promise<void> {
+  const title = input.title.trim().slice(0, 40);
+  const content = input.content.trim();
+  if (!title || !content) throw new Error("タイトルと内容は必須です");
+
+  const { error } = await client.from("contest_ideas").insert({
+    contest_id: input.contestId,
+    user_id: userId,
+    title,
+    content,
+    appeal: input.appeal?.trim().slice(0, 140) || null,
+    roadmap_id: input.roadmapId || null,
+    image_url: input.imageUrl || null,
+    external_url: input.externalUrl?.trim() || null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function toggleIdeaLike(
+  client: SupabaseClient,
+  userId: string,
+  ideaId: string,
+  currentlyLiked: boolean,
+): Promise<void> {
+  if (currentlyLiked) {
+    const { error } = await client.from("contest_idea_likes").delete().eq("idea_id", ideaId).eq("user_id", userId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await client.from("contest_idea_likes").insert({ idea_id: ideaId, user_id: userId });
+  if (error) throw new Error(error.message);
+}
+
+export async function uploadContestImage(
+  client: SupabaseClient,
+  userId: string,
+  file: File,
+): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("画像ファイルを選んでください");
+  if (file.size > 5 * 1024 * 1024) throw new Error("画像は5MB以下にしてください");
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `${userId}/contest/${Date.now()}.${ext}`;
+  const { error } = await client.storage.from("post-images").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || "image/jpeg",
+  });
+  if (error) throw new Error(error.message);
+  return client.storage.from("post-images").getPublicUrl(path).data.publicUrl;
 }

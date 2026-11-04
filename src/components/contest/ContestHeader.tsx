@@ -1,6 +1,6 @@
 "use client";
 
-import { Gift, Sparkles } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { daysLeft } from "@/lib/contest/api";
 import type { Contest } from "@/lib/contest/types";
@@ -8,11 +8,12 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   contest: Contest;
+  ideaCount: number;
   onApply: () => void;
   demo?: boolean;
 };
 
-export function ContestHeader({ contest, onApply, demo }: Props) {
+export function ContestHeader({ contest, ideaCount, onApply, demo }: Props) {
   const { tx } = useI18n();
   const left = daysLeft(contest.endAt);
   const active = contest.status === "active" && left > 0;
@@ -38,6 +39,9 @@ export function ContestHeader({ contest, onApply, demo }: Props) {
               {tx(`残り ${left}日`, `${left}d left`)}
             </span>
           ) : null}
+          <span className="inline-flex items-center rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-zinc-600 ring-1 ring-zinc-200">
+            {tx(`${ideaCount} 投稿`, `${ideaCount} posts`)}
+          </span>
           {demo ? (
             <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-500">
               {tx("プレビュー", "Preview")}
@@ -62,22 +66,9 @@ export function ContestHeader({ contest, onApply, demo }: Props) {
           </div>
         ) : null}
 
-        {contest.rewardText ? (
-          <div className="flex items-start gap-2.5 text-sm text-zinc-700">
-            <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-100">
-              <Gift className="h-3.5 w-3.5" aria-hidden />
-            </span>
-            <p className="leading-relaxed">
-              <span className="font-semibold text-zinc-900">{tx("特典", "Perks")}</span>
-              <span className="text-zinc-400"> · </span>
-              {contest.rewardText}
-            </p>
-          </div>
-        ) : null}
-
         <DuoButton type="button" fullWidth size="lg" onClick={onApply} disabled={!active} className="gap-2">
-          <Sparkles className="h-4 w-4" aria-hidden />
-          {tx("この課題のロードマップを作成して応募", "Create a roadmap & enter")}
+          <Lightbulb className="h-4 w-4" aria-hidden />
+          {tx("アイデアを発表・応募する", "Share your idea")}
         </DuoButton>
       </div>
     </section>

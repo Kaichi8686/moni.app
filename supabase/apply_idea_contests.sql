@@ -1,3 +1,4 @@
+-- レガシー: ロードマップ応募版。新規は apply_contest_ideas_free_format.sql を使ってください。
 -- アイデアコンテスト（悩み課題 × 解決ロードマップ応募）
 -- 依存: auth.users, public.profiles（任意）, public.projects（任意・既存RM転用）
 
