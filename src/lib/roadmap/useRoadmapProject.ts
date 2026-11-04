@@ -145,7 +145,8 @@ export function useRoadmapProject(projectId: string) {
         icon: string;
       }>,
     ) => {
-      if (!supabase || !canEdit) return;
+      if (!supabase) throw new Error("Supabase に接続できません");
+      if (!canEdit) throw new Error("編集権限がありません");
       const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (patch.title !== undefined) row.title = patch.title.trim();
       if (patch.goal !== undefined) row.goal = patch.goal.trim();
