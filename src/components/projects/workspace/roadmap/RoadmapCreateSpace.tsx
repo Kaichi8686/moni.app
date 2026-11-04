@@ -43,11 +43,28 @@ const TOP = 28;
 const GAP = 108;
 const TRACK_W = 360;
 
+/** 選択時イントロ: マス出現 → 上棒 → 下棒 → パルス → 操作可 */
+type IntroPhase = "idle" | "masu" | "prevBar" | "nextBar" | "pulse" | "ready";
+
+const INTRO_MASU_MS = 320;
+const INTRO_BAR_MS = 420;
+const INTRO_PULSE_MS = 380;
+
 function centerOf(index: number, columnX: number) {
   return {
     x: columnX + NODE / 2,
     y: TOP + index * GAP + NODE / 2,
   };
+}
+
+/** 高い端 → 低い端の順で path を作り、上から下へ描画できるようにする */
+function barPathTopToBottom(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+) {
+  const start = a.y <= b.y ? a : b;
+  const end = a.y <= b.y ? b : a;
+  return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
 }
 
 function newDraftId() {
@@ -79,8 +96,10 @@ function buildInitialDrafts(existing: CreateSpaceExistingStep[]): CreateSpaceDra
 export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onConfirm }: Props) {
   const { tx } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const introTimersRef = useRef<number[]>([]);
   const [drafts, setDrafts] = useState<CreateSpaceDraft[]>(() => buildInitialDrafts(existingSteps));
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
   const [dragEnd, setDragEnd] = useState<"prev" | "next" | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -90,6 +109,44 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
     existingSteps.forEach((step, index) => map.set(step.id, { ...step, index }));
     return map;
   }, [existingSteps]);
+
+  const clearIntroTimers = useCallback(() => {
+    introTimersRef.current.forEach((id) => window.clearTimeout(id));
+    introTimersRef.current = [];
+  }, []);
+
+  const runSelectionIntro = useCallback(
+    (draft: CreateSpaceDraft) => {
+      clearIntroTimers();
+      setIntroPhase("masu");
+
+      const hasPrev = Boolean(draft.prevId && existingById.has(draft.prevId));
+      const hasNext = Boolean(draft.nextId && existingById.has(draft.nextId));
+
+      const schedule = (ms: number, fn: () => void) => {
+        const id = window.setTimeout(fn, ms);
+        introTimersRef.current.push(id);
+      };
+
+      let elapsed = INTRO_MASU_MS;
+
+      if (hasPrev) {
+        schedule(elapsed, () => setIntroPhase("prevBar"));
+        elapsed += INTRO_BAR_MS;
+      }
+      if (hasNext) {
+        schedule(elapsed, () => setIntroPhase("nextBar"));
+        elapsed += INTRO_BAR_MS;
+      }
+
+      schedule(elapsed, () => setIntroPhase("pulse"));
+      elapsed += INTRO_PULSE_MS;
+      schedule(elapsed, () => setIntroPhase("ready"));
+    },
+    [clearIntroTimers, existingById],
+  );
+
+  useEffect(() => () => clearIntroTimers(), [clearIntroTimers]);
 
   const activeIndex = drafts.findIndex((draft) => draft.id === activeDraftId);
   const activeDraft = activeIndex >= 0 ? drafts[activeIndex] : null;
@@ -165,27 +222,52 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
   function selectDraft(draftId: string) {
     const index = drafts.findIndex((draft) => draft.id === draftId);
     if (index < 0 || index > workIndex) return;
-    if (drafts[index]?.done) return;
+    const draft = drafts[index];
+    if (!draft || draft.done) return;
+    if (introPhase !== "idle" && introPhase !== "ready") return;
+    if (draftId === activeDraftId && introPhase === "ready") return;
+    setDragEnd(null);
     setActiveDraftId(draftId);
+    runSelectionIntro(draft);
   }
 
   function clearSelection() {
+    clearIntroTimers();
+    setIntroPhase("idle");
     setActiveDraftId(null);
     setDragEnd(null);
   }
 
   function markActiveDone() {
     if (!activeDraft) return;
+    if (introPhase !== "ready") return;
     if (!activeDraft.prevId && !activeDraft.nextId && existingSteps.length > 0) {
       setError(tx("上下どちらかの棒を現存マスにつないでください", "Connect at least one bar to an existing step"));
       return;
     }
     setError("");
+    clearIntroTimers();
+    setIntroPhase("idle");
     setDrafts((prev) =>
       prev.map((draft) => (draft.id === activeDraft.id ? { ...draft, done: true } : draft)),
     );
     setActiveDraftId(null);
   }
+
+  const introPlaying = introPhase !== "idle" && introPhase !== "ready";
+  const showPrevBar =
+    introPhase === "prevBar" ||
+    introPhase === "nextBar" ||
+    introPhase === "pulse" ||
+    introPhase === "ready";
+  const showNextBar = introPhase === "nextBar" || introPhase === "pulse" || introPhase === "ready";
+  const showHandles = introPhase === "ready";
+  const masuIntroClass =
+    introPhase === "masu"
+      ? "roadmap-create-masu-appear"
+      : introPhase === "pulse"
+        ? "roadmap-create-masu-pulse"
+        : "";
 
   function addDraftColumn() {
     setDrafts((prev) => {
@@ -285,14 +367,14 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             return (
               <div
                 key={draft.id}
-                className="absolute"
+                className={`absolute z-[1] ${isActive ? masuIntroClass : ""}`}
                 style={{ left: c.x - NODE / 2, top: c.y - NODE / 2, width: NODE, height: NODE }}
               >
                 <RoadmapPathNode
                   tone={draft.done ? "done" : "create"}
-                  sparkle={isActive}
+                  sparkle={isActive && !introPlaying}
                   selected={isActive || draft.done}
-                  disabled={locked || draft.done || busy || saving}
+                  disabled={locked || draft.done || busy || saving || introPlaying}
                   className="!w-auto"
                   onClick={() => selectDraft(draft.id)}
                   aria-label={tx(`追加マス ${index + 1}`, `New step ${index + 1}`)}
@@ -307,7 +389,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             );
           })}
 
-          {/* 選択中の上下棒 */}
+          {/* 選択中の上下棒（上→下へ描画） */}
           {activeDraft ? (
             <svg
               className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
@@ -321,16 +403,22 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 if (!targetId) return null;
                 const target = existingById.get(targetId);
                 if (!target) return null;
+                const visible = end === "prev" ? showPrevBar : showNextBar;
+                if (!visible) return null;
+                const drawing = end === "prev" ? introPhase === "prevBar" : introPhase === "nextBar";
                 const from = centerOf(activeIndex, DRAFT_X);
                 const to = centerOf(target.index, EXISTING_X);
                 return (
                   <g key={end}>
                     <path
-                      d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+                      key={`${activeDraft.id}-${end}-${drawing ? "draw" : "solid"}`}
+                      d={barPathTopToBottom(from, to)}
+                      pathLength={1}
                       fill="none"
                       stroke="#F97316"
                       strokeWidth={12}
                       strokeLinecap="round"
+                      className={drawing ? "roadmap-create-bar-draw" : undefined}
                     />
                   </g>
                 );
@@ -338,7 +426,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
             </svg>
           ) : null}
 
-          {/* 棒の先（ドラッグハンドル） */}
+          {/* 棒の先（ドラッグハンドル）— イントロ完了後に表示 */}
           {activeDraft
             ? (["prev", "next"] as const).map((end) => {
                 const targetId = end === "prev" ? activeDraft.prevId : activeDraft.nextId;
@@ -356,14 +444,16 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                     type="button"
                     className={`absolute z-[2] h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${
                       dragEnd === end ? "bg-orange-600" : "bg-orange-400"
-                    }`}
+                    } ${showHandles ? "roadmap-create-handle-in" : "roadmap-create-handle-hidden"}`}
                     style={{ left: handle.x, top: handle.y }}
                     aria-label={
                       end === "prev"
                         ? tx("上の棒をスライド", "Slide upper bar")
                         : tx("下の棒をスライド", "Slide lower bar")
                     }
+                    disabled={!showHandles}
                     onPointerDown={(event) => {
+                      if (!showHandles) return;
                       event.preventDefault();
                       setDragEnd(end);
                     }}
@@ -387,7 +477,7 @@ export function RoadmapCreateSpace({ existingSteps, busy = false, onClose, onCon
                 tone="orange"
                 size="md"
                 fullWidth
-                disabled={busy || saving}
+                disabled={busy || saving || introPlaying}
                 onClick={markActiveDone}
                 className="gap-2 !text-[15px]"
               >
