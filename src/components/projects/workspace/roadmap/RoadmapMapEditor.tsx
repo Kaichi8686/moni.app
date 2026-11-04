@@ -6,6 +6,7 @@ import { ArrowLeft, Map, Plus, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
@@ -297,7 +298,7 @@ export function RoadmapMapEditor() {
                   "マスをタップして名前・絵・ゴール・詳細を編集できます。",
                   "Tap a step to edit its name, icon, goal, and details.",
                 )
-              : tx("右下の作成、または＋のマスから最初のステップを追加しよう。", "Add the first step from Create or the + node.")}
+              : tx("右下のマス作成、または＋のマスから最初のステップを追加しよう。", "Add the first step from Create step or the + node.")}
           </p>
         </div>
       </div>
@@ -469,16 +470,20 @@ export function RoadmapMapEditor() {
       </button>
 
       {showCreateFab ? (
-        <button
-          type="button"
-          onClick={openCreateSheet}
-          disabled={busy}
-          className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(249,115,22,0.35)] transition hover:bg-orange-600 disabled:opacity-40 md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))]"
-          aria-label={tx("マスを作成", "Create step")}
-        >
-          <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
-          {tx("作成", "Create")}
-        </button>
+        <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))]">
+          <DuoButton
+            type="button"
+            tone="orange"
+            size="md"
+            onClick={openCreateSheet}
+            disabled={busy}
+            className="gap-2 !px-4 !py-3.5 !text-[15px]"
+            aria-label={tx("マスを作成", "Create step")}
+          >
+            <Plus className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />
+            {tx("マス作成", "Create step")}
+          </DuoButton>
+        </div>
       ) : null}
 
       <RoadmapPhaseEditSheet
