@@ -150,6 +150,15 @@ export default function DiscoverPage() {
       ) : null}
 
       <main className="mobile-content-inset mx-auto w-full max-w-none space-y-4 py-4 sm:max-w-lg">
+        <Link
+          href="/contest"
+          className="block overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-white to-[#EEF0FF] p-4 shadow-sm transition active:scale-[0.99]"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-600">{t("contestNav")}</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-900">{t("contestDiscoverCard")}</p>
+          <p className="mt-2 text-sm font-semibold text-[#5E6AD2]">{t("contestDiscoverCta")}</p>
+        </Link>
+
         {msg ? <p className="text-sm text-violet-700">{msg}</p> : null}
         {err ? <p className="text-sm text-rose-600">{err}</p> : null}
 
