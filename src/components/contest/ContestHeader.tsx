@@ -42,11 +42,6 @@ export function ContestHeader({ contest, ideaCount, onApply, demo }: Props) {
           <span className="inline-flex items-center rounded-full bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-zinc-600 ring-1 ring-zinc-200">
             {tx(`${ideaCount} 投稿`, `${ideaCount} posts`)}
           </span>
-          {demo ? (
-            <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-500">
-              {tx("プレビュー", "Preview")}
-            </span>
-          ) : null}
         </div>
 
         <div>

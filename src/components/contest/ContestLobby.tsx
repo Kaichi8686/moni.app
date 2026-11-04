@@ -26,7 +26,6 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
   const { tx } = useI18n();
   const [filter, setFilter] = useState<LobbyFilter>("active");
   const [items, setItems] = useState<ContestLobbyItem[]>([]);
-  const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -38,9 +37,8 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
     setLoading(true);
     setErr("");
     try {
-      const { items: rows, demo: isDemo } = await loadContestLobby(supabase, next);
+      const { items: rows } = await loadContestLobby(supabase, next);
       setItems(rows);
-      setDemo(isDemo);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed");
     } finally {
@@ -88,11 +86,6 @@ export function ContestLobby({ onEnter, onCreate }: Props) {
           </button>
         </div>
 
-        {demo ? (
-          <p className="mb-2 text-center text-[11px] font-medium text-zinc-400">
-            {tx("プレビュー表示（DB未適用時）", "Preview (DB not applied yet)")}
-          </p>
-        ) : null}
         {err ? <p className="mb-2 text-sm text-rose-600">{err}</p> : null}
 
         {loading ? (

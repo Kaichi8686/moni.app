@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEMO_CONTEST, DEMO_IDEAS, isMissingRelationError } from "@/lib/contest/demo";
+import { DEMO_CONTEST, DEMO_CONTEST_SECONDARY, DEMO_IDEAS, isMissingRelationError } from "@/lib/contest/demo";
 import type {
   Contest,
   ContestGallerySort,
@@ -57,21 +57,8 @@ export function daysLeft(endAt: string, now = Date.now()): number {
 export type ContestLobbyItem = Contest & { ideaCount: number };
 
 const DEMO_LOBBY: ContestLobbyItem[] = [
-  { ...DEMO_CONTEST, ideaCount: DEMO_IDEAS.length },
-  {
-    id: "demo-contest-2",
-    title: "朝起きられない問題をどうにかしたい",
-    description: "アラームを何度もスヌーズしてしまう朝の習慣を変えるアイデアを募集。",
-    whyText: null,
-    rewardText: null,
-    promptHint: null,
-    category: "habits",
-    startAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    endAt: new Date(Date.now() + 7 * 86400000).toISOString(),
-    status: "active",
-    createdAt: new Date().toISOString(),
-    ideaCount: 5,
-  },
+  { ...DEMO_CONTEST, ideaCount: 0 },
+  { ...DEMO_CONTEST_SECONDARY, ideaCount: 0 },
 ];
 
 /** ロビー用：開催中〜終了のコンテスト一覧 */
