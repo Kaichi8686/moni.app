@@ -165,6 +165,23 @@ export function useRoadmapProject(projectId: string) {
         }
         throw new Error(err.message);
       }
+      // reload 前にローカルへ反映（シートが一瞬閉じたりアイコンが戻って見えないのを防ぐ）
+      setPhases((prev) =>
+        prev.map((phase) => {
+          if (phase.id !== phaseId) return phase;
+          return {
+            ...phase,
+            title: patch.title !== undefined ? patch.title.trim() : phase.title,
+            goal: patch.goal !== undefined ? patch.goal.trim() : phase.goal,
+            description:
+              patch.description !== undefined ? patch.description.trim() : phase.description,
+            status: patch.status !== undefined ? patch.status : phase.status,
+            startDate: patch.startDate !== undefined ? patch.startDate : phase.startDate,
+            endDate: patch.endDate !== undefined ? patch.endDate : phase.endDate,
+            icon: patch.icon !== undefined ? patch.icon.trim() || "star" : phase.icon,
+          };
+        }),
+      );
       await reload();
     },
     [canEdit, reload],
