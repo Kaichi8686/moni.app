@@ -189,16 +189,6 @@ export function DocumentsHomeList({
                     onClick={() => setMenuId(null)}
                   />
                   <div className="absolute right-2 top-full z-50 min-w-[140px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
-                    <button
-                      type="button"
-                      className="block w-full px-4 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
-                      onClick={() => {
-                        setMenuId(null);
-                        onOpen(d.id);
-                      }}
-                    >
-                      開く
-                    </button>
                     {canEdit && onDelete ? (
                       <button
                         type="button"
@@ -210,7 +200,9 @@ export function DocumentsHomeList({
                       >
                         削除
                       </button>
-                    ) : null}
+                    ) : (
+                      <p className="px-4 py-2.5 text-[13px] text-[#5f6368]">行をタップで開きます</p>
+                    )}
                   </div>
                 </>
               ) : null}
