@@ -12,6 +12,7 @@ import {
   type ProjectDocumentRow,
   wordCountFromDocContent,
 } from "@/lib/projects/documents";
+import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 
 function isSchemaError(error?: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -32,7 +33,6 @@ export default function WorkspaceDocuments() {
   const [docContent, setDocContent] = useState("");
   const [docCreating, setDocCreating] = useState(false);
   const [docSaving, setDocSaving] = useState(false);
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [leavingEditor, setLeavingEditor] = useState(false);
   const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
 
@@ -232,11 +232,16 @@ export default function WorkspaceDocuments() {
       return;
     }
     setDocuments((prev) => prev.filter((d) => d.id !== id));
-    if (selectedDocId === id) setSelectedDocId(null);
     if (activeDocId === id) {
       setActiveDocId(null);
       setViewMode("list");
     }
+  }
+
+  async function uploadDocImage(file: File): Promise<string> {
+    if (!supabase || !uid || !projectId) throw new Error("画像を追加するにはログインが必要です。");
+    const uploaded = await uploadProjectImage(supabase, uid, "project-doc", projectId, file);
+    return uploaded.publicUrl;
   }
 
   if (workspaceLoading || docsLoading) {
@@ -260,8 +265,6 @@ export default function WorkspaceDocuments() {
           canEdit={canEdit}
           docCreating={docCreating}
           userInitial={userInitial}
-          selectedDocId={selectedDocId}
-          onSelectDoc={setSelectedDocId}
           onOpen={openDocument}
           onCreate={() => void createDocument()}
           onDelete={canEdit ? (id) => void deleteDocument(id) : undefined}
@@ -290,6 +293,7 @@ export default function WorkspaceDocuments() {
           activeDoc?.updated_by ? (memberNames[activeDoc.updated_by] ?? "メンバー") : "—"
         }
         hideSidebar
+        onUploadImage={canEdit ? uploadDocImage : undefined}
         onBack={() => {
           setViewMode("list");
           if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
