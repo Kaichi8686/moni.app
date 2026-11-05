@@ -369,6 +369,12 @@ html.moni-landing-active {
   padding-bottom: var(--bottom-nav-clearance);
 }
 
+/* ドキュメント編集フルスクリーン: 下タブ・ヘッダーを隠す */
+html.moni-doc-editor .app-bottom-nav,
+html.moni-doc-editor .project-workspace-header {
+  display: none !important;
+}
+
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;
