@@ -143,6 +143,8 @@ type Props = {
   onBack?: () => void;
   /** 写真アップロード。公開 URL を返す。未指定時はプラスからの写真追加は無効 */
   onUploadImage?: (file: File) => Promise<string>;
+  /** 画面全体で編集（タブバー・余白なし）。Workspace のドキュメント編集向け */
+  fullscreen?: boolean;
 };
 
 export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, Props>(function ProjectGoogleDocsShell(
@@ -161,6 +163,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     hideSidebar = false,
     onBack,
     onUploadImage,
+    fullscreen = false,
   },
   ref,
 ) {
@@ -483,14 +486,18 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     return `最終更新: ${updatedByLabel} · ${wordCount} 語 · ${saveHint}`;
   }, [activeDocId, saveHint, updatedByLabel, wordCount]);
 
-  const showSidebar = !hideSidebar && sidebar;
+  const showSidebar = !hideSidebar && sidebar && !fullscreen;
   const editing = activeDocId !== null && autoSave;
 
   return (
     <section
-      className={`flex min-h-[min(70dvh,720px)] flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white lg:min-h-[min(75dvh,780px)] ${
-        showSidebar ? "lg:flex-row" : ""
-      }`}
+      className={
+        fullscreen
+          ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-white"
+          : `flex min-h-[min(70dvh,720px)] flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white lg:min-h-[min(75dvh,780px)] ${
+              showSidebar ? "lg:flex-row" : ""
+            }`
+      }
     >
       {showSidebar ? (
         <aside className="flex max-h-[200px] shrink-0 flex-col border-b border-[#E5E7EB] bg-[#FAFAFA] lg:max-h-none lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r xl:w-60">
@@ -500,7 +507,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Google Docs 風トップバー: 完了 / 元に戻す・やり直し・＋ */}
-        <div className="relative flex items-center gap-0.5 border-b border-[#e8eaed] bg-white px-1.5 py-1">
+        <div
+          className={`relative flex items-center gap-0.5 border-b border-[#e8eaed] bg-white px-1.5 py-1 ${
+            fullscreen ? "pt-[max(0.25rem,env(safe-area-inset-top))]" : ""
+          }`}
+        >
           {onBack ? (
             <button
               type="button"
@@ -594,13 +605,23 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           <p className="border-b border-[#e8f0fe] bg-[#e8f0fe] px-3 py-1.5 text-[12px] text-[#174ea6]">写真を追加中…</p>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#F3F4F6] px-3 py-4 sm:px-6 sm:py-6">
+        <div
+          className={
+            fullscreen
+              ? "min-h-0 flex-1 overflow-y-auto bg-white"
+              : "min-h-0 flex-1 overflow-y-auto bg-[#F3F4F6] px-3 py-4 sm:px-6 sm:py-6"
+          }
+        >
           {activeDocId === null ? (
             <p className="py-12 text-center text-sm text-[#6B7280]">ドキュメントを選択するか、新規作成してください。</p>
           ) : (
             <div
-              className="mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
-              style={{ maxWidth: PAGE_MAX_WIDTH }}
+              className={
+                fullscreen
+                  ? "mx-auto flex min-h-full w-full flex-col bg-white"
+                  : "mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
+              }
+              style={fullscreen ? undefined : { maxWidth: PAGE_MAX_WIDTH }}
             >
               <div
                 ref={editorRef}
@@ -614,10 +635,12 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 onMouseUp={rememberSelection}
                 onKeyUp={rememberSelection}
                 onSelect={rememberSelection}
-                className="gdocs-editor-body w-full outline-none"
+                className="gdocs-editor-body w-full flex-1 outline-none"
                 style={{
-                  minHeight: PAGE_MIN_HEIGHT,
-                  padding: "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
+                  minHeight: fullscreen ? "100%" : PAGE_MIN_HEIGHT,
+                  padding: fullscreen
+                    ? "1rem 1.25rem 1.5rem"
+                    : "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
                   boxSizing: "border-box",
                 }}
               />
@@ -625,9 +648,15 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           )}
         </div>
 
-        {/* キーボード直上の文字設定バー（Google Docs 風） */}
-        <div className="relative shrink-0 border-t border-[#dadce0] bg-white">
-          <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* キーボード直上の文字設定バー（Google Docs 風）— 画面下端に常時表示 */}
+        <div
+          className={`relative z-10 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.06)] ${
+            fullscreen ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]" : ""
+          }`}
+          role="toolbar"
+          aria-label="文字の書式"
+        >
+          <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <ToolBtn
               title="太字"
               onClick={() => {
@@ -870,9 +899,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           </div>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E5E7EB] bg-white px-3 py-1.5 text-[11px] text-[#6B7280]">
-          <p className="min-w-0 truncate">{statusLine}</p>
-        </footer>
+        {fullscreen ? null : (
+          <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E5E7EB] bg-white px-3 py-1.5 text-[11px] text-[#6B7280]">
+            <p className="min-w-0 truncate">{statusLine}</p>
+          </footer>
+        )}
       </div>
     </section>
   );

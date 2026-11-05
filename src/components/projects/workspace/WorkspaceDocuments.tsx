@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ProjectGoogleDocsShell,
   type ProjectGoogleDocsShellHandle,
@@ -13,6 +14,8 @@ import {
   wordCountFromDocContent,
 } from "@/lib/projects/documents";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
+
+const DOC_EDITOR_CLASS = "moni-doc-editor";
 
 function isSchemaError(error?: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -34,6 +37,7 @@ export default function WorkspaceDocuments() {
   const [docCreating, setDocCreating] = useState(false);
   const [docSaving, setDocSaving] = useState(false);
   const [leavingEditor, setLeavingEditor] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
   const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
 
   const memberNames = useMemo(() => {
@@ -160,6 +164,23 @@ export default function WorkspaceDocuments() {
     return () => registerBackHandler(null);
   }, [viewMode, registerBackHandler, backToList]);
 
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  /** 編集中は下タブ・ワークスペースヘッダーを隠し、画面全体を使う */
+  useEffect(() => {
+    if (viewMode !== "editor") return;
+    const root = document.documentElement;
+    root.classList.add(DOC_EDITOR_CLASS);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      root.classList.remove(DOC_EDITOR_CLASS);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [viewMode]);
+
   async function createDocument() {
     setActionErr("");
     if (!supabase || !projectId) return;
@@ -273,34 +294,40 @@ export default function WorkspaceDocuments() {
     );
   }
 
-  return (
-    <div className="space-y-2">
+  const editor = (
+    <div className="fixed inset-0 z-[200] flex h-[100dvh] w-full flex-col bg-white">
       {actionErr ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionErr}</p>
+        <p className="shrink-0 border-b border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionErr}</p>
       ) : null}
-      <ProjectGoogleDocsShell
-        ref={editorShellRef}
-        activeDocId={activeDocId}
-        documents={documents.map((d) => ({ id: d.id, content: d.content ?? "" }))}
-        docTitle={docTitle}
-        onDocTitleChange={setDocTitle}
-        onDocContentChange={setDocContent}
-        onSave={(payload) => saveDocument(payload)}
-        saving={docSaving}
-        autoSave={canEdit}
-        wordCount={docWordCount}
-        updatedByLabel={
-          activeDoc?.updated_by ? (memberNames[activeDoc.updated_by] ?? "メンバー") : "—"
-        }
-        hideSidebar
-        onUploadImage={canEdit ? uploadDocImage : undefined}
-        onBack={() => {
-          setViewMode("list");
-          if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
-            window.history.back();
+      <div className="min-h-0 flex-1">
+        <ProjectGoogleDocsShell
+          ref={editorShellRef}
+          activeDocId={activeDocId}
+          documents={documents.map((d) => ({ id: d.id, content: d.content ?? "" }))}
+          docTitle={docTitle}
+          onDocTitleChange={setDocTitle}
+          onDocContentChange={setDocContent}
+          onSave={(payload) => saveDocument(payload)}
+          saving={docSaving}
+          autoSave={canEdit}
+          wordCount={docWordCount}
+          updatedByLabel={
+            activeDoc?.updated_by ? (memberNames[activeDoc.updated_by] ?? "メンバー") : "—"
           }
-        }}
-      />
+          hideSidebar
+          fullscreen
+          onUploadImage={canEdit ? uploadDocImage : undefined}
+          onBack={() => {
+            setViewMode("list");
+            if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
+              window.history.back();
+            }
+          }}
+        />
+      </div>
     </div>
   );
+
+  if (!portalReady) return null;
+  return createPortal(editor, document.body);
 }
