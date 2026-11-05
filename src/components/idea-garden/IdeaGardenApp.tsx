@@ -946,11 +946,16 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     // 袋選び ↔ フォーカスで layoutId 共有するため、両フェーズを同じ LayoutGroup で包む
     if (screen.phase === "pick-bag" || screen.phase === "bag-focus") {
       const kind = selectedKind ?? bag.id;
+      const streak = ideaStreakDays(plants);
+      const plantedDateKeys = plants.map((p) => p.dateKey);
       return (
         <LayoutGroup id="idea-seed-bag">
           {screen.phase === "pick-bag" ? (
             <div className="flex min-h-[calc(100dvh-7rem)] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F0FFF4] to-[#FFF8E7] px-4 pb-6 pt-4">
-              <h1 className="text-center text-[22px] font-extrabold text-[#3C3C3C]">
+              <div className="flex justify-center pt-1">
+                <IdeaStreakBadge days={streak} onClick={() => setStreakCalendarOpen(true)} />
+              </div>
+              <h1 className="mt-3 text-center text-[22px] font-extrabold text-[#3C3C3C]">
                 {tx("花を咲かせる種を選ぼう", "Pick a seed to bloom")}
               </h1>
               <p className="mt-1 text-center text-[13px] font-semibold text-zinc-500">
@@ -964,6 +969,12 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
                   setSelectedKind(k);
                   setGrow("bag-focus");
                 }}
+              />
+              <IdeaStreakCalendar
+                open={streakCalendarOpen}
+                onClose={() => setStreakCalendarOpen(false)}
+                plantedDateKeys={plantedDateKeys}
+                streakDays={streak}
               />
             </div>
           ) : (
