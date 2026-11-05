@@ -5,6 +5,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  ArrowLeft,
   Bold,
   Check,
   Highlighter,
@@ -106,7 +107,7 @@ function ToolBtn({
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-2 text-[15px] text-[#3c4043] transition hover:bg-[#f1f3f4] disabled:opacity-40 ${
+      className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-2 text-[15px] text-[#3c4043] transition hover:bg-[#f1f3f4] disabled:pointer-events-none disabled:opacity-25 ${
         active ? "bg-[#e8f0fe] text-[#174ea6]" : ""
       } ${className}`}
     >
@@ -179,9 +180,15 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const persistNowRef = useRef<() => Promise<void>>(async () => {});
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
+  const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
+  const lastTapRef = useRef(0);
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
+  const [editMode, setEditMode] = useState(true);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [viewportBox, setViewportBox] = useState({ top: 0, height: 0 });
   const [imageBusy, setImageBusy] = useState(false);
   const [imageErr, setImageErr] = useState("");
   const [colorOpen, setColorOpen] = useState(false);
@@ -231,6 +238,16 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     sel.addRange(range);
   }, []);
 
+  const refreshHistoryState = useCallback(() => {
+    try {
+      setCanUndo(document.queryCommandEnabled("undo"));
+      setCanRedo(document.queryCommandEnabled("redo"));
+    } catch {
+      setCanUndo(false);
+      setCanRedo(false);
+    }
+  }, []);
+
   const exec = useCallback(
     (command: string, value?: string) => {
       restoreSelection();
@@ -242,8 +259,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
         /* noop */
       }
       rememberSelection();
+      refreshHistoryState();
     },
-    [rememberSelection, restoreSelection],
+    [rememberSelection, refreshHistoryState, restoreSelection],
   );
 
   const readEditorHtml = useCallback(() => {
@@ -338,16 +356,55 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
   useImperativeHandle(ref, () => ({ flushAndSave }), [flushAndSave]);
 
-  const handleBack = useCallback(async () => {
-    if (!onBack || leaving) return;
+  /** チェック: 保存して閲覧モードへ（戻るボタン表示） */
+  const handleDone = useCallback(async () => {
+    if (leaving) return;
     setLeaving(true);
     try {
       await flushAndSave();
+      setEditMode(false);
+      setColorOpen(false);
+      setHighlightOpen(false);
+      setAlignOpen(false);
+      setStyleOpen(false);
+      setInsertOpen(false);
+      editorRef.current?.blur();
+      setCanUndo(false);
+      setCanRedo(false);
     } catch {
-      // 保存失敗でも一覧へは戻す（ヒントは flushAndSave 内で更新済み）
+      // 保存失敗時も閲覧へは進める
+      setEditMode(false);
+    } finally {
+      setLeaving(false);
     }
+  }, [flushAndSave, leaving]);
+
+  /** 戻る: 保存せず一覧へ */
+  const handleLeaveWithoutSave = useCallback(() => {
+    if (!onBack || leaving) return;
+    discardOnLeaveRef.current = true;
+    if (flushDebounceRef.current) {
+      clearTimeout(flushDebounceRef.current);
+      flushDebounceRef.current = null;
+    }
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = null;
+    }
+    dirtyRef.current = false;
     onBack();
-  }, [flushAndSave, leaving, onBack]);
+  }, [leaving, onBack]);
+
+  const enterEditMode = useCallback(() => {
+    if (!autoSave || activeDocId === null) return;
+    setEditMode(true);
+    queueMicrotask(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      el.focus();
+      refreshHistoryState();
+    });
+  }, [activeDocId, autoSave, refreshHistoryState]);
 
   const scheduleFlush = useCallback(() => {
     if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
@@ -366,11 +423,12 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     [],
   );
 
-  // アンマウント / ドキュメント切替前に未保存分を送る（デバウンス待ちも含む）
+  // アンマウント時: 戻る（保存なし）以外で未保存があれば送る
   useEffect(() => {
     return () => {
       if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+      if (discardOnLeaveRef.current) return;
       if (!autoSave || !activeDocIdRef.current) return;
       const html = readEditorHtml();
       if (!dirtyRef.current && html === contentRef.current) return;
@@ -381,6 +439,29 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     };
   }, [autoSave, activeDocId, readEditorHtml]);
 
+  /** キーボード直上にツールバーが来るよう visualViewport に合わせる */
+  useEffect(() => {
+    if (!fullscreen || typeof window === "undefined") return;
+    const sync = () => {
+      const vv = window.visualViewport;
+      if (vv) {
+        setViewportBox({ top: vv.offsetTop, height: vv.height });
+      } else {
+        setViewportBox({ top: 0, height: window.innerHeight });
+      }
+    };
+    sync();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      vv?.removeEventListener("resize", sync);
+      vv?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, [fullscreen]);
+
   useLayoutEffect(() => {
     const el = editorRef.current;
     if (!el || activeDocId === null) return;
@@ -389,8 +470,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
-    queueMicrotask(() => setSaveHint("保存済み"));
-  }, [activeDocId]);
+    setEditMode(Boolean(autoSave));
+    discardOnLeaveRef.current = false;
+    queueMicrotask(() => {
+      setSaveHint("保存済み");
+      refreshHistoryState();
+    });
+  }, [activeDocId, autoSave, refreshHistoryState]);
 
   useEffect(() => {
     const el = editorRef.current;
@@ -409,7 +495,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     rememberSelection();
     scheduleFlush();
     setSaveHint("編集中…");
-  }, [rememberSelection, scheduleFlush]);
+    refreshHistoryState();
+  }, [refreshHistoryState, rememberSelection, scheduleFlush]);
 
   const onTitleChange = useCallback(
     (value: string) => {
@@ -423,8 +510,24 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const onEditorBlur = useCallback(() => {
     rememberSelection();
     flushToParent();
-    if (dirtyRef.current) void persistNow();
-  }, [flushToParent, persistNow, rememberSelection]);
+    refreshHistoryState();
+  }, [flushToParent, refreshHistoryState, rememberSelection]);
+
+  const onEditorDoubleActivate = useCallback(() => {
+    if (editMode) return;
+    enterEditMode();
+  }, [editMode, enterEditMode]);
+
+  const onEditorTouchEnd = useCallback(() => {
+    if (editMode) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      enterEditMode();
+      lastTapRef.current = 0;
+      return;
+    }
+    lastTapRef.current = now;
+  }, [editMode, enterEditMode]);
 
   const applyBlockStyle = (v: string) => {
     if (v === "p") exec("formatBlock", "<p>");
@@ -487,7 +590,12 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   }, [activeDocId, saveHint, updatedByLabel, wordCount]);
 
   const showSidebar = !hideSidebar && sidebar && !fullscreen;
-  const editing = activeDocId !== null && autoSave;
+  const canEditDoc = activeDocId !== null && autoSave;
+  const editing = canEditDoc && editMode;
+  const fullscreenStyle =
+    fullscreen && viewportBox.height > 0
+      ? { height: viewportBox.height, maxHeight: viewportBox.height }
+      : undefined;
 
   return (
     <section
@@ -498,6 +606,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               showSidebar ? "lg:flex-row" : ""
             }`
       }
+      style={fullscreenStyle}
     >
       {showSidebar ? (
         <aside className="flex max-h-[200px] shrink-0 flex-col border-b border-[#E5E7EB] bg-[#FAFAFA] lg:max-h-none lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r xl:w-60">
@@ -513,15 +622,26 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           }`}
         >
           {onBack ? (
-            <button
-              type="button"
-              onClick={() => void handleBack()}
-              disabled={leaving}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8] hover:bg-[#e8f0fe] disabled:opacity-50"
-              aria-label="完了してドキュメント一覧に戻る"
-            >
-              <Check className="h-6 w-6" strokeWidth={2.5} />
-            </button>
+            editing ? (
+              <button
+                type="button"
+                onClick={() => void handleDone()}
+                disabled={leaving}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8] hover:bg-[#e8f0fe] disabled:opacity-50"
+                aria-label="保存して編集を終了"
+              >
+                <Check className="h-6 w-6" strokeWidth={2.5} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLeaveWithoutSave}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4]"
+                aria-label="ドキュメント一覧に戻る（保存しない）"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            )
           ) : null}
 
           <div className="min-w-0 flex-1 px-1">
@@ -529,73 +649,80 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               className="w-full truncate border-0 bg-transparent text-[15px] font-medium text-[#202124] outline-none placeholder:text-[#9CA3AF]"
               value={docTitle}
               onChange={(e) => onTitleChange(e.target.value)}
-              onBlur={() => {
-                if (dirtyRef.current) void persistNow();
-              }}
               placeholder="無題のドキュメント"
-              disabled={activeDocId === null || !autoSave}
+              disabled={!editing}
               aria-label="タイトル"
             />
             <p className="truncate text-[11px] text-[#5f6368]" aria-live="polite">
-              {activeDocId === null ? "" : saveHint}
+              {activeDocId === null
+                ? ""
+                : editing
+                  ? saveHint
+                  : canEditDoc
+                    ? "ダブルタップで編集"
+                    : saveHint}
             </p>
           </div>
 
-          <ToolBtn title="元に戻す" onClick={() => exec("undo")} disabled={!editing}>
-            <Undo2 className="h-5 w-5" />
-          </ToolBtn>
-          <ToolBtn title="やり直し" onClick={() => exec("redo")} disabled={!editing}>
-            <Redo2 className="h-5 w-5" />
-          </ToolBtn>
+          {editing ? (
+            <>
+              <ToolBtn title="元に戻す" onClick={() => exec("undo")} disabled={!canUndo}>
+                <Undo2 className="h-5 w-5" />
+              </ToolBtn>
+              <ToolBtn title="やり直し" onClick={() => exec("redo")} disabled={!canRedo}>
+                <Redo2 className="h-5 w-5" />
+              </ToolBtn>
 
-          <div className="relative">
-            <ToolBtn
-              title="挿入"
-              onClick={() => {
-                rememberSelection();
-                setInsertOpen((v) => !v);
-                setColorOpen(false);
-                setHighlightOpen(false);
-                setAlignOpen(false);
-                setStyleOpen(false);
-              }}
-              disabled={!editing || imageBusy}
-              active={insertOpen}
-            >
-              <Plus className="h-5 w-5" />
-            </ToolBtn>
-            {insertOpen ? (
-              <>
-                <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setInsertOpen(false)} />
-                <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4] disabled:opacity-40"
-                    disabled={!onUploadImage}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <ImagePlus className="h-4 w-4 text-[#5f6368]" />
-                    写真を追加
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
-                    onClick={insertLink}
-                  >
-                    リンクを追加
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
+              <div className="relative">
+                <ToolBtn
+                  title="挿入"
+                  onClick={() => {
+                    rememberSelection();
+                    setInsertOpen((v) => !v);
+                    setColorOpen(false);
+                    setHighlightOpen(false);
+                    setAlignOpen(false);
+                    setStyleOpen(false);
+                  }}
+                  disabled={imageBusy}
+                  active={insertOpen}
+                >
+                  <Plus className="h-5 w-5" />
+                </ToolBtn>
+                {insertOpen ? (
+                  <>
+                    <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setInsertOpen(false)} />
+                    <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4] disabled:opacity-40"
+                        disabled={!onUploadImage}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-4 w-4 text-[#5f6368]" />
+                        写真を追加
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
+                        onClick={insertLink}
+                      >
+                        リンクを追加
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
-            className="hidden"
-            onChange={(e) => void onPickImage(e.target.files?.[0] ?? null)}
-          />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                className="hidden"
+                onChange={(e) => void onPickImage(e.target.files?.[0] ?? null)}
+              />
+            </>
+          ) : null}
         </div>
 
         {imageErr ? (
@@ -627,15 +754,27 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 ref={editorRef}
                 role="textbox"
                 aria-multiline
+                aria-readonly={!editing}
                 tabIndex={0}
-                contentEditable={autoSave}
+                contentEditable={editing}
                 suppressContentEditableWarning
                 onInput={onEditorInput}
                 onBlur={onEditorBlur}
-                onMouseUp={rememberSelection}
-                onKeyUp={rememberSelection}
-                onSelect={rememberSelection}
-                className="gdocs-editor-body w-full flex-1 outline-none"
+                onMouseUp={() => {
+                  rememberSelection();
+                  refreshHistoryState();
+                }}
+                onKeyUp={() => {
+                  rememberSelection();
+                  refreshHistoryState();
+                }}
+                onSelect={() => {
+                  rememberSelection();
+                  refreshHistoryState();
+                }}
+                onDoubleClick={onEditorDoubleActivate}
+                onTouchEnd={onEditorTouchEnd}
+                className={`gdocs-editor-body w-full flex-1 outline-none ${editing ? "" : "cursor-text"}`}
                 style={{
                   minHeight: fullscreen ? "100%" : PAGE_MIN_HEIGHT,
                   padding: fullscreen
@@ -648,10 +787,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           )}
         </div>
 
-        {/* キーボード直上の文字設定バー（Google Docs 風）— 画面下端に常時表示 */}
+        {/* 入力欄の直上（キーボードのすぐ上）に文字設定バー */}
+        {editing ? (
         <div
           className={`relative z-10 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.06)] ${
-            fullscreen ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]" : ""
+            fullscreen && viewportBox.height >= (typeof window !== "undefined" ? window.innerHeight - 8 : 9999)
+              ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+              : "pb-1"
           }`}
           role="toolbar"
           aria-label="文字の書式"
@@ -898,6 +1040,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             </div>
           </div>
         </div>
+        ) : null}
 
         {fullscreen ? null : (
           <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E5E7EB] bg-white px-3 py-1.5 text-[11px] text-[#6B7280]">

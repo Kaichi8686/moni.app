@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ProjectGoogleDocsShell,
@@ -16,6 +16,46 @@ import {
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 
 const DOC_EDITOR_CLASS = "moni-doc-editor";
+
+/** キーボード直上にツールバーが来るよう visualViewport に合わせて全体を載せる */
+function DocEditorViewport({ children }: { children: ReactNode }) {
+  const [box, setBox] = useState({ top: 0, height: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    const sync = () => {
+      const vv = window.visualViewport;
+      if (vv) {
+        setBox({ top: vv.offsetTop, height: vv.height, left: vv.offsetLeft, width: vv.width });
+      } else {
+        setBox({ top: 0, height: window.innerHeight, left: 0, width: window.innerWidth });
+      }
+    };
+    sync();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      vv?.removeEventListener("resize", sync);
+      vv?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
+
+  return (
+    <div
+      className="fixed z-[200] flex flex-col bg-white"
+      style={{
+        top: box.top,
+        left: box.left,
+        width: box.width || "100%",
+        height: box.height || "100dvh",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function isSchemaError(error?: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -124,17 +164,11 @@ export default function WorkspaceDocuments() {
     }
   }
 
-  const backToList = useCallback(async () => {
+  /** 戻るは保存しない（チェックで保存済みの前提） */
+  const backToList = useCallback(() => {
     if (leavingEditor) return;
     setLeavingEditor(true);
     try {
-      if (canEdit) {
-        try {
-          await editorShellRef.current?.flushAndSave();
-        } catch {
-          // 保存失敗でも一覧へ戻す（シェル側でヒント表示済み）
-        }
-      }
       setViewMode("list");
       if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
         window.history.back();
@@ -142,7 +176,7 @@ export default function WorkspaceDocuments() {
     } finally {
       setLeavingEditor(false);
     }
-  }, [canEdit, leavingEditor]);
+  }, [leavingEditor]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -156,7 +190,7 @@ export default function WorkspaceDocuments() {
   useEffect(() => {
     registerBackHandler(() => {
       if (viewMode === "editor") {
-        void backToList();
+        backToList();
         return true;
       }
       return false;
@@ -295,7 +329,7 @@ export default function WorkspaceDocuments() {
   }
 
   const editor = (
-    <div className="fixed inset-0 z-[200] flex h-[100dvh] w-full flex-col bg-white">
+    <DocEditorViewport>
       {actionErr ? (
         <p className="shrink-0 border-b border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-800">{actionErr}</p>
       ) : null}
@@ -317,15 +351,10 @@ export default function WorkspaceDocuments() {
           hideSidebar
           fullscreen
           onUploadImage={canEdit ? uploadDocImage : undefined}
-          onBack={() => {
-            setViewMode("list");
-            if (typeof window !== "undefined" && window.history.state?.moniDocuments === "editor") {
-              window.history.back();
-            }
-          }}
+          onBack={backToList}
         />
       </div>
-    </div>
+    </DocEditorViewport>
   );
 
   if (!portalReady) return null;
