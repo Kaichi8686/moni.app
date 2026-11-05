@@ -1,5 +1,7 @@
 -- プロジェクトグループラインの全員同期 + プロジェクト仲間同士の 1:1 DM
 -- Supabase SQL Editor で実行
+-- 注意: プロジェクト作成時の自動シード／メンバー参加トリガーは
+--       apply_project_group_chat_auto_seed.sql を後から実行すること。
 
 -- 1) プロジェクト会話: 既存でも毎回メンバーを全員同期
 create or replace function public.get_or_create_project_conversation(p_project_id uuid)
