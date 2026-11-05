@@ -1178,7 +1178,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         }`}
       >
         {isCoachChat || isRoadmapEditPage ? null : (
-        <header className="sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
+        <header className="project-workspace-header sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
           <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
