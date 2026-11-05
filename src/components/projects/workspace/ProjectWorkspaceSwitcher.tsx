@@ -140,7 +140,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
     <div ref={rootRef} className="relative min-w-0 max-w-full">
       <button
         type="button"
-        className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full py-0.5 pr-1.5 text-left transition hover:bg-zinc-100 active:bg-zinc-200/80"
+        className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/95 py-0.5 pl-0.5 pr-2 text-left shadow-sm ring-1 ring-zinc-200/70 transition hover:bg-white active:bg-zinc-50"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={menuId}
