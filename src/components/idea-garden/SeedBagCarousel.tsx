@@ -13,6 +13,12 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 const SLOT = 152;
 const SPRING = { type: "spring" as const, stiffness: 480, damping: 40, mass: 0.55 };
 const DRAG_SELECT_SLOP = 10;
+/** 端（矢印付近）は選択せずスライド扱い */
+const EDGE_SLIDE_ZONE = 72;
+/** 中央のこの幅だけタップで袋選択 */
+const CENTER_SELECT_ZONE = 120;
+/** 矢印操作直後は誤選択を抑止 */
+const SELECT_SUPPRESS_MS = 320;
 
 type Props = {
   index: number;
@@ -79,7 +85,7 @@ function BagSlot({
   );
 }
 
-/** 種袋カルーセル — 移動は先にアニメ、着地後に付け替え（矢印連打でも袋が消えない） */
+/** 種袋カルーセル — 矢印は誤選択せず、連打でも袋が消えない */
 export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   const { tx, locale } = useI18n();
   const x = useMotionValue(0);
@@ -96,12 +102,16 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   const moveGenRef = useRef(0);
   /** 矢印連打分。+ は次へ、- は前へ */
   const queuedStepsRef = useRef(0);
+  const suppressSelectUntilRef = useRef(0);
+  const trackRef = useRef<HTMLDivElement | null>(null);
 
   const ptrRef = useRef<{
     id: number;
     startClientX: number;
     originX: number;
     moved: boolean;
+    /** ポインタ開始時点でスライド中だった（離しても選択しない） */
+    startedDuringMove: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -129,12 +139,17 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
 
   const bag = SEED_BAGS[labelIndex]!;
 
+  const markArrowUse = () => {
+    suppressSelectUntilRef.current = performance.now() + SELECT_SUPPRESS_MS;
+  };
+
   const startSlide = (dir: -1 | 1) => {
     const next = wrap(displayIndexRef.current + dir);
     const gen = ++moveGenRef.current;
     labelIndexRef.current = next;
     setLabelIndex(next);
     movingRef.current = true;
+    markArrowUse();
     x.stop();
     x.set(0);
     // dir=1（次）→ 左へ -SLOT。隣（+1）が中央へ来る
@@ -156,6 +171,7 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   /** 隣の袋を中央へ滑らせ、着地後に index 付け替え。連打はキューする */
   const slideBy = (dir: -1 | 1) => {
     if (handoffKind) return;
+    markArrowUse();
     if (movingRef.current || pendingRemapRef.current != null) {
       queuedStepsRef.current += dir;
       // 連打が溜まりすぎない（見た目の追従用に最大 ±4）
@@ -167,6 +183,7 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
   };
 
   const selectCenter = () => {
+    if (performance.now() < suppressSelectUntilRef.current) return;
     if (movingRef.current || pendingRemapRef.current != null) {
       // 選択時は着地を確定してから
       moveGenRef.current += 1;
@@ -197,6 +214,28 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
 
     const dx = clientX - ptr.startClientX;
     if (!ptr.moved && Math.abs(dx) < DRAG_SELECT_SLOP) {
+      // スライド中に掴んだ指は選択にしない
+      if (ptr.startedDuringMove) return;
+      if (performance.now() < suppressSelectUntilRef.current) return;
+
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (rect) {
+        const rel = clientX - rect.left;
+        // 矢印付近のタップはスライド（袋選択にしない）
+        if (rel < EDGE_SLIDE_ZONE) {
+          slideBy(-1);
+          return;
+        }
+        if (rel > rect.width - EDGE_SLIDE_ZONE) {
+          slideBy(1);
+          return;
+        }
+        const centerX = rect.left + rect.width / 2;
+        // 中央付近だけ袋選択
+        if (Math.abs(clientX - centerX) > CENTER_SELECT_ZONE / 2) {
+          return;
+        }
+      }
       selectCenter();
       return;
     }
@@ -214,25 +253,39 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
 
   const offsets = [-2, -1, 0, 1, 2] as const;
 
+  const arrowBtnClass =
+    "absolute top-1/2 z-30 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full " +
+    "bg-white text-[#3C3C3C] shadow-md outline-none active:scale-95 " +
+    "before:absolute before:-inset-2 before:content-['']";
+
   return (
     <div className="relative mt-8 flex flex-1 flex-col items-center justify-center">
       <button
         type="button"
-        className="absolute left-0 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#3C3C3C] shadow-md active:scale-95"
-        onClick={() => slideBy(-1)}
+        className={`${arrowBtnClass} left-0`}
+        onPointerDown={(e) => {
+          // 下のトラックへポインタが落ちないようにする
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          slideBy(-1);
+        }}
         aria-label={tx("前の袋", "Previous bag")}
       >
-        <ChevronLeft />
+        <ChevronLeft className="relative h-6 w-6" />
       </button>
 
       <div className="relative w-full max-w-[26rem] px-1">
         <div
+          ref={trackRef}
           className="relative mx-auto h-56 w-full touch-none overflow-x-clip overflow-y-visible"
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             if (handoffKind) return;
+            const startedDuringMove = movingRef.current || pendingRemapRef.current != null;
             // ドラッグ開始時は進行中スライドを即着地
-            if (movingRef.current || pendingRemapRef.current != null) {
+            if (startedDuringMove) {
               moveGenRef.current += 1;
               x.stop();
               const landed =
@@ -248,6 +301,7 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
               });
               onIndexChange(landed);
               x.set(0);
+              markArrowUse();
             }
             x.stop();
             ptrRef.current = {
@@ -255,6 +309,7 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
               startClientX: e.clientX,
               originX: x.get(),
               moved: false,
+              startedDuringMove,
             };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
@@ -315,11 +370,17 @@ export function SeedBagCarousel({ index, onIndexChange, onSelect }: Props) {
 
       <button
         type="button"
-        className="absolute right-0 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#3C3C3C] shadow-md active:scale-95"
-        onClick={() => slideBy(1)}
+        className={`${arrowBtnClass} right-0`}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          slideBy(1);
+        }}
         aria-label={tx("次の袋", "Next bag")}
       >
-        <ChevronRight />
+        <ChevronRight className="relative h-6 w-6" />
       </button>
 
       <p className="mt-3 text-center text-[16px] font-extrabold text-[#3C3C3C]">
