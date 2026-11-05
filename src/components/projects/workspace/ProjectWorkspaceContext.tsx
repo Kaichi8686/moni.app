@@ -1178,7 +1178,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         }`}
       >
         {isCoachChat || isRoadmapEditPage ? null : (
-        <header className="project-workspace-header sticky top-0 z-[100] isolate border-b border-[#E5E7EB] bg-white/95 px-3 py-1.5 backdrop-blur sm:px-4">
+        <header className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4">
           <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -1195,10 +1195,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 <button
                   type="button"
                   disabled={!project}
-                  className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full transition disabled:opacity-50 ${
+                  className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full shadow-sm ring-1 ring-zinc-200/70 transition disabled:opacity-50 ${
                     actionMenuOpen
-                      ? "bg-[#EEF0FF] text-[#5E6AD2]"
-                      : "bg-zinc-100 text-[#374151] hover:bg-zinc-200/80"
+                      ? "bg-[#EEF0FF] text-[#5E6AD2] ring-[#C7CBFF]"
+                      : "bg-white/95 text-[#374151] hover:bg-zinc-50"
                   }`}
                   aria-label={
                     pendingJoinRequestCount > 0
