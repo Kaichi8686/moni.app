@@ -86,11 +86,20 @@ export async function ensureProjectBoard(projectId: string, uid: string): Promis
   return data.id as string;
 }
 
-export async function loadBoardElements(boardId: string): Promise<WhiteboardElement[]> {
+export type BoardElementsScope = "project" | "conversation";
+
+function elementsTable(scope: BoardElementsScope): "project_board_elements" | "conversation_board_elements" {
+  return scope === "conversation" ? "conversation_board_elements" : "project_board_elements";
+}
+
+export async function loadBoardElements(
+  boardId: string,
+  scope: BoardElementsScope = "project",
+): Promise<WhiteboardElement[]> {
   if (!supabase) return [];
 
   const { data, error } = await supabase
-    .from("project_board_elements")
+    .from(elementsTable(scope))
     .select("id, board_id, element_type, payload, updated_at")
     .eq("board_id", boardId)
     .order("created_at", { ascending: true })
@@ -109,6 +118,7 @@ export async function insertBoardElement(
   element: Pick<WhiteboardElement, "type" | "payload">,
   /** Undo/Redo で同じ id を復元したい場合に指定 */
   explicitId?: string,
+  scope: BoardElementsScope = "project",
 ): Promise<WhiteboardElement> {
   if (!supabase) throw new Error("Supabase が未設定です。");
 
@@ -122,7 +132,7 @@ export async function insertBoardElement(
   if (explicitId) insertRow.id = explicitId;
 
   const { data, error } = await supabase
-    .from("project_board_elements")
+    .from(elementsTable(scope))
     .insert(insertRow)
     .select("id, board_id, element_type, payload, updated_at")
     .single();
@@ -137,19 +147,20 @@ export async function updateBoardElement(
   id: string,
   uid: string,
   payload: WhiteboardElement["payload"],
+  scope: BoardElementsScope = "project",
 ): Promise<void> {
   if (!supabase) throw new Error("Supabase が未設定です。");
 
   const { error } = await supabase
-    .from("project_board_elements")
+    .from(elementsTable(scope))
     .update({ payload, updated_by: uid, updated_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
 }
 
-export async function deleteBoardElement(id: string): Promise<void> {
+export async function deleteBoardElement(id: string, scope: BoardElementsScope = "project"): Promise<void> {
   if (!supabase) throw new Error("Supabase が未設定です。");
-  const { error } = await supabase.from("project_board_elements").delete().eq("id", id);
+  const { error } = await supabase.from(elementsTable(scope)).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

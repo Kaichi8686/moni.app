@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Menu } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { closeProjectCluster } from "@/lib/navigation/projectCluster";
 
@@ -9,9 +9,18 @@ type Props = {
   title: string;
   subtitle?: string;
   onTitleClick?: () => void;
+  /** DM 共有スペースなど、右上ハンバーガーから開く操作 */
+  onMenuClick?: () => void;
+  menuAriaLabel?: string;
 };
 
-export function ConversationHeader({ title, subtitle, onTitleClick }: Props) {
+export function ConversationHeader({
+  title,
+  subtitle,
+  onTitleClick,
+  onMenuClick,
+  menuAriaLabel,
+}: Props) {
   const { tx } = useI18n();
   const titleEl = (
     <>
@@ -37,6 +46,16 @@ export function ConversationHeader({ title, subtitle, onTitleClick }: Props) {
       ) : (
         <div className="min-w-0 flex-1">{titleEl}</div>
       )}
+      {onMenuClick ? (
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100"
+          aria-label={menuAriaLabel ?? tx("メニュー", "Menu")}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      ) : null}
     </header>
   );
 }

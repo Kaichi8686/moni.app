@@ -8,6 +8,7 @@ import {
   insertBoardElement,
   loadBoardElements,
   updateBoardElement,
+  type BoardElementsScope,
 } from "@/lib/projects/whiteboard/boardApi";
 import {
   loadViewport,
@@ -29,10 +30,13 @@ const HIGHLIGHTER_DEFAULT_WIDTH = 18;
 const HIGHLIGHTER_OPACITY = 0.35;
 
 type Props = {
+  /** ダウンロード名などに使う識別子（プロジェクトID or 会話ID） */
   projectId: string;
   boardId: string;
   uid: string | null;
   canEdit: boolean;
+  /** DM 共有ボードは conversation_board_elements を使う */
+  boardElementsScope?: BoardElementsScope;
 };
 
 type Pt = { x: number; y: number };
@@ -124,7 +128,13 @@ type HistoryEntry =
 
 const DRAW_TOOLS = new Set<WhiteboardTool>(["pen", "highlighter", "eraser", "rect", "circle", "arrow", "pan"]);
 
-export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
+export function ProjectWhiteboard({
+  projectId,
+  boardId,
+  uid,
+  canEdit,
+  boardElementsScope = "project",
+}: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [elements, setElements] = useState<WhiteboardElement[]>([]);
@@ -215,7 +225,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
       setTextDraft(null);
       setEditingTextId(null);
       try {
-        const els = await loadBoardElements(boardId);
+        const els = await loadBoardElements(boardId, boardElementsScope);
         if (!cancelled) setElements(els);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "読み込み失敗");
@@ -226,7 +236,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [boardId, uid]);
+  }, [boardId, boardElementsScope, uid]);
 
   useEffect(() => {
     if (!textDraft) return;
@@ -239,7 +249,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
       if (!boardId || !uid || !canEdit) return null;
       setSaving(true);
       try {
-        const saved = await insertBoardElement(boardId, uid, el);
+        const saved = await insertBoardElement(boardId, uid, el, undefined, boardElementsScope);
         setElements((prev) => [...prev, saved]);
         pushHistory({ type: "add", element: saved });
         return saved;
@@ -250,7 +260,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
         setSaving(false);
       }
     },
-    [boardId, canEdit, uid, pushHistory],
+    [boardId, boardElementsScope, canEdit, uid, pushHistory],
   );
 
   const removeElement = useCallback(
@@ -259,7 +269,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
       const target = elements.find((e) => e.id === id);
       setSaving(true);
       try {
-        await deleteBoardElement(id);
+        await deleteBoardElement(id, boardElementsScope);
         setElements((prev) => prev.filter((e) => e.id !== id));
         if (record && target) pushHistory({ type: "remove", element: target });
         setSelectedId((cur) => (cur === id ? null : cur));
@@ -269,7 +279,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
         setSaving(false);
       }
     },
-    [canEdit, elements, pushHistory],
+    [boardElementsScope, canEdit, elements, pushHistory],
   );
 
   const undo = useCallback(async () => {
@@ -279,15 +289,15 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
     setSaving(true);
     try {
       if (entry.type === "add") {
-        await deleteBoardElement(entry.element.id);
+        await deleteBoardElement(entry.element.id, boardElementsScope);
         setElements((prev) => prev.filter((e) => e.id !== entry.element.id));
         redoRef.current.push(entry);
       } else if (entry.type === "remove") {
-        await insertBoardElement(boardId, uid, entry.element, entry.element.id);
+        await insertBoardElement(boardId, uid, entry.element, entry.element.id, boardElementsScope);
         setElements((prev) => [...prev, entry.element]);
         redoRef.current.push(entry);
       } else {
-        await updateBoardElement(entry.id, uid, entry.before);
+        await updateBoardElement(entry.id, uid, entry.before, boardElementsScope);
         setElements((prev) => prev.map((e) => (e.id === entry.id ? { ...e, payload: entry.before } : e)));
         redoRef.current.push(entry);
       }
@@ -298,7 +308,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [uid, boardId, syncHistoryLen]);
+  }, [uid, boardId, boardElementsScope, syncHistoryLen]);
 
   const redo = useCallback(async () => {
     if (!uid || !boardId) return;
@@ -307,15 +317,15 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
     setSaving(true);
     try {
       if (entry.type === "add") {
-        await insertBoardElement(boardId, uid, entry.element, entry.element.id);
+        await insertBoardElement(boardId, uid, entry.element, entry.element.id, boardElementsScope);
         setElements((prev) => [...prev, entry.element]);
         undoRef.current.push(entry);
       } else if (entry.type === "remove") {
-        await deleteBoardElement(entry.element.id);
+        await deleteBoardElement(entry.element.id, boardElementsScope);
         setElements((prev) => prev.filter((e) => e.id !== entry.element.id));
         undoRef.current.push(entry);
       } else {
-        await updateBoardElement(entry.id, uid, entry.after);
+        await updateBoardElement(entry.id, uid, entry.after, boardElementsScope);
         setElements((prev) => prev.map((e) => (e.id === entry.id ? { ...e, payload: entry.after } : e)));
         undoRef.current.push(entry);
       }
@@ -326,7 +336,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [uid, boardId, syncHistoryLen]);
+  }, [uid, boardId, boardElementsScope, syncHistoryLen]);
 
   const applyPinchZoom = useCallback((nextZoom: number, cx: number, cy: number) => {
     setViewport((v) => {
@@ -550,7 +560,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
             : ({ ...(el.payload as NotePayload | TextPayload | ShapePayload), x: d.ox, y: d.oy } as WhiteboardElement["payload"]);
         setSaving(true);
         try {
-          await updateBoardElement(el.id, uid, el.payload);
+          await updateBoardElement(el.id, uid, el.payload, boardElementsScope);
           pushHistory({ type: "modify", id: el.id, before, after: el.payload });
         } catch (err) {
           setError(err instanceof Error ? err.message : "更新失敗");
@@ -611,7 +621,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
       setElements((prev) => prev.map((x) => (x.id === id ? { ...x, payload: next } : x)));
       setSaving(true);
       try {
-        await updateBoardElement(id, uid, next);
+        await updateBoardElement(id, uid, next, boardElementsScope);
         pushHistory({ type: "modify", id, before, after: next });
       } catch (e) {
         setError(e instanceof Error ? e.message : "保存失敗");
@@ -619,7 +629,7 @@ export function ProjectWhiteboard({ projectId, boardId, uid, canEdit }: Props) {
         setSaving(false);
       }
     },
-    [elements, uid, pushHistory],
+    [boardElementsScope, elements, uid, pushHistory],
   );
 
   async function saveNoteText(id: string, text: string) {
