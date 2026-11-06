@@ -349,34 +349,34 @@ export function InboxList() {
   })();
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-4 py-2">
-        <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
-          <Search className="h-4 w-4 shrink-0 text-zinc-400" />
-          <input
-            placeholder={
-              scopedProjectId
-                ? tx("メンバー・グループを検索", "Search members or group")
-                : tx("検索", "Search")
-            }
-            className="flex-1 bg-transparent text-sm outline-none"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
-
+    <>
       {/*
-        absolute inset で高さを確定させ、overflow-y が確実に効くようにする。
-        全幅 button だと iOS で縦スクロールが奪われやすいので行は Link にしている。
+        flex 高さ連鎖を使わず、固定シェル直下の単一スクロールにする。
+        これなら人数が増えても確実に上下へ動ける。端より先は overscroll で止める。
       */}
-      <div className="relative min-h-0 flex-1">
-        <div
-          className="absolute inset-0 touch-pan-y divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
+      <div
+        className="absolute inset-0 overflow-y-auto overscroll-y-contain"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+      >
+        <div className="sticky top-0 z-10 border-b border-zinc-100 bg-[#fafaf8] px-4 py-2">
+          <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
+            <Search className="h-4 w-4 shrink-0 text-zinc-400" />
+            <input
+              placeholder={
+                scopedProjectId
+                  ? tx("メンバー・グループを検索", "Search members or group")
+                  : tx("検索", "Search")
+              }
+              className="flex-1 bg-transparent text-sm outline-none"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
+
+        <div className="divide-y divide-zinc-50">
           {!userId ? (
             <p className="px-4 py-8 text-center text-sm text-zinc-500">
               <Link href="/" className="font-medium text-violet-600 underline">
@@ -387,13 +387,18 @@ export function InboxList() {
           ) : loadError ? (
             <p className="px-4 py-8 text-center text-sm text-red-600">
               {loadError === "__db__"
-                ? tx("メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。", "Messaging is not set up. Run the SQL in Supabase.")
+                ? tx(
+                    "メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。",
+                    "Messaging is not set up. Run the SQL in Supabase.",
+                  )
                 : loadError === "__generic__"
                   ? tx("読み込みに失敗しました", "Failed to load")
                   : loadError}
             </p>
           ) : loading ? (
-            <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
+            <p className="px-4 py-8 text-center text-sm text-zinc-400">
+              {tx("読み込み中...", "Loading…")}
+            </p>
           ) : (
             <>
               {!scopedProjectId ? (
@@ -407,11 +412,11 @@ export function InboxList() {
               ) : (
                 filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
               )}
-              {/* 下タブに隠れないよう末尾余白。端より先にはスクロールしない */}
-              <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
             </>
           )}
         </div>
+
+        <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
       </div>
 
       {showFollowingPicker && userId ? (
@@ -425,7 +430,7 @@ export function InboxList() {
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
