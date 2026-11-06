@@ -641,7 +641,7 @@ export default function WorkspaceIssues() {
               <DuoButton
                 key={issue.id}
                 type="button"
-                tone={submitted ? "zinc" : "peach"}
+                tone={submitted ? "lime" : "peach"}
                 size="md"
                 fullWidth
                 onClick={() =>
@@ -651,7 +651,7 @@ export default function WorkspaceIssues() {
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="line-clamp-2">{issue.title}</span>
-                  <span className={`truncate text-[11px] font-semibold ${submitted ? "text-zinc-500" : "text-orange-800/75"}`}>
+                  <span className={`truncate text-[11px] font-semibold ${submitted ? "text-[#3F6212]/75" : "text-[#9A5B1F]/80"}`}>
                     {[
                       assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee"),
                       issue.dueDate
@@ -737,7 +737,7 @@ export default function WorkspaceIssues() {
               if (prevStepId === undefined) return;
               goToNeighbor(prevStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("前のステップ", "Previous step")}
           >
             <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -756,7 +756,7 @@ export default function WorkspaceIssues() {
               if (nextStepId === undefined) return;
               goToNeighbor(nextStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("次のステップ", "Next step")}
           >
             <ChevronRight className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -834,7 +834,7 @@ export default function WorkspaceIssues() {
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
-                  <span className="truncate text-[11px] font-semibold text-orange-800/75">
+                  <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
                     {locale === "en" ? meta.hintEn : meta.hintJa}
                   </span>
                 </span>
@@ -900,7 +900,7 @@ export default function WorkspaceIssues() {
                   {index + 1}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className={`text-[11px] font-extrabold tracking-[0.1em] ${inProgress ? "text-white/80" : "text-orange-800/70"}`}>
+                  <span className={`text-[11px] font-extrabold tracking-[0.1em] ${inProgress ? "text-white/80" : "text-[#9A5B1F]/75"}`}>
                     STEP {index + 1}
                     {inProgress ? (
                       <span className="ml-2 tracking-normal">{tx("いまここ", "Current")}</span>
@@ -908,7 +908,7 @@ export default function WorkspaceIssues() {
                   </span>
                   <span className="truncate">{phase.title}</span>
                   {phase.goal ? (
-                    <span className={`truncate text-[11px] font-semibold ${inProgress ? "text-white/75" : "text-orange-800/75"}`}>
+                    <span className={`truncate text-[11px] font-semibold ${inProgress ? "text-white/75" : "text-[#9A5B1F]/80"}`}>
                       {phase.goal}
                     </span>
                   ) : null}
