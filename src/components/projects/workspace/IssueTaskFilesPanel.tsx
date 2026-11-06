@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
+  ExternalLink,
   FileText,
+  Image as ImageIcon,
   LayoutGrid,
+  Link2,
   MoreVertical,
   PenTool,
   StickyNote,
@@ -29,6 +32,9 @@ import {
   createWorkFileId,
   defaultTitle,
   newCanvasWorkFile,
+  newLinkWorkFile,
+  newPhotoWorkFile,
+  normalizeExternalUrl,
   removeWorkFile,
   sortWorkFilesByUpdated,
   upsertWorkFile,
@@ -82,6 +88,28 @@ function CanvasIcon() {
   );
 }
 
+function PhotoIcon({ url }: { url?: string }) {
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded preview
+      <img src={url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+    );
+  }
+  return (
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#E8F5E9] text-[#2E7D32]">
+      <ImageIcon className="h-5 w-5" aria-hidden />
+    </span>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#E3F2FD] text-[#1565C0]">
+      <Link2 className="h-5 w-5" aria-hidden />
+    </span>
+  );
+}
+
 function formatUpdated(iso: string, locale: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -93,15 +121,19 @@ function formatUpdated(iso: string, locale: string): string {
   });
 }
 
-function FileIcon({ kind }: { kind: IssueWorkFileKind }) {
+function FileIcon({ kind, url }: { kind: IssueWorkFileKind; url?: string }) {
   if (kind === "doc") return <DocIcon />;
   if (kind === "board") return <BoardIcon />;
+  if (kind === "photo") return <PhotoIcon url={url} />;
+  if (kind === "link") return <LinkIcon />;
   return <CanvasIcon />;
 }
 
 function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => string) {
   if (kind === "doc") return tx("ドキュメント", "Document");
   if (kind === "board") return tx("ホワイトボード", "Whiteboard");
+  if (kind === "photo") return tx("写真", "Photo");
+  if (kind === "link") return tx("リンク", "Link");
   return tx("作業スペース", "Workspace");
 }
 
@@ -158,7 +190,11 @@ export function IssueTaskFilesPanel({
   const [docSaving, setDocSaving] = useState(false);
   const [canvasDraft, setCanvasDraft] = useState<IssueWorkspaceBoard>(() => createEmptyBoard());
   const [uploading, setUploading] = useState(false);
+  const [linkDraftOpen, setLinkDraftOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkTitle, setLinkTitle] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitted = isIssueSubmitted(issue);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
@@ -210,6 +246,7 @@ export function IssueTaskFilesPanel({
     setDocContent("");
     setFabOpen(false);
     setMenuId(null);
+    setLinkDraftOpen(false);
   }, []);
 
   useEffect(() => {
@@ -256,10 +293,14 @@ export function IssueTaskFilesPanel({
       setOpenFileId(file.id);
       return;
     }
+    if (file.kind === "link" && file.url) {
+      window.open(file.url, "_blank", "noopener,noreferrer");
+      return;
+    }
     setOpenFileId(file.id);
   }
 
-  async function createFile(kind: IssueWorkFileKind) {
+  async function createFile(kind: Exclude<IssueWorkFileKind, "photo" | "link">) {
     if (!canEdit || !uid) return;
     setCreating(true);
     setError("");
@@ -310,6 +351,53 @@ export function IssueTaskFilesPanel({
       setOpenFileId(next.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function addPhotoFiles(list: FileList | null) {
+    if (!list || !canEdit || !uid || !supabase) return;
+    setCreating(true);
+    setError("");
+    setFabOpen(false);
+    try {
+      let nextFiles = files;
+      let openedId: string | null = null;
+      for (const file of Array.from(list)) {
+        const uploaded = await uploadProjectImage(supabase, uid, "issue-photo", issue.id, file);
+        const next = newPhotoWorkFile(uploaded.publicUrl, file.name.replace(/\.[^.]+$/, "") || undefined);
+        nextFiles = upsertWorkFile(nextFiles, next);
+        if (!openedId) openedId = next.id;
+      }
+      await persistFiles(nextFiles);
+      if (openedId) setOpenFileId(openedId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("写真を追加できませんでした", "Couldn’t add the photo"));
+    } finally {
+      setCreating(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
+  async function addLinkFile() {
+    if (!canEdit) return;
+    const url = normalizeExternalUrl(linkUrl);
+    if (!url) {
+      setError(tx("正しいURLを入力してください", "Enter a valid URL"));
+      return;
+    }
+    setCreating(true);
+    setError("");
+    try {
+      const next = newLinkWorkFile(url, linkTitle);
+      await persistFiles(upsertWorkFile(files, next));
+      setLinkDraftOpen(false);
+      setLinkUrl("");
+      setLinkTitle("");
+      setFabOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("リンクを追加できませんでした", "Couldn’t add the link"));
     } finally {
       setCreating(false);
     }
@@ -469,43 +557,72 @@ export function IssueTaskFilesPanel({
       );
     }
 
-    return createPortal(
-      <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
-        <IssueWorkspaceCanvas
-          board={canvasDraft}
-          canEdit={canEdit}
-          uploading={uploading}
-          fullscreen
-          onChange={persistCanvas}
-          onRequestPhoto={() => fileRef.current?.click()}
-          toolbarStart={
+    if (openFile.kind === "photo" && openFile.url) {
+      return createPortal(
+        <div className="fixed inset-0 z-[240] flex flex-col bg-zinc-950">
+          <div className="flex shrink-0 items-center gap-2 px-3 py-2 text-white">
             <button
               type="button"
-              data-board-ui
               onClick={closeEditor}
-              className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+              className="inline-flex h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold hover:bg-white/10"
             >
-              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-              <span>{tx("戻る", "Back")}</span>
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              {tx("戻る", "Back")}
             </button>
-          }
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(event) => void addPhotos(event.target.files)}
-        />
-        {error ? (
-          <p className="absolute bottom-4 left-1/2 z-10 max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
-            {error}
-          </p>
-        ) : null}
-      </div>,
-      document.body,
-    );
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold">{openFile.title}</p>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- uploaded photo viewer */}
+            <img
+              src={openFile.url}
+              alt={openFile.title}
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+        </div>,
+        document.body,
+      );
+    }
+
+    if (openFile.kind === "canvas") {
+      return createPortal(
+        <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
+          <IssueWorkspaceCanvas
+            board={canvasDraft}
+            canEdit={canEdit}
+            uploading={uploading}
+            fullscreen
+            onChange={persistCanvas}
+            onRequestPhoto={() => fileRef.current?.click()}
+            toolbarStart={
+              <button
+                type="button"
+                data-board-ui
+                onClick={closeEditor}
+                className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+              >
+                <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                <span>{tx("戻る", "Back")}</span>
+              </button>
+            }
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => void addPhotos(event.target.files)}
+          />
+          {error ? (
+            <p className="absolute bottom-4 left-1/2 z-10 max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
+              {error}
+            </p>
+          ) : null}
+        </div>,
+        document.body,
+      );
+    }
   }
 
   return (
@@ -575,13 +692,15 @@ export function IssueTaskFilesPanel({
                   onClick={() => void openExisting(file)}
                   className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition hover:bg-[#f8f9fa] active:bg-[#f1f3f4] sm:px-4"
                 >
-                  <FileIcon kind={file.kind} />
+                  <FileIcon kind={file.kind} url={file.url} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-normal text-[#202124]">
                       {file.title?.trim() || defaultTitle(file.kind)}
                     </span>
                     <span className="mt-0.5 block truncate text-[13px] text-[#5f6368]">
-                      {kindLabel(file.kind, tx)}
+                      {file.kind === "link" && file.url
+                        ? file.url.replace(/^https?:\/\//i, "")
+                        : kindLabel(file.kind, tx)}
                       {file.updatedAt ? ` · ${formatUpdated(file.updatedAt, locale)}` : ""}
                     </span>
                   </span>
@@ -663,6 +782,28 @@ export function IssueTaskFilesPanel({
                 <PenTool className="h-5 w-5 text-[#E65100]" aria-hidden />
                 {tx("作業スペース", "Workspace")}
               </button>
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => photoInputRef.current?.click()}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+              >
+                <PhotoIcon />
+                {tx("写真", "Photo")}
+              </button>
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => {
+                  setFabOpen(false);
+                  setLinkDraftOpen(true);
+                  setError("");
+                }}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+              >
+                <LinkIcon />
+                {tx("リンク", "Link")}
+              </button>
             </div>
           ) : null}
           <button
@@ -675,8 +816,92 @@ export function IssueTaskFilesPanel({
             {fabOpen ? <X className="h-5 w-5" aria-hidden /> : <span className="text-[22px] font-light leading-none text-[#1a73e8]">+</span>}
             {fabOpen ? tx("閉じる", "Close") : tx("新規", "New")}
           </button>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => void addPhotoFiles(event.target.files)}
+          />
         </div>
       ) : null}
+
+      {linkDraftOpen && portalReady
+        ? createPortal(
+            <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 p-4 sm:items-center">
+              <button
+                type="button"
+                className="absolute inset-0"
+                aria-label={tx("閉じる", "Close")}
+                onClick={() => {
+                  setLinkDraftOpen(false);
+                  setError("");
+                }}
+              />
+              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-base font-bold text-zinc-900">{tx("リンクを追加", "Add link")}</h2>
+                  <button
+                    type="button"
+                    className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100"
+                    aria-label={tx("閉じる", "Close")}
+                    onClick={() => {
+                      setLinkDraftOpen(false);
+                      setError("");
+                    }}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <label className="block text-[13px] font-semibold text-zinc-700">
+                  {tx("URL", "URL")}
+                  <input
+                    type="url"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
+                    autoFocus
+                  />
+                </label>
+                <label className="mt-3 block text-[13px] font-semibold text-zinc-700">
+                  {tx("タイトル（任意）", "Title (optional)")}
+                  <input
+                    type="text"
+                    value={linkTitle}
+                    onChange={(e) => setLinkTitle(e.target.value)}
+                    placeholder={tx("表示名", "Display name")}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
+                  />
+                </label>
+                {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                    onClick={() => {
+                      setLinkDraftOpen(false);
+                      setError("");
+                    }}
+                  >
+                    {tx("キャンセル", "Cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={creating || !linkUrl.trim()}
+                    onClick={() => void addLinkFile()}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1765cc] disabled:opacity-50"
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                    {tx("追加", "Add")}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
