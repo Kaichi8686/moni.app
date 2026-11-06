@@ -18,7 +18,10 @@ type Props = {
 };
 
 const CARD_SHELL =
-  "flex w-[7.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white shadow-[0_4px_0_#D97706]";
+  "flex w-[7.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white";
+
+const CARD_BTN =
+  "!mt-1 !rounded-xl !px-1 !py-1.5 !text-[10px] !leading-none !shadow-none enabled:active:!translate-y-0";
 
 function localDatetimeToIso(value: string): string | null {
   if (!value.trim()) return null;
@@ -117,7 +120,7 @@ export function InboxVoteCards({ projectId }: Props) {
                   setCreateError("");
                   setCreateOpen(true);
                 }}
-                className="!mt-1 !rounded-xl !px-1 !py-1.5 !text-[10px] !leading-none"
+                className={CARD_BTN}
               >
                 {tx("作成", "Create")}
               </DuoButton>
@@ -141,7 +144,7 @@ export function InboxVoteCards({ projectId }: Props) {
                   onClick={() =>
                     router.push(`/projects/${projectId}/ideas?event=${encodeURIComponent(ev.id)}`)
                   }
-                  className="!mt-1 !rounded-xl !px-1 !py-1.5 !text-[10px] !leading-none"
+                  className={CARD_BTN}
                 >
                   {tx("投票する", "Vote")}
                 </DuoButton>
