@@ -13,6 +13,8 @@ type Props = {
   votesRemaining: number;
   currentUid: string | null;
   isOwner: boolean;
+  /** 投票のみ（選択肢の削除・編集なし） */
+  voteOnly?: boolean;
   onVote: (id: string) => void;
   onUnvote: (id: string) => void;
   onDelete: (id: string) => void;
@@ -27,6 +29,7 @@ export function IdeaList({
   votesRemaining,
   currentUid,
   isOwner,
+  voteOnly = false,
   onVote,
   onUnvote,
   onDelete,
@@ -38,8 +41,10 @@ export function IdeaList({
 
   if (display.length === 0) {
     return (
-      <div className="border border-dashed border-zinc-300 px-3 py-4 text-[12px] text-zinc-500">
-        {tx("まだ選択肢がありません。上から追加してください。", "No options yet. Add one above.")}
+      <div className="rounded-2xl border border-dashed border-zinc-300 px-3 py-4 text-[12px] text-zinc-500">
+        {voteOnly
+          ? tx("まだ選択肢がありません。", "No options yet.")
+          : tx("まだ選択肢がありません。上から追加してください。", "No options yet. Add one above.")}
       </div>
     );
   }
@@ -56,7 +61,8 @@ export function IdeaList({
         const canVote =
           !votingClosed && votesRemaining > 0 && idea.myVotes < votingSettings.maxVotesPerIdea;
         const canUnvote = !votingClosed && idea.myVotes > 0;
-        const canDelete = Boolean(currentUid) && (isOwner || idea.authorId === currentUid);
+        const canDelete =
+          !voteOnly && Boolean(currentUid) && (isOwner || idea.authorId === currentUid);
         return (
           <li key={idea.id}>
             <IdeaCard

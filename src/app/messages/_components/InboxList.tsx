@@ -6,9 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { ja, enUS } from "date-fns/locale";
 import { FolderKanban, Search, Users } from "lucide-react";
-import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
-import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
 import { InboxVoteCards } from "@/app/messages/_components/InboxVoteCards";
@@ -352,14 +350,6 @@ export function InboxList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-bottom-nav">
-      <div className="mobile-sticky-header mobile-content-inset">
-        <AppBrandHeader
-          bare
-          className="py-1"
-          right={userId ? <ProjectNoticeBell userId={userId} /> : null}
-        />
-      </div>
-
       <div className="border-b px-4 py-2">
         <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-zinc-400" />

@@ -1,8 +1,9 @@
 "use client";
 
 import { Minus, Trash2, Trophy } from "lucide-react";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import type { IdeaWithTally } from "@/lib/projects/ideaVoting/types";
-import { voteBtn, voteBtnGhost, voteBtnPrimary, voteCard, voteChip } from "@/components/projects/idea-voting/voteUi";
+import { voteBtnGhost, voteCard, voteChip } from "@/components/projects/idea-voting/voteUi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
@@ -54,7 +55,7 @@ export function IdeaCard({
         : tx("上限", "Max");
 
   return (
-    <article className={`${voteCard} ${isTop && rank === 1 ? "border-zinc-900" : ""} px-3 py-2.5`}>
+    <article className={`${voteCard} rounded-2xl ${isTop && rank === 1 ? "border-zinc-900" : ""} px-3 py-2.5`}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           {isTop ? (
@@ -75,24 +76,27 @@ export function IdeaCard({
             ) : null}
           </p>
         </div>
-        <div className="flex w-[4.75rem] shrink-0 flex-col items-end gap-1">
+        <div className="flex w-[5.25rem] shrink-0 flex-col items-end gap-1">
           <p className="text-right">
             <span className={`text-[15px] font-semibold tabular-nums tracking-tight ${hideTallies ? "text-zinc-300" : "text-zinc-900"}`}>
               {hideTallies ? "—" : idea.votes}
             </span>
             <span className="ml-0.5 text-[10px] text-zinc-400">{hideTallies ? tx("締切後", "After close") : tx("票", "votes")}</span>
           </p>
-          <button
+          <DuoButton
             type="button"
+            tone={votingClosed || !canVote ? "zinc" : "orange"}
+            size="md"
+            fullWidth
             disabled={votingClosed || !canVote}
             onClick={() => onVote(idea.id)}
-            className={`w-full ${votingClosed || !canVote ? `${voteBtn} border border-zinc-200 bg-zinc-50 text-zinc-400` : voteBtnPrimary}`}
+            className="!rounded-xl !px-1 !py-1.5 !text-[11px] !leading-none"
             aria-label={voted ? tx("さらに投票する", "Vote again") : tx("投票する", "Vote")}
           >
             {voteLabel}
-          </button>
+          </DuoButton>
           {canUnvote ? (
-            <button type="button" onClick={() => onUnvote(idea.id)} className={`${voteBtnGhost} h-7 w-full text-[11px] text-zinc-500`}>
+            <button type="button" onClick={() => onUnvote(idea.id)} className={`${voteBtnGhost} h-7 w-full rounded-xl text-[11px] text-zinc-500`}>
               <Minus className="h-3 w-3" aria-hidden />
               {tx("取消", "Undo")}
             </button>
