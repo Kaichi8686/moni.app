@@ -155,21 +155,21 @@ function IdeaHubInner() {
       </button>
       <button
         type="button"
-        onClick={() => setSparkMode("contest")}
-        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
-          sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
-        }`}
-      >
-        {tx("コンテスト", "Contest")}
-      </button>
-      <button
-        type="button"
         onClick={() => setSparkMode("ai")}
         className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "ai" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
         AI
+      </button>
+      <button
+        type="button"
+        onClick={() => setSparkMode("contest")}
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
+          sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        }`}
+      >
+        {tx("コンテスト", "Contest")}
       </button>
     </div>
   ) : null;
