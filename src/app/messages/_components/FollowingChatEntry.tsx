@@ -15,10 +15,17 @@ export function FollowingChatEntry({ recentFollowing, onOpen }: Props) {
   const stacked = recentFollowing.slice(0, 2);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="flex w-full items-center px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="flex w-full cursor-pointer items-center px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
     >
       <div className="relative mr-3 shrink-0">
         <StackedFollowAvatars
@@ -40,6 +47,6 @@ export function FollowingChatEntry({ recentFollowing, onOpen }: Props) {
         </p>
       </div>
       <ChevronRight className="ml-2 h-5 w-5 shrink-0 text-zinc-300" aria-hidden />
-    </button>
+    </div>
   );
 }
