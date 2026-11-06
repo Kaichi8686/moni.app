@@ -6,7 +6,8 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 export type MailPerson = {
   id: string;
-  conversationId: string;
+  /** 既存 DM があるとき。未作成なら peer から開く */
+  conversationId?: string;
   displayName: string;
   avatarUrl?: string | null;
   unreadCount?: number;
@@ -14,7 +15,7 @@ export type MailPerson = {
 
 type Props = {
   people: MailPerson[];
-  onSelect: (conversationId: string) => void;
+  onSelect: (person: MailPerson) => void;
 };
 
 const ITEM_PX = 64;
@@ -92,12 +93,12 @@ export function MailPeopleReel({ people, onSelect }: Props) {
         >
           {people.map((person, index) => (
             <button
-              key={person.conversationId}
+              key={person.conversationId ?? person.id}
               id={`mail-reel-${person.id}`}
               type="button"
               role="option"
               aria-selected={index === activeIndex}
-              onClick={() => onSelect(person.conversationId)}
+              onClick={() => onSelect(person)}
               className="relative flex h-16 w-16 shrink-0 snap-start snap-always items-center justify-center"
             >
               <MemberAvatarBubble
@@ -116,11 +117,7 @@ export function MailPeopleReel({ people, onSelect }: Props) {
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onSelect(active.conversationId)}
-          className="min-w-0 flex-1 text-left"
-        >
+        <button type="button" onClick={() => onSelect(active)} className="min-w-0 flex-1 text-left">
           <p className="truncate text-base font-semibold tracking-tight text-zinc-900">
             {active.displayName}
           </p>
@@ -135,7 +132,7 @@ export function MailPeopleReel({ people, onSelect }: Props) {
           <div className="flex shrink-0 flex-col gap-1" aria-hidden>
             {people.map((person, index) => (
               <span
-                key={person.conversationId}
+                key={person.conversationId ?? person.id}
                 className={`h-1.5 w-1.5 rounded-full ${
                   index === activeIndex ? "bg-zinc-800" : "bg-zinc-300"
                 }`}

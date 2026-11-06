@@ -336,20 +336,31 @@ export function InboxList() {
     [recentFollowing, inboxListedPeerIds],
   );
 
-  /** メールタブ先頭の上下スライド用：DM 相手のみ */
-  const mailPeople = useMemo(
-    () =>
-      filtered
-        .filter((c) => c.type === "direct" && c.otherUser)
-        .map((c) => ({
-          id: c.otherUser!.id,
-          conversationId: c.id,
-          displayName: c.otherUser!.displayName,
-          avatarUrl: c.otherUser!.avatarUrl,
-          unreadCount: c.unreadCount,
-        })),
-    [filtered],
-  );
+  /**
+   * メールタブ先頭の上下スライド用。
+   * プロジェクト側: メンバー DM。プロフィール側: 既存 DM + まだ一覧にないフォロー中の人。
+   */
+  const mailPeople = useMemo(() => {
+    const fromDm = filtered
+      .filter((c) => c.type === "direct" && c.otherUser)
+      .map((c) => ({
+        id: c.otherUser!.id,
+        conversationId: c.id,
+        displayName: c.otherUser!.displayName,
+        avatarUrl: c.otherUser!.avatarUrl,
+        unreadCount: c.unreadCount,
+      }));
+    if (scopedProjectId) return fromDm;
+    const seen = new Set(fromDm.map((p) => p.id));
+    const fromFollowing = followingForEntry
+      .filter((u) => !seen.has(u.id))
+      .map((u) => ({
+        id: u.id,
+        displayName: u.displayName,
+        avatarUrl: u.avatarUrl,
+      }));
+    return [...fromDm, ...fromFollowing];
+  }, [filtered, followingForEntry, scopedProjectId]);
 
   const emptyHint = (() => {
     if (scopedProjectId && scopedMemberOk) {
@@ -406,13 +417,29 @@ export function InboxList() {
           <>
             <MailPeopleReel
               people={mailPeople}
-              onSelect={(conversationId) => router.push(`/messages/${conversationId}`)}
+              onSelect={(person) => {
+                if (person.conversationId) {
+                  router.push(`/messages/${person.conversationId}`);
+                  return;
+                }
+                if (!supabase) return;
+                void navigateToDirectMessage(supabase, router, person.id);
+              }}
             />
-            {!scopedProjectId ? (
+            {!scopedProjectId && mailPeople.length === 0 ? (
               <FollowingChatEntry
                 recentFollowing={followingForEntry}
                 onOpen={() => setShowFollowingPicker(true)}
               />
+            ) : null}
+            {!scopedProjectId && mailPeople.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowFollowingPicker(true)}
+                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 transition hover:bg-zinc-50"
+              >
+                {tx("フォロー中の人をすべて見る", "See everyone you follow")}
+              </button>
             ) : null}
             {filtered.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
