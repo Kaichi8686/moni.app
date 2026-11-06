@@ -130,7 +130,8 @@ export default function WorkspaceVoteCreate() {
           console.warn("createIdea", err);
         }
       }
-      router.replace(`/projects/${projectId}/ideas?event=${encodeURIComponent(created.id)}`);
+      // メッセージ一覧へ戻る。作成カードの右に新しい投票カードが載る
+      router.replace(messagesHref);
     } catch (err) {
       setError(err instanceof Error ? err.message : tx("作成に失敗しました", "Couldn’t create"));
       setBusy(false);
