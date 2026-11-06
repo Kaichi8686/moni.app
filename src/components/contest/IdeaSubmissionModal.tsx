@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, ImagePlus, Loader2, Map, Link2 } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   createRoadmapFromProject,
   submitContestIdea,
@@ -145,22 +144,22 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
       aria-labelledby="idea-submit-title"
     >
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative z-10 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
+      <div className="relative z-10 max-h-[92vh] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-[var(--shadow-lg)]">
         <div className="mb-4 flex items-start gap-3">
           <button
             type="button"
             onClick={onClose}
             aria-label={tx("戻る", "Back")}
-            className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:scale-95"
+            className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 active:bg-zinc-100"
           >
-            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+            <ChevronLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           </button>
           <div className="min-w-0 flex-1 pt-0.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-              {tx("アイデア応募", "Submit idea")}
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-400">
+              {tx("応募", "Submit")}
             </p>
-            <h2 id="idea-submit-title" className="mt-1 text-lg font-semibold text-zinc-950">
-              {done ? tx("投稿完了！", "Posted!") : tx("自由形式で発表しよう", "Share in any format")}
+            <h2 id="idea-submit-title" className="mt-1 text-lg font-semibold tracking-tight text-zinc-950">
+              {done ? tx("投稿完了", "Posted") : tx("アイデアを発表", "Share an idea")}
             </h2>
           </div>
         </div>
@@ -169,55 +168,55 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
 
         {done ? (
           <div className="flex flex-col items-center py-8 text-center">
-            <span className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
-              <Check className="h-6 w-6" aria-hidden />
+            <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-800">
+              <Check className="h-5 w-5" aria-hidden />
             </span>
             <p className="text-sm text-zinc-600">{tx("ギャラリーに載りました", "It’s in the gallery")}</p>
           </div>
         ) : (
           <div className="space-y-3.5">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-zinc-500">
-                {tx("アイデア名（必須・40字）", "Title (required, 40)")}
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                {tx("タイトル", "Title")}
               </label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value.slice(0, 40))}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-[#5E6AD2]/30 focus:ring-2"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-400"
                 placeholder={tx("例: 机の外に充電ステーション", "e.g. Charge station outside the desk")}
               />
               <p className="mt-1 text-right text-[11px] tabular-nums text-zinc-400">{title.length}/40</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-zinc-500">
-                {tx("解決アプローチ / 内容（必須）", "Approach / content (required)")}
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                {tx("内容", "Content")}
               </label>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value.slice(0, 4000))}
                 rows={7}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm leading-relaxed outline-none ring-[#5E6AD2]/30 focus:ring-2"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm leading-relaxed outline-none transition focus:border-zinc-400"
                 placeholder={tx("Markdown可。手順・理由・工夫など自由に", "Markdown OK. Steps, why, tips…")}
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-zinc-500">
-                {tx("アピールポイント（任意）", "Pitch (optional)")}
+              <label className="mb-1 block text-xs font-medium text-zinc-500">
+                {tx("アピール（任意）", "Pitch (optional)")}
               </label>
               <input
                 value={appeal}
                 onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-[#5E6AD2]/30 focus:ring-2"
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none transition focus:border-zinc-400"
                 placeholder={tx("推しポイントを一言で", "One-line highlight")}
               />
             </div>
 
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 p-3">
-              <p className="mb-2 text-xs font-semibold text-zinc-500">{tx("添付（任意）", "Attachments (optional)")}</p>
+            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-3">
+              <p className="mb-2 text-xs font-medium text-zinc-500">{tx("添付（任意）", "Attachments")}</p>
               <div className="flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50">
                   <ImagePlus className="h-3.5 w-3.5" aria-hidden />
                   {uploading ? tx("アップロード中…", "Uploading…") : tx("画像", "Image")}
                   <input
@@ -232,7 +231,7 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
                   type="button"
                   onClick={() => setShowProjects((v) => !v)}
                   disabled={demo}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-[#5E6AD2] ring-1 ring-[#D8DCFF] hover:bg-[#F7F8FF] disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
                 >
                   <Map className="h-3.5 w-3.5" aria-hidden />
                   {tx("ロードマップ", "Roadmap")}
@@ -241,10 +240,10 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
 
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageUrl} alt="" className="mt-2 h-24 w-full rounded-lg object-cover" />
+                <img src={imageUrl} alt="" className="mt-2 h-24 w-full rounded-xl border border-zinc-200 object-cover" />
               ) : null}
               {roadmapLabel ? (
-                <p className="mt-2 text-xs font-medium text-[#5E6AD2]">
+                <p className="mt-2 text-xs font-medium text-zinc-600">
                   {tx("連携中:", "Linked:")} {roadmapLabel}
                 </p>
               ) : null}
@@ -262,7 +261,7 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
                           type="button"
                           disabled={busy}
                           onClick={() => void onPickProject(p.id)}
-                          className="flex w-full items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-left text-xs font-semibold text-zinc-800 ring-1 ring-zinc-200 hover:ring-[#5E6AD2]/50"
+                          className="flex w-full items-center gap-2 rounded-xl border border-zinc-200 bg-white px-2.5 py-2 text-left text-xs font-medium text-zinc-800 transition hover:border-zinc-300"
                         >
                           <span aria-hidden>{p.icon || "📁"}</span>
                           <span className="truncate">{p.name}</span>
@@ -274,24 +273,24 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
               ) : null}
 
               <div className="mt-2">
-                <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-zinc-500">
+                <label className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-500">
                   <Link2 className="h-3 w-3" aria-hidden />
-                  {tx("外部URL（Figma / GitHub / Web）", "External URL")}
+                  {tx("外部URL", "External URL")}
                 </label>
                 <input
                   value={externalUrl}
                   onChange={(e) => setExternalUrl(e.target.value.slice(0, 500))}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2]/30 focus:ring-2"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-zinc-400"
                   placeholder="https://"
                 />
               </div>
             </div>
 
-            <DuoButton
+            <button
               type="button"
-              fullWidth
               disabled={busy || uploading || !title.trim() || !content.trim()}
               onClick={() => void submit()}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-[13px] font-medium text-white transition hover:bg-zinc-800 active:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? (
                 <span className="inline-flex items-center gap-2">
@@ -299,9 +298,9 @@ export function IdeaSubmissionModal({ open, contest, userId, demo, onClose, onSu
                   {tx("投稿中…", "Posting…")}
                 </span>
               ) : (
-                tx("コンテストに応募", "Submit entry")
+                tx("応募する", "Submit")
               )}
-            </DuoButton>
+            </button>
           </div>
         )}
       </div>

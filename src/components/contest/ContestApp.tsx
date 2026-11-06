@@ -9,10 +9,16 @@ import { IdeaDetailModal } from "@/components/contest/IdeaDetailModal";
 import { IdeaGallery } from "@/components/contest/IdeaGallery";
 import { IdeaSubmissionModal } from "@/components/contest/IdeaSubmissionModal";
 import { loadActiveContest, loadContestById, loadContestIdeas, toggleIdeaLike } from "@/lib/contest/api";
+import { DEMO_CONTEST, DEMO_CONTEST_SECONDARY, DEMO_IDEAS } from "@/lib/contest/demo";
 import type { Contest, ContestGallerySort, ContestIdea } from "@/lib/contest/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+
+function resolveDemoContest(id: string | null): Contest {
+  if (id === DEMO_CONTEST_SECONDARY.id) return DEMO_CONTEST_SECONDARY;
+  return DEMO_CONTEST;
+}
 
 type Props = {
   /** Ideaタブ内埋め込み（ナビ二重を避ける） */
@@ -130,19 +136,61 @@ export function ContestApp({ embedded = false, contestId = null, onBack, autoOpe
   }
 
   if (!supabaseEnabled) {
-    return <p className="p-8 text-center text-sm text-zinc-500">Supabase 未接続</p>;
+    const offlineContest = resolveDemoContest(contestId);
+    return (
+      <div className={`${embedded ? "min-h-0" : "min-h-[100dvh] pb-bottom-nav"} bg-zinc-50 text-zinc-900`}>
+        {embedded ? (
+          <div className="mx-auto flex max-w-lg items-center gap-2 px-4 py-2">
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex min-h-9 items-center rounded-xl px-2 text-[13px] font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900"
+            >
+              ← {tx("ロビー", "Lobby")}
+            </button>
+          </div>
+        ) : (
+          <AppBrandHeader />
+        )}
+        <main className="mx-auto w-full max-w-lg space-y-4 px-4 py-4 sm:px-5">
+          <ContestHeader
+            contest={offlineContest}
+            ideaCount={DEMO_IDEAS.length}
+            onApply={() => {
+              setToast(tx("応募にはログインが必要です", "Sign in to enter"));
+              window.setTimeout(() => setToast(""), 2200);
+            }}
+            demo
+          />
+          <IdeaGallery
+            ideas={DEMO_IDEAS}
+            sort={sort}
+            onSortChange={setSort}
+            onOpen={setDetail}
+            onToggleLike={() => undefined}
+            canLike={false}
+          />
+        </main>
+        {toast ? (
+          <div className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white shadow-[var(--shadow-md)]">
+            {toast}
+          </div>
+        ) : null}
+        {embedded ? null : <AppBottomNav />}
+      </div>
+    );
   }
 
   return (
-    <div className={`${embedded ? "min-h-0" : "min-h-[100dvh] pb-bottom-nav"} bg-[#fafaf8] text-zinc-900`}>
+    <div className={`${embedded ? "min-h-0" : "min-h-[100dvh] pb-bottom-nav"} bg-zinc-50 text-zinc-900`}>
       {embedded ? (
         <div className="mx-auto flex max-w-lg items-center gap-2 px-4 py-2">
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex min-h-10 items-center rounded-xl px-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-100"
+            className="inline-flex min-h-9 items-center rounded-xl px-2 text-[13px] font-medium text-zinc-600 transition hover:bg-white hover:text-zinc-900"
           >
-            ← {tx("ロビーに戻る", "Back to lobby")}
+            ← {tx("ロビー", "Lobby")}
           </button>
         </div>
       ) : (
@@ -157,25 +205,19 @@ export function ContestApp({ embedded = false, contestId = null, onBack, autoOpe
             </Link>
           }
           right={
-            <Link href="/discover" className="rounded-lg px-2 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100">
+            <Link href="/discover" className="rounded-lg px-2 py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-100">
               {tx("発見", "Discover")}
             </Link>
           }
         />
       )}
 
-      <main className="mx-auto w-full max-w-lg space-y-5 px-4 py-4 sm:px-5">
+      <main className="mx-auto w-full max-w-lg space-y-4 px-4 py-4 sm:px-5">
         {!embedded ? (
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-              {tx("コミュニティイベント", "Community event")}
-            </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-zinc-950">
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-950">
               {tx("アイデアコンテスト", "Idea Contest")}
             </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {tx("自由な形式で解決アイデアを発表しよう", "Share solutions in any format you like")}
-            </p>
           </div>
         ) : null}
 
@@ -183,8 +225,8 @@ export function ContestApp({ embedded = false, contestId = null, onBack, autoOpe
 
         {loading || !contest ? (
           <div className="space-y-3">
-            <div className="h-56 animate-pulse rounded-2xl bg-zinc-100" />
-            <div className="h-40 animate-pulse rounded-2xl bg-zinc-100" />
+            <div className="h-48 animate-pulse rounded-xl border border-zinc-200 bg-white" />
+            <div className="h-36 animate-pulse rounded-xl border border-zinc-200 bg-white" />
           </div>
         ) : (
           <>
@@ -225,7 +267,7 @@ export function ContestApp({ embedded = false, contestId = null, onBack, autoOpe
       />
 
       {toast ? (
-        <div className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
+        <div className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-medium text-white shadow-[var(--shadow-md)]">
           {toast}
         </div>
       ) : null}

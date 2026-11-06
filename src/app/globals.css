@@ -49,8 +49,8 @@
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Mobile shell — bottom nav + safe areas (floating pill needs float inset) */
-  --bottom-nav-height: 4.25rem;
-  --bottom-nav-float-inset: 0.65rem;
+  --bottom-nav-height: 3.85rem;
+  --bottom-nav-float-inset: 0.55rem;
   --bottom-nav-clearance: calc(
     var(--bottom-nav-height) + var(--bottom-nav-float-inset) + env(safe-area-inset-bottom, 0px)
   );
@@ -405,16 +405,14 @@ html.moni-doc-editor .project-workspace-header {
   display: flex;
   min-width: 0;
   align-items: center;
-  min-height: 3.65rem;
-  padding: 0.28rem 0.3rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 8px 28px rgba(15, 23, 42, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  min-height: 3.35rem;
+  padding: 0.22rem 0.24rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: none;
+  border: 1px solid rgba(24, 24, 27, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transition:
     flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
     flex-basis 320ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -445,15 +443,15 @@ html.moni-doc-editor .project-workspace-header {
   position: relative;
   z-index: 1;
   display: inline-flex;
-  width: 1.55rem;
-  min-height: 2.75rem;
+  width: 1.45rem;
+  min-height: 2.5rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 9999px;
+  border-radius: 10px;
   background: transparent;
-  color: #71717a;
+  color: #a1a1aa;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -486,7 +484,7 @@ html.moni-doc-editor .project-workspace-header {
 }
 
 .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-cluster-toggle.is-collapse {
-  width: 1.55rem;
+  width: 1.45rem;
   opacity: 1;
   transform: translateX(0);
 }
@@ -554,8 +552,8 @@ html.moni-doc-editor .project-workspace-header {
   top: 0;
   left: 0;
   z-index: 0;
-  border-radius: 9999px;
-  background: rgba(24, 24, 27, 0.08);
+  border-radius: 10px;
+  background: rgba(24, 24, 27, 0.06);
   opacity: 0;
   pointer-events: none;
   will-change: transform, width, height;
@@ -579,16 +577,14 @@ html.moni-doc-editor .project-workspace-header {
   display: flex;
   min-width: 0;
   align-items: center;
-  min-height: 3.65rem;
-  padding: 0.28rem 0.3rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 8px 28px rgba(15, 23, 42, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  min-height: 3.35rem;
+  padding: 0.22rem 0.24rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: none;
+  border: 1px solid rgba(24, 24, 27, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transition:
     flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
     flex-basis 320ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -603,10 +599,10 @@ html.moni-doc-editor .project-workspace-header {
 }
 
 .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-profile-pill {
-  flex: 0 0 3.55rem;
-  width: 3.55rem;
-  max-width: 3.55rem;
-  padding: 0.2rem;
+  flex: 0 0 3.25rem;
+  width: 3.25rem;
+  max-width: 3.25rem;
+  padding: 0.18rem;
   justify-content: center;
 }
 
@@ -641,11 +637,11 @@ html.moni-doc-editor .project-workspace-header {
   z-index: 1;
   display: flex;
   flex: 0 0 auto;
-  width: 2.95rem;
-  height: 2.95rem;
+  width: 2.7rem;
+  height: 2.7rem;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
+  border-radius: 10px;
   transition: width 280ms ease, height 280ms ease;
 }
 
@@ -659,15 +655,15 @@ html.moni-doc-editor .project-workspace-header {
   z-index: 1;
   display: flex;
   min-width: 0;
-  min-height: 2.9rem;
+  min-height: 2.65rem;
   flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0;
-  margin: 0.1rem 0.08rem;
-  padding: 0.35rem 0.2rem;
-  border-radius: 9999px;
+  margin: 0.06rem 0.04rem;
+  padding: 0.28rem 0.16rem;
+  border-radius: 10px;
   font-size: 11px;
   line-height: 1.15;
   letter-spacing: 0.01em;
@@ -679,7 +675,7 @@ html.moni-doc-editor .project-workspace-header {
 
 .app-bottom-nav-item--project {
   flex: 0 0 auto;
-  width: 3.1rem;
+  width: 2.85rem;
   margin-left: 0.05rem;
 }
 
@@ -696,7 +692,7 @@ html.moni-doc-editor .project-workspace-header {
   min-height: 0;
   margin: 0;
   padding: 0;
-  border-radius: 9999px;
+  border-radius: 10px;
 }
 
 .app-bottom-nav-item.is-active {
@@ -706,11 +702,11 @@ html.moni-doc-editor .project-workspace-header {
 
 .app-bottom-nav-item:not(.is-active) {
   font-weight: 500;
-  color: #71717a;
+  color: #a1a1aa;
 }
 
 .app-bottom-nav-item:not(.is-active):active {
-  color: #3f3f46;
+  color: #52525b;
 }
 
 .app-bottom-nav-profile-slot.is-active .app-bottom-nav-item--profile {
@@ -722,13 +718,13 @@ html.moni-doc-editor .project-workspace-header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   line-height: 1;
 }
 
 .app-bottom-nav-svg {
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1.2rem;
+  height: 1.2rem;
   display: block;
 }
 
@@ -759,21 +755,21 @@ html.moni-doc-editor .project-workspace-header {
   }
 
   .app-bottom-nav-item--project {
-    width: 3.25rem;
+    width: 3rem;
   }
 
   .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-profile-pill {
-    flex-basis: 3.7rem;
-    width: 3.7rem;
-    max-width: 3.7rem;
+    flex-basis: 3.4rem;
+    width: 3.4rem;
+    max-width: 3.4rem;
   }
 
   .app-bottom-nav-cluster-toggle {
-    width: 1.7rem;
+    width: 1.55rem;
   }
 
   .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-cluster-toggle.is-collapse {
-    width: 1.7rem;
+    width: 1.55rem;
   }
 }
 
