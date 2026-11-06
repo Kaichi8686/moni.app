@@ -24,7 +24,7 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
     docEditorOpen ||
       pathname?.match(/^\/projects\/[^/]+\/coach\/?$/) ||
       pathname?.match(/^\/projects\/[^/]+\/roadmap\/?$/) ||
-      pathname?.match(/^\/projects\/[^/]+\/ideas\/new\/?$/),
+      pathname?.match(/^\/projects\/[^/]+\/ideas(?:\/|$)/),
   );
   return (
     <>

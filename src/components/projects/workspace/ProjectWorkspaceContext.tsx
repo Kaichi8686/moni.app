@@ -1167,9 +1167,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     pathname === `/projects/${projectId}/recruit` || pathname?.startsWith(`/projects/${projectId}/recruit/`);
   /** ロードマップ編集（/roadmap/templates は除く）はヘッダー・タブなし */
   const isRoadmapEditPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/roadmap\/?$/));
-  /** 投票作成はヘッダーなし（戻るは画面側の固定ボタン） */
+  /** 投票（作成・詳細）はヘッダーなし（戻るは画面側の固定ボタン） */
+  const isVotePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/ideas(?:\/|$)/));
   const isVoteCreatePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/ideas\/new\/?$/));
-  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage || isVoteCreatePage;
+  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1187,7 +1188,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           isRecruitPage ? "flex flex-col" : ""
         }`}
       >
-        {isCoachChat || isRoadmapEditPage || isVoteCreatePage ? null : (
+        {isCoachChat || isRoadmapEditPage || isVotePage ? null : (
         <header className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4">
           <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
@@ -1385,7 +1386,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat || isRoadmapEditPage || isVoteCreatePage
+            isCoachChat || isRoadmapEditPage || isVotePage
               ? "min-h-[100dvh]"
               : isRecruitPage
                 ? "min-h-0 flex-1"
@@ -1396,7 +1397,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
-                : isRoadmapEditPage || isVoteCreatePage
+                : isRoadmapEditPage || isVotePage
                   ? "min-h-[100dvh]"
                   : isRecruitPage
                     ? "flex min-h-0 flex-1 flex-col"
@@ -1409,11 +1410,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   ? "h-full"
                   : isVoteCreatePage
                     ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                    : isRoadmapEditPage
-                      ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
-                      : isRecruitPage
-                        ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
-                        : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
+                    : isVotePage
+                      ? "mx-auto max-w-2xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
+                      : isRoadmapEditPage
+                        ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
+                        : isRecruitPage
+                          ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
+                          : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >
               {error && !isCoachChat ? (

@@ -66,6 +66,11 @@ function isProjectRecruitPath(pathname: string): boolean {
   return /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(pathname);
 }
 
+/** 投票（メッセージ導線）— ホーム／概要タブではなくメッセージ側として扱う */
+function isProjectIdeasPath(pathname: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/ideas(?:\/|$)/i.test(pathname);
+}
+
 function resolveProjectScopedHref(
   pathname: string,
   suffix: "issues" | "recruit",
@@ -122,6 +127,8 @@ const PROJECT_ITEM: NavItem = {
     // 課題・募集は開いたクラスタ側の専用タブ
     if (rest === "issues" || rest.startsWith("issues/")) return false;
     if (rest === "recruit" || rest.startsWith("recruit/")) return false;
+    // 投票はメッセージ導線（プロジェクトホーム扱いしない）
+    if (rest === "ideas" || rest.startsWith("ideas/")) return false;
     return true;
   },
 };
@@ -133,7 +140,7 @@ const CLOSED_TABS: NavItem[] = [
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => p === "/messages" || p.startsWith("/messages/"),
+    match: (p) => p === "/messages" || p.startsWith("/messages/") || isProjectIdeasPath(p),
     badgeKey: "mail",
   },
   {
@@ -164,7 +171,7 @@ const OPEN_TABS: NavItem[] = [
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => p === "/messages" || p.startsWith("/messages/"),
+    match: (p) => p === "/messages" || p.startsWith("/messages/") || isProjectIdeasPath(p),
     badgeKey: "mail",
   },
   {
@@ -375,8 +382,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
       // キューブ一覧：ブロック閉じ＋矢印なしを維持
       enterProjectListMode();
       setOpenPref(false);
-    } else if (onMessagesPath && messagesProjectParam) {
-      // プロジェクトブロックのメール
+    } else if ((onMessagesPath && messagesProjectParam) || isProjectIdeasPath(pathname)) {
+      // プロジェクトブロックのメール／投票（メッセージ導線）
       openProjectCluster();
       setOpenPref(true);
     } else if (onMessagesPath || profileActive) {
