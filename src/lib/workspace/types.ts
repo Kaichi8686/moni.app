@@ -5,8 +5,10 @@ export type IssueStatus = "backlog" | "todo" | "in_progress" | "in_review" | "do
 export type Priority = "no_priority" | "urgent" | "high" | "medium" | "low";
 
 import type { IssueWorkflow } from "@/lib/workspace/issueWorkflow";
+import type { IssueWorkFile } from "@/lib/workspace/issueWorkFiles";
 import type { IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
 export type { IssueWorkflow, IssueWorkflowStep } from "@/lib/workspace/issueWorkflow";
+export type { IssueWorkFile, IssueWorkFileKind } from "@/lib/workspace/issueWorkFiles";
 export type { IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
 
 /** Built-in genres, or custom ids like `custom_ab12cd34` */
@@ -53,6 +55,8 @@ export interface Issue {
   workspaceText: string;
   /** 作業スペースのフリーキャンバス（用紙・写真・矢印） */
   workspaceBoard: IssueWorkspaceBoard | null;
+  /** 課題内の作業ファイル（ドキュメント / ホワイトボード / 作業スペース） */
+  workFiles: IssueWorkFile[];
   attachments: string[];
   submittedAt?: string;
   /** 旧5ステップが残っていて、作業スペースへ移す必要がある */

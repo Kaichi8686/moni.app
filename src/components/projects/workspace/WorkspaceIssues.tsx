@@ -1,21 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus, StickyNote } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
+import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
-import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
-import { dateInputToIso, daysUntilDue, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
-import {
-  boardFromPlainText,
-  createEmptyBoard,
-  SHEET_COLORS,
-  type IssueWorkspaceBoard,
-} from "@/lib/workspace/issueWorkspaceBoard";
+import { dateInputToIso, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
   createCustomTaskGenreId,
@@ -33,11 +25,9 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type PhaseKey = string | null;
 
 type Screen =
-  | { kind: "list" }
   | { kind: "step"; phaseId: PhaseKey }
   | { kind: "genre"; phaseId: PhaseKey; genre: TaskGenre }
-  | { kind: "task"; phaseId: PhaseKey; genre: TaskGenre; issueId: string }
-  | { kind: "canvas"; phaseId: PhaseKey; genre: TaskGenre; issueId: string };
+  | { kind: "task"; phaseId: PhaseKey; genre: TaskGenre; issueId: string };
 
 function phaseKeyOf(issue: Issue): PhaseKey {
   return issue.phaseId ?? null;
@@ -69,13 +59,11 @@ export default function WorkspaceIssues() {
     canEdit,
     createIssue,
     saveIssueWork,
-    updateIssue,
     coachingContext,
     saveCoachingContext,
     registerBackHandler,
   } = useProjectWorkspace();
-  const [screen, setScreen] = useState<Screen>({ kind: "list" });
-  const [portalReady, setPortalReady] = useState(false);
+  const [screen, setScreen] = useState<Screen | null>(null);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
   const [draftGenreLabel, setDraftGenreLabel] = useState("");
@@ -84,16 +72,9 @@ export default function WorkspaceIssues() {
   const [draftAssignees, setDraftAssignees] = useState<string[]>([]);
   const [draftBegin, setDraftBegin] = useState("");
   const [draftDue, setDraftDue] = useState("");
-  const [beginDraft, setBeginDraft] = useState("");
-  const [dueDraft, setDueDraft] = useState("");
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [savingGenre, setSavingGenre] = useState(false);
-  const [boardDraft, setBoardDraft] = useState<IssueWorkspaceBoard>(() => createEmptyBoard());
-  const fileRef = useRef<HTMLInputElement>(null);
-  const boardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const entryHandled = useRef(false);
-  const taskId = screen.kind === "task" || screen.kind === "canvas" ? screen.issueId : "";
 
   const sortedPhases = useMemo(
     () => [...phases].sort((a, b) => a.order - b.order),
@@ -114,68 +95,6 @@ export default function WorkspaceIssues() {
     () => openIssues.filter((issue) => !issue.phaseId).length,
     [openIssues],
   );
-
-  // 課題を開いたときだけボードを読み込む（保存後の issues 更新で編集中の下書きを潰さない）
-  useEffect(() => {
-    if (!taskId) return;
-    const issue = issues.find((item) => item.id === taskId);
-    setBoardDraft(issue?.workspaceBoard ?? boardFromPlainText(issue?.workspaceText ?? ""));
-    setBeginDraft(isoToDateInput(issue?.beginAt));
-    setDueDraft(isoToDateInput(issue?.dueDate));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- task switch only
-  }, [taskId]);
-
-  useEffect(() => {
-    if (!taskId) return;
-    const issue = issues.find((item) => item.id === taskId);
-    if (!issue) return;
-    setBeginDraft(isoToDateInput(issue.beginAt));
-    setDueDraft(isoToDateInput(issue.dueDate));
-  }, [taskId, issues]);
-
-  useEffect(() => {
-    return () => {
-      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (screen.kind !== "canvas") {
-      registerBackHandler(null);
-      return;
-    }
-    registerBackHandler(() => {
-      setScreen({ kind: "task", phaseId: screen.phaseId, genre: screen.genre, issueId: screen.issueId });
-      return true;
-    });
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      registerBackHandler(null);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [registerBackHandler, screen]);
-
-  function persistBoard(issueId: string, board: IssueWorkspaceBoard) {
-    setBoardDraft(board);
-    if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
-    boardSaveTimer.current = setTimeout(() => {
-      void saveIssueWork(issueId, { workspaceBoard: board });
-    }, 400);
-  }
-
-  function openCanvas(phaseId: PhaseKey, genre: TaskGenre, issueId: string) {
-    setScreen({ kind: "canvas", phaseId, genre, issueId });
-  }
-
-  function closeCanvas() {
-    if (screen.kind !== "canvas") return;
-    setScreen({ kind: "task", phaseId: screen.phaseId, genre: screen.genre, issueId: screen.issueId });
-  }
 
   useEffect(() => {
     if (entryHandled.current) return;
@@ -220,13 +139,14 @@ export default function WorkspaceIssues() {
       return;
     }
 
-    // クエリなし: いまのステップのジャンル一覧へ
+    // クエリなし: いまのステップのジャンル一覧へ（ステップ選択画面は出さない）
     if (sortedPhases.length === 0 && phases.length > 0) return;
     entryHandled.current = true;
     const inProgress = sortedPhases.find((item) => item.status === "in_progress");
     const firstOpen = sortedPhases.find((item) => item.status !== "completed");
     const focus = inProgress ?? firstOpen ?? sortedPhases[0];
     if (focus) setScreen({ kind: "step", phaseId: focus.id });
+    else setScreen({ kind: "step", phaseId: null });
   }, [issues, phases.length, sortedPhases]);
 
   const names = useMemo(() => {
@@ -235,14 +155,14 @@ export default function WorkspaceIssues() {
     return map;
   }, [project?.members]);
 
-  const activeGenre = screen.kind === "list" || screen.kind === "step" ? null : screen.genre;
+  const activeGenre = !screen || screen.kind === "step" ? null : screen.genre;
   const activeIssue =
-    screen.kind === "task" || screen.kind === "canvas"
+    screen && screen.kind === "task"
       ? issues.find((issue) => issue.id === screen.issueId) ?? null
       : null;
 
   const stepGenres = useMemo(() => {
-    if (screen.kind === "list") return [] as TaskGenre[];
+    if (!screen) return [] as TaskGenre[];
     return listStepTaskGenres(screen.phaseId, customGenres, openIssues);
   }, [screen, customGenres, openIssues]);
 
@@ -264,7 +184,8 @@ export default function WorkspaceIssues() {
 
   async function addCustomGenre(event: FormEvent) {
     event.preventDefault();
-    if (screen.kind !== "step") return;
+    if (!screen || screen.kind !== "step") return;
+    const stepScreen = screen;
     const labelJa = normalizeCustomTaskGenreLabel(draftGenreLabel);
     if (!labelJa) {
       setError(tx("ジャンル名を入力してください", "Enter a genre name"));
@@ -277,7 +198,7 @@ export default function WorkspaceIssues() {
     const duplicate = customGenres.some(
       (g) =>
         g.labelJa.toLowerCase() === labelJa.toLowerCase() &&
-        (g.phaseId ?? null) === screen.phaseId,
+        (g.phaseId ?? null) === stepScreen.phaseId,
     );
     if (duplicate) {
       setError(tx("同じ名前のジャンルがすでにあります", "That genre name already exists"));
@@ -291,13 +212,13 @@ export default function WorkspaceIssues() {
         labelJa,
         hintJa: draftGenreHint.trim().slice(0, 60) || undefined,
         colorKey: nextCustomColorKey(customGenres.length),
-        phaseId: screen.phaseId ?? undefined,
+        phaseId: stepScreen.phaseId ?? undefined,
       };
       await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
       setDraftGenreLabel("");
       setDraftGenreHint("");
       setAddingGenre(false);
-      setScreen({ kind: "genre", phaseId: screen.phaseId, genre: next.id });
+      setScreen({ kind: "genre", phaseId: stepScreen.phaseId, genre: next.id });
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ジャンルを追加できませんでした", "Couldn’t add the genre"));
     } finally {
@@ -307,7 +228,8 @@ export default function WorkspaceIssues() {
 
   async function addTask(event: FormEvent) {
     event.preventDefault();
-    if (screen.kind !== "genre" || !draftTitle.trim()) return;
+    if (!screen || screen.kind !== "genre" || !draftTitle.trim()) return;
+    const genreScreen = screen;
     setError("");
     try {
       const beginAt = dateInputToIso(draftBegin);
@@ -321,8 +243,8 @@ export default function WorkspaceIssues() {
         status: "todo",
         priority: "medium",
         assigneeIds: draftAssignees,
-        genre: screen.genre,
-        phaseId: screen.phaseId,
+        genre: genreScreen.genre,
+        phaseId: genreScreen.phaseId,
         beginAt,
         dueDate,
       });
@@ -336,218 +258,24 @@ export default function WorkspaceIssues() {
     }
   }
 
-  async function addPhotos(files: FileList | null) {
-    if (!files || !activeIssue || !uid) return;
-    setUploading(true);
-    setError("");
-    try {
-      const { supabase } = await import("@/lib/supabase");
-      if (!supabase) throw new Error(tx("画像を保存できません", "Can’t save the photo"));
-      let nextBoard = boardDraft;
-      for (const file of Array.from(files)) {
-        const result = await uploadProjectImage(supabase, uid, "issue-photo", activeIssue.id, file);
-        nextBoard = appendImageToBoard(nextBoard, result.publicUrl);
-      }
-      if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
-      setBoardDraft(nextBoard);
-      await saveIssueWork(activeIssue.id, { workspaceBoard: nextBoard });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("画像を追加できませんでした", "Couldn’t add the photo"));
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  function dueLabel(issue: Issue) {
-    const days = daysUntilDue(issue.dueDate);
-    if (days == null) return "";
-    if (days > 0) return tx(`期限まであと${days}日`, `${days} days left`);
-    if (days === 0) return tx("期限は今日", "Due today");
-    return tx(`期限を${Math.abs(days)}日過ぎています`, `${Math.abs(days)} days overdue`);
-  }
-
-  if (screen.kind === "canvas" && activeIssue) {
-    if (!portalReady) return null;
-    return createPortal(
-      <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
-        <IssueWorkspaceCanvas
-          board={boardDraft}
-          canEdit={canEdit}
-          uploading={uploading}
-          fullscreen
-          onChange={(board) => persistBoard(activeIssue.id, board)}
-          onRequestPhoto={() => fileRef.current?.click()}
-          toolbarStart={
-            <button
-              type="button"
-              data-board-ui
-              onClick={closeCanvas}
-              className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
-            >
-              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-              <span>{tx("戻る", "Back")}</span>
-            </button>
-          }
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(event) => void addPhotos(event.target.files)}
-        />
-        {error ? (
-          <p className="absolute bottom-4 left-1/2 z-10 max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
-            {error}
-          </p>
-        ) : null}
-        {uploading ? (
-          <p className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-zinc-900/85 px-4 py-2 text-sm font-semibold text-white shadow-lg">
-            {tx("写真を追加中…", "Adding photo…")}
-          </p>
-        ) : null}
-      </div>,
-      document.body,
-    );
+  if (!screen) {
+    return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   }
 
   if (screen.kind === "task" && activeIssue && activeGenre) {
     const meta = resolveGenreMeta(activeGenre, customGenres);
-    const submitted = isIssueSubmitted(activeIssue);
-    const assignee = assigneeNames(activeIssue, names).join("、");
-    const due = dueLabel(activeIssue);
-    const previewSheets = boardDraft.items.filter((item) => item.kind === "sheet").slice(0, 4);
-    const phaseId = screen.phaseId;
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setScreen({ kind: "genre", phaseId, genre: activeGenre })}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <p className="min-w-0 truncate text-sm font-semibold text-zinc-500">
-            {stepLabel(phaseId, sortedPhases, tx)}
-            <span className="text-zinc-300"> · </span>
-            {locale === "en" ? meta.en : meta.ja}
-          </p>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-950">{activeIssue.title}</h1>
-        <p className="text-sm text-zinc-600">
-          {[assignee || tx("担当未設定", "No assignee"), due].filter(Boolean).join(" · ")}
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block text-sm">
-            <span className="font-semibold text-zinc-800">{tx("やり始める", "Start")}</span>
-            <input
-              type="date"
-              value={beginDraft}
-              disabled={!canEdit}
-              onChange={(event) => {
-                const value = event.target.value;
-                setBeginDraft(value);
-                const beginAt = dateInputToIso(value);
-                const dueAt = dateInputToIso(dueDraft);
-                if (beginAt && dueAt && beginAt > dueAt) {
-                  setError(tx("やり始める日は期限より前にしてください", "Start before the deadline"));
-                  return;
-                }
-                setError("");
-                void updateIssue(activeIssue.id, { beginAt });
-              }}
-              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-semibold text-zinc-800">{tx("期限", "Deadline")}</span>
-            <input
-              type="date"
-              value={dueDraft}
-              disabled={!canEdit}
-              onChange={(event) => {
-                const value = event.target.value;
-                setDueDraft(value);
-                const dueAt = dateInputToIso(value);
-                const beginAt = dateInputToIso(beginDraft);
-                if (beginAt && dueAt && beginAt > dueAt) {
-                  setError(tx("やり始める日は期限より前にしてください", "Start before the deadline"));
-                  return;
-                }
-                setError("");
-                void updateIssue(activeIssue.id, { dueDate: dueAt });
-              }}
-              className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
-            />
-          </label>
-        </div>
-        <button
-          type="button"
-          onClick={() => openCanvas(phaseId, activeGenre, activeIssue.id)}
-          className="group flex w-full items-stretch overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-left transition hover:border-orange-300 hover:bg-orange-50/40"
-          aria-label={tx("移動", "Go")}
-        >
-          <div
-            className="relative min-h-[4.5rem] min-w-0 flex-1 overflow-hidden"
-            style={{
-              backgroundColor: "#F4F4F5",
-              backgroundImage:
-                "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
-              backgroundSize: "16px 16px",
-            }}
-          >
-            {previewSheets.length > 0 ? (
-              <div className="absolute inset-0 flex items-center gap-2 px-3">
-                {previewSheets.map((sheet) => (
-                  <span
-                    key={sheet.id}
-                    className="h-12 w-11 shrink-0 overflow-hidden rounded-sm border px-1 py-0.5 text-[8px] leading-tight text-zinc-800 shadow-sm"
-                    style={{
-                      backgroundColor: SHEET_COLORS[sheet.color].bg,
-                      borderColor: SHEET_COLORS[sheet.color].border,
-                    }}
-                  >
-                    {(sheet.text || " ").slice(0, 18)}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-zinc-400">
-                <StickyNote className="h-5 w-5" aria-hidden />
-              </div>
-            )}
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-1 bg-zinc-900 px-4 text-sm font-semibold text-white group-hover:bg-orange-500">
-            {tx("移動", "Go")}
-            <ArrowRight className="h-4 w-4" />
-          </span>
-        </button>
-        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        <DuoButton
-          type="button"
-          tone="orange"
-          size="lg"
-          fullWidth
-          disabled={!canEdit || submitted}
-          onClick={() => {
-            if (boardSaveTimer.current) {
-              clearTimeout(boardSaveTimer.current);
-              boardSaveTimer.current = null;
-            }
-            void saveIssueWork(activeIssue.id, {
-              workspaceBoard: boardDraft,
-              submittedAt: new Date().toISOString(),
-            });
-          }}
-          className="!text-[16px]"
-        >
-          {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-        </DuoButton>
-      </div>
+      <IssueTaskFilesPanel
+        issue={activeIssue}
+        members={project?.members ?? []}
+        stepLabel={stepLabel(screen.phaseId, sortedPhases, tx)}
+        genreLabel={locale === "en" ? meta.en : meta.ja}
+        uid={uid}
+        canEdit={canEdit}
+        onBack={() => setScreen({ kind: "genre", phaseId: screen.phaseId, genre: activeGenre })}
+        onSaveWork={(patch) => saveIssueWork(activeIssue.id, patch)}
+        registerBackHandler={registerBackHandler}
+      />
     );
   }
 
@@ -641,7 +369,7 @@ export default function WorkspaceIssues() {
               <DuoButton
                 key={issue.id}
                 type="button"
-                tone={submitted ? "zinc" : "peach"}
+                tone={submitted ? "lime" : "peach"}
                 size="md"
                 fullWidth
                 onClick={() =>
@@ -651,7 +379,7 @@ export default function WorkspaceIssues() {
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="line-clamp-2">{issue.title}</span>
-                  <span className={`truncate text-[11px] font-semibold ${submitted ? "text-zinc-500" : "text-orange-800/75"}`}>
+                  <span className={`truncate text-[11px] font-semibold ${submitted ? "text-[#3F6212]/75" : "text-[#9A5B1F]/80"}`}>
                     {[
                       assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee"),
                       issue.dueDate
@@ -698,21 +426,8 @@ export default function WorkspaceIssues() {
 
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setScreen({ kind: "list" });
-              setAddingGenre(false);
-              setCreating(false);
-              setError("");
-            }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-zinc-100"
-            aria-label={tx("ステップ一覧", "All steps")}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          {canEdit ? (
+        {canEdit ? (
+          <div className="flex justify-end">
             <DuoButton
               type="button"
               tone="orange"
@@ -721,13 +436,13 @@ export default function WorkspaceIssues() {
                 setError("");
                 setAddingGenre((v) => !v);
               }}
-              className="ml-auto !gap-1 !px-3 !py-2.5 !text-[13px]"
+              className="!gap-1 !px-3 !py-2.5 !text-[13px]"
             >
               <Plus className="h-4 w-4" aria-hidden />
               {tx("ジャンルを追加", "Add genre")}
             </DuoButton>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-2.5">
           <button
@@ -737,7 +452,7 @@ export default function WorkspaceIssues() {
               if (prevStepId === undefined) return;
               goToNeighbor(prevStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("前のステップ", "Previous step")}
           >
             <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -756,7 +471,7 @@ export default function WorkspaceIssues() {
               if (nextStepId === undefined) return;
               goToNeighbor(nextStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFC46B] text-[#7C2D12] shadow-[0_4px_0_#E89A3C] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("次のステップ", "Next step")}
           >
             <ChevronRight className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -834,7 +549,7 @@ export default function WorkspaceIssues() {
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
-                  <span className="truncate text-[11px] font-semibold text-orange-800/75">
+                  <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
                     {locale === "en" ? meta.hintEn : meta.hintJa}
                   </span>
                 </span>
@@ -849,123 +564,18 @@ export default function WorkspaceIssues() {
             );
           })}
         </div>
+        {sortedPhases.length === 0 && phaseId === null ? (
+          <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
+            {tx(
+              "ロードマップのステップがまだありません。概要のロードマップからステップを作ると、ここに表示されます。",
+              "No roadmap steps yet. Create steps from the overview roadmap to organize tasks here.",
+            )}
+          </p>
+        ) : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       </div>
     );
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-zinc-950">{tx("課題", "Tasks")}</h1>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {tx("ロードマップのステップごとにジャンルと課題を整理", "Organize genres and tasks by roadmap step")}
-          </p>
-        </div>
-      </div>
-
-      {sortedPhases.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
-          {tx(
-            "ロードマップのステップがまだありません。概要のロードマップからステップを作ると、ここに表示されます。",
-            "No roadmap steps yet. Create steps from the overview roadmap to organize tasks here.",
-          )}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {sortedPhases.map((phase, index) => {
-            const openCount = openCountFor(phase.id);
-            const inProgress = phase.status === "in_progress";
-            return (
-              <DuoButton
-                key={phase.id}
-                type="button"
-                tone={inProgress ? "orange" : "peach"}
-                size="md"
-                fullWidth
-                onClick={() => {
-                  setAddingGenre(false);
-                  setScreen({ kind: "step", phaseId: phase.id });
-                }}
-                className={LIST_DUO}
-              >
-                <span
-                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold ${
-                    inProgress
-                      ? "bg-white/25 text-white"
-                      : "bg-[#FF9600] text-white shadow-[0_2px_0_#D97706]"
-                  }`}
-                >
-                  {index + 1}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className={`text-[11px] font-extrabold tracking-[0.1em] ${inProgress ? "text-white/80" : "text-orange-800/70"}`}>
-                    STEP {index + 1}
-                    {inProgress ? (
-                      <span className="ml-2 tracking-normal">{tx("いまここ", "Current")}</span>
-                    ) : null}
-                  </span>
-                  <span className="truncate">{phase.title}</span>
-                  {phase.goal ? (
-                    <span className={`truncate text-[11px] font-semibold ${inProgress ? "text-white/75" : "text-orange-800/75"}`}>
-                      {phase.goal}
-                    </span>
-                  ) : null}
-                </span>
-                {openCount > 0 ? (
-                  <span
-                    className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold ${
-                      inProgress
-                        ? "bg-white text-[#FF9600]"
-                        : "bg-[#FF4B4B] text-white shadow-[0_2px_0_#C43232]"
-                    }`}
-                  >
-                    {openCount}
-                  </span>
-                ) : (
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                )}
-              </DuoButton>
-            );
-          })}
-        </div>
-      )}
-
-      {unlinkedCount > 0 || sortedPhases.length === 0 ? (
-        <div className="flex flex-col gap-2.5">
-          <DuoButton
-            type="button"
-            tone="zinc"
-            size="md"
-            fullWidth
-            onClick={() => {
-              setAddingGenre(false);
-              setScreen({ kind: "step", phaseId: null });
-            }}
-            className={LIST_DUO}
-          >
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-300 text-xs font-extrabold text-zinc-700">
-              —
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate">{tx("ステップ未設定", "No step")}</span>
-              <span className="truncate text-[11px] font-semibold text-zinc-500">
-                {tx("ロードマップにまだついていない課題", "Tasks not linked to a roadmap step")}
-              </span>
-            </span>
-            {unlinkedCount > 0 ? (
-              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
-                {unlinkedCount}
-              </span>
-            ) : (
-              <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-            )}
-          </DuoButton>
-        </div>
-      ) : null}
-
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-    </div>
-  );
+  return null;
 }

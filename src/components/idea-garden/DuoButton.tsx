@@ -2,7 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type Tone = "green" | "orange" | "gold" | "peach" | "sky" | "zinc";
+type Tone = "green" | "orange" | "gold" | "peach" | "lime" | "sky" | "zinc";
 type Size = "md" | "lg" | "xl";
 
 /**
@@ -38,14 +38,24 @@ const TONES: Record<Tone, { face: string; text: string; lip: Record<Size, string
       xl: "shadow-[0_6px_0_#D97706]",
     },
   },
-  /** 薄いオレンジ（課題カードなど） */
+  /** 薄いオレンジ（課題カード・未提出など） */
   peach: {
-    face: "bg-[#FFC46B]",
-    text: "text-[#7C2D12]",
+    face: "bg-[#FFE0A8]",
+    text: "text-[#9A5B1F]",
     lip: {
-      md: "shadow-[0_4px_0_#E89A3C]",
-      lg: "shadow-[0_5px_0_#E89A3C]",
-      xl: "shadow-[0_6px_0_#E89A3C]",
+      md: "shadow-[0_4px_0_#F0B85A]",
+      lg: "shadow-[0_5px_0_#F0B85A]",
+      xl: "shadow-[0_6px_0_#F0B85A]",
+    },
+  },
+  /** 黄緑色（提出済み課題など） */
+  lime: {
+    face: "bg-[#C8E86A]",
+    text: "text-[#3F6212]",
+    lip: {
+      md: "shadow-[0_4px_0_#9BC23E]",
+      lg: "shadow-[0_5px_0_#9BC23E]",
+      xl: "shadow-[0_6px_0_#9BC23E]",
     },
   },
   sky: {

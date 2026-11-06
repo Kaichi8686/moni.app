@@ -15,12 +15,19 @@ import {
   readBoardFromText,
   type IssueWorkspaceBoard,
 } from "@/lib/workspace/issueWorkspaceBoard";
+import {
+  ensureLegacyCanvasFile,
+  parseIssueWorkFiles,
+  serializeIssueWorkFiles,
+  type IssueWorkFile,
+} from "@/lib/workspace/issueWorkFiles";
 import { isTaskGenre } from "@/lib/workspace/taskGenres";
 import type { TaskGenre } from "@/lib/workspace/types";
 
 export { BUILTIN_TASK_GENRES, isTaskGenre, TASK_GENRES } from "@/lib/workspace/taskGenres";
 export type { TaskGenre };
 export type { IssueWorkspaceBoard };
+export type { IssueWorkFile, IssueWorkFileKind } from "@/lib/workspace/issueWorkFiles";
 
 export const WORK_MARKER = "---moni-work-v1---";
 const GENRE_PREFIX = "genre:";
@@ -34,6 +41,8 @@ export type IssueWork = {
   workspaceText: string;
   /** フリーキャンバス。無い場合は workspaceText から用紙1枚へ移行 */
   workspaceBoard: IssueWorkspaceBoard | null;
+  /** 課題内ファイル一覧 */
+  workFiles: IssueWorkFile[];
   attachments: string[];
   submittedAt: string | null;
 };
@@ -47,6 +56,7 @@ type WorkRow = {
   genre?: string | null;
   workspace_text?: string | null;
   workspace_board_json?: unknown | null;
+  work_files_json?: unknown | null;
   attachment_urls?: string[] | null;
   submitted_at?: string | null;
 };
@@ -75,10 +85,14 @@ function readPackedWork(description?: string | null): Partial<IssueWork> | null 
   if (!description?.includes(WORK_MARKER)) return null;
   const json = description.slice(description.indexOf(WORK_MARKER) + WORK_MARKER.length).trim();
   try {
-    const parsed = JSON.parse(json) as Partial<IssueWork> & { workspaceBoard?: unknown };
+    const parsed = JSON.parse(json) as Partial<IssueWork> & {
+      workspaceBoard?: unknown;
+      workFiles?: unknown;
+    };
     if (!parsed || typeof parsed !== "object") return null;
     const board = parseWorkspaceBoard(parsed.workspaceBoard) ?? null;
-    return { ...parsed, workspaceBoard: board };
+    const workFiles = parseIssueWorkFiles(parsed.workFiles);
+    return { ...parsed, workspaceBoard: board, workFiles };
   } catch {
     return null;
   }
@@ -138,6 +152,12 @@ export function readIssueWork(row: WorkRow): IssueWork & { legacyWorkflow: boole
   const attachments = columnAttachments.length > 0 ? columnAttachments : packedAttachments;
   const packedBoard = packed?.workspaceBoard ?? null;
   const workspaceBoard = resolveWorkspaceBoard(row, packedBoard, workspaceText, attachments);
+  const columnFiles = parseIssueWorkFiles(row.work_files_json);
+  const packedFiles = packed?.workFiles ?? [];
+  const workFiles = ensureLegacyCanvasFile(
+    columnFiles.length > 0 ? columnFiles : packedFiles,
+    workspaceBoard,
+  );
   const submittedAt =
     (typeof row.submitted_at === "string" && row.submitted_at) ||
     (typeof packed?.submittedAt === "string" && packed.submittedAt) ||
@@ -147,6 +167,7 @@ export function readIssueWork(row: WorkRow): IssueWork & { legacyWorkflow: boole
     genre,
     workspaceText: textFromBoard || workspaceText,
     workspaceBoard,
+    workFiles,
     attachments: boardImageUrls(workspaceBoard).length > 0 ? boardImageUrls(workspaceBoard) : attachments,
     submittedAt: submittedAt || null,
     legacyWorkflow: Boolean(workflow),
@@ -160,6 +181,7 @@ export function packWorkDescription(work: IssueWork): string {
     genre: work.genre,
     workspaceText: text,
     workspaceBoard: board,
+    workFiles: serializeIssueWorkFiles(work.workFiles),
     attachments: board ? boardImageUrls(board) : work.attachments,
     submittedAt: work.submittedAt,
   };
@@ -188,10 +210,12 @@ export function mergeWorkPatch(
   if (patch.workspaceText !== undefined && patch.workspaceBoard === undefined) {
     workspaceBoard = applyPlainTextToBoard(workspaceBoard, patch.workspaceText);
   }
+  const workFiles = patch.workFiles ?? current.workFiles;
   return syncWorkFromBoard({
     genre: patch.genre ?? current.genre,
     workspaceText,
     workspaceBoard,
+    workFiles,
     attachments: patch.attachments ?? current.attachments,
     submittedAt: patch.submittedAt === undefined ? current.submittedAt : patch.submittedAt,
   });
