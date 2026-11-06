@@ -16,8 +16,11 @@ type Props = {
 const CARD_SHELL =
   "flex w-[7.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white";
 
-const CARD_BTN =
+const CARD_BTN_FLAT =
   "!mt-1 !rounded-xl !px-1 !py-1.5 !text-[10px] !leading-none !shadow-none enabled:active:!translate-y-0";
+
+/** 投票する = DuoButton 本来の下帯シャドウ付き */
+const CARD_BTN_DUO = "!mt-1 !rounded-xl !px-1 !py-1.5 !text-[10px] !leading-none";
 
 /** プロジェクトメッセージ: 検索欄と名前一覧のあいだに置く縦長の投票カード */
 export function InboxVoteCards({ projectId }: Props) {
@@ -67,7 +70,7 @@ export function InboxVoteCards({ projectId }: Props) {
               size="md"
               fullWidth
               onClick={() => router.push(`/projects/${projectId}/ideas/new`)}
-              className={CARD_BTN}
+              className={CARD_BTN_FLAT}
             >
               {tx("作成", "Create")}
             </DuoButton>
@@ -91,10 +94,10 @@ export function InboxVoteCards({ projectId }: Props) {
                 onClick={() =>
                   router.push(`/projects/${projectId}/ideas?event=${encodeURIComponent(ev.id)}`)
                 }
-                className={CARD_BTN}
-              >
-                {tx("投票する", "Vote")}
-              </DuoButton>
+                  className={CARD_BTN_DUO}
+                >
+                  {tx("投票する", "Vote")}
+                </DuoButton>
             </div>
           </article>
         ))}

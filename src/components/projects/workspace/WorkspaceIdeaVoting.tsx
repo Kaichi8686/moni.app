@@ -19,6 +19,7 @@ import {
   type IdeaVoteRow,
 } from "@/lib/projects/ideaVoting/ideaVotingApi";
 import {
+  isUnlimitedVotes,
   isVoteEventClosed,
   type IdeaVotingSettings,
   type IdeaWithTally,
@@ -273,13 +274,17 @@ export default function WorkspaceIdeaVoting() {
             <p className="mt-1 text-[11px] text-zinc-400">
               {formatDeadline(selected.closesAt, locale)}
               {selected.anonymous ? tx(" · 匿名", " · Anonymous") : ""}
-              {tx(` · 1人${selected.votesPerPerson}票`, ` · ${selected.votesPerPerson} votes each`)}
+              {isUnlimitedVotes(selected.votesPerPerson)
+                ? tx(" · 複数投票可", " · Multiple votes")
+                : tx(` · 1人${selected.votesPerPerson}票`, ` · ${selected.votesPerPerson} votes each`)}
             </p>
           </div>
           <span className={closed ? voteChip : voteChipActive}>
             {closed
               ? tx("締切済み", "Closed")
-              : tx(`残り ${votesRemaining}/${selected.votesPerPerson}`, `${votesRemaining}/${selected.votesPerPerson} left`)}
+              : isUnlimitedVotes(selected.votesPerPerson)
+                ? tx("何票でも可", "Unlimited")
+                : tx(`残り ${votesRemaining}/${selected.votesPerPerson}`, `${votesRemaining}/${selected.votesPerPerson} left`)}
           </span>
         </div>
       </header>
@@ -297,10 +302,12 @@ export default function WorkspaceIdeaVoting() {
       )}
 
       <p className="text-[11px] text-zinc-500">
-        {tx(
-          `1人${selected.votesPerPerson}票 · 1案最大${selected.maxVotesPerIdea}票`,
-          `${selected.votesPerPerson} votes each · max ${selected.maxVotesPerIdea} per option`,
-        )}
+        {isUnlimitedVotes(selected.votesPerPerson)
+          ? tx("1人あたり何票でも投票できます", "Each person can cast as many votes as they want")
+          : tx(
+              `1人${selected.votesPerPerson}票 · 1案最大${selected.maxVotesPerIdea}票`,
+              `${selected.votesPerPerson} votes each · max ${selected.maxVotesPerIdea} per option`,
+            )}
         {selected.anonymous ? tx(" · 匿名", " · Anonymous") : ""}
       </p>
 
