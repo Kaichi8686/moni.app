@@ -10,6 +10,7 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
 import { InboxVoteCards } from "@/app/messages/_components/InboxVoteCards";
+import { MailPeopleReel } from "@/app/messages/_components/MailPeopleReel";
 import {
   ensureMyProjectConversations,
   ensureProjectScopedMail,
@@ -335,6 +336,21 @@ export function InboxList() {
     [recentFollowing, inboxListedPeerIds],
   );
 
+  /** メールタブ先頭の上下スライド用：DM 相手のみ */
+  const mailPeople = useMemo(
+    () =>
+      filtered
+        .filter((c) => c.type === "direct" && c.otherUser)
+        .map((c) => ({
+          id: c.otherUser!.id,
+          conversationId: c.id,
+          displayName: c.otherUser!.displayName,
+          avatarUrl: c.otherUser!.avatarUrl,
+          unreadCount: c.unreadCount,
+        })),
+    [filtered],
+  );
+
   const emptyHint = (() => {
     if (scopedProjectId && scopedMemberOk) {
       return tx(
@@ -368,7 +384,7 @@ export function InboxList() {
 
       {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
-      <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
+      <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain">
         {!userId ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-500">
             <Link href="/" className="font-medium text-violet-600 underline">
@@ -388,6 +404,10 @@ export function InboxList() {
           <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
         ) : (
           <>
+            <MailPeopleReel
+              people={mailPeople}
+              onSelect={(conversationId) => router.push(`/messages/${conversationId}`)}
+            />
             {!scopedProjectId ? (
               <FollowingChatEntry
                 recentFollowing={followingForEntry}
