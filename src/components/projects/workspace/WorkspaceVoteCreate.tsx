@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
@@ -73,6 +72,17 @@ export default function WorkspaceVoteCreate() {
   const filledOptions = options.map((item) => item.trim()).filter(Boolean);
   const canSubmit = Boolean(title.trim()) && filledOptions.length >= 2 && !busy && Boolean(uid);
 
+  const isDirty = useMemo(() => {
+    return (
+      Boolean(title.trim()) ||
+      Boolean(description.trim()) ||
+      Boolean(closesAt.trim()) ||
+      allowMultiple ||
+      !anonymous ||
+      options.some((item) => item.trim())
+    );
+  }, [title, description, closesAt, allowMultiple, anonymous, options]);
+
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setVisible(true));
     return () => window.cancelAnimationFrame(id);
@@ -80,6 +90,20 @@ export default function WorkspaceVoteCreate() {
 
   function updateOption(index: number, value: string) {
     setOptions((prev) => prev.map((item, i) => (i === index ? value : item)));
+  }
+
+  function handleBack() {
+    if (busy) return;
+    if (isDirty) {
+      const ok = window.confirm(
+        tx(
+          "今まで入力した内容は消えます。戻っても大丈夫ですか？",
+          "Your input will be discarded. Go back anyway?",
+        ),
+      );
+      if (!ok) return;
+    }
+    router.push(messagesHref);
   }
 
   async function handleSubmit(e?: FormEvent) {
@@ -106,7 +130,8 @@ export default function WorkspaceVoteCreate() {
           console.warn("createIdea", err);
         }
       }
-      router.replace(`/projects/${projectId}/ideas?event=${encodeURIComponent(created.id)}`);
+      // メッセージ一覧へ戻る。作成カードの右に新しい投票カードが載る
+      router.replace(messagesHref);
     } catch (err) {
       setError(err instanceof Error ? err.message : tx("作成に失敗しました", "Couldn’t create"));
       setBusy(false);
@@ -119,26 +144,26 @@ export default function WorkspaceVoteCreate() {
 
   return (
     <div
-      className={`mx-auto max-w-lg transition-opacity duration-300 ease-out ${
+      className={`relative transition-opacity duration-300 ease-out ${
         visible ? "opacity-100" : "opacity-0"
       }`}
     >
+      <button
+        type="button"
+        onClick={handleBack}
+        className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:scale-95"
+        aria-label={tx("戻る", "Back")}
+      >
+        <ArrowLeft className="h-5 w-5" strokeWidth={2.25} />
+      </button>
+
       <form
         onSubmit={(e) => void handleSubmit(e)}
-        className="space-y-5 pb-[calc(var(--bottom-nav-clearance)+5.5rem)]"
+        className="space-y-5 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-12"
       >
-        <div>
-          <Link
-            href={messagesHref}
-            className="inline-flex items-center gap-1 text-[12px] font-medium text-zinc-500 hover:text-zinc-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {tx("メッセージ", "Messages")}
-          </Link>
-          <h1 className="mt-2 text-[18px] font-extrabold tracking-tight text-zinc-900">
-            {tx("投票を作成", "Create a vote")}
-          </h1>
-        </div>
+        <h1 className="text-[18px] font-extrabold tracking-tight text-zinc-900">
+          {tx("投票を作成", "Create a vote")}
+        </h1>
 
         <label className="block space-y-1.5">
           <span className="text-[12px] font-semibold text-zinc-700">{tx("タイトル", "Title")}</span>
@@ -229,16 +254,15 @@ export default function WorkspaceVoteCreate() {
         ) : null}
       </form>
 
-      <div className="fixed inset-x-0 bottom-[var(--bottom-nav-clearance)] z-30 border-t border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
         <div className="mx-auto max-w-lg">
           <DuoButton
             type="button"
             tone="orange"
-            size="md"
+            size="lg"
             fullWidth
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
-            className="!shadow-none enabled:active:!translate-y-0"
           >
             {busy ? tx("作成中…", "Creating…") : tx("作成", "Create")}
           </DuoButton>
