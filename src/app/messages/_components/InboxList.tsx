@@ -10,7 +10,6 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
 import { InboxVoteCards } from "@/app/messages/_components/InboxVoteCards";
-import { MailPeopleReel } from "@/app/messages/_components/MailPeopleReel";
 import {
   ensureMyProjectConversations,
   ensureProjectScopedMail,
@@ -336,32 +335,6 @@ export function InboxList() {
     [recentFollowing, inboxListedPeerIds],
   );
 
-  /**
-   * メールタブ先頭の上下スライド用。
-   * プロジェクト側: メンバー DM。プロフィール側: 既存 DM + まだ一覧にないフォロー中の人。
-   */
-  const mailPeople = useMemo(() => {
-    const fromDm = filtered
-      .filter((c) => c.type === "direct" && c.otherUser)
-      .map((c) => ({
-        id: c.otherUser!.id,
-        conversationId: c.id,
-        displayName: c.otherUser!.displayName,
-        avatarUrl: c.otherUser!.avatarUrl,
-        unreadCount: c.unreadCount,
-      }));
-    if (scopedProjectId) return fromDm;
-    const seen = new Set(fromDm.map((p) => p.id));
-    const fromFollowing = followingForEntry
-      .filter((u) => !seen.has(u.id))
-      .map((u) => ({
-        id: u.id,
-        displayName: u.displayName,
-        avatarUrl: u.avatarUrl,
-      }));
-    return [...fromDm, ...fromFollowing];
-  }, [filtered, followingForEntry, scopedProjectId]);
-
   const emptyHint = (() => {
     if (scopedProjectId && scopedMemberOk) {
       return tx(
@@ -376,8 +349,8 @@ export function InboxList() {
   })();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-bottom-nav">
-      <div className="border-b px-4 py-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b px-4 py-2">
         <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-zinc-400" />
           <input
@@ -395,7 +368,12 @@ export function InboxList() {
 
       {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
-      <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain">
+      {/*
+        min-h-0 が無いと flex 子が内容高まで伸びて overflow が効かず、
+        人数が増えると下の人が見えない／スライドできない。
+        overscroll-y-contain で端より先へのバウンス連鎖を抑える。
+      */}
+      <div className="min-h-0 flex-1 touch-pan-y divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain">
         {!userId ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-500">
             <Link href="/" className="font-medium text-violet-600 underline">
@@ -415,37 +393,19 @@ export function InboxList() {
           <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
         ) : (
           <>
-            <MailPeopleReel
-              people={mailPeople}
-              onSelect={(person) => {
-                if (person.conversationId) {
-                  router.push(`/messages/${person.conversationId}`);
-                  return;
-                }
-                if (!supabase) return;
-                void navigateToDirectMessage(supabase, router, person.id);
-              }}
-            />
-            {!scopedProjectId && mailPeople.length === 0 ? (
+            {!scopedProjectId ? (
               <FollowingChatEntry
                 recentFollowing={followingForEntry}
                 onOpen={() => setShowFollowingPicker(true)}
               />
-            ) : null}
-            {!scopedProjectId && mailPeople.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowFollowingPicker(true)}
-                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 transition hover:bg-zinc-50"
-              >
-                {tx("フォロー中の人をすべて見る", "See everyone you follow")}
-              </button>
             ) : null}
             {filtered.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
             ) : (
               filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
             )}
+            {/* 下タブに隠れないよう末尾余白。先頭／末尾より先にはスクロールしない */}
+            <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
           </>
         )}
       </div>
