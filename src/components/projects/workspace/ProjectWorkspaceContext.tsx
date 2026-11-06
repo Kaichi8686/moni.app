@@ -954,6 +954,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           genre: issue.genre,
           workspaceText: issue.workspaceText,
           workspaceBoard: issue.workspaceBoard ?? null,
+          workFiles: issue.workFiles ?? [],
           attachments: issue.attachments,
           submittedAt: issue.submittedAt ?? null,
         },
@@ -967,6 +968,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         genre: next.genre,
         workspace_text: next.workspaceText,
         workspace_board_json: next.workspaceBoard,
+        work_files_json: next.workFiles,
         attachment_urls: next.attachments,
         submitted_at: next.submittedAt,
         status,
@@ -974,6 +976,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         updated_at: updatedAt,
       };
       let { error: err } = await supabase.from("project_issues").update(row).eq("id", issueId);
+      if (err && /work_files_json|schema cache|42703/i.test(err.message)) {
+        delete row.work_files_json;
+        row.description = packWorkDescription(next);
+        ({ error: err } = await supabase.from("project_issues").update(row).eq("id", issueId));
+      }
       if (err && /workspace_board_json|schema cache|42703/i.test(err.message)) {
         delete row.workspace_board_json;
         // 列が無い環境では description の packed JSON にボードを残す
@@ -999,6 +1006,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             ? {
                 ...item,
                 ...next,
+                workFiles: next.workFiles,
                 submittedAt: next.submittedAt ?? undefined,
                 status,
                 labels: withGenreLabel(item.labels, next.genre),
