@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CalendarClock, Lock, LockOpen, Plus, Trash2, VenetianMask } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { IdeaForm } from "@/components/projects/idea-voting/IdeaForm";
@@ -52,6 +53,8 @@ function localDatetimeToIso(value: string): string | null {
 
 export default function WorkspaceIdeaVoting() {
   const { tx, locale } = useI18n();
+  const searchParams = useSearchParams();
+  const eventParam = searchParams.get("event")?.trim() || null;
   const { projectId, project, loading, uid, isOwner } = useProjectWorkspace();
   const [events, setEvents] = useState<IdeaVoteEventWithCount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -104,7 +107,10 @@ export default function WorkspaceIdeaVoting() {
     setHydrated(false);
     void (async () => {
       try {
-        await refreshEvents();
+        const list = await refreshEvents();
+        if (!cancelled && eventParam && list?.some((e) => e.id === eventParam)) {
+          setSelectedId(eventParam);
+        }
         setError("");
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : tx("読み込みに失敗しました", "Couldn’t load"));
@@ -115,7 +121,7 @@ export default function WorkspaceIdeaVoting() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEvents]);
+  }, [refreshEvents, eventParam, tx]);
 
   useEffect(() => {
     void (async () => {

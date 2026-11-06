@@ -8,7 +8,6 @@ import {
   PenLine,
   PenTool,
   Sparkles,
-  Vote,
 } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
@@ -492,10 +491,7 @@ export default function WorkspaceOverview() {
 
       <section>
         <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <CompactLink href={`/projects/${projectId}/ideas`} icon={Vote} label={tx("投票", "Voting")} />
-          <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
-        </div>
+        <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
       </section>
 
       <section>

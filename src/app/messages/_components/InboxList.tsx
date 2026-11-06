@@ -11,6 +11,7 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ProjectNoticeBell } from "@/components/projects/ProjectNoticeBell";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
+import { InboxVoteCards } from "@/app/messages/_components/InboxVoteCards";
 import {
   ensureMyProjectConversations,
   ensureProjectScopedMail,
@@ -374,6 +375,8 @@ export function InboxList() {
           />
         </div>
       </div>
+
+      {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
       <div className="flex-1 divide-y divide-zinc-50 overflow-y-auto">
         {!userId ? (
