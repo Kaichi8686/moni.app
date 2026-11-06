@@ -12,11 +12,31 @@ import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { ensureOwnerMembership } from "@/lib/projects/ensureOwnerMembership";
 import { openProjectCluster } from "@/lib/navigation/projectCluster";
-import { rememberLastProject } from "@/lib/workspace/lastProject";
+import {
+  LAST_PROJECT_CHANGE_EVENT,
+  readRecentProjectIds,
+  rememberLastProject,
+} from "@/lib/workspace/lastProject";
 
 export type AppFeatureKey = "projects" | "articles" | "mentor" | "discovery" | "chat" | "account";
 
 type SortKey = "newest" | "oldest" | "name";
+
+function sortProjectsByRecentOpen(projects: ProjectRow[], recentIds: string[]): ProjectRow[] {
+  if (projects.length <= 1) return projects;
+  const rank = new Map(recentIds.map((id, index) => [id, index]));
+  return [...projects].sort((a, b) => {
+    const ra = rank.get(a.id);
+    const rb = rank.get(b.id);
+    if (ra != null && rb != null) return ra - rb;
+    if (ra != null) return -1;
+    if (rb != null) return 1;
+    return (
+      new Date(b.updated_at ?? b.created_at).getTime() -
+      new Date(a.updated_at ?? a.created_at).getTime()
+    );
+  });
+}
 
 type Props = {
   hasSession: boolean;
@@ -130,6 +150,7 @@ export function ProjectTabGlide({
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [err, setErr] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(startCreate);
@@ -138,6 +159,17 @@ export function ProjectTabGlide({
   useEffect(() => {
     if (startCreate) setCreateOpen(true);
   }, [startCreate]);
+
+  useEffect(() => {
+    const syncRecent = () => setRecentIds(readRecentProjectIds());
+    syncRecent();
+    window.addEventListener(LAST_PROJECT_CHANGE_EVENT, syncRecent);
+    window.addEventListener("storage", syncRecent);
+    return () => {
+      window.removeEventListener(LAST_PROJECT_CHANGE_EVENT, syncRecent);
+      window.removeEventListener("storage", syncRecent);
+    };
+  }, []);
   const [form, setForm] = useState({
     name: "",
     business_type: "software" as "maker" | "software" | "social",
@@ -235,6 +267,9 @@ export function ProjectTabGlide({
   }, [reloadSignal, load]);
 
   const displayList = useMemo(() => {
+    if (fillViewport) {
+      return sortProjectsByRecentOpen(projects, recentIds);
+    }
     const q = query.trim().toLowerCase();
     let list = projects.filter((p) => {
       if (!q) return true;
@@ -248,7 +283,7 @@ export function ProjectTabGlide({
       list = [...list].sort((a, b) => a.name.localeCompare(b.name, "ja"));
     }
     return list;
-  }, [projects, query, sort]);
+  }, [projects, query, sort, fillViewport, recentIds]);
 
   async function onCreate() {
     if (!supabase || !form.name.trim()) return;
@@ -416,53 +451,41 @@ export function ProjectTabGlide({
           fillViewport ? "bg-transparent" : "bg-white"
         }`}
       >
-        <header
-          className={`relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 px-3 backdrop-blur-sm sm:px-5 ${
-            fillViewport
-              ? "border-violet-100/60 bg-white/55 py-1.5"
-              : "bg-white/90 px-4 py-2.5 lg:px-6"
-          }`}
-        >
-          {!fillViewport ? (
+        {!fillViewport ? (
+          <header className="relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-100/80 bg-white/90 px-3 py-2.5 backdrop-blur-sm sm:px-5 lg:px-6">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">マイプロジェクト</h2>
               <p className="mt-0.5 text-[11px] text-zinc-500">参加中のプロジェクトだけ表示されます</p>
             </div>
-          ) : null}
-          <div
-            className={`flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 ${
-              fillViewport ? "w-full flex-1" : "flex-1 sm:flex-initial sm:min-w-0"
-            }`}
-          >
-            <label className={`relative min-w-0 flex-1 ${fillViewport ? "" : "sm:max-w-xs"}`}>
-              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] leading-none sm:left-3 sm:text-[15px]" aria-hidden>
-                🔍
-              </span>
-              <input
-                className={`w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-8 pr-2 text-sm outline-none focus:border-zinc-400 sm:pl-9 sm:pr-3 sm:text-sm ${
-                  fillViewport ? "min-h-[36px] py-1.5 text-xs" : "min-h-[44px] py-2 text-base"
-                }`}
-                placeholder="検索"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="プロジェクトを検索"
-              />
-            </label>
-            <label className="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
-              <span className="sr-only sm:not-sr-only">並び</span>
-              <select
-                className={`rounded-lg border border-zinc-200 bg-white text-zinc-800 ${fillViewport ? "px-1.5 py-1 text-[11px]" : "px-2 py-1 text-xs"}`}
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                aria-label="並び順"
-              >
-                <option value="newest">新しい順</option>
-                <option value="oldest">古い順</option>
-                <option value="name">名前</option>
-              </select>
-            </label>
-          </div>
-        </header>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:flex-initial sm:min-w-0 sm:gap-2">
+              <label className="relative min-w-0 flex-1 sm:max-w-xs">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] leading-none sm:left-3 sm:text-[15px]" aria-hidden>
+                  🔍
+                </span>
+                <input
+                  className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-zinc-50 py-2 pl-8 pr-2 text-base outline-none focus:border-zinc-400 sm:pl-9 sm:pr-3 sm:text-sm"
+                  placeholder="検索"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label="プロジェクトを検索"
+                />
+              </label>
+              <label className="flex shrink-0 items-center gap-1 text-[11px] text-zinc-500">
+                <span className="sr-only sm:not-sr-only">並び</span>
+                <select
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  aria-label="並び順"
+                >
+                  <option value="newest">新しい順</option>
+                  <option value="oldest">古い順</option>
+                  <option value="name">名前</option>
+                </select>
+              </label>
+            </div>
+          </header>
+        ) : null}
 
         {err ? (
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
