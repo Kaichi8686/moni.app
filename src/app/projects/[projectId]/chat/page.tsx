@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getOrCreateProjectConversation } from "@/lib/messages/api";
+import { conversationHref, mailInboxHref, writeMailProjectScope } from "@/lib/messages/mailScope";
+import { openProjectCluster } from "@/lib/navigation/projectCluster";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -28,10 +30,12 @@ export default function ProjectChatRedirectPage() {
         router.replace(`/login?next=/projects/${projectId}/chat`);
         return;
       }
+      writeMailProjectScope(projectId);
+      openProjectCluster();
       const convId = await getOrCreateProjectConversation(supabase, projectId);
       if (cancelled) return;
       if (convId) {
-        router.replace(`/messages/${convId}`);
+        router.replace(conversationHref(convId, projectId));
         return;
       }
       setMessage(
@@ -41,7 +45,7 @@ export default function ProjectChatRedirectPage() {
         ),
       );
       window.setTimeout(() => {
-        if (!cancelled) router.replace("/messages");
+        if (!cancelled) router.replace(mailInboxHref(projectId));
       }, 1600);
     })();
     return () => {

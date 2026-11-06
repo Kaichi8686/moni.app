@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreateDirectConversation } from "@/lib/messages/api";
+import { clearMailProjectScope, conversationHref } from "@/lib/messages/mailScope";
 import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
 import { closeProjectCluster } from "@/lib/navigation/projectCluster";
 
@@ -25,9 +26,10 @@ export async function navigateToDirectMessage(
 ): Promise<OpenDirectMessageResult> {
   const result = await openDirectMessage(client, peerUserId);
   if (!result.ok) return result;
-  // プロフィールタブブロックのメッセージに戻す
+  // プロフィール側メッセージとして開く
+  clearMailProjectScope();
   closeProjectCluster();
   markDirectConversationOpened(result.conversationId);
-  router.push(`/messages/${result.conversationId}`);
+  router.push(conversationHref(result.conversationId));
   return result;
 }

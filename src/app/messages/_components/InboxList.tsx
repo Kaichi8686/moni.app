@@ -18,9 +18,15 @@ import {
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { navigateToDirectMessage } from "@/lib/messages/openDirectMessage";
 import {
+  clearMailProjectScope,
+  conversationHref,
+  writeMailProjectScope,
+} from "@/lib/messages/mailScope";
+import {
   readOpenedDirectConversationIds,
   subscribeOpenedDirectConversations,
 } from "@/lib/messages/openedDirectConversations";
+import { closeProjectCluster, openProjectCluster } from "@/lib/navigation/projectCluster";
 import { loadFollowingIds, loadFollowingListRecent } from "@/lib/profile/followActions";
 import type { FollowListUser } from "@/lib/profile/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -193,6 +199,17 @@ export function InboxList() {
       void load({ syncPeers: true });
     });
   }, [load]);
+
+  // プロフィール側 / プロジェクト側メールを別タブ文脈として保持
+  useEffect(() => {
+    if (scopedProjectId) {
+      writeMailProjectScope(scopedProjectId);
+      openProjectCluster();
+      return;
+    }
+    clearMailProjectScope();
+    closeProjectCluster();
+  }, [scopedProjectId]);
 
   useEffect(() => {
     const client = supabase;
@@ -410,7 +427,13 @@ export function InboxList() {
               {filtered.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
               ) : (
-                filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
+                filtered.map((conv) => (
+                  <ConversationRow
+                    key={conv.id}
+                    conversation={conv}
+                    projectId={scopedProjectId}
+                  />
+                ))
               )}
             </>
           )}
@@ -434,7 +457,13 @@ export function InboxList() {
   );
 }
 
-function ConversationRow({ conversation }: { conversation: InboxConversation }) {
+function ConversationRow({
+  conversation,
+  projectId,
+}: {
+  conversation: InboxConversation;
+  projectId?: string | null;
+}) {
   const { locale, tx } = useI18n();
   const isUnread = conversation.unreadCount > 0;
   const title =
@@ -444,7 +473,7 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
 
   return (
     <Link
-      href={`/messages/${conversation.id}`}
+      href={conversationHref(conversation.id, projectId)}
       className="flex w-full items-center px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
     >
       <div className="relative mr-3 shrink-0">
