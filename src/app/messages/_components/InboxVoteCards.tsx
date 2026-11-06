@@ -20,7 +20,7 @@ const CARD_SHELL =
 const CARD_BTN = "!mt-1 !min-h-[2.35rem] !rounded-2xl !px-2 !py-2 !text-[12px] !leading-none";
 
 const CARD_TITLE =
-  "line-clamp-2 min-h-0 flex-1 text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
+  "min-h-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
 
 /** プロジェクトメッセージ: 検索欄と名前一覧のあいだに置く縦長の投票カード */
 export function InboxVoteCards({ projectId }: Props) {
