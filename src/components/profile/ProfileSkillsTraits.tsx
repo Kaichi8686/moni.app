@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { interestFieldLabel } from "@/lib/profile/interestFields";
 import {
@@ -17,6 +18,41 @@ type Props = {
   className?: string;
 };
 
+function Section({
+  title,
+  empty,
+  emptyLabel,
+  children,
+}: {
+  title: string;
+  empty: boolean;
+  emptyLabel: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">{title}</p>
+      {empty ? (
+        <p className="text-[13px] leading-relaxed text-zinc-400">{emptyLabel}</p>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
+function TagList({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap gap-1.5">{children}</div>;
+}
+
+function TagChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+      {children}
+    </span>
+  );
+}
+
 export function ProfileSkillsTraits({
   skills,
   traits,
@@ -25,85 +61,49 @@ export function ProfileSkillsTraits({
   className = "",
 }: Props) {
   const { locale, tx } = useI18n();
-  if (
-    skills.length === 0 &&
-    traits.length === 0 &&
-    interestFields.length === 0 &&
-    socialIssues.length === 0
-  ) {
-    return null;
-  }
+  const unset = tx("未設定です", "Not set");
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {skills.length > 0 ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-            {tx("興味のあること", "Interests")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {skills.map((tag) => (
-              <span
-                key={`skill-${tag}`}
-                className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-              >
-                {displayTagLabel(tag, SKILL_PRESETS, locale)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {interestFields.length > 0 ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-            {tx("興味のある分野", "Fields of interest")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {interestFields.map((tag) => (
-              <span
-                key={`field-${tag}`}
-                className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                {interestFieldLabel(tag, locale)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {traits.length > 0 ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-            {tx("性格", "Personality")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {traits.map((tag) => (
-              <span
-                key={`trait-${tag}`}
-                className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-              >
-                {displayTagLabel(tag, TRAIT_PRESETS, locale)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {socialIssues.length > 0 ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-400">
-            {tx("気になる社会問題", "Social issues")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {socialIssues.map((tag) => (
-              <span
-                key={`issue-${tag}`}
-                className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[12px] font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                {socialIssueLabel(tag, locale)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <Section title={tx("興味のあること", "Interests")} empty={skills.length === 0} emptyLabel={unset}>
+        <TagList>
+          {skills.map((tag) => (
+            <TagChip key={`skill-${tag}`}>{displayTagLabel(tag, SKILL_PRESETS, locale)}</TagChip>
+          ))}
+        </TagList>
+      </Section>
+
+      <Section
+        title={tx("興味のある分野", "Fields of interest")}
+        empty={interestFields.length === 0}
+        emptyLabel={unset}
+      >
+        <TagList>
+          {interestFields.map((tag) => (
+            <TagChip key={`field-${tag}`}>{interestFieldLabel(tag, locale)}</TagChip>
+          ))}
+        </TagList>
+      </Section>
+
+      <Section title={tx("性格", "Personality")} empty={traits.length === 0} emptyLabel={unset}>
+        <TagList>
+          {traits.map((tag) => (
+            <TagChip key={`trait-${tag}`}>{displayTagLabel(tag, TRAIT_PRESETS, locale)}</TagChip>
+          ))}
+        </TagList>
+      </Section>
+
+      <Section
+        title={tx("気になる社会問題", "Social issues")}
+        empty={socialIssues.length === 0}
+        emptyLabel={unset}
+      >
+        <TagList>
+          {socialIssues.map((tag) => (
+            <TagChip key={`issue-${tag}`}>{socialIssueLabel(tag, locale)}</TagChip>
+          ))}
+        </TagList>
+      </Section>
     </div>
   );
 }
