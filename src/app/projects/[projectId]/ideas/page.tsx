@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import WorkspaceIdeaVoting from "@/components/projects/workspace/WorkspaceIdeaVoting";
 
 export const metadata: Metadata = {
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function IdeaVotingPage() {
-  return <WorkspaceIdeaVoting />;
+  return (
+    <Suspense fallback={<p className="text-sm text-[#6B7280]">読み込み中…</p>}>
+      <WorkspaceIdeaVoting />
+    </Suspense>
+  );
 }
