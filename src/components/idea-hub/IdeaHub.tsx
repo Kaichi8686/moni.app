@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Sparkles } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { ContestApp } from "@/components/contest/ContestApp";
@@ -17,7 +16,7 @@ import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type HubView = "mine" | "chat" | "board" | "interviews";
-type SparkMode = "grow" | "contest";
+type SparkMode = "grow" | "contest" | "ai";
 
 function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
   if (board) return "board";
@@ -26,7 +25,8 @@ function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
   return "mine";
 }
 
-function parseSparkMode(raw: string | null): SparkMode {
+function parseSparkMode(raw: string | null, tab: IdeaHubTab): SparkMode {
+  if (tab === "excavate" || tab === "qna") return "ai";
   return raw === "contest" ? "contest" : "grow";
 }
 
@@ -39,7 +39,7 @@ function IdeaHubInner() {
   const qnaBoard = urlTab === "qna" && searchParams.get("view") === "board";
   const view = viewFromTab(urlTab, qnaBoard);
   const aiMode: IdeaPersonalAiMode = urlTab === "excavate" ? "excavate" : "consult";
-  const urlSpark = parseSparkMode(searchParams.get("spark"));
+  const urlSpark = parseSparkMode(searchParams.get("spark"), urlTab);
 
   /** URL と独立したローカル状態（切替を確実にする） */
   const [sparkMode, setSparkModeState] = useState<SparkMode>(urlSpark);
@@ -81,11 +81,35 @@ function IdeaHubInner() {
     [replaceParams],
   );
 
-  const setSparkMode = useCallback(
-    (mode: SparkMode) => {
+  const openAi = useCallback(
+    (mode: IdeaPersonalAiMode = "consult") => {
       setContestRoomId(null);
       setContestAutoSubmit(false);
       setGardenImmersive(false);
+      setOpenHistoryOnChat(false);
+      setStartFreshOnChat(true);
+      setChatKey((k) => k + 1);
+      setSparkModeState("ai");
+      replaceParams((params) => {
+        params.set("tab", mode === "consult" ? "qna" : "excavate");
+        params.delete("view");
+        params.delete("spark");
+      });
+    },
+    [replaceParams],
+  );
+
+  const setSparkMode = useCallback(
+    (mode: SparkMode) => {
+      if (mode === "ai") {
+        openAi("consult");
+        return;
+      }
+      setContestRoomId(null);
+      setContestAutoSubmit(false);
+      setGardenImmersive(false);
+      setOpenHistoryOnChat(false);
+      setStartFreshOnChat(false);
       setSparkModeState(mode);
       if (mode === "grow") setGardenKey((k) => k + 1);
       replaceParams((params) => {
@@ -95,39 +119,19 @@ function IdeaHubInner() {
         else params.delete("spark");
       });
     },
-    [replaceParams],
+    [openAi, replaceParams],
   );
 
   const goHome = useCallback(() => {
-    setOpenHistoryOnChat(false);
-    setStartFreshOnChat(false);
-    setContestRoomId(null);
-    setContestAutoSubmit(false);
-    setGardenImmersive(false);
-    setSparkModeState("grow");
-    setGardenKey((k) => k + 1);
-    replaceParams((params) => {
-      params.delete("tab");
-      params.delete("view");
-      params.delete("spark");
-    });
-  }, [replaceParams]);
-
-  const openAi = useCallback(
-    (mode: IdeaPersonalAiMode = "consult") => {
-      setOpenHistoryOnChat(false);
-      setStartFreshOnChat(true);
-      setChatKey((k) => k + 1);
-      replaceTab(mode === "consult" ? "qna" : "excavate");
-    },
-    [replaceTab],
-  );
+    setSparkMode("grow");
+  }, [setSparkMode]);
 
   const setAiMode = useCallback(
     (mode: IdeaPersonalAiMode) => {
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(true);
       setChatKey((k) => k + 1);
+      setSparkModeState("ai");
       replaceTab(mode === "consult" ? "qna" : "excavate");
     },
     [replaceTab],
@@ -135,24 +139,33 @@ function IdeaHubInner() {
 
   const inAiChat = view === "chat";
   const hideBottomNav = inAiChat || (view === "mine" && gardenImmersive);
-  /** 花の没入中以外は常にトグル表示（コンテスト詳細中も花へ戻れる） */
-  const showSparkToggle = view === "mine" && !gardenImmersive;
+  /** 花の没入中以外はトグル表示（AI・コンテスト詳細中も他へ戻れる） */
+  const showSparkToggle = (view === "mine" && !gardenImmersive) || inAiChat;
 
   const sparkToggle = showSparkToggle ? (
-    <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
+    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
       <button
         type="button"
         onClick={() => setSparkMode("grow")}
-        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "grow" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
-        {tx("花を育てる", "Grow a flower")}
+        {tx("花を育てる", "Grow")}
+      </button>
+      <button
+        type="button"
+        onClick={() => setSparkMode("ai")}
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
+          sparkMode === "ai" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+        }`}
+      >
+        AI
       </button>
       <button
         type="button"
         onClick={() => setSparkMode("contest")}
-        className={`min-h-11 rounded-xl text-sm font-extrabold tracking-tight transition ${
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
@@ -163,12 +176,12 @@ function IdeaHubInner() {
 
   return (
     <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
-      {/* コンテスト側: 通常ヘッダー + トグル */}
-      {view === "mine" && sparkMode === "contest" ? (
+      {/* コンテスト / AI: 通常ヘッダー + トグル */}
+      {(view === "mine" && sparkMode === "contest") || inAiChat ? (
         <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
-            <AppBrandHeader bare />
-            <div className="mt-1">{sparkToggle}</div>
+            {inAiChat ? null : <AppBrandHeader bare />}
+            <div className={inAiChat ? undefined : "mt-1"}>{sparkToggle}</div>
           </div>
         </header>
       ) : null}
@@ -224,7 +237,6 @@ function IdeaHubInner() {
           key={`${aiMode}-${chatKey}`}
           variant="hub"
           initialMode={aiMode}
-          onExit={goHome}
           onModeChange={setAiMode}
           openHistoryOnMount={openHistoryOnChat}
           startFreshOnMount={startFreshOnChat}
@@ -259,17 +271,6 @@ function IdeaHubInner() {
           </div>
           <InterviewsComingSoon articles={INTERVIEW_ARTICLE_MOCKS} />
         </div>
-      ) : null}
-
-      {view === "mine" && sparkMode === "grow" && !gardenImmersive ? (
-        <button
-          type="button"
-          onClick={() => openAi("consult")}
-          aria-label={tx("AIを開く", "Open AI")}
-          className="fixed left-4 bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition hover:bg-violet-500 md:bottom-8"
-        >
-          <Sparkles className="h-6 w-6" aria-hidden />
-        </button>
       ) : null}
 
       {hideBottomNav ? null : <AppBottomNav />}
