@@ -502,6 +502,11 @@ export function ProjectCubeCarousel({
     () => [...projects.map((project) => ({ kind: "project" as const, project })), { kind: "create", id: "__create__" }],
     [projects],
   );
+  const leadProjectId = projects[0]?.id ?? "";
+  useEffect(() => {
+    // Keep the most recently opened project centered when order updates.
+    setActiveIndex(0);
+  }, [leadProjectId]);
   const count = items.length;
   const safeIndex = count === 0 ? 0 : ((activeIndex % count) + count) % count;
   const activeItem = items[safeIndex] ?? null;
