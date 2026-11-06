@@ -55,6 +55,11 @@ export const DEFAULT_IDEA_VOTING_SETTINGS: IdeaVotingSettings = {
   maxVotesPerIdea: 1,
 };
 
+/** 複数投票（実質上限なし）として扱うしきい値 */
+export function isUnlimitedVotes(votesPerPerson: number): boolean {
+  return votesPerPerson >= 100;
+}
+
 /** このブラウザでの投票状況 */
 export type VoterState = {
   byIdea: Record<string, number>;

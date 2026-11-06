@@ -7,7 +7,7 @@ import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { voteInput } from "@/components/projects/idea-voting/voteUi";
-import { createIdea, createVoteEvent } from "@/lib/projects/ideaVoting/ideaVotingApi";
+import { createIdea, createVoteEvent, VOTE_LIMIT_MAX } from "@/lib/projects/ideaVoting/ideaVotingApi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -88,8 +88,8 @@ export default function WorkspaceVoteCreate() {
     setBusy(true);
     setError("");
     try {
-      const votesPerPerson = allowMultiple ? 3 : 1;
-      const maxVotesPerIdea = 1;
+      const votesPerPerson = allowMultiple ? VOTE_LIMIT_MAX : 1;
+      const maxVotesPerIdea = allowMultiple ? VOTE_LIMIT_MAX : 1;
       const created = await createVoteEvent(projectId, uid, {
         title: title.trim(),
         description: description.trim(),
@@ -172,7 +172,7 @@ export default function WorkspaceVoteCreate() {
           <div className="border-t border-zinc-100" />
           <ToggleRow
             label={tx("複数投票", "Multiple votes")}
-            detail={tx("1人あたり3票まで入れられます", "Up to 3 votes per person")}
+            detail={tx("1人あたり何票でも入れられます", "Each person can cast as many votes as they want")}
             checked={allowMultiple}
             onChange={setAllowMultiple}
           />

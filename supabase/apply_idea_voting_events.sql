@@ -27,8 +27,8 @@ create table if not exists public.project_idea_votes (
 -- 3) 旧・プロジェクト全体設定（互換用）
 create table if not exists public.project_idea_settings (
   project_id uuid primary key references public.projects (id) on delete cascade,
-  votes_per_person integer not null default 1 check (votes_per_person between 1 and 10),
-  max_votes_per_idea integer not null default 1 check (max_votes_per_idea between 1 and 10),
+  votes_per_person integer not null default 1 check (votes_per_person between 1 and 9999),
+  max_votes_per_idea integer not null default 1 check (max_votes_per_idea between 1 and 9999),
   closed boolean not null default false,
   anonymous boolean not null default true,
   updated_at timestamptz not null default now()
@@ -44,8 +44,8 @@ create table if not exists public.project_idea_events (
   closes_at timestamptz,
   closed boolean not null default false,
   anonymous boolean not null default true,
-  votes_per_person integer not null default 1 check (votes_per_person between 1 and 10),
-  max_votes_per_idea integer not null default 1 check (max_votes_per_idea between 1 and 10),
+  votes_per_person integer not null default 1 check (votes_per_person between 1 and 9999),
+  max_votes_per_idea integer not null default 1 check (max_votes_per_idea between 1 and 9999),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -78,9 +78,12 @@ function requireClient() {
   return supabase;
 }
 
+/** 複数投票ON時など。DB check も同上限に合わせておくこと */
+export const VOTE_LIMIT_MAX = 9999;
+
 function clampLimit(value: number): number {
   if (!Number.isFinite(value)) return 1;
-  return Math.min(10, Math.max(1, Math.round(value)));
+  return Math.min(VOTE_LIMIT_MAX, Math.max(1, Math.round(value)));
 }
 
 function isMissingRelation(error: { code?: string; message?: string } | null): boolean {
