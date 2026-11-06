@@ -349,7 +349,7 @@ export function InboxList() {
   })();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b px-4 py-2">
         <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-zinc-400" />
@@ -369,45 +369,49 @@ export function InboxList() {
       {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
       {/*
-        min-h-0 が無いと flex 子が内容高まで伸びて overflow が効かず、
-        人数が増えると下の人が見えない／スライドできない。
-        overscroll-y-contain で端より先へのバウンス連鎖を抑える。
+        absolute inset で高さを確定させ、overflow-y が確実に効くようにする。
+        全幅 button だと iOS で縦スクロールが奪われやすいので行は Link にしている。
       */}
-      <div className="min-h-0 flex-1 touch-pan-y divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain">
-        {!userId ? (
-          <p className="px-4 py-8 text-center text-sm text-zinc-500">
-            <Link href="/" className="font-medium text-violet-600 underline">
-              {tx("ログイン", "Log in")}
-            </Link>
-            {tx("するとメッセージが表示されます", " to see your messages")}
-          </p>
-        ) : loadError ? (
-          <p className="px-4 py-8 text-center text-sm text-red-600">
-            {loadError === "__db__"
-              ? tx("メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。", "Messaging is not set up. Run the SQL in Supabase.")
-              : loadError === "__generic__"
-                ? tx("読み込みに失敗しました", "Failed to load")
-                : loadError}
-          </p>
-        ) : loading ? (
-          <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
-        ) : (
-          <>
-            {!scopedProjectId ? (
-              <FollowingChatEntry
-                recentFollowing={followingForEntry}
-                onOpen={() => setShowFollowingPicker(true)}
-              />
-            ) : null}
-            {filtered.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
-            ) : (
-              filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
-            )}
-            {/* 下タブに隠れないよう末尾余白。先頭／末尾より先にはスクロールしない */}
-            <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
-          </>
-        )}
+      <div className="relative min-h-0 flex-1">
+        <div
+          className="absolute inset-0 touch-pan-y divide-y divide-zinc-50 overflow-y-auto overscroll-y-contain"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          {!userId ? (
+            <p className="px-4 py-8 text-center text-sm text-zinc-500">
+              <Link href="/" className="font-medium text-violet-600 underline">
+                {tx("ログイン", "Log in")}
+              </Link>
+              {tx("するとメッセージが表示されます", " to see your messages")}
+            </p>
+          ) : loadError ? (
+            <p className="px-4 py-8 text-center text-sm text-red-600">
+              {loadError === "__db__"
+                ? tx("メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。", "Messaging is not set up. Run the SQL in Supabase.")
+                : loadError === "__generic__"
+                  ? tx("読み込みに失敗しました", "Failed to load")
+                  : loadError}
+            </p>
+          ) : loading ? (
+            <p className="px-4 py-8 text-center text-sm text-zinc-400">{tx("読み込み中...", "Loading…")}</p>
+          ) : (
+            <>
+              {!scopedProjectId ? (
+                <FollowingChatEntry
+                  recentFollowing={followingForEntry}
+                  onOpen={() => setShowFollowingPicker(true)}
+                />
+              ) : null}
+              {filtered.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
+              ) : (
+                filtered.map((conv) => <ConversationRow key={conv.id} conversation={conv} />)
+              )}
+              {/* 下タブに隠れないよう末尾余白。端より先にはスクロールしない */}
+              <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
+            </>
+          )}
+        </div>
       </div>
 
       {showFollowingPicker && userId ? (
@@ -426,7 +430,6 @@ export function InboxList() {
 }
 
 function ConversationRow({ conversation }: { conversation: InboxConversation }) {
-  const router = useRouter();
   const { locale, tx } = useI18n();
   const isUnread = conversation.unreadCount > 0;
   const title =
@@ -434,15 +437,9 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
       ? (conversation.otherUser?.displayName ?? tx("ユーザー", "User"))
       : (conversation.name ?? tx("グループ", "Group"));
 
-  const open = () => {
-    // 未読でも確実に遷移（preventDefault しない単純遷移）
-    router.push(`/messages/${conversation.id}`);
-  };
-
   return (
-    <button
-      type="button"
-      onClick={open}
+    <Link
+      href={`/messages/${conversation.id}`}
       className="flex w-full items-center px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100"
     >
       <div className="relative mr-3 shrink-0">
@@ -502,6 +499,6 @@ function ConversationRow({ conversation }: { conversation: InboxConversation }) 
           </span>
         </div>
       </div>
-    </button>
+    </Link>
   );
 }
