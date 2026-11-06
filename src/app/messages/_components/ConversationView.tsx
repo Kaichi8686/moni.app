@@ -25,7 +25,7 @@ import { profileToSender } from "@/lib/messages/mappers";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { isProjectId, writeMailProjectScope } from "@/lib/messages/mailScope";
 import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
-import { closeProjectCluster, openProjectCluster } from "@/lib/navigation/projectCluster";
+import { openProjectCluster } from "@/lib/navigation/projectCluster";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Message } from "@/lib/types/messages";
