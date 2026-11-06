@@ -1,27 +1,20 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, Lock, LockOpen, Plus, Trash2, VenetianMask } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { IdeaForm } from "@/components/projects/idea-voting/IdeaForm";
 import { IdeaList } from "@/components/projects/idea-voting/IdeaList";
-import { IdeaVotingSettingsPanel } from "@/components/projects/idea-voting/IdeaVotingSettingsPanel";
-import { voteBtnGhost, voteBtnPrimary, voteCard, voteChip, voteChipActive, voteInput } from "@/components/projects/idea-voting/voteUi";
+import { voteCard, voteChip, voteChipActive } from "@/components/projects/idea-voting/voteUi";
 import { supabase } from "@/lib/supabase";
 import {
-  createIdea,
-  createVoteEvent,
-  deleteIdea,
-  deleteVoteEvent,
   fetchEvents,
   fetchIdeas,
   fetchVotes,
   ideaVotingRealtimeTable,
-  LEGACY_EVENT_ID,
   resolveIdeaVotingBackend,
   setMyVote,
-  updateVoteEvent,
   type IdeaVoteEventWithCount,
   type IdeaVoteRow,
 } from "@/lib/projects/ideaVoting/ideaVotingApi";
@@ -45,51 +38,40 @@ function formatDeadline(iso: string | null, locale: "ja" | "en"): string {
   });
 }
 
-function localDatetimeToIso(value: string): string | null {
-  if (!value.trim()) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
+/** 投票詳細のみ。一覧・ルール変更はメッセージのカード側に移した。 */
 export default function WorkspaceIdeaVoting() {
   const { tx, locale } = useI18n();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const eventParam = searchParams.get("event")?.trim() || null;
-  const { projectId, project, loading, uid, isOwner } = useProjectWorkspace();
+  const { projectId, loading, uid } = useProjectWorkspace();
   const [events, setEvents] = useState<IdeaVoteEventWithCount[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ideas, setIdeas] = useState<ProjectIdea[]>([]);
   const [votes, setVotes] = useState<IdeaVoteRow[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
 
-  const selected = events.find((e) => e.id === selectedId) ?? null;
+  const messagesHref = `/messages?project=${encodeURIComponent(projectId)}`;
+  const selected = eventParam ? (events.find((e) => e.id === eventParam) ?? null) : null;
   const closed = selected ? isVoteEventClosed(selected) : false;
 
-  const posterName = useMemo(() => {
-    if (!uid || !project?.members) return undefined;
-    return project.members.find((m) => m.id === uid)?.name;
-  }, [uid, project?.members]);
-
   const refreshEvents = useCallback(async () => {
-    if (!projectId || !supabase) return;
+    if (!projectId || !supabase) return [];
     const list = await fetchEvents(projectId);
     setEvents(list);
     return list;
   }, [projectId]);
 
   const refreshSelected = useCallback(async () => {
-    if (!projectId || !supabase || !selectedId) {
+    if (!projectId || !supabase || !eventParam) {
       setIdeas([]);
       setVotes([]);
       return;
     }
-    const [i, v] = await Promise.all([fetchIdeas(projectId, selectedId), fetchVotes(projectId)]);
+    const [i, v] = await Promise.all([fetchIdeas(projectId, eventParam), fetchVotes(projectId)]);
     setIdeas(i);
     setVotes(v);
-  }, [projectId, selectedId]);
+  }, [projectId, eventParam]);
 
   const refresh = useCallback(async () => {
     if (!projectId || !supabase) return;
@@ -103,14 +85,17 @@ export default function WorkspaceIdeaVoting() {
   }, [projectId, refreshEvents, refreshSelected, tx]);
 
   useEffect(() => {
+    if (!loading && projectId && !eventParam) {
+      router.replace(messagesHref);
+    }
+  }, [loading, projectId, eventParam, router, messagesHref]);
+
+  useEffect(() => {
     let cancelled = false;
     setHydrated(false);
     void (async () => {
       try {
-        const list = await refreshEvents();
-        if (!cancelled && eventParam && list?.some((e) => e.id === eventParam)) {
-          setSelectedId(eventParam);
-        }
+        await refreshEvents();
         setError("");
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : tx("読み込みに失敗しました", "Couldn’t load"));
@@ -121,7 +106,7 @@ export default function WorkspaceIdeaVoting() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEvents, eventParam, tx]);
+  }, [refreshEvents, tx]);
 
   useEffect(() => {
     void (async () => {
@@ -131,7 +116,7 @@ export default function WorkspaceIdeaVoting() {
         setError(e instanceof Error ? e.message : tx("読み込みに失敗しました", "Couldn’t load"));
       }
     })();
-  }, [refreshSelected]);
+  }, [refreshSelected, tx]);
 
   useEffect(() => {
     if (!projectId || !supabase) return;
@@ -214,71 +199,6 @@ export default function WorkspaceIdeaVoting() {
     return [...ideasWithTally].sort((a, b) => b.votes - a.votes || a.createdAt.localeCompare(b.createdAt))[0];
   }, [closed, ideasWithTally]);
 
-  const canManageEvent = Boolean(
-    selected && uid && (isOwner || selected.createdBy === uid || selected.id === LEGACY_EVENT_ID && isOwner),
-  );
-
-  async function handleCreateEvent(input: {
-    title: string;
-    description: string;
-    closesAt: string;
-    anonymous: boolean;
-    votesPerPerson: number;
-    maxVotesPerIdea: number;
-    options: string[];
-  }) {
-    if (!uid) return;
-    setBusy(true);
-    try {
-      const created = await createVoteEvent(projectId, uid, {
-        title: input.title,
-        description: input.description,
-        closesAt: localDatetimeToIso(input.closesAt),
-        anonymous: input.anonymous,
-        votesPerPerson: input.votesPerPerson,
-        maxVotesPerIdea: input.maxVotesPerIdea,
-      });
-      const author = input.anonymous ? null : posterName ?? tx("メンバー", "Member");
-      const missed: string[] = [];
-      for (const text of input.options) {
-        try {
-          await createIdea(projectId, uid, text, author, created.id);
-        } catch {
-          missed.push(text);
-        }
-      }
-      await refreshEvents();
-      setSelectedId(created.id);
-      setCreateOpen(false);
-      if (missed.length > 0) {
-        setError(tx(`選択肢を保存できませんでした: ${missed.join("、")}`, `Couldn’t save options: ${missed.join(", ")}`));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handlePost(text: string) {
-    if (!uid || !selected || closed) return;
-    setBusy(true);
-    try {
-      const created = await createIdea(
-        projectId,
-        uid,
-        text,
-        selected.anonymous ? null : posterName ?? tx("メンバー", "Member"),
-        selected.id,
-      );
-      setIdeas((prev) => [created, ...prev.filter((i) => i.id !== created.id)]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("投稿に失敗しました", "Couldn’t post"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function applyMyVoteLocal(ideaId: string, nextCount: number) {
     if (!uid) return;
     setVotes((prev) => {
@@ -314,117 +234,24 @@ export default function WorkspaceIdeaVoting() {
     void changeMyVote(ideaId, current - 1);
   }
 
-  async function handleDelete(ideaId: string) {
-    const idea = ideas.find((i) => i.id === ideaId);
-    const canDelete = Boolean(uid) && (isOwner || idea?.authorId === uid);
-    if (!canDelete) return;
-    if (typeof window !== "undefined" && !window.confirm(tx("この選択肢を削除しますか？", "Delete this option?"))) return;
-    setIdeas((prev) => prev.filter((i) => i.id !== ideaId));
-    setVotes((prev) => prev.filter((v) => v.ideaId !== ideaId));
-    try {
-      await deleteIdea(ideaId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("削除に失敗しました", "Couldn’t delete"));
-      void refresh();
-    }
-  }
-
-  async function persistEvent(patch: Parameters<typeof updateVoteEvent>[1]) {
-    if (!selected) return;
-    try {
-      await updateVoteEvent(selected, patch);
-      await refreshEvents();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("設定の保存に失敗しました", "Couldn’t save settings"));
-      void refresh();
-    }
-  }
-
-  async function handleDeleteEvent() {
-    if (!selected || selected.id === LEGACY_EVENT_ID) return;
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(tx(`「${selected.title}」を削除しますか？選択肢も消えます。`, `Delete “${selected.title}”? Options will be removed too.`))
-    )
-      return;
-    try {
-      await deleteVoteEvent(selected);
-      setSelectedId(null);
-      await refreshEvents();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("削除に失敗しました", "Couldn’t delete"));
-    }
-  }
-
   if (loading || !hydrated) {
     return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+  }
+
+  if (!eventParam) {
+    return <p className="text-sm text-[#6B7280]">{tx("メッセージへ戻っています…", "Returning to messages…")}</p>;
   }
 
   if (!selected) {
     return (
       <div className="mx-auto max-w-2xl space-y-3">
-        <header className="flex items-end justify-between gap-3 border-b border-zinc-200 pb-3">
-          <div>
-            <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">{tx("投票", "Voting")}</h1>
-            <p className="mt-0.5 text-[12px] text-zinc-500">
-              {tx("テーマごとに作って、選択肢へ投票します。", "Create a topic, then vote on options.")}
-            </p>
-          </div>
-          <button type="button" onClick={() => setCreateOpen((v) => !v)} className={voteBtnPrimary}>
-            <Plus className="h-3.5 w-3.5" />
-            {tx("投票を作る", "Create vote")}
-          </button>
-        </header>
-
-        {error ? (
-          <p className="border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800">{error}</p>
-        ) : null}
-
-        {createOpen ? (
-          <VoteEventCreateForm busy={busy} onCancel={() => setCreateOpen(false)} onSubmit={handleCreateEvent} />
-        ) : null}
-
-        {events.length === 0 ? (
-          <div className="border border-dashed border-zinc-300 px-3 py-4 text-[12px] text-zinc-500">
-            {tx("まだありません。「投票を作る」から追加してください。", "None yet. Use “Create vote” to add one.")}
-          </div>
-        ) : (
-          <ul className="space-y-1.5">
-            {events.map((ev) => {
-              const done = isVoteEventClosed(ev);
-              return (
-                <li key={ev.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(ev.id)}
-                    className={`${voteCard} flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left hover:border-zinc-400`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-semibold tracking-tight text-zinc-900">{ev.title}</p>
-                      {ev.description ? <p className="mt-0.5 truncate text-[12px] text-zinc-500">{ev.description}</p> : null}
-                      <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] text-zinc-400">
-                        <span>{tx(`${ev.optionCount}件`, `${ev.optionCount}`)}</span>
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarClock className="h-3 w-3" />
-                          {formatDeadline(ev.closesAt, locale)}
-                        </span>
-                        {ev.anonymous ? (
-                          <span className="inline-flex items-center gap-1">
-                            <VenetianMask className="h-3 w-3" />
-                            {tx("匿名", "Anonymous")}
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
-                    <span className={done ? voteChip : voteChipActive}>
-                      {done ? tx("終了", "Closed") : tx("投票中", "Open")}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <p className="rounded-2xl border border-rose-300 bg-rose-50 px-3 py-2 text-[12px] text-rose-800">
+          {error || tx("この投票は見つかりません。", "This vote wasn’t found.")}
+        </p>
+        <Link href={messagesHref} className="inline-flex items-center gap-1 text-[12px] font-medium text-zinc-600 hover:text-zinc-900">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          {tx("メッセージに戻る", "Back to messages")}
+        </Link>
       </div>
     );
   }
@@ -432,14 +259,13 @@ export default function WorkspaceIdeaVoting() {
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <header className="border-b border-zinc-200 pb-3">
-        <button
-          type="button"
-          onClick={() => setSelectedId(null)}
+        <Link
+          href={messagesHref}
           className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-900"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          {tx("一覧", "All votes")}
-        </button>
+          {tx("メッセージ", "Messages")}
+        </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">{selected.title}</h1>
@@ -450,24 +276,16 @@ export default function WorkspaceIdeaVoting() {
               {tx(` · 1人${selected.votesPerPerson}票`, ` · ${selected.votesPerPerson} votes each`)}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className={closed ? voteChip : voteChipActive}>
-              {closed
-                ? tx("締切済み", "Closed")
-                : tx(`残り ${votesRemaining}/${selected.votesPerPerson}`, `${votesRemaining}/${selected.votesPerPerson} left`)}
-            </span>
-            {canManageEvent ? (
-              <button type="button" onClick={() => void persistEvent({ closed: !selected.closed })} className={voteBtnGhost}>
-                {closed ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                {closed ? tx("再開", "Reopen") : tx("締切", "Close")}
-              </button>
-            ) : null}
-          </div>
+          <span className={closed ? voteChip : voteChipActive}>
+            {closed
+              ? tx("締切済み", "Closed")
+              : tx(`残り ${votesRemaining}/${selected.votesPerPerson}`, `${votesRemaining}/${selected.votesPerPerson} left`)}
+          </span>
         </div>
       </header>
 
       {closed && winner ? (
-        <div className={`${voteCard} border-zinc-900 px-3 py-2`}>
+        <div className={`${voteCard} rounded-2xl border-zinc-900 px-3 py-2`}>
           <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{tx("最多得票", "Top vote")}</p>
           <p className="text-[13px] font-semibold tracking-tight text-zinc-900">{winner.text}</p>
           <p className="text-[11px] text-zinc-500">{tx(`${winner.votes}票`, `${winner.votes} votes`)}</p>
@@ -478,59 +296,15 @@ export default function WorkspaceIdeaVoting() {
         </p>
       )}
 
-      {canManageEvent ? (
-        <div className="space-y-1.5">
-          <IdeaVotingSettingsPanel
-            settings={settingsForList}
-            onSave={(next) => void persistEvent({ votesPerPerson: next.votesPerPerson, maxVotesPerIdea: next.maxVotesPerIdea })}
-          />
-          <div className={`${voteCard} flex items-center justify-between gap-2 px-3 py-2`}>
-            <p className="text-[12px] text-zinc-500">
-              {selected.anonymous ? tx("誰が入れたかは見えません", "Voters stay hidden") : tx("投稿者名を表示", "Show author names")}
-            </p>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={selected.anonymous}
-              onClick={() => void persistEvent({ anonymous: !selected.anonymous })}
-              className={selected.anonymous ? voteChipActive : voteChip}
-            >
-              <VenetianMask className="h-3 w-3" />
-              {selected.anonymous ? tx("匿名オン", "Anonymous on") : tx("匿名オフ", "Anonymous off")}
-            </button>
-          </div>
-          {selected.id !== LEGACY_EVENT_ID ? (
-            <button
-              type="button"
-              onClick={() => void handleDeleteEvent()}
-              className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-rose-600"
-            >
-              <Trash2 className="h-3 w-3" />
-              {tx("この投票を削除", "Delete this vote")}
-            </button>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-[11px] text-zinc-500">
-          {tx(
-            `1人${selected.votesPerPerson}票 · 1案最大${selected.maxVotesPerIdea}票`,
-            `${selected.votesPerPerson} votes each · max ${selected.maxVotesPerIdea} per option`,
-          )}
-          {selected.anonymous ? tx(" · 匿名", " · Anonymous") : ""}
-        </p>
-      )}
+      <p className="text-[11px] text-zinc-500">
+        {tx(
+          `1人${selected.votesPerPerson}票 · 1案最大${selected.maxVotesPerIdea}票`,
+          `${selected.votesPerPerson} votes each · max ${selected.maxVotesPerIdea} per option`,
+        )}
+        {selected.anonymous ? tx(" · 匿名", " · Anonymous") : ""}
+      </p>
 
-      {error ? <p className="border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800">{error}</p> : null}
-
-      <IdeaForm
-        disabled={closed || busy}
-        anonymousMode={selected.anonymous}
-        posterName={posterName}
-        heading={selected.anonymous ? tx("選択肢を追加（匿名）", "Add option (anonymous)") : tx("選択肢を追加", "Add option")}
-        placeholder={tx("例: A案 / 体育館でやる / 予算3万円以内…", "e.g. Plan A / gym / under $200…")}
-        submitLabel={tx("追加", "Add")}
-        onSubmit={handlePost}
-      />
+      {error ? <p className="rounded-2xl border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800">{error}</p> : null}
 
       <section className="space-y-1.5">
         <h2 className="text-[12px] font-medium text-zinc-500">
@@ -545,165 +319,13 @@ export default function WorkspaceIdeaVoting() {
           hideTallies={!closed}
           votesRemaining={votesRemaining}
           currentUid={uid}
-          isOwner={isOwner}
+          isOwner={false}
+          voteOnly
           onVote={handleVote}
           onUnvote={handleUnvote}
-          onDelete={handleDelete}
+          onDelete={() => undefined}
         />
       </section>
     </div>
-  );
-}
-
-function clampVoteLimit(n: number): number {
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(10, Math.max(1, Math.round(n)));
-}
-
-function VoteEventCreateForm({
-  busy,
-  onCancel,
-  onSubmit,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onSubmit: (input: {
-    title: string;
-    description: string;
-    closesAt: string;
-    anonymous: boolean;
-    votesPerPerson: number;
-    maxVotesPerIdea: number;
-    options: string[];
-  }) => void;
-}) {
-  const { tx } = useI18n();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [closesAt, setClosesAt] = useState("");
-  const [anonymous, setAnonymous] = useState(true);
-  const [votesPerPerson, setVotesPerPerson] = useState("1");
-  const [maxVotesPerIdea, setMaxVotesPerIdea] = useState("1");
-  const [options, setOptions] = useState(["", ""]);
-
-  const filledOptions = options.map((item) => item.trim()).filter(Boolean);
-  const canSubmit = Boolean(title.trim()) && filledOptions.length >= 2 && !busy;
-
-  function updateOption(index: number, value: string) {
-    setOptions((prev) => prev.map((item, i) => (i === index ? value : item)));
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    const perPerson = clampVoteLimit(Number(votesPerPerson));
-    const perIdea = Math.min(perPerson, clampVoteLimit(Number(maxVotesPerIdea)));
-    onSubmit({
-      title,
-      description,
-      closesAt,
-      anonymous,
-      votesPerPerson: perPerson,
-      maxVotesPerIdea: perIdea,
-      options: filledOptions,
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className={`${voteCard} space-y-3 p-3`}>
-      <p className="text-[13px] font-semibold tracking-tight text-zinc-900">{tx("新しい投票", "New vote")}</p>
-      <input
-        required
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder={tx("何を決める？（例: 文化祭の出し物）", "What are you deciding? (e.g. festival booth)")}
-        className={voteInput}
-      />
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={2}
-        placeholder={tx("説明（任意）", "Description (optional)")}
-        className={`${voteInput} resize-y`}
-      />
-      <label className="block">
-        <span className="text-[11px] text-zinc-500">{tx("締切", "Deadline")}</span>
-        <input type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} className={`${voteInput} mt-0.5`} />
-      </label>
-
-      <fieldset className="space-y-2 border-t border-zinc-200 pt-3">
-        <legend className="text-[12px] font-medium text-zinc-900">{tx("ルール", "Rules")}</legend>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="text-[11px] text-zinc-500">{tx("1人あたりの票", "Votes per person")}</span>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={votesPerPerson}
-              onChange={(e) => setVotesPerPerson(e.target.value)}
-              className={`${voteInput} mt-0.5`}
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] text-zinc-500">{tx("1つの選択肢の上限", "Max per option")}</span>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              value={maxVotesPerIdea}
-              onChange={(e) => setMaxVotesPerIdea(e.target.value)}
-              className={`${voteInput} mt-0.5`}
-            />
-          </label>
-        </div>
-        <label className="flex items-center gap-2 text-[12px] text-zinc-700">
-          <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} className="rounded-[2px] border-zinc-400" />
-          {tx("匿名投票", "Anonymous voting")}
-        </label>
-      </fieldset>
-
-      <fieldset className="space-y-2 border-t border-zinc-200 pt-3">
-        <legend className="text-[12px] font-medium text-zinc-900">{tx("選択肢", "Options")}</legend>
-        <p className="text-[11px] text-zinc-500">{tx("2つ以上入れてください", "Add at least two")}</p>
-        {options.map((option, index) => (
-          <div key={index} className="flex items-center gap-1.5">
-            <input
-              value={option}
-              onChange={(e) => updateOption(index, e.target.value)}
-              placeholder={tx(`選択肢 ${index + 1}`, `Option ${index + 1}`)}
-              className={voteInput}
-            />
-            {options.length > 2 ? (
-              <button
-                type="button"
-                onClick={() => setOptions((prev) => prev.filter((_, i) => i !== index))}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-zinc-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={tx("選択肢を削除", "Remove option")}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setOptions((prev) => [...prev, ""])}
-          className={voteBtnGhost}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {tx("選択肢を追加", "Add option")}
-        </button>
-      </fieldset>
-
-      <div className="flex justify-end gap-1.5">
-        <button type="button" onClick={onCancel} className={voteBtnGhost}>
-          {tx("キャンセル", "Cancel")}
-        </button>
-        <button type="submit" disabled={!canSubmit} className={voteBtnPrimary}>
-          {busy ? tx("作成中…", "Creating…") : tx("作成", "Create")}
-        </button>
-      </div>
-    </form>
   );
 }
