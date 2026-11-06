@@ -33,7 +33,6 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type PhaseKey = string | null;
 
 type Screen =
-  | { kind: "list" }
   | { kind: "step"; phaseId: PhaseKey }
   | { kind: "genre"; phaseId: PhaseKey; genre: TaskGenre }
   | { kind: "task"; phaseId: PhaseKey; genre: TaskGenre; issueId: string }
@@ -74,7 +73,7 @@ export default function WorkspaceIssues() {
     saveCoachingContext,
     registerBackHandler,
   } = useProjectWorkspace();
-  const [screen, setScreen] = useState<Screen>({ kind: "list" });
+  const [screen, setScreen] = useState<Screen | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
@@ -93,7 +92,7 @@ export default function WorkspaceIssues() {
   const fileRef = useRef<HTMLInputElement>(null);
   const boardSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const entryHandled = useRef(false);
-  const taskId = screen.kind === "task" || screen.kind === "canvas" ? screen.issueId : "";
+  const taskId = screen && (screen.kind === "task" || screen.kind === "canvas") ? screen.issueId : "";
 
   const sortedPhases = useMemo(
     () => [...phases].sort((a, b) => a.order - b.order),
@@ -144,7 +143,7 @@ export default function WorkspaceIssues() {
   }, []);
 
   useEffect(() => {
-    if (screen.kind !== "canvas") {
+    if (!screen || screen.kind !== "canvas") {
       registerBackHandler(null);
       return;
     }
@@ -173,7 +172,7 @@ export default function WorkspaceIssues() {
   }
 
   function closeCanvas() {
-    if (screen.kind !== "canvas") return;
+    if (!screen || screen.kind !== "canvas") return;
     setScreen({ kind: "task", phaseId: screen.phaseId, genre: screen.genre, issueId: screen.issueId });
   }
 
@@ -220,13 +219,14 @@ export default function WorkspaceIssues() {
       return;
     }
 
-    // クエリなし: いまのステップのジャンル一覧へ
+    // クエリなし: いまのステップのジャンル一覧へ（ステップ選択画面は出さない）
     if (sortedPhases.length === 0 && phases.length > 0) return;
     entryHandled.current = true;
     const inProgress = sortedPhases.find((item) => item.status === "in_progress");
     const firstOpen = sortedPhases.find((item) => item.status !== "completed");
     const focus = inProgress ?? firstOpen ?? sortedPhases[0];
     if (focus) setScreen({ kind: "step", phaseId: focus.id });
+    else setScreen({ kind: "step", phaseId: null });
   }, [issues, phases.length, sortedPhases]);
 
   const names = useMemo(() => {
@@ -235,14 +235,14 @@ export default function WorkspaceIssues() {
     return map;
   }, [project?.members]);
 
-  const activeGenre = screen.kind === "list" || screen.kind === "step" ? null : screen.genre;
+  const activeGenre = !screen || screen.kind === "step" ? null : screen.genre;
   const activeIssue =
-    screen.kind === "task" || screen.kind === "canvas"
+    screen && (screen.kind === "task" || screen.kind === "canvas")
       ? issues.find((issue) => issue.id === screen.issueId) ?? null
       : null;
 
   const stepGenres = useMemo(() => {
-    if (screen.kind === "list") return [] as TaskGenre[];
+    if (!screen) return [] as TaskGenre[];
     return listStepTaskGenres(screen.phaseId, customGenres, openIssues);
   }, [screen, customGenres, openIssues]);
 
@@ -264,7 +264,8 @@ export default function WorkspaceIssues() {
 
   async function addCustomGenre(event: FormEvent) {
     event.preventDefault();
-    if (screen.kind !== "step") return;
+    if (!screen || screen.kind !== "step") return;
+    const stepScreen = screen;
     const labelJa = normalizeCustomTaskGenreLabel(draftGenreLabel);
     if (!labelJa) {
       setError(tx("ジャンル名を入力してください", "Enter a genre name"));
@@ -277,7 +278,7 @@ export default function WorkspaceIssues() {
     const duplicate = customGenres.some(
       (g) =>
         g.labelJa.toLowerCase() === labelJa.toLowerCase() &&
-        (g.phaseId ?? null) === screen.phaseId,
+        (g.phaseId ?? null) === stepScreen.phaseId,
     );
     if (duplicate) {
       setError(tx("同じ名前のジャンルがすでにあります", "That genre name already exists"));
@@ -291,13 +292,13 @@ export default function WorkspaceIssues() {
         labelJa,
         hintJa: draftGenreHint.trim().slice(0, 60) || undefined,
         colorKey: nextCustomColorKey(customGenres.length),
-        phaseId: screen.phaseId ?? undefined,
+        phaseId: stepScreen.phaseId ?? undefined,
       };
       await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
       setDraftGenreLabel("");
       setDraftGenreHint("");
       setAddingGenre(false);
-      setScreen({ kind: "genre", phaseId: screen.phaseId, genre: next.id });
+      setScreen({ kind: "genre", phaseId: stepScreen.phaseId, genre: next.id });
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ジャンルを追加できませんでした", "Couldn’t add the genre"));
     } finally {
@@ -307,7 +308,8 @@ export default function WorkspaceIssues() {
 
   async function addTask(event: FormEvent) {
     event.preventDefault();
-    if (screen.kind !== "genre" || !draftTitle.trim()) return;
+    if (!screen || screen.kind !== "genre" || !draftTitle.trim()) return;
+    const genreScreen = screen;
     setError("");
     try {
       const beginAt = dateInputToIso(draftBegin);
@@ -321,8 +323,8 @@ export default function WorkspaceIssues() {
         status: "todo",
         priority: "medium",
         assigneeIds: draftAssignees,
-        genre: screen.genre,
-        phaseId: screen.phaseId,
+        genre: genreScreen.genre,
+        phaseId: genreScreen.phaseId,
         beginAt,
         dueDate,
       });
@@ -365,6 +367,10 @@ export default function WorkspaceIssues() {
     if (days > 0) return tx(`期限まであと${days}日`, `${days} days left`);
     if (days === 0) return tx("期限は今日", "Due today");
     return tx(`期限を${Math.abs(days)}日過ぎています`, `${Math.abs(days)} days overdue`);
+  }
+
+  if (!screen) {
+    return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   }
 
   if (screen.kind === "canvas" && activeIssue) {
@@ -698,21 +704,8 @@ export default function WorkspaceIssues() {
 
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setScreen({ kind: "list" });
-              setAddingGenre(false);
-              setCreating(false);
-              setError("");
-            }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-zinc-100"
-            aria-label={tx("ステップ一覧", "All steps")}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          {canEdit ? (
+        {canEdit ? (
+          <div className="flex justify-end">
             <DuoButton
               type="button"
               tone="orange"
@@ -721,13 +714,13 @@ export default function WorkspaceIssues() {
                 setError("");
                 setAddingGenre((v) => !v);
               }}
-              className="ml-auto !gap-1 !px-3 !py-2.5 !text-[13px]"
+              className="!gap-1 !px-3 !py-2.5 !text-[13px]"
             >
               <Plus className="h-4 w-4" aria-hidden />
               {tx("ジャンルを追加", "Add genre")}
             </DuoButton>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-2.5">
           <button
@@ -849,123 +842,18 @@ export default function WorkspaceIssues() {
             );
           })}
         </div>
+        {sortedPhases.length === 0 && phaseId === null ? (
+          <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
+            {tx(
+              "ロードマップのステップがまだありません。概要のロードマップからステップを作ると、ここに表示されます。",
+              "No roadmap steps yet. Create steps from the overview roadmap to organize tasks here.",
+            )}
+          </p>
+        ) : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       </div>
     );
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-zinc-950">{tx("課題", "Tasks")}</h1>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {tx("ロードマップのステップごとにジャンルと課題を整理", "Organize genres and tasks by roadmap step")}
-          </p>
-        </div>
-      </div>
-
-      {sortedPhases.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
-          {tx(
-            "ロードマップのステップがまだありません。概要のロードマップからステップを作ると、ここに表示されます。",
-            "No roadmap steps yet. Create steps from the overview roadmap to organize tasks here.",
-          )}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {sortedPhases.map((phase, index) => {
-            const openCount = openCountFor(phase.id);
-            const inProgress = phase.status === "in_progress";
-            return (
-              <DuoButton
-                key={phase.id}
-                type="button"
-                tone={inProgress ? "orange" : "peach"}
-                size="md"
-                fullWidth
-                onClick={() => {
-                  setAddingGenre(false);
-                  setScreen({ kind: "step", phaseId: phase.id });
-                }}
-                className={LIST_DUO}
-              >
-                <span
-                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold ${
-                    inProgress
-                      ? "bg-white/25 text-white"
-                      : "bg-[#FF9600] text-white shadow-[0_2px_0_#D97706]"
-                  }`}
-                >
-                  {index + 1}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className={`text-[11px] font-extrabold tracking-[0.1em] ${inProgress ? "text-white/80" : "text-[#9A5B1F]/75"}`}>
-                    STEP {index + 1}
-                    {inProgress ? (
-                      <span className="ml-2 tracking-normal">{tx("いまここ", "Current")}</span>
-                    ) : null}
-                  </span>
-                  <span className="truncate">{phase.title}</span>
-                  {phase.goal ? (
-                    <span className={`truncate text-[11px] font-semibold ${inProgress ? "text-white/75" : "text-[#9A5B1F]/80"}`}>
-                      {phase.goal}
-                    </span>
-                  ) : null}
-                </span>
-                {openCount > 0 ? (
-                  <span
-                    className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold ${
-                      inProgress
-                        ? "bg-white text-[#FF9600]"
-                        : "bg-[#FF4B4B] text-white shadow-[0_2px_0_#C43232]"
-                    }`}
-                  >
-                    {openCount}
-                  </span>
-                ) : (
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                )}
-              </DuoButton>
-            );
-          })}
-        </div>
-      )}
-
-      {unlinkedCount > 0 || sortedPhases.length === 0 ? (
-        <div className="flex flex-col gap-2.5">
-          <DuoButton
-            type="button"
-            tone="zinc"
-            size="md"
-            fullWidth
-            onClick={() => {
-              setAddingGenre(false);
-              setScreen({ kind: "step", phaseId: null });
-            }}
-            className={LIST_DUO}
-          >
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-300 text-xs font-extrabold text-zinc-700">
-              —
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate">{tx("ステップ未設定", "No step")}</span>
-              <span className="truncate text-[11px] font-semibold text-zinc-500">
-                {tx("ロードマップにまだついていない課題", "Tasks not linked to a roadmap step")}
-              </span>
-            </span>
-            {unlinkedCount > 0 ? (
-              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
-                {unlinkedCount}
-              </span>
-            ) : (
-              <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-            )}
-          </DuoButton>
-        </div>
-      ) : null}
-
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-    </div>
-  );
+  return null;
 }
