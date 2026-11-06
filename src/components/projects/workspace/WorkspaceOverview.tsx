@@ -177,6 +177,17 @@ export default function WorkspaceOverview() {
       }));
   }, [issues, selectedPhaseId, selectedPhaseIsCurrent, tx, uid]);
 
+  /** 達成確認用：このマスに紐づく未完了課題（担当者問わず） */
+  const selectedPhaseUnfinishedIssueCount = useMemo(() => {
+    if (!selectedPhaseId) return 0;
+    return issues.filter(
+      (issue) =>
+        issue.phaseId === selectedPhaseId &&
+        issue.status !== "cancelled" &&
+        issue.status !== "done",
+    ).length;
+  }, [issues, selectedPhaseId]);
+
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
@@ -472,6 +483,7 @@ export default function WorkspaceOverview() {
         }}
         showTasks={selectedPhaseIsCurrent && selectedPhaseTasks.length > 0}
         tasks={selectedPhaseTasks}
+        unfinishedIssueCount={selectedPhaseUnfinishedIssueCount}
         onSelectTask={(taskId) => {
           setSelectedPhaseId(null);
           router.push(`/projects/${projectId}/issues?task=${taskId}`);
