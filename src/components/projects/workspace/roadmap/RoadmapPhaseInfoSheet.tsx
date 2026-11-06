@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { RoadmapAchieveConfirmDialog } from "@/components/projects/workspace/roadmap/RoadmapAchieveConfirmDialog";
 
 export type RoadmapPhaseInfo = {
   id: string;
@@ -36,6 +37,8 @@ type Props = {
   /** このマスで今やるべき課題（最大3件想定） */
   tasks?: RoadmapPhaseTaskPreview[];
   onSelectTask?: (taskId: string) => void;
+  /** このステップに紐づく未完了課題数（達成確認の警告用） */
+  unfinishedIssueCount?: number;
 };
 
 export function RoadmapPhaseInfoSheet({
@@ -49,6 +52,7 @@ export function RoadmapPhaseInfoSheet({
   showTasks = false,
   tasks = [],
   onSelectTask,
+  unfinishedIssueCount = 0,
 }: Props) {
   const { tx } = useI18n();
   const [goalDraft, setGoalDraft] = useState("");
@@ -91,6 +95,8 @@ export function RoadmapPhaseInfoSheet({
   const showAchieve = Boolean(canAchieve && onAchieve && !alreadyDone && !editable);
   const goalText = (phase.goal ?? goalDraft).trim();
   const previewTasks = tasks.slice(0, 3);
+  const stepLabel =
+    phase.stepNumber != null ? `STEP ${phase.stepNumber} · ${phase.title}` : phase.title;
 
   function requestClose() {
     if (busy) return;
@@ -129,229 +135,191 @@ export function RoadmapPhaseInfoSheet({
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-[80] flex items-end justify-center ${closing ? "roadmap-phase-sheet-root-out" : "roadmap-phase-sheet-root-in"}`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="roadmap-phase-sheet-title"
-    >
-      <button
-        type="button"
-        className={`absolute inset-0 border-0 bg-black/40 ${closing ? "roadmap-phase-sheet-backdrop-out" : "roadmap-phase-sheet-backdrop-in"}`}
-        aria-label={tx("閉じる", "Close")}
-        onClick={requestClose}
-      />
+    <>
       <div
-        className={`relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.15)] sm:mx-4 sm:mb-4 sm:rounded-2xl ${
-          closing ? "roadmap-phase-sheet-panel-out" : "roadmap-phase-sheet-panel-in"
-        }`}
+        className={`fixed inset-0 z-[80] flex items-end justify-center ${closing ? "roadmap-phase-sheet-root-out" : "roadmap-phase-sheet-root-in"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="roadmap-phase-sheet-title"
       >
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
-          <div className="min-w-0">
-            {phase.stepNumber != null ? (
-              <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {phase.stepNumber}</p>
-            ) : null}
-            <h2 id="roadmap-phase-sheet-title" className="truncate text-sm font-bold text-zinc-900">
-              {confirming ? tx("達成の最終確認", "Final confirmation") : phase.title}
-            </h2>
+        <button
+          type="button"
+          className={`absolute inset-0 border-0 bg-black/40 ${closing ? "roadmap-phase-sheet-backdrop-out" : "roadmap-phase-sheet-backdrop-in"}`}
+          aria-label={tx("閉じる", "Close")}
+          onClick={requestClose}
+        />
+        <div
+          className={`relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.15)] sm:mx-4 sm:mb-4 sm:rounded-2xl ${
+            closing ? "roadmap-phase-sheet-panel-out" : "roadmap-phase-sheet-panel-in"
+          }`}
+        >
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
+            <div className="min-w-0">
+              {phase.stepNumber != null ? (
+                <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {phase.stepNumber}</p>
+              ) : null}
+              <h2 id="roadmap-phase-sheet-title" className="truncate text-sm font-bold text-zinc-900">
+                {phase.title}
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
+              onClick={requestClose}
+              aria-label={tx("閉じる", "Close")}
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
-            onClick={requestClose}
-            aria-label={tx("閉じる", "Close")}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        {confirming ? (
-          <>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <p className="text-sm leading-relaxed text-zinc-600">
-                {tx(
-                  "あらかじめ決めたゴールを達成しましたか？達成するとこのマスが進みます。",
-                  "Did you achieve the goal you set? Confirming will advance this step.",
-                )}
-              </p>
-              <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-4">
-                <p className="text-xs font-bold text-orange-900">{tx("このステップのゴール", "Goal for this step")}</p>
-                {goalText ? (
-                  <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-relaxed text-zinc-900">
-                    {goalText}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
+              <label htmlFor="roadmap-phase-goal" className="block text-xs font-bold text-orange-900">
+                {tx("ゴール", "Goal")}
+              </label>
+              {editable ? (
+                <>
+                  <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
+                    {tx("達成したら「できた」と言えること", "What “done” looks like")}
                   </p>
+                  <textarea
+                    id="roadmap-phase-goal"
+                    value={goalDraft}
+                    onChange={(e) => setGoalDraft(e.target.value)}
+                    placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
+                    rows={3}
+                    className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                    disabled={busy}
+                  />
+                </>
+              ) : goalDraft.trim() || phase.goal?.trim() ? (
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{phase.goal}</p>
+              ) : (
+                <p className="mt-2 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="roadmap-phase-overview" className="block text-xs font-semibold text-zinc-600">
+                {tx("詳細", "Details")}
+              </label>
+              {editable ? (
+                <textarea
+                  id="roadmap-phase-overview"
+                  value={descriptionDraft}
+                  onChange={(e) => setDescriptionDraft(e.target.value)}
+                  placeholder={tx("このステップでやることや背景", "What you’ll do in this step")}
+                  rows={4}
+                  className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                  disabled={busy}
+                />
+              ) : descriptionDraft.trim() || phase.description?.trim() ? (
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{phase.description}</p>
+              ) : (
+                <p className="mt-1.5 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
+              )}
+            </div>
+
+            {!editable && showTasks ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-zinc-600">
+                  {tx("今やるべき課題", "What to do now")}
+                </p>
+                {previewTasks.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {previewTasks.map((task) => (
+                      <DuoButton
+                        key={task.id}
+                        type="button"
+                        tone="peach"
+                        size="md"
+                        fullWidth
+                        onClick={() => onSelectTask?.(task.id)}
+                        className="!justify-start !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug"
+                      >
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="line-clamp-2">{task.title}</span>
+                          {task.dueLabel ? (
+                            <span className="text-[11px] font-semibold text-orange-800/75">{task.dueLabel}</span>
+                          ) : null}
+                        </span>
+                      </DuoButton>
+                    ))}
+                  </div>
                 ) : (
-                  <p className="mt-2 text-sm text-zinc-400">{tx("ゴールはまだ書かれていません", "No goal set yet")}</p>
+                  <p className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 px-3 py-3 text-sm text-zinc-500">
+                    {tx("このマスに紐づく課題はまだありません", "No tasks linked to this step yet")}
+                  </p>
                 )}
               </div>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {actionError ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[12px] text-amber-900" role="alert">
-                  {actionError}
-                </p>
-              ) : null}
+            ) : null}
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-2.5 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {editable ? (
               <DuoButton
                 type="button"
                 tone="orange"
                 size="md"
                 fullWidth
                 disabled={busy}
-                onClick={() => void handleConfirmAchieve()}
-                className="gap-2 !text-[15px]"
+                onClick={() => void handleSave()}
+                className="!text-[15px]"
               >
-                <Check className="h-4 w-4" aria-hidden />
-                {busy ? tx("反映中…", "Updating…") : tx("達成した", "I achieved it")}
+                {busy ? tx("保存中…", "Saving…") : tx("ゴールを保存", "Save goal")}
               </DuoButton>
+            ) : null}
+            {alreadyDone ? (
+              <p className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl border border-orange-100 bg-orange-50 text-sm font-bold text-orange-700">
+                <Check className="h-4 w-4" aria-hidden />
+                {tx("達成済み", "Achieved")}
+              </p>
+            ) : null}
+            {showAchieve ? (
               <DuoButton
                 type="button"
-                tone="zinc"
+                tone="orange"
                 size="md"
                 fullWidth
                 disabled={busy}
                 onClick={() => {
-                  setConfirming(false);
                   setActionError("");
+                  setConfirming(true);
                 }}
                 className="!text-[15px]"
               >
-                {tx("まだ", "Not yet")}
+                {tx("達成", "Achieve")}
               </DuoButton>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
-                <label htmlFor="roadmap-phase-goal" className="block text-xs font-bold text-orange-900">
-                  {tx("ゴール", "Goal")}
-                </label>
-                {editable ? (
-                  <>
-                    <p className="mt-0.5 text-[11px] leading-snug text-orange-800/80">
-                      {tx("達成したら「できた」と言えること", "What “done” looks like")}
-                    </p>
-                    <textarea
-                      id="roadmap-phase-goal"
-                      value={goalDraft}
-                      onChange={(e) => setGoalDraft(e.target.value)}
-                      placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
-                      rows={3}
-                      className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
-                      disabled={busy}
-                    />
-                  </>
-                ) : goalDraft.trim() || phase.goal?.trim() ? (
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{phase.goal}</p>
-                ) : (
-                  <p className="mt-2 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="roadmap-phase-overview" className="block text-xs font-semibold text-zinc-600">
-                  {tx("詳細", "Details")}
-                </label>
-                {editable ? (
-                  <textarea
-                    id="roadmap-phase-overview"
-                    value={descriptionDraft}
-                    onChange={(e) => setDescriptionDraft(e.target.value)}
-                    placeholder={tx("このステップでやることや背景", "What you’ll do in this step")}
-                    rows={4}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
-                    disabled={busy}
-                  />
-                ) : descriptionDraft.trim() || phase.description?.trim() ? (
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{phase.description}</p>
-                ) : (
-                  <p className="mt-1.5 text-sm text-zinc-400">{tx("まだ書かれていません", "Not set yet")}</p>
-                )}
-              </div>
-
-              {!editable && showTasks ? (
-                <div>
-                  <p className="mb-2 text-xs font-semibold text-zinc-600">
-                    {tx("今やるべき課題", "What to do now")}
-                  </p>
-                  {previewTasks.length > 0 ? (
-                    <div className="space-y-2.5">
-                      {previewTasks.map((task) => (
-                        <DuoButton
-                          key={task.id}
-                          type="button"
-                          tone="peach"
-                          size="md"
-                          fullWidth
-                          onClick={() => onSelectTask?.(task.id)}
-                          className="!justify-start !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug"
-                        >
-                          <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="line-clamp-2">{task.title}</span>
-                            {task.dueLabel ? (
-                              <span className="text-[11px] font-semibold text-orange-800/75">{task.dueLabel}</span>
-                            ) : null}
-                          </span>
-                        </DuoButton>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 px-3 py-3 text-sm text-zinc-500">
-                      {tx("このマスに紐づく課題はまだありません", "No tasks linked to this step yet")}
-                    </p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex shrink-0 flex-col gap-2.5 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {editable ? (
-                <DuoButton
-                  type="button"
-                  tone="orange"
-                  size="md"
-                  fullWidth
-                  disabled={busy}
-                  onClick={() => void handleSave()}
-                  className="!text-[15px]"
-                >
-                  {busy ? tx("保存中…", "Saving…") : tx("ゴールを保存", "Save goal")}
-                </DuoButton>
-              ) : null}
-              {alreadyDone ? (
-                <p className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl border border-orange-100 bg-orange-50 text-sm font-bold text-orange-700">
-                  <Check className="h-4 w-4" aria-hidden />
-                  {tx("達成済み", "Achieved")}
-                </p>
-              ) : null}
-              {showAchieve ? (
-                <DuoButton
-                  type="button"
-                  tone="orange"
-                  size="md"
-                  fullWidth
-                  disabled={busy}
-                  onClick={() => setConfirming(true)}
-                  className="!text-[15px]"
-                >
-                  {tx("達成", "Achieve")}
-                </DuoButton>
-              ) : null}
-              <DuoButton
-                type="button"
-                tone="zinc"
-                size="md"
-                fullWidth
-                onClick={requestClose}
-                className="!text-[15px]"
-              >
-                {tx("閉じる", "Close")}
-              </DuoButton>
-            </div>
-          </>
-        )}
+            ) : null}
+            <DuoButton
+              type="button"
+              tone="zinc"
+              size="md"
+              fullWidth
+              onClick={requestClose}
+              className="!text-[15px]"
+            >
+              {tx("閉じる", "Close")}
+            </DuoButton>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <RoadmapAchieveConfirmDialog
+        open={confirming}
+        goal={goalText || phase.goal}
+        stepTitle={stepLabel}
+        unfinishedIssueCount={unfinishedIssueCount}
+        busy={busy}
+        error={actionError}
+        onCancel={() => {
+          if (busy) return;
+          setConfirming(false);
+          setActionError("");
+        }}
+        onConfirm={() => void handleConfirmAchieve()}
+      />
+    </>
   );
 }
