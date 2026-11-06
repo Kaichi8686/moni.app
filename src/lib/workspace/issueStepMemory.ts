@@ -3,13 +3,14 @@
 export const ISSUE_STEP_MEMORY_TTL_MS = 60 * 60 * 1000; // 1時間離れたら「いまのステップ」へ
 
 type IssueStepMemory = {
-  phaseId: string | null;
+  /** 実ステップ id のみ。ステップ未設定は記憶しない（誤って未設定から始まるのを防ぐ） */
+  phaseId: string;
   /** 課題タブ／ページを離れた時刻。閲覧中は null */
   leftAt: number | null;
 };
 
 function storageKey(projectId: string): string {
-  return `moni:issueStepMemory:${projectId}`;
+  return `moni:issueStepMemory:v2:${projectId}`;
 }
 
 function readRaw(projectId: string): IssueStepMemory | null {
@@ -18,14 +19,14 @@ function readRaw(projectId: string): IssueStepMemory | null {
     const raw = window.sessionStorage.getItem(storageKey(projectId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<IssueStepMemory>;
-    if (parsed.phaseId !== null && typeof parsed.phaseId !== "string") return null;
+    if (typeof parsed.phaseId !== "string" || !parsed.phaseId.trim()) return null;
     const leftAt =
       parsed.leftAt === null || parsed.leftAt === undefined
         ? null
         : typeof parsed.leftAt === "number" && Number.isFinite(parsed.leftAt)
           ? parsed.leftAt
           : null;
-    return { phaseId: parsed.phaseId ?? null, leftAt };
+    return { phaseId: parsed.phaseId.trim(), leftAt };
   } catch {
     return null;
   }
@@ -40,9 +41,9 @@ function writeRaw(projectId: string, value: IssueStepMemory) {
   }
 }
 
-/** いま見ているステップを覚える（閲覧中フラグ） */
+/** いま見ている実ステップを覚える。未設定バケットは記憶しない */
 export function rememberIssueStep(projectId: string, phaseId: string | null) {
-  if (!projectId) return;
+  if (!projectId || !phaseId) return;
   writeRaw(projectId, { phaseId, leftAt: null });
 }
 
@@ -55,26 +56,33 @@ export function markIssueStepLeft(projectId: string) {
 }
 
 /**
- * 短時間の離脱なら最後のステップを返す。
- * - undefined: 初回 or 長時間離脱 → 呼び出し側で「いまのステップ」
- * - null: ステップ未設定バケットを復元
- * - string: その phaseId を復元
+ * 短時間の離脱なら最後の実ステップ id を返す。
+ * undefined = 初回・長時間離脱・無効 → 呼び出し側で「いまのステップ」
  */
 export function readRecentIssueStep(
   projectId: string,
   validPhaseIds: Set<string>,
   now = Date.now(),
   ttlMs = ISSUE_STEP_MEMORY_TTL_MS,
-): string | null | undefined {
+): string | undefined {
   if (!projectId) return undefined;
   const mem = readRaw(projectId);
   if (!mem) return undefined;
   if (mem.leftAt != null && now - mem.leftAt > ttlMs) return undefined;
-  // leftAt が null（同一セッションで未離脱扱い）も短時間復元対象
-  if (mem.phaseId === null) {
-    // 未設定バケットは明示的に覚えているときだけ
-    return null;
-  }
   if (!validPhaseIds.has(mem.phaseId)) return undefined;
   return mem.phaseId;
+}
+
+/** Overview と同じく本線を優先して「いまのステップ」を決める */
+export function resolveCurrentPhaseId(
+  phases: { id: string; status: string; order: number; sideOf?: string | null }[],
+): string | null {
+  const sorted = [...phases].sort((a, b) => a.order - b.order);
+  const main = sorted.filter((phase) => !phase.sideOf);
+  const pool = main.length > 0 ? main : sorted;
+  const inProgress = pool.find((item) => item.status === "in_progress");
+  if (inProgress) return inProgress.id;
+  const firstOpen = pool.find((item) => item.status !== "completed");
+  if (firstOpen) return firstOpen.id;
+  return pool[0]?.id ?? sorted[0]?.id ?? null;
 }

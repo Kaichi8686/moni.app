@@ -23,6 +23,7 @@ import {
   markIssueStepLeft,
   readRecentIssueStep,
   rememberIssueStep,
+  resolveCurrentPhaseId,
 } from "@/lib/workspace/issueStepMemory";
 import type { CustomTaskGenreDef, Issue, Phase } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -59,6 +60,7 @@ export default function WorkspaceIssues() {
   const { tx, locale } = useI18n();
   const {
     projectId,
+    loading,
     issues,
     phases,
     project,
@@ -104,14 +106,14 @@ export default function WorkspaceIssues() {
   );
 
   function focusCurrentStep(): Screen {
-    const inProgress = sortedPhases.find((item) => item.status === "in_progress");
-    const firstOpen = sortedPhases.find((item) => item.status !== "completed");
-    const focus = inProgress ?? firstOpen ?? sortedPhases[0];
-    return { kind: "step", phaseId: focus?.id ?? null };
+    return { kind: "step", phaseId: resolveCurrentPhaseId(sortedPhases) };
   }
 
   useEffect(() => {
     if (entryHandled.current) return;
+    // phases 未取得のまま「未設定」で確定しない（ロード待ち）
+    if (loading) return;
+
     const params = new URLSearchParams(window.location.search);
     const task = params.get("task");
     const genre = params.get("genre");
@@ -136,9 +138,14 @@ export default function WorkspaceIssues() {
       let phaseId: PhaseKey | undefined;
       if (phase === "none") phaseId = null;
       else if (phase) {
-        if (sortedPhases.length === 0 && phases.length === 0) return;
+        if (sortedPhases.length === 0) {
+          entryHandled.current = true;
+          setScreen(focusCurrentStep());
+          return;
+        }
         if (!sortedPhases.some((item) => item.id === phase)) {
           entryHandled.current = true;
+          setScreen(focusCurrentStep());
           return;
         }
         phaseId = phase;
@@ -149,30 +156,26 @@ export default function WorkspaceIssues() {
         setScreen({ kind: "genre", phaseId: phaseId ?? null, genre });
       } else if (phaseId !== undefined) {
         setScreen({ kind: "step", phaseId });
+      } else {
+        setScreen(focusCurrentStep());
       }
       return;
     }
 
-    // クエリなし: 短時間の離脱なら直前のステップ、それ以外はいまのステップ
-    if (sortedPhases.length === 0 && phases.length > 0) return;
+    // クエリなし: 短時間の離脱なら直前の実ステップ、それ以外はいまのステップ
     entryHandled.current = true;
     const validIds = new Set(sortedPhases.map((item) => item.id));
     const remembered = readRecentIssueStep(projectId, validIds);
-    if (remembered !== undefined) {
-      // 未設定バケットは、未リンク課題があるかステップが無いときだけ復元
-      if (remembered === null && unlinkedCount === 0 && sortedPhases.length > 0) {
-        setScreen(focusCurrentStep());
-      } else {
-        setScreen({ kind: "step", phaseId: remembered });
-      }
+    if (remembered) {
+      setScreen({ kind: "step", phaseId: remembered });
       return;
     }
     setScreen(focusCurrentStep());
-  }, [issues, phases.length, projectId, sortedPhases, unlinkedCount]);
+  }, [issues, loading, projectId, sortedPhases]);
 
-  // 見ているステップを記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
+  // 見ている実ステップを記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
   useEffect(() => {
-    if (!projectId || !screen) return;
+    if (!projectId || !screen || loading) return;
     rememberIssueStep(projectId, screen.phaseId);
     let leftAtMs: number | null = null;
 
@@ -205,9 +208,8 @@ export default function WorkspaceIssues() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-    // focusCurrentStep は sortedPhases に依存。ステップ切替のたびにリスナを張り直す
     // eslint-disable-next-line react-hooks/exhaustive-deps -- screen.phaseId で十分
-  }, [projectId, screen?.phaseId, sortedPhases]);
+  }, [loading, projectId, screen?.phaseId, sortedPhases]);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
