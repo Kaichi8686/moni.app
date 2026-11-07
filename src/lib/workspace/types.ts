@@ -23,6 +23,8 @@ export type CustomTaskGenreDef = {
   hintEn?: string;
   /** Maps to icon background class, e.g. bg-rose-500 */
   colorKey?: string;
+  /** lucide アイコンキー（例: tag, pen, hammer） */
+  iconKey?: string;
   /** ロードマップのどのステップ（project_phases.id）向けか。未設定は全体／未分類 */
   phaseId?: string;
 };

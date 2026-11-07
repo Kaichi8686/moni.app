@@ -1,23 +1,16 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
-import {
-  createCustomTaskGenreId,
-  CUSTOM_TASK_GENRE_LABEL_MAX,
-  listStepTaskGenres,
-  MAX_CUSTOM_TASK_GENRES,
-  nextCustomColorKey,
-  normalizeCustomTaskGenreLabel,
-  resolveGenreMeta,
-} from "@/lib/workspace/taskGenres";
+import { listStepTaskGenres, MAX_CUSTOM_TASK_GENRES, resolveGenreMeta } from "@/lib/workspace/taskGenres";
 import {
   ISSUE_STEP_MEMORY_TTL_MS,
   markIssueStepLeft,
@@ -25,7 +18,7 @@ import {
   rememberIssueStep,
   resolveCurrentPhaseId,
 } from "@/lib/workspace/issueStepMemory";
-import type { CustomTaskGenreDef, Issue, Phase } from "@/lib/workspace/types";
+import type { Issue, Phase } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 /** null = ステップ未設定の課題用バケット */
@@ -75,10 +68,7 @@ export default function WorkspaceIssues() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
-  const [draftGenreLabel, setDraftGenreLabel] = useState("");
-  const [draftGenreHint, setDraftGenreHint] = useState("");
   const [error, setError] = useState("");
-  const [savingGenre, setSavingGenre] = useState(false);
   const entryHandled = useRef(false);
 
   const sortedPhases = useMemo(
@@ -240,50 +230,6 @@ export default function WorkspaceIssues() {
     return issuesFor(phaseId, genre).filter((issue) => !isIssueSubmitted(issue)).length;
   }
 
-  async function addCustomGenre(event: FormEvent) {
-    event.preventDefault();
-    if (!screen || screen.kind !== "step") return;
-    const stepScreen = screen;
-    const labelJa = normalizeCustomTaskGenreLabel(draftGenreLabel);
-    if (!labelJa) {
-      setError(tx("ジャンル名を入力してください", "Enter a genre name"));
-      return;
-    }
-    if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
-      setError(tx(`ジャンルは最大${MAX_CUSTOM_TASK_GENRES}個までです`, `You can add up to ${MAX_CUSTOM_TASK_GENRES} genres`));
-      return;
-    }
-    const duplicate = customGenres.some(
-      (g) =>
-        g.labelJa.toLowerCase() === labelJa.toLowerCase() &&
-        (g.phaseId ?? null) === stepScreen.phaseId,
-    );
-    if (duplicate) {
-      setError(tx("同じ名前のジャンルがすでにあります", "That genre name already exists"));
-      return;
-    }
-    setSavingGenre(true);
-    setError("");
-    try {
-      const next: CustomTaskGenreDef = {
-        id: createCustomTaskGenreId(),
-        labelJa,
-        hintJa: draftGenreHint.trim().slice(0, 60) || undefined,
-        colorKey: nextCustomColorKey(customGenres.length),
-        phaseId: stepScreen.phaseId ?? undefined,
-      };
-      await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
-      setDraftGenreLabel("");
-      setDraftGenreHint("");
-      setAddingGenre(false);
-      setScreen({ kind: "genre", phaseId: stepScreen.phaseId, genre: next.id });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("ジャンルを追加できませんでした", "Couldn’t add the genre"));
-    } finally {
-      setSavingGenre(false);
-    }
-  }
-
   if (!screen) {
     return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   }
@@ -433,8 +379,6 @@ export default function WorkspaceIssues() {
       setAddingGenre(false);
       setCreating(false);
       setError("");
-      setDraftGenreLabel("");
-      setDraftGenreHint("");
       setScreen({ kind: "step", phaseId: nextId });
     }
 
@@ -448,7 +392,16 @@ export default function WorkspaceIssues() {
               size="md"
               onClick={() => {
                 setError("");
-                setAddingGenre((v) => !v);
+                if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
+                  setError(
+                    tx(
+                      `ジャンルは最大${MAX_CUSTOM_TASK_GENRES}個までです`,
+                      `You can add up to ${MAX_CUSTOM_TASK_GENRES} genres`,
+                    ),
+                  );
+                  return;
+                }
+                setAddingGenre(true);
               }}
               className="!gap-1 !px-3 !py-2.5 !text-[13px]"
             >
@@ -493,52 +446,18 @@ export default function WorkspaceIssues() {
         </div>
 
         {addingGenre && canEdit ? (
-          <form
-            className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3"
-            onSubmit={(event) => void addCustomGenre(event)}
-          >
-            <p className="text-sm font-semibold text-zinc-900">{tx("このステップの新しいジャンル", "New genre for this step")}</p>
-            <input
-              value={draftGenreLabel}
-              onChange={(event) => setDraftGenreLabel(event.target.value)}
-              maxLength={CUSTOM_TASK_GENRE_LABEL_MAX}
-              placeholder={tx("例: 撮影・編集", "e.g. Filming & editing")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-              autoFocus
-            />
-            <input
-              value={draftGenreHint}
-              onChange={(event) => setDraftGenreHint(event.target.value)}
-              maxLength={60}
-              placeholder={tx("説明（任意）", "Description (optional)")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-            />
-            <div className="flex gap-2.5">
-              <DuoButton
-                type="button"
-                tone="zinc"
-                size="md"
-                onClick={() => {
-                  setAddingGenre(false);
-                  setDraftGenreLabel("");
-                  setDraftGenreHint("");
-                  setError("");
-                }}
-                className="flex-1 !text-[15px]"
-              >
-                {tx("キャンセル", "Cancel")}
-              </DuoButton>
-              <DuoButton
-                type="submit"
-                tone="orange"
-                size="md"
-                disabled={savingGenre || !draftGenreLabel.trim()}
-                className="flex-[2] !text-[15px]"
-              >
-                {savingGenre ? tx("追加中…", "Adding…") : tx("追加する", "Add")}
-              </DuoButton>
-            </div>
-          </form>
+          <GenreCreateWizard
+            phaseId={phaseId}
+            existingCount={customGenres.length}
+            existingLabels={customGenres
+              .filter((g) => (g.phaseId ?? null) === phaseId || !g.phaseId)
+              .map((g) => g.labelJa)}
+            onClose={() => setAddingGenre(false)}
+            onComplete={async (next) => {
+              await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
+              setScreen({ kind: "genre", phaseId, genre: next.id });
+            }}
+          />
         ) : null}
 
         <div className="flex flex-col gap-2.5">
