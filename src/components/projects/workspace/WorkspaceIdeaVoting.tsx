@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { IdeaList } from "@/components/projects/idea-voting/IdeaList";
 import { voteCard, voteChip, voteChipActive } from "@/components/projects/idea-voting/voteUi";
@@ -50,6 +51,8 @@ export default function WorkspaceIdeaVoting() {
   const [votes, setVotes] = useState<IdeaVoteRow[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [submitting, setSubmitting] = useState(false);
 
   const messagesHref = `/messages?project=${encodeURIComponent(projectId)}`;
   const selected = eventParam ? (events.find((e) => e.id === eventParam) ?? null) : null;
@@ -117,6 +120,10 @@ export default function WorkspaceIdeaVoting() {
       }
     })();
   }, [refreshSelected, tx]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [eventParam]);
 
   useEffect(() => {
     if (!projectId || !supabase) return;
@@ -194,10 +201,24 @@ export default function WorkspaceIdeaVoting() {
     maxVotesPerIdea: selected?.maxVotesPerIdea ?? 1,
   };
 
+  const hideUntilClose = Boolean(selected?.hideResultsUntilClose);
+  const iHaveVoted = votesUsed > 0;
+  const showResults = closed || (!hideUntilClose && iHaveVoted);
+  const resultBarMax = useMemo(() => {
+    if (!showResults || ideasWithTally.length === 0) return 1;
+    return Math.max(1, ...ideasWithTally.map((idea) => idea.votes));
+  }, [showResults, ideasWithTally]);
+
   const winner = useMemo(() => {
     if (!closed || ideasWithTally.length === 0) return null;
     return [...ideasWithTally].sort((a, b) => b.votes - a.votes || a.createdAt.localeCompare(b.createdAt))[0];
   }, [closed, ideasWithTally]);
+
+  const pendingSelection = useMemo(
+    () => [...selectedIds].filter((id) => (tallies.mine.get(id) ?? 0) <= 0),
+    [selectedIds, tallies.mine],
+  );
+  const canSubmitVote = !closed && !submitting && pendingSelection.length > 0 && pendingSelection.length <= votesRemaining;
 
   function applyMyVoteLocal(ideaId: string, nextCount: number) {
     if (!uid) return;
@@ -208,30 +229,45 @@ export default function WorkspaceIdeaVoting() {
     });
   }
 
-  async function changeMyVote(ideaId: string, nextCount: number) {
-    if (!uid) return;
-    const prevCount = tallies.mine.get(ideaId) ?? 0;
-    applyMyVoteLocal(ideaId, nextCount);
-    try {
-      await setMyVote(projectId, ideaId, uid, nextCount);
-    } catch (e) {
-      applyMyVoteLocal(ideaId, prevCount);
-      setError(e instanceof Error ? e.message : tx("投票に失敗しました", "Couldn’t vote"));
-    }
-  }
-
-  function handleVote(ideaId: string) {
+  function handleToggleSelect(ideaId: string) {
     if (!selected || closed) return;
-    const current = tallies.mine.get(ideaId) ?? 0;
-    if (votesRemaining <= 0 || current >= selected.maxVotesPerIdea) return;
-    void changeMyVote(ideaId, current + 1);
+    if ((tallies.mine.get(ideaId) ?? 0) > 0) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ideaId)) {
+        next.delete(ideaId);
+        return next;
+      }
+      const pending = [...next].filter((id) => (tallies.mine.get(id) ?? 0) <= 0).length;
+      if (pending >= votesRemaining) return prev;
+      if ((tallies.mine.get(ideaId) ?? 0) >= selected.maxVotesPerIdea) return prev;
+      next.add(ideaId);
+      return next;
+    });
   }
 
-  function handleUnvote(ideaId: string) {
-    if (closed) return;
-    const current = tallies.mine.get(ideaId) ?? 0;
-    if (current <= 0) return;
-    void changeMyVote(ideaId, current - 1);
+  async function handleSubmitVotes() {
+    if (!uid || !selected || !canSubmitVote) return;
+    setSubmitting(true);
+    setError("");
+    const targets = pendingSelection.slice(0, votesRemaining);
+    const rollback: Array<{ ideaId: string; prev: number }> = [];
+    try {
+      for (const ideaId of targets) {
+        const prev = tallies.mine.get(ideaId) ?? 0;
+        const nextCount = Math.min(prev + 1, selected.maxVotesPerIdea);
+        if (nextCount <= prev) continue;
+        rollback.push({ ideaId, prev });
+        applyMyVoteLocal(ideaId, nextCount);
+        await setMyVote(projectId, ideaId, uid, nextCount);
+      }
+      setSelectedIds(new Set());
+    } catch (e) {
+      for (const item of rollback) applyMyVoteLocal(item.ideaId, item.prev);
+      setError(e instanceof Error ? e.message : tx("投票に失敗しました", "Couldn’t vote"));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (loading || !hydrated) {
@@ -264,8 +300,16 @@ export default function WorkspaceIdeaVoting() {
     );
   }
 
+  const tipText = closed
+    ? null
+    : hideUntilClose
+      ? tx("投票中は票数順に並べません。結果は締切後に表示します。", "Options aren’t ranked while voting is open. Results show after close.")
+      : iHaveVoted
+        ? tx("投票結果は締切まで更新されます。", "Results update until the vote closes.")
+        : tx("右のチェックで選んで、下の「投票する」を押してください。", "Check options on the right, then tap Vote below.");
+
   return (
-    <div className="relative mx-auto max-w-2xl space-y-3 pt-12">
+    <div className="relative mx-auto max-w-2xl space-y-3 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-12">
       {backButton}
       <header className="border-b border-zinc-200 pb-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -278,6 +322,7 @@ export default function WorkspaceIdeaVoting() {
               {isUnlimitedVotes(selected.votesPerPerson)
                 ? tx(" · 複数投票可", " · Multiple votes")
                 : tx(` · 1人${selected.votesPerPerson}票`, ` · ${selected.votesPerPerson} votes each`)}
+              {hideUntilClose ? tx(" · 結果は締切後", " · Results after close") : ""}
             </p>
           </div>
           <span className={closed ? voteChip : voteChipActive}>
@@ -290,17 +335,15 @@ export default function WorkspaceIdeaVoting() {
         </div>
       </header>
 
-      {closed && winner ? (
+      {closed && winner && showResults ? (
         <div className={`${voteCard} rounded-2xl border-zinc-900 px-3 py-2`}>
           <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{tx("最多得票", "Top vote")}</p>
           <p className="text-[13px] font-semibold tracking-tight text-zinc-900">{winner.text}</p>
           <p className="text-[11px] text-zinc-500">{tx(`${winner.votes}票`, `${winner.votes} votes`)}</p>
         </div>
-      ) : (
-        <p className="border-l-2 border-zinc-900 pl-2 text-[11px] leading-relaxed text-zinc-500">
-          {tx("投票中は票数順に並べません。結果は締切後に表示します。", "Options aren’t ranked while voting is open. Results show after close.")}
-        </p>
-      )}
+      ) : tipText ? (
+        <p className="border-l-2 border-zinc-900 pl-2 text-[11px] leading-relaxed text-zinc-500">{tipText}</p>
+      ) : null}
 
       <p className="text-[11px] text-zinc-500">
         {isUnlimitedVotes(selected.votesPerPerson)
@@ -317,23 +360,46 @@ export default function WorkspaceIdeaVoting() {
       <section className="space-y-1.5">
         <h2 className="text-[12px] font-medium text-zinc-500">
           {tx(`選択肢 ${ideas.length}`, `Options ${ideas.length}`)}
-          {closed ? tx(" · 票数順", " · by votes") : ""}
+          {closed && showResults ? tx(" · 票数順", " · by votes") : ""}
         </h2>
         <IdeaList
           ideas={ideasWithTally}
           votingSettings={settingsForList}
           votingClosed={closed}
-          sortByVotes={closed}
-          hideTallies={!closed}
+          sortByVotes={closed && showResults}
+          showResults={showResults}
+          resultBarMax={resultBarMax}
+          selectMode={!closed}
+          selectedIds={selectedIds}
           votesRemaining={votesRemaining}
           currentUid={uid}
           isOwner={false}
           voteOnly
-          onVote={handleVote}
-          onUnvote={handleUnvote}
+          onToggleSelect={handleToggleSelect}
           onDelete={() => undefined}
         />
       </section>
+
+      {!closed ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+          <div className="mx-auto max-w-lg">
+            <DuoButton
+              type="button"
+              tone="orange"
+              size="lg"
+              fullWidth
+              disabled={!canSubmitVote}
+              onClick={() => void handleSubmitVotes()}
+            >
+              {submitting
+                ? tx("投票中…", "Voting…")
+                : pendingSelection.length > 0
+                  ? tx(`投票する（${pendingSelection.length}）`, `Vote (${pendingSelection.length})`)
+                  : tx("投票する", "Vote")}
+            </DuoButton>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

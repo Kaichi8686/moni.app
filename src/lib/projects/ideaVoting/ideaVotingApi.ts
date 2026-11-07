@@ -155,6 +155,7 @@ type EventDbRow = {
   anonymous: boolean;
   votes_per_person: number;
   max_votes_per_idea: number;
+  hide_results_until_close?: boolean | null;
   created_at: string;
 };
 
@@ -171,6 +172,7 @@ function mapEventRow(r: EventDbRow): IdeaVoteEvent {
     anonymous: r.anonymous !== false,
     votesPerPerson: clampLimit(r.votes_per_person),
     maxVotesPerIdea: clampLimit(r.max_votes_per_idea),
+    hideResultsUntilClose: Boolean(r.hide_results_until_close),
   };
 }
 
@@ -189,6 +191,7 @@ function eventFromTask(r: TaskRow, projectId: string): IdeaVoteEvent | null {
     anonymous: m.anonymous === undefined ? true : Boolean(m.anonymous),
     votesPerPerson: clampLimit(Number(m.votesPerPerson) || 1),
     maxVotesPerIdea: clampLimit(Number(m.maxVotesPerIdea) || 1),
+    hideResultsUntilClose: Boolean(m.hideResultsUntilClose),
   };
 }
 
@@ -640,6 +643,7 @@ export type CreateVoteEventInput = {
   anonymous?: boolean;
   votesPerPerson?: number;
   maxVotesPerIdea?: number;
+  hideResultsUntilClose?: boolean;
 };
 
 export type UpdateVoteEventInput = Partial<{
@@ -650,6 +654,7 @@ export type UpdateVoteEventInput = Partial<{
   anonymous: boolean;
   votesPerPerson: number;
   maxVotesPerIdea: number;
+  hideResultsUntilClose: boolean;
 }>;
 
 async function optionCountsByEvent(projectId: string): Promise<Map<string, number>> {
@@ -686,13 +691,27 @@ export async function fetchEvents(projectId: string): Promise<IdeaVoteEventWithC
     const { data, error } = await client
       .from("project_idea_events")
       .select(
-        "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,created_at",
+        "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,hide_results_until_close,created_at",
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: false })
       .limit(200);
-    if (error && !isMissingRelation(error)) throw new Error(error.message);
-    if (!error) events = ((data as EventDbRow[] | null) ?? []).map(mapEventRow);
+    if (error && /column|hide_results/i.test(error.message)) {
+      const legacy = await client
+        .from("project_idea_events")
+        .select(
+          "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,created_at",
+        )
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (legacy.error && !isMissingRelation(legacy.error)) throw new Error(legacy.error.message);
+      if (!legacy.error) events = ((legacy.data as EventDbRow[] | null) ?? []).map(mapEventRow);
+    } else if (error && !isMissingRelation(error)) {
+      throw new Error(error.message);
+    } else if (!error) {
+      events = ((data as EventDbRow[] | null) ?? []).map(mapEventRow);
+    }
   }
 
   const taskEvents = (await loadEventTasks(projectId))
@@ -718,6 +737,7 @@ export async function fetchEvents(projectId: string): Promise<IdeaVoteEventWithC
       anonymous: settings.anonymous,
       votesPerPerson: settings.votesPerPerson,
       maxVotesPerIdea: settings.maxVotesPerIdea,
+      hideResultsUntilClose: false,
     });
   }
 
@@ -734,6 +754,7 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
   const title = input.title.trim();
   if (!title) throw new Error("タイトルを入力してください。");
   const client = requireClient();
+  const hideResultsUntilClose = Boolean(input.hideResultsUntilClose);
   const payload = {
     project_id: projectId,
     created_by: uid,
@@ -744,19 +765,45 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
     anonymous: input.anonymous !== false,
     votes_per_person: clampLimit(input.votesPerPerson ?? 1),
     max_votes_per_idea: clampLimit(input.maxVotesPerIdea ?? 1),
+    hide_results_until_close: hideResultsUntilClose,
   };
 
   if (await hasEventsTable()) {
-    const { data, error } = await client
+    const withHide = await client
       .from("project_idea_events")
       .insert(payload)
       .select(
-        "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,created_at",
+        "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,hide_results_until_close,created_at",
       )
       .single();
-    if (!error && data) return mapEventRow(data as EventDbRow);
-    if (error && !isMissingRelation(error) && !/column/i.test(error.message)) throw new Error(error.message);
-    cachedEventsTable = false;
+    if (!withHide.error && withHide.data) return mapEventRow(withHide.data as EventDbRow);
+    if (withHide.error && /column|hide_results/i.test(withHide.error.message)) {
+      // カラム未適用: 非公開フラグが必要なときは tasks.meta に逃がす。不要なら従来カラムだけで作成。
+      if (!hideResultsUntilClose) {
+        const { hide_results_until_close: _unused, ...withoutHide } = payload;
+        void _unused;
+        const fallback = await client
+          .from("project_idea_events")
+          .insert(withoutHide)
+          .select(
+            "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,created_at",
+          )
+          .single();
+        if (!fallback.error && fallback.data) return mapEventRow(fallback.data as EventDbRow);
+        if (fallback.error && !isMissingRelation(fallback.error) && !/column/i.test(fallback.error.message)) {
+          throw new Error(fallback.error.message);
+        }
+      }
+      // hideResultsUntilClose=true か events 作成失敗 → tasks へ
+    } else if (
+      withHide.error &&
+      !isMissingRelation(withHide.error) &&
+      !/column/i.test(withHide.error.message)
+    ) {
+      throw new Error(withHide.error.message);
+    } else {
+      cachedEventsTable = false;
+    }
   }
 
   const { data, error } = await client
@@ -776,6 +823,7 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
         anonymous: payload.anonymous,
         votesPerPerson: payload.votes_per_person,
         maxVotesPerIdea: payload.max_votes_per_idea,
+        hideResultsUntilClose,
       },
     })
     .select("id,title,description,status,created_by,created_at,updated_at,meta")
@@ -806,6 +854,7 @@ export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEve
     if (patch.anonymous !== undefined) row.anonymous = patch.anonymous;
     if (patch.votesPerPerson !== undefined) row.votes_per_person = clampLimit(patch.votesPerPerson);
     if (patch.maxVotesPerIdea !== undefined) row.max_votes_per_idea = clampLimit(patch.maxVotesPerIdea);
+    if (patch.hideResultsUntilClose !== undefined) row.hide_results_until_close = Boolean(patch.hideResultsUntilClose);
     const { error } = await client.from("project_idea_events").update(row).eq("id", event.id);
     if (!error) return;
     if (!isMissingRelation(error) && !/column/i.test(error.message)) throw new Error(error.message);
@@ -818,6 +867,10 @@ export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEve
     anonymous: patch.anonymous ?? event.anonymous,
     votesPerPerson: clampLimit(patch.votesPerPerson ?? event.votesPerPerson),
     maxVotesPerIdea: clampLimit(patch.maxVotesPerIdea ?? event.maxVotesPerIdea),
+    hideResultsUntilClose:
+      patch.hideResultsUntilClose !== undefined
+        ? Boolean(patch.hideResultsUntilClose)
+        : Boolean(event.hideResultsUntilClose),
   };
   const title = patch.title !== undefined ? `__event__:${patch.title.trim().slice(0, 160)}` : undefined;
   const description = patch.description !== undefined ? patch.description : undefined;

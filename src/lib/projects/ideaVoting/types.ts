@@ -41,6 +41,8 @@ export type IdeaVoteEvent = {
   anonymous: boolean;
   votesPerPerson: number;
   maxVotesPerIdea: number;
+  /** true なら締切まで票数・結果を非公開 */
+  hideResultsUntilClose: boolean;
 };
 
 export function isVoteEventClosed(event: Pick<IdeaVoteEvent, "closed" | "closesAt">, now = Date.now()): boolean {
