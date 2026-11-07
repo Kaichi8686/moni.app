@@ -525,13 +525,14 @@ export function RoadmapMapEditor() {
                   const lane = normalizeLane(side.lane);
                   if (lane !== -1 && lane !== 1) return null;
                   const sideTone = "active" as const;
+                  const mainSparkle = isCurrent && step.status !== "completed";
                   return {
                     key: side.id,
                     lane,
                     children: (
                       <RoadmapPathNode
                         tone={sideTone}
-                        sparkle={side.status === "in_progress"}
+                        sparkle={mainSparkle || side.status === "in_progress"}
                         selected={selectedId === side.id}
                         onClick={() => {
                           setSelectedId((current) => (current === side.id ? null : side.id));
