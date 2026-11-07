@@ -1,4 +1,4 @@
-import { gardenNow, tokyoDateKey } from "@/lib/idea-garden/calendar";
+import { gardenBusinessDateKey, gardenNow } from "@/lib/idea-garden/calendar";
 
 export type DailyPrompt = {
   id: string;
@@ -71,7 +71,7 @@ const PROMPTS: DailyPrompt[] = [
 ];
 
 function dayOfYearTokyo(date: Date = gardenNow()): number {
-  const key = tokyoDateKey(date);
+  const key = gardenBusinessDateKey(date);
   const [y, m, d] = key.split("-").map(Number);
   const start = Date.UTC(y, 0, 0);
   const now = Date.UTC(y, m - 1, d);

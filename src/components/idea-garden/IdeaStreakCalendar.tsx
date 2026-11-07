@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   addDaysToDateKey,
-  tokyoDateKey,
+  gardenBusinessDateKey,
   tokyoWeekday,
 } from "@/lib/idea-garden/calendar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -108,13 +108,14 @@ function formatMonthTitle(monthKey: string, locale: "ja" | "en"): string {
 /** 連続記録タップ → 出した日／休んだ日のカレンダー */
 export function IdeaStreakCalendar({ open, onClose, plantedDateKeys, streakDays }: Props) {
   const { tx, locale } = useI18n();
-  const today = tokyoDateKey();
+  const today = gardenBusinessDateKey();
   const planted = useMemo(() => new Set(plantedDateKeys), [plantedDateKeys]);
   const [monthKey, setMonthKey] = useState(() => monthKeyFromDateKey(today));
-
-  useEffect(() => {
-    if (open) setMonthKey(monthKeyFromDateKey(tokyoDateKey()));
-  }, [open]);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setMonthKey(monthKeyFromDateKey(gardenBusinessDateKey()));
+  }
 
   const cells = useMemo(
     () => buildMonthCells(monthKey, planted, today),

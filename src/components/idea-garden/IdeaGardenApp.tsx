@@ -17,8 +17,8 @@ import { SeedBagArt } from "@/components/idea-garden/illustrations/SeedBagArt";
 import {
   isGrowDay,
   isSunday,
-  tokyoDateKey,
-  tokyoWeekday,
+  gardenBusinessDateKey,
+  gardenBusinessWeekday,
   weekdayLabel,
   weekKeyFor,
 } from "@/lib/idea-garden/calendar";
@@ -87,7 +87,7 @@ function SeedRevealPhase({ kind, onDone }: { kind: FlowerKind; onDone: () => voi
 }
 
 function initialScreen(plants: PlantedIdea[]): GardenScreen {
-  const today = tokyoDateKey();
+  const today = gardenBusinessDateKey();
   const existing = plantForDate(plants, today);
   if (isSunday()) {
     if (goldDoneThisWeek(plants, weekKeyFor()) || existing?.gold) {
@@ -216,7 +216,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
         version: 1,
         plants,
         draft: {
-          dateKey: tokyoDateKey(),
+          dateKey: gardenBusinessDateKey(),
           screen,
           paused,
           resumeScreen,
@@ -433,8 +433,8 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     const plant: PlantedIdea = {
       id: crypto.randomUUID(),
       weekKey: currentWeekKey,
-      dateKey: tokyoDateKey(),
-      weekday: tokyoWeekday(),
+      dateKey: gardenBusinessDateKey(),
+      weekday: gardenBusinessWeekday(),
       flowerKind: selectedKind,
       title: title.trim(),
       answer: answer.trim(),
@@ -684,7 +684,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
 
   /* ——— SHELF (個人専用) ——— */
   if (screen.kind === "shelf") {
-    const canStartGrow = isGrowDay() && !plantForDate(plants, tokyoDateKey());
+    const canStartGrow = isGrowDay() && !plantForDate(plants, gardenBusinessDateKey());
     const canStartSunday =
       isSunday() && !goldDoneThisWeek(plants, currentWeekKey) && sundayCandidates.length > 0;
     const streak = ideaStreakDays(plants);
@@ -707,6 +707,9 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               <h1 className="mt-3 text-[22px] font-extrabold tracking-tight text-[#3C3C3C]">
                 {tx("あなたのアイデアの棚", "Your idea shelf")}
               </h1>
+              <p className="mt-1 text-center text-[11px] font-semibold text-zinc-500">
+                {tx("花は毎朝11時に更新されます", "Flowers refresh every morning at 11:00")}
+              </p>
               <p className="mt-1 text-[13px] font-semibold text-zinc-500">
                 {isSunday()
                   ? tx("日曜は自分のお気に入りを深掘りしよう", "Deepen your own favorite on Sundays")

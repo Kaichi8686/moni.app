@@ -4,8 +4,6 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { ContestApp } from "@/components/contest/ContestApp";
-import { ContestLobby } from "@/components/contest/ContestLobby";
 import { IdeaGardenApp } from "@/components/idea-garden/IdeaGardenApp";
 import { IdeaLeagueApp } from "@/components/idea-league/IdeaLeagueApp";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
@@ -17,7 +15,7 @@ import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type HubView = "mine" | "chat" | "board" | "interviews";
-type SparkMode = "grow" | "contest" | "league" | "ai";
+type SparkMode = "grow" | "league" | "ai";
 
 function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
   if (board) return "board";
@@ -28,8 +26,8 @@ function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
 
 function parseSparkMode(raw: string | null, tab: IdeaHubTab): SparkMode {
   if (tab === "excavate" || tab === "qna") return "ai";
-  if (raw === "contest") return "contest";
-  if (raw === "league") return "league";
+  // 旧 contest リンクはリーグへ寄せる
+  if (raw === "league" || raw === "contest") return "league";
   return "grow";
 }
 
@@ -51,8 +49,6 @@ function IdeaHubInner() {
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [gardenImmersive, setGardenImmersive] = useState(false);
-  const [contestRoomId, setContestRoomId] = useState<string | null>(null);
-  const [contestAutoSubmit, setContestAutoSubmit] = useState(false);
 
   useEffect(() => {
     setSparkModeState(urlSpark);
@@ -86,8 +82,6 @@ function IdeaHubInner() {
 
   const openAi = useCallback(
     (mode: IdeaPersonalAiMode = "consult") => {
-      setContestRoomId(null);
-      setContestAutoSubmit(false);
       setGardenImmersive(false);
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(true);
@@ -108,8 +102,6 @@ function IdeaHubInner() {
         openAi("consult");
         return;
       }
-      setContestRoomId(null);
-      setContestAutoSubmit(false);
       setGardenImmersive(false);
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(false);
@@ -118,8 +110,7 @@ function IdeaHubInner() {
       replaceParams((params) => {
         params.delete("tab");
         params.delete("view");
-        if (mode === "contest") params.set("spark", "contest");
-        else if (mode === "league") params.set("spark", "league");
+        if (mode === "league") params.set("spark", "league");
         else params.delete("spark");
       });
     },
@@ -143,15 +134,15 @@ function IdeaHubInner() {
 
   const inAiChat = view === "chat";
   const hideBottomNav = inAiChat || (view === "mine" && gardenImmersive);
-  /** 花の没入中以外はトグル表示（AI・コンテスト詳細中も他へ戻れる） */
+  /** 花の没入中以外はトグル表示 */
   const showSparkToggle = (view === "mine" && !gardenImmersive) || inAiChat;
 
   const sparkToggle = showSparkToggle ? (
-    <div className="grid grid-cols-4 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
+    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur">
       <button
         type="button"
         onClick={() => setSparkMode("grow")}
-        className={`min-h-11 rounded-xl px-0.5 text-[11px] font-extrabold tracking-tight transition sm:text-sm ${
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "grow" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
@@ -160,7 +151,7 @@ function IdeaHubInner() {
       <button
         type="button"
         onClick={() => setSparkMode("ai")}
-        className={`min-h-11 rounded-xl px-0.5 text-[11px] font-extrabold tracking-tight transition sm:text-sm ${
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "ai" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
@@ -169,28 +160,18 @@ function IdeaHubInner() {
       <button
         type="button"
         onClick={() => setSparkMode("league")}
-        className={`min-h-11 rounded-xl px-0.5 text-[11px] font-extrabold tracking-tight transition sm:text-sm ${
+        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
           sparkMode === "league" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
         {tx("リーグ", "League")}
-      </button>
-      <button
-        type="button"
-        onClick={() => setSparkMode("contest")}
-        className={`min-h-11 rounded-xl px-0.5 text-[11px] font-extrabold tracking-tight transition sm:text-sm ${
-          sparkMode === "contest" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
-        }`}
-      >
-        {tx("コンテスト", "Contest")}
       </button>
     </div>
   ) : null;
 
   return (
     <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
-      {/* コンテスト / リーグ / AI: 通常ヘッダー + トグル */}
-      {(view === "mine" && (sparkMode === "contest" || sparkMode === "league")) || inAiChat ? (
+      {(view === "mine" && sparkMode === "league") || inAiChat ? (
         <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
             {inAiChat ? null : <AppBrandHeader bare />}
@@ -199,7 +180,6 @@ function IdeaHubInner() {
         </header>
       ) : null}
 
-      {/* 花側: 元の全画面UIを壊さないよう、トグルは浮かせる */}
       {view === "mine" && sparkMode === "grow" && showSparkToggle ? (
         <div className="pointer-events-none fixed inset-x-0 top-[max(0.4rem,env(safe-area-inset-top))] z-40 flex justify-center px-4">
           <div className="pointer-events-auto w-full max-w-sm">{sparkToggle}</div>
@@ -221,32 +201,7 @@ function IdeaHubInner() {
       ) : null}
 
       {view === "mine" && sparkMode === "league" ? (
-        <IdeaLeagueApp embedded hideChrome />
-      ) : null}
-
-      {view === "mine" && sparkMode === "contest" ? (
-        contestRoomId ? (
-          <ContestApp
-            embedded
-            contestId={contestRoomId}
-            autoOpenSubmit={contestAutoSubmit}
-            onBack={() => {
-              setContestRoomId(null);
-              setContestAutoSubmit(false);
-            }}
-          />
-        ) : (
-          <ContestLobby
-            onEnter={(id) => {
-              setContestAutoSubmit(false);
-              setContestRoomId(id);
-            }}
-            onCreate={(id) => {
-              setContestAutoSubmit(true);
-              setContestRoomId(id);
-            }}
-          />
-        )
+        <IdeaLeagueApp embedded hideChrome onOpenGarden={() => setSparkMode("grow")} />
       ) : null}
 
       {inAiChat ? (

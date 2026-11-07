@@ -1,4 +1,4 @@
-import { saturdayWeekKey, saturdayWindow, isSaturday, leagueNow } from "@/lib/idea-league/calendar";
+import { scheduleFor, saturdayWeekKey, saturdayWindow, leagueNow } from "@/lib/idea-league/calendar";
 import { promptForWeek, TUTORIAL_PROMPT } from "@/lib/idea-league/prompts";
 import {
   LEAGUE_GROUP_SIZE,
@@ -35,6 +35,8 @@ type StoreShape = {
     string,
     {
       week: LeagueWeek;
+      seedPlantId: string | null;
+      authoredByUserId: string | null;
       groups: Record<
         string,
         {
@@ -122,6 +124,7 @@ function ensureWeekGroup(
 ) {
   const { startsAt, endsAt } = saturdayWindow(weekKey);
   const prompt = promptForWeek(weekKey);
+  const sched = scheduleFor(leagueNow());
   if (!store.weeks[weekKey]) {
     store.weeks[weekKey] = {
       week: {
@@ -131,10 +134,20 @@ function ensureWeekGroup(
         promptBody: prompt.body,
         startsAt: startsAt.toISOString(),
         endsAt: endsAt.toISOString(),
-        status: isSaturday(leagueNow()) && saturdayWeekKey(leagueNow()) === weekKey ? "active" : "ended",
+        status:
+          sched.weekKey === weekKey && (sched.phase === "submit" || sched.phase === "vote")
+            ? "active"
+            : sched.weekKey === weekKey && sched.phase === "results"
+              ? "ended"
+              : "upcoming",
       },
+      seedPlantId: null,
+      authoredByUserId: null,
       groups: {},
     };
+  } else {
+    store.weeks[weekKey]!.seedPlantId ??= null;
+    store.weeks[weekKey]!.authoredByUserId ??= null;
   }
   const weekBucket = store.weeks[weekKey]!;
   const groupKey = `${tier}-0`;
@@ -329,13 +342,17 @@ export function completeLocalTutorial(
 
 export function loadLocalBattle(
   me: { userId: string; displayName: string; avatarUrl: string | null },
+  opts?: { weekKey?: string },
 ): LeagueBattleState {
   const store = readStore();
   const profile = ensureProfile(store, me.userId);
-  const weekKey = saturdayWeekKey(leagueNow());
+  const sched = scheduleFor(leagueNow());
+  const weekKey = opts?.weekKey ?? sched.weekKey;
   const group = ensureWeekGroup(store, weekKey, profile.tier, me);
   const week = store.weeks[weekKey]!.week;
-  week.status = isSaturday(leagueNow()) ? "active" : "ended";
+  const phase = weekKey === sched.weekKey ? sched.phase : "results";
+  week.status =
+    phase === "submit" || phase === "vote" ? "active" : phase === "results" ? "ended" : "upcoming";
 
   // sync vote scores from votes map
   const voteCounts: Record<string, number> = {};
@@ -348,9 +365,11 @@ export function loadLocalBattle(
 
   writeStore(store);
 
+  const peersHidden = phase === "submit";
   const members = rankedMembers(group, me.userId, profile.highlight);
   const submissions: LeagueSubmission[] = group.members
     .filter((m) => m.submission)
+    .filter((m) => (peersHidden ? m.userId === me.userId : true))
     .map((m) => {
       const s = m.submission!;
       return {
@@ -360,7 +379,7 @@ export function loadLocalBattle(
         title: s.title,
         content: s.content,
         appeal: s.appeal,
-        voteCount: m.voteScore,
+        voteCount: peersHidden && m.userId !== me.userId ? 0 : m.voteScore,
         votedByMe: group.votes[me.userId] === s.id,
         authorName: m.displayName,
         authorAvatarUrl: m.avatarUrl,
@@ -377,20 +396,42 @@ export function loadLocalBattle(
     week,
     tier: profile.tier,
     groupId: group.groupId,
-    members,
+    members: peersHidden ? members.filter((m) => m.isMe) : members,
     submissions,
     myMembershipId: mine?.membershipId ?? null,
     mySubmission,
     myVoteSubmissionId: group.votes[me.userId] ?? null,
     promotionCutoff: PROMOTION_SLOTS,
     demo: true,
+    phase: phase === "waiting" ? "waiting" : phase,
+    peersHidden,
+    displayResultsWeekKey: sched.displayResultsWeekKey,
+    seedPlantId: store.weeks[weekKey]?.seedPlantId ?? null,
   };
+}
+
+export function saveLocalPromptFromSeed(
+  me: { userId: string; displayName: string; avatarUrl: string | null },
+  input: { plantId: string; title: string; body: string },
+): LeagueBattleState {
+  const store = readStore();
+  const profile = ensureProfile(store, me.userId);
+  const weekKey = saturdayWeekKey(leagueNow());
+  ensureWeekGroup(store, weekKey, profile.tier, me);
+  const bucket = store.weeks[weekKey]!;
+  bucket.week.promptTitle = input.title.trim().slice(0, 80);
+  bucket.week.promptBody = input.body.trim();
+  bucket.seedPlantId = input.plantId;
+  bucket.authoredByUserId = me.userId;
+  writeStore(store);
+  return loadLocalBattle(me);
 }
 
 export function submitLocalIdea(
   me: { userId: string; displayName: string; avatarUrl: string | null },
   input: { title: string; content: string; appeal?: string },
 ): LeagueBattleState {
+  if (scheduleFor(leagueNow()).phase !== "submit") return loadLocalBattle(me);
   const store = readStore();
   const profile = ensureProfile(store, me.userId);
   const weekKey = saturdayWeekKey(leagueNow());
@@ -410,6 +451,7 @@ export function castLocalVote(
   me: { userId: string; displayName: string; avatarUrl: string | null },
   submissionId: string,
 ): LeagueBattleState {
+  if (scheduleFor(leagueNow()).phase !== "vote") return loadLocalBattle(me);
   const store = readStore();
   const profile = ensureProfile(store, me.userId);
   const weekKey = saturdayWeekKey(leagueNow());
@@ -434,11 +476,13 @@ export function castLocalVote(
   return loadLocalBattle(me);
 }
 
-/** 土曜終了後（またはデモ強制）に上位3を昇格 */
+/** 水曜 11:00 の結果公表時に上位3を昇格 */
 export function finalizeLocalWeek(userId: string): LeagueProfileState {
   const store = readStore();
   const profile = ensureProfile(store, userId);
-  const weekKey = saturdayWeekKey(leagueNow());
+  const sched = scheduleFor(leagueNow());
+  if (sched.phase !== "results") return loadLocalProfile(userId);
+  const weekKey = sched.weekKey;
   const weekBucket = store.weeks[weekKey];
   if (!weekBucket) return loadLocalProfile(userId);
   const groupKey = `${profile.tier}-0`;
@@ -465,7 +509,7 @@ export function finalizeLocalWeek(userId: string): LeagueProfileState {
       rank: me.rank,
       voteScore: me.voteScore,
       resultStatus: promoted ? "promoted" : "stayed",
-      endedAt: weekBucket.week.endsAt,
+      endedAt: sched.resultsAt.toISOString(),
     });
     weekBucket.week.status = "ended";
   }

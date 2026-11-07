@@ -45,6 +45,8 @@ export type LeagueSubmission = {
   highlighted: boolean;
 };
 
+export type LeaguePhaseId = "waiting" | "submit" | "vote" | "results";
+
 export type LeagueBattleState = {
   week: LeagueWeek;
   tier: LeagueTier;
@@ -56,6 +58,12 @@ export type LeagueBattleState = {
   myVoteSubmissionId: string | null;
   promotionCutoff: number;
   demo: boolean;
+  phase: LeaguePhaseId;
+  /** 提出中は他者の解答を隠す */
+  peersHidden: boolean;
+  /** 結果カードに出す週（公表前は先週） */
+  displayResultsWeekKey: string | null;
+  seedPlantId: string | null;
 };
 
 export type LeagueHistoryEntry = {
