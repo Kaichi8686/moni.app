@@ -260,7 +260,7 @@ export function RoadmapPhaseEditSheet({
                 }
               }}
               disabled={locked}
-              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-[16px] font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <RoadmapMarkPicker
@@ -283,7 +283,7 @@ export function RoadmapPhaseEditSheet({
               disabled={locked}
               rows={2}
               placeholder={tx("例：10人に話を聞く", "e.g. Talk to 10 people")}
-              className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <div>
@@ -297,7 +297,7 @@ export function RoadmapPhaseEditSheet({
               disabled={locked}
               rows={3}
               placeholder={tx("このステップでやること", "What you’ll do in this step")}
-              className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
         </div>

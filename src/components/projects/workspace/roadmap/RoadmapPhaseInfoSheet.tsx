@@ -189,7 +189,7 @@ export function RoadmapPhaseInfoSheet({
                     onChange={(e) => setGoalDraft(e.target.value)}
                     placeholder={tx("例：ターゲットと直接10人話す", "e.g. Talk to 10 people in the target audience")}
                     rows={3}
-                    className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                    className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-[16px] outline-none ring-orange-400 focus:ring-2"
                     disabled={busy}
                   />
                 </>
@@ -211,7 +211,7 @@ export function RoadmapPhaseInfoSheet({
                   onChange={(e) => setDescriptionDraft(e.target.value)}
                   placeholder={tx("このステップでやることや背景", "What you’ll do in this step")}
                   rows={4}
-                  className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none ring-orange-400 focus:ring-2"
+                  className="mt-1.5 w-full resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none ring-orange-400 focus:ring-2"
                   disabled={busy}
                 />
               ) : descriptionDraft.trim() || phase.description?.trim() ? (

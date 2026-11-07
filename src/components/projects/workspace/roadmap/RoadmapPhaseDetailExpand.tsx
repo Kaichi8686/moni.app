@@ -100,7 +100,7 @@ export function RoadmapPhaseDetailExpand({
               value={titleDraft}
               onChange={(event) => setTitleDraft(event.target.value)}
               disabled={busy}
-              className="mt-1 min-h-[40px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1 min-h-[40px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-[16px] font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <RoadmapMarkPicker
@@ -119,7 +119,7 @@ export function RoadmapPhaseDetailExpand({
               disabled={busy}
               rows={2}
               placeholder={tx("達成したら「できた」と言えること", "What “done” looks like")}
-              className="mt-1 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2 text-[16px] text-zinc-800 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <div>
@@ -132,7 +132,7 @@ export function RoadmapPhaseDetailExpand({
               disabled={busy}
               rows={3}
               placeholder={tx("このステップでやること", "What you’ll do in this step")}
-              className="mt-1 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[16px] text-zinc-700 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <button
