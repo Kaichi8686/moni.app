@@ -276,7 +276,6 @@ export default function WorkspaceOverview() {
       </section>
 
       <div className="mx-auto max-w-3xl space-y-7 pt-7">
-      <ProjectBriefSection />
       <ProjectDeletionVoteBanner />
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -291,14 +290,17 @@ export default function WorkspaceOverview() {
             </Link>
           ) : null}
         </div>
-        {project && projectGoal ? (
-          <ProjectGoalBanner
-            className="mb-4"
-            projectName={project.name}
-            goal={projectGoal}
-            onClick={() => setGoalDetailOpen(true)}
-          />
-        ) : null}
+        {/* 未入力は写真ボタン風 CTA、入力後は同じ位置にゴールバナー */}
+        <div className="mb-4">
+          <ProjectBriefSection />
+          {project && projectGoal ? (
+            <ProjectGoalBanner
+              projectName={project.name}
+              goal={projectGoal}
+              onClick={() => setGoalDetailOpen(true)}
+            />
+          ) : null}
+        </div>
         {sortedPhases.length > 0 ? (
           <>
             <RoadmapPath
