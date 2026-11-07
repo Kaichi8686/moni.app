@@ -40,3 +40,19 @@ export function splitRoadmapPathLayout<T extends PathLayoutPhase>(phases: T[]): 
   }
   return { main, bySideOf };
 }
+
+/** 親マスにぶら下がる横置きを左右ごとに slotIndex 付きで並べる（0が最内） */
+export function sideSlotsForParent<T extends PathLayoutPhase>(
+  sides: T[],
+): Array<T & { lane: -1 | 1; slotIndex: number }> {
+  const left = sides
+    .filter((side) => normalizeLane(side.lane) === -1)
+    .sort((a, b) => a.order - b.order);
+  const right = sides
+    .filter((side) => normalizeLane(side.lane) === 1)
+    .sort((a, b) => a.order - b.order);
+  return [
+    ...left.map((side, slotIndex) => ({ ...side, lane: -1 as const, slotIndex })),
+    ...right.map((side, slotIndex) => ({ ...side, lane: 1 as const, slotIndex })),
+  ];
+}

@@ -17,9 +17,9 @@ const ROW_GAP = 40;
 /** 進行中マスの外枠が切れないよう余白を確保 */
 const TOP_PAD = 20;
 const STEP_Y = NODE_SIZE + ROW_GAP;
-/** 横置きのすき間を確保するため本線トラックを少し広げる */
-const TRACK_WIDTH = 400;
-/** 本線マスから横置きマスまでの距離（CreateSpace と同じ） */
+/** 横置きを複数並べられるようトラックを広げる */
+const TRACK_WIDTH = 560;
+/** 本線から1つ目の横置きまでの距離 */
 const SIDE_GAP = 120;
 
 /** 作成空間などでも同じ並びを使うための公開定数 */
@@ -43,12 +43,14 @@ export function roadmapPathNodeCenter(index: number): { x: number; y: number } {
   };
 }
 
+/** slotIndex: 同じ左右で外側へ 0,1,2…（0が本線にいちばん近い） */
 export function roadmapPathSideCenter(
   mainIndex: number,
   lane: -1 | 1,
+  slotIndex = 0,
 ): { x: number; y: number } {
   const main = roadmapPathNodeCenter(mainIndex);
-  const rawX = main.x + lane * SIDE_GAP;
+  const rawX = main.x + lane * SIDE_GAP * (Math.max(slotIndex, 0) + 1);
   const minX = NODE_SIZE / 2 + 4;
   const maxX = TRACK_WIDTH - NODE_SIZE / 2 - 4;
   return {
@@ -85,6 +87,10 @@ function clearedEndIndex(segmentCleared: boolean[] | undefined, pointCount: numb
 export type RoadmapPathSideSlot = {
   key: string;
   lane: -1 | 1;
+  /** 同じ左右で本線から何個目か（0が最内） */
+  slotIndex?: number;
+  /** 下の棒をオレンジにする（横マス達成済み） */
+  lowerCleared?: boolean;
   children: ReactNode;
 };
 
@@ -111,8 +117,8 @@ type Props = {
 /**
  * マスと線を同じ座標系で描く。
  * - 本線マス: 中央 + offset
- * - 横置き: 同じ Y で左右へ
- * - 線: 本線同士を縦につなぎ、横置きは作成空間と同じく上下の本線マスへ
+ * - 横置き: 同じ Y で左右へ（複数は外側へずらす）
+ * - 線: 本線同士＋横置きは上下の本線／内側の横マスへ
  */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -129,7 +135,6 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
   const count = items.length;
   const hasBelow = items.some((item) => Boolean(item.props.below));
 
-  // 閉じているときは定数座標。詳細パネル展開時だけ実測 Y に切り替える
   useLayoutEffect(() => {
     if (!hasBelow) {
       setMeasuredYs(null);
@@ -169,9 +174,9 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
   const clearedPath = clearedEnd >= 1 ? buildStraightPath(points.slice(0, clearedEnd + 1)) : "";
 
   /**
-   * 横置きは同じ行の本線ではなく上下へつなぐ。
-   * 上の棒: その行まで到達していればオレンジ／下の棒: 次へ進んでいればオレンジ、未クリアは灰色。
-   * 太さは本線と同じ 14。
+   * 横置き:
+   * - 最内（slot 0）: 上下の本線へ（下棒は横マス達成時だけオレンジ）
+   * - 外側: ひとつ内側の横マスへ水平につなぐ
    */
   const sideLinks = useMemo(() => {
     const links: Array<{ from: Point; to: Point; key: string; cleared: boolean }> = [];
@@ -181,25 +186,39 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
       const prev = points[index - 1];
       const next = points[index + 1];
       for (const side of item.props.sides ?? []) {
+        const slot = Math.max(side.slotIndex ?? 0, 0);
         const sidePoint = {
-          x: roadmapPathSideCenter(index, side.lane).x,
+          x: roadmapPathSideCenter(index, side.lane, slot).x,
           y: main.y,
         };
         const baseKey = `${item.key ?? index}-${side.key}`;
-        if (prev) {
+        if (slot === 0) {
+          if (prev) {
+            links.push({
+              from: prev,
+              to: sidePoint,
+              key: `${baseKey}-prev`,
+              cleared: clearedEnd >= index,
+            });
+          }
+          if (next) {
+            links.push({
+              from: next,
+              to: sidePoint,
+              key: `${baseKey}-next`,
+              // 下棒は横マスを達成するまで灰色
+              cleared: Boolean(side.lowerCleared),
+            });
+          }
+        } else {
+          const inner = {
+            x: roadmapPathSideCenter(index, side.lane, slot - 1).x,
+            y: main.y,
+          };
           links.push({
-            from: prev,
+            from: inner,
             to: sidePoint,
-            key: `${baseKey}-prev`,
-            cleared: clearedEnd >= index,
-          });
-        }
-        if (next) {
-          links.push({
-            from: next,
-            to: sidePoint,
-            key: `${baseKey}-next`,
-            // 未到達は灰色。いま取り組んでいる行（到達済み）ならオレンジ
+            key: `${baseKey}-inner`,
             cleared: clearedEnd >= index,
           });
         }
@@ -213,8 +232,8 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     : TOP_PAD + Math.max(count, 1) * STEP_Y - ROW_GAP + 12;
 
   return (
-    <div ref={rootRef} className={`relative mx-auto w-full max-w-md ${className}`}>
-      <div className="relative mx-auto" style={{ width: TRACK_WIDTH, minHeight: contentHeight }}>
+    <div ref={rootRef} className={`relative mx-auto w-full max-w-lg ${className}`}>
+      <div className="relative mx-auto overflow-visible" style={{ width: TRACK_WIDTH, minHeight: contentHeight }}>
         {count > 1 && fullPath ? (
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
@@ -254,7 +273,6 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
           </svg>
         ) : null}
 
-        {/* 本線1マスだけのときも横置きの棒を描く */}
         {count <= 1 && sideLinks.length > 0 ? (
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
@@ -296,7 +314,8 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
                 {item.props.children}
               </div>
               {(item.props.sides ?? []).map((side) => {
-                const sideCenter = roadmapPathSideCenter(index, side.lane);
+                const slot = Math.max(side.slotIndex ?? 0, 0);
+                const sideCenter = roadmapPathSideCenter(index, side.lane, slot);
                 return (
                   <div
                     key={side.key}
@@ -306,7 +325,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
                       left: sideCenter.x - NODE_SIZE / 2,
                       width: NODE_SIZE,
                       height: NODE_SIZE,
-                      animationDelay: `${Math.min(index, 5) * 30 + 40}ms`,
+                      animationDelay: `${Math.min(index, 5) * 30 + 40 + slot * 20}ms`,
                     }}
                   >
                     {side.children}
@@ -318,7 +337,6 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
         })}
       </div>
 
-      {/* 詳細パネルは線トラックの下に並べる（展開時は Y を実測して線を追従） */}
       {items.map((item, index) =>
         item.props.below ? (
           <div key={`below-${item.key ?? index}`} className="mx-auto mt-2 w-full max-w-sm px-1">
