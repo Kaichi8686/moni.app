@@ -9,6 +9,7 @@ import {
   roadmapPathSideCenter,
 } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
+import { useRoadmapTrackScrollCenter } from "@/components/projects/workspace/roadmap/useRoadmapTrackScrollCenter";
 import {
   RoadmapStepMark,
   resolveRoadmapMarkId,
@@ -191,6 +192,7 @@ export function RoadmapCreateSpace({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const introTimersRef = useRef<number[]>([]);
   const [draft, setDraft] = useState<CreateSpaceDraft | null>(null);
+  const scrollRef = useRoadmapTrackScrollCenter([existingSteps.length, existingSides.length, draft?.id]);
   const [anchorIndex, setAnchorIndex] = useState(0);
   const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
   const [dragKind, setDragKind] = useState<"masu" | "prev" | "next" | null>(null);
@@ -454,18 +456,24 @@ export function RoadmapCreateSpace({
         <ArrowLeft className="h-5 w-5" aria-hidden />
       </button>
 
-      <div className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-36 pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))]">
-        <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
-        <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-          {tx(
-            "いまのステップの広い側にマスを置きます。すでに横にあるマスの外側へ足せます。上下にスライドして場所を変え、棒で接続を調整できます。",
-            "Place on the wider side of your current step, outside any existing side steps. Slide to move, drag bars to reconnect.",
-          )}
-        </p>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-36 pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))]">
+        <div className="mx-auto w-full max-w-lg px-4">
+          <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
+          <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
+            {tx(
+              "いまのステップの広い側にマスを置きます。すでに横にあるマスの外側へ足せます。上下にスライドして場所を変え、棒で接続を調整できます。",
+              "Place on the wider side of your current step, outside any existing side steps. Slide to move, drag bars to reconnect.",
+            )}
+          </p>
+        </div>
 
         <div
+          ref={scrollRef}
+          className="mt-5 flex w-full justify-center overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+        <div
           ref={rootRef}
-          className="relative mx-auto mt-5"
+          className="relative shrink-0"
           style={{ width: TRACK_W, minHeight: contentHeight }}
         >
           {/* 灰棒は最下層 */}
@@ -635,9 +643,10 @@ export function RoadmapCreateSpace({
             </div>
           ) : null}
         </div>
+        </div>
 
         {error ? (
-          <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+          <p className="mx-auto mt-3 w-full max-w-lg rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
         ) : null}
       </div>
 
