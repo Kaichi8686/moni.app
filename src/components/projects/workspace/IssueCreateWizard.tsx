@@ -869,7 +869,10 @@ export function IssueCreateWizard({
                     <label className="block text-[12px] font-semibold text-zinc-700">
                       {tx("URL", "URL")}
                       <input
-                        type="url"
+                        type="text"
+                        inputMode="url"
+                        autoCapitalize="off"
+                        autoCorrect="off"
                         value={draftLinkUrl}
                         onChange={(e) => setDraftLinkUrl(e.target.value)}
                         placeholder="https://"

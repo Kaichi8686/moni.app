@@ -50,6 +50,7 @@ import {
   sortWorkFilesByUpdated,
   upsertWorkFile,
   type IssueWorkFile,
+  type IssueWorkFileItem,
   type IssueWorkFileKind,
 } from "@/lib/workspace/issueWorkFiles";
 import { createEmptyBoard, type IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
@@ -213,9 +214,14 @@ export function IssueTaskFilesPanel({
   const [linkTitle, setLinkTitle] = useState("");
   const [namePrompt, setNamePrompt] = useState<IssueWorkFileKind | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [draftSlotItems, setDraftSlotItems] = useState<IssueWorkFileItem[]>([]);
+  const [draftLinkUrl, setDraftLinkUrl] = useState("");
+  const [draftLinkTitle, setDraftLinkTitle] = useState("");
+  const [uploadingDraft, setUploadingDraft] = useState(false);
   const [photoViewerItemId, setPhotoViewerItemId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const slotPhotoInputRef = useRef<HTMLInputElement>(null);
+  const draftPhotoRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
   const submitted = isIssueSubmitted(issue);
@@ -345,11 +351,66 @@ export function IssueTaskFilesPanel({
     setOpenFileId(file.id);
   }
 
+  function clearDraftSlotExtras() {
+    setDraftSlotItems([]);
+    setDraftLinkUrl("");
+    setDraftLinkTitle("");
+    setUploadingDraft(false);
+    if (draftPhotoRef.current) draftPhotoRef.current.value = "";
+  }
+
   function openNamePrompt(kind: IssueWorkFileKind) {
     setFabOpen(false);
     setNamePrompt(kind);
     setDraftName(defaultTitle(kind));
+    clearDraftSlotExtras();
     setError("");
+  }
+
+  async function addDraftPhotos(list: FileList | null) {
+    if (!list || !canEdit || !uid || !supabase) return;
+    setUploadingDraft(true);
+    setError("");
+    try {
+      const added: IssueWorkFileItem[] = [];
+      for (const file of Array.from(list)) {
+        const uploaded = await uploadProjectImage(supabase, uid, "issue-photo", issue.id, file);
+        added.push({
+          id: createWorkFileId(),
+          url: uploaded.publicUrl,
+          title: file.name.replace(/\.[^.]+$/, "") || undefined,
+          addedBy: uid,
+          addedAt: new Date().toISOString(),
+        });
+      }
+      setDraftSlotItems((prev) => [...prev, ...added]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("写真を追加できませんでした", "Couldn’t add the photo"));
+    } finally {
+      setUploadingDraft(false);
+      if (draftPhotoRef.current) draftPhotoRef.current.value = "";
+    }
+  }
+
+  function addDraftLink() {
+    const url = normalizeExternalUrl(draftLinkUrl);
+    if (!url) {
+      setError(tx("正しいURLを入力してください", "Enter a valid URL"));
+      return;
+    }
+    setError("");
+    setDraftSlotItems((prev) => [
+      ...prev,
+      {
+        id: createWorkFileId(),
+        url,
+        title: draftLinkTitle.trim() || undefined,
+        addedBy: uid ?? undefined,
+        addedAt: new Date().toISOString(),
+      },
+    ]);
+    setDraftLinkUrl("");
+    setDraftLinkTitle("");
   }
 
   async function createNamedFile() {
@@ -401,15 +462,18 @@ export function IssueTaskFilesPanel({
         setOpenFileId(next.id);
       } else if (namePrompt === "photo") {
         next = newPhotoSlotFile(name);
+        for (const item of draftSlotItems) next = appendFileItem(next, item);
         await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
       } else {
         next = newLinkSlotFile(name);
+        for (const item of draftSlotItems) next = appendFileItem(next, item);
         await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
       }
       setNamePrompt(null);
       setDraftName("");
+      clearDraftSlotExtras();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
     } finally {
@@ -575,6 +639,86 @@ export function IssueTaskFilesPanel({
 
   const assignee = assigneeNames(issue, names).join("、") || tx("担当未設定", "No assignee");
 
+  const linkDraftPortal =
+    linkDraftOpen && portalReady
+      ? createPortal(
+          <div className="fixed inset-0 z-[270] flex items-end justify-center bg-black/40 p-4 sm:items-center">
+            <button
+              type="button"
+              className="absolute inset-0"
+              aria-label={tx("閉じる", "Close")}
+              onClick={() => {
+                setLinkDraftOpen(false);
+                setError("");
+              }}
+            />
+            <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-zinc-900">{tx("リンクを入れる", "Add link")}</h2>
+                <button
+                  type="button"
+                  className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100"
+                  aria-label={tx("閉じる", "Close")}
+                  onClick={() => {
+                    setLinkDraftOpen(false);
+                    setError("");
+                  }}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <label className="block text-[13px] font-semibold text-zinc-700">
+                {tx("URL", "URL")}
+                <input
+                  type="text"
+                  inputMode="url"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
+                  autoFocus
+                />
+              </label>
+              <label className="mt-3 block text-[13px] font-semibold text-zinc-700">
+                {tx("タイトル（任意）", "Title (optional)")}
+                <input
+                  type="text"
+                  value={linkTitle}
+                  onChange={(e) => setLinkTitle(e.target.value)}
+                  placeholder={tx("表示名", "Display name")}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
+                />
+              </label>
+              {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                  onClick={() => {
+                    setLinkDraftOpen(false);
+                    setError("");
+                  }}
+                >
+                  {tx("キャンセル", "Cancel")}
+                </button>
+                <button
+                  type="button"
+                  disabled={creating || !linkUrl.trim()}
+                  onClick={() => void addLinkToOpenSlot()}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1765cc] disabled:opacity-50"
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  {tx("追加", "Add")}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   if (openFile && portalReady) {
     if (openFile.kind === "doc") {
       return createPortal(
@@ -639,7 +783,9 @@ export function IssueTaskFilesPanel({
     if (openFile.kind === "photo" || openFile.kind === "link") {
       const items = fileItems(openFile);
       const canAdd = canEdit && !submitted;
-      return createPortal(
+      return (
+        <>
+          {createPortal(
         <div className="fixed inset-0 z-[240] flex flex-col bg-white">
           <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 px-3 py-2">
             <button
@@ -745,6 +891,9 @@ export function IssueTaskFilesPanel({
           ) : null}
         </div>,
         document.body,
+          )}
+          {linkDraftPortal}
+        </>
       );
     }
 
@@ -1054,8 +1203,16 @@ export function IssueTaskFilesPanel({
       {namePrompt && portalReady
         ? createPortal(
             <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-              <button type="button" className="absolute inset-0" aria-label={tx("閉じる", "Close")} onClick={() => setNamePrompt(null)} />
-              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+              <button
+                type="button"
+                className="absolute inset-0"
+                aria-label={tx("閉じる", "Close")}
+                onClick={() => {
+                  setNamePrompt(null);
+                  clearDraftSlotExtras();
+                }}
+              />
+              <div className="relative z-10 max-h-[min(90dvh,720px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
                 <h2 className="text-base font-bold text-zinc-900">{tx("ファイル名", "File name")}</h2>
                 <input
                   value={draftName}
@@ -1065,15 +1222,126 @@ export function IssueTaskFilesPanel({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      void createNamedFile();
+                      if (namePrompt !== "photo" && namePrompt !== "link") void createNamedFile();
                     }
                   }}
                 />
+
+                {namePrompt === "photo" ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[12px] font-semibold text-zinc-600">
+                      {tx("写真（任意・何枚でも）", "Photos (optional, any number)")}
+                    </p>
+                    {draftSlotItems.length > 0 ? (
+                      <ul className="grid grid-cols-3 gap-2">
+                        {draftSlotItems.map((item) => (
+                          <li key={item.id} className="relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- draft preview */}
+                            <img src={item.url} alt={item.title || ""} className="aspect-square w-full object-cover" />
+                            <button
+                              type="button"
+                              className="absolute right-1 top-1 rounded-full bg-black/55 p-1 text-white"
+                              aria-label={tx("削除", "Remove")}
+                              onClick={() => setDraftSlotItems((prev) => prev.filter((x) => x.id !== item.id))}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={uploadingDraft || !uid}
+                      onClick={() => draftPhotoRef.current?.click()}
+                      className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-6 text-[13px] font-bold text-[#9A5B1F] disabled:opacity-50"
+                    >
+                      <Plus className="h-5 w-5" aria-hidden />
+                      {uploadingDraft ? tx("アップロード中…", "Uploading…") : tx("写真を追加", "Add photos")}
+                    </button>
+                    <input
+                      ref={draftPhotoRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => void addDraftPhotos(e.target.files)}
+                    />
+                  </div>
+                ) : null}
+
+                {namePrompt === "link" ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[12px] font-semibold text-zinc-600">
+                      {tx("リンク（任意・何個でも）", "Links (optional, any number)")}
+                    </p>
+                    {draftSlotItems.length > 0 ? (
+                      <ul className="space-y-2">
+                        {draftSlotItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-[13px]"
+                          >
+                            <Link2 className="h-4 w-4 shrink-0 text-[#1565C0]" aria-hidden />
+                            <span className="min-w-0 flex-1 truncate font-semibold text-[#1565C0]">
+                              {item.title || item.url}
+                            </span>
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full p-1 text-zinc-500 hover:bg-zinc-200"
+                              aria-label={tx("削除", "Remove")}
+                              onClick={() => setDraftSlotItems((prev) => prev.filter((x) => x.id !== item.id))}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <label className="block text-[12px] font-semibold text-zinc-700">
+                      {tx("URL", "URL")}
+                      <input
+                        type="text"
+                        inputMode="url"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        value={draftLinkUrl}
+                        onChange={(e) => setDraftLinkUrl(e.target.value)}
+                        placeholder="https://"
+                        className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+                      />
+                    </label>
+                    <label className="block text-[12px] font-semibold text-zinc-700">
+                      {tx("タイトル（任意）", "Title (optional)")}
+                      <input
+                        type="text"
+                        value={draftLinkTitle}
+                        onChange={(e) => setDraftLinkTitle(e.target.value)}
+                        placeholder={tx("表示名", "Display name")}
+                        className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!draftLinkUrl.trim()}
+                      onClick={addDraftLink}
+                      className="flex w-full items-center justify-center gap-1 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-3 text-[13px] font-bold text-[#9A5B1F] disabled:opacity-40"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden />
+                      {tx("リストに追加", "Add to list")}
+                    </button>
+                  </div>
+                ) : null}
+
+                {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
                 <div className="mt-4 flex justify-end gap-2">
                   <button
                     type="button"
                     className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
-                    onClick={() => setNamePrompt(null)}
+                    onClick={() => {
+                      setNamePrompt(null);
+                      clearDraftSlotExtras();
+                    }}
                   >
                     {tx("キャンセル", "Cancel")}
                   </button>
@@ -1081,7 +1349,7 @@ export function IssueTaskFilesPanel({
                     type="button"
                     tone="orange"
                     size="md"
-                    disabled={creating}
+                    disabled={creating || uploadingDraft}
                     onClick={() => void createNamedFile()}
                     className="!px-4 !py-2 !text-[14px]"
                   >
@@ -1094,81 +1362,7 @@ export function IssueTaskFilesPanel({
           )
         : null}
 
-      {linkDraftOpen && portalReady
-        ? createPortal(
-            <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-              <button
-                type="button"
-                className="absolute inset-0"
-                aria-label={tx("閉じる", "Close")}
-                onClick={() => {
-                  setLinkDraftOpen(false);
-                  setError("");
-                }}
-              />
-              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-base font-bold text-zinc-900">{tx("リンクを入れる", "Add link")}</h2>
-                  <button
-                    type="button"
-                    className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100"
-                    aria-label={tx("閉じる", "Close")}
-                    onClick={() => {
-                      setLinkDraftOpen(false);
-                      setError("");
-                    }}
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <label className="block text-[13px] font-semibold text-zinc-700">
-                  {tx("URL", "URL")}
-                  <input
-                    type="url"
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://"
-                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
-                    autoFocus
-                  />
-                </label>
-                <label className="mt-3 block text-[13px] font-semibold text-zinc-700">
-                  {tx("タイトル（任意）", "Title (optional)")}
-                  <input
-                    type="text"
-                    value={linkTitle}
-                    onChange={(e) => setLinkTitle(e.target.value)}
-                    placeholder={tx("表示名", "Display name")}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-[#1a73e8]"
-                  />
-                </label>
-                {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
-                    onClick={() => {
-                      setLinkDraftOpen(false);
-                      setError("");
-                    }}
-                  >
-                    {tx("キャンセル", "Cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={creating || !linkUrl.trim()}
-                    onClick={() => void addLinkToOpenSlot()}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1765cc] disabled:opacity-50"
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden />
-                    {tx("追加", "Add")}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {linkDraftPortal}
 
       {confirmDeleteIssue ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
