@@ -15,7 +15,9 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     const sync = () =>
       setDocEditorOpen(
-        root.classList.contains("moni-doc-editor") || root.classList.contains("moni-issues-drill"),
+        root.classList.contains("moni-doc-editor") ||
+          root.classList.contains("moni-issues-drill") ||
+          root.classList.contains("moni-recruit-drill"),
       );
     sync();
     const obs = new MutationObserver(sync);

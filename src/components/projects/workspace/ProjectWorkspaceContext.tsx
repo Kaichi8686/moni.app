@@ -1238,13 +1238,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   return (
     <WorkspaceCtx.Provider value={value}>
       <div
-        className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""} ${
-          isRecruitPage ? "flex flex-col" : ""
-        }`}
+        className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""}`}
       >
-        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage ? null : (
+        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage ? null : (
         <header className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4">
-          <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
+          <div className="mx-auto max-w-3xl">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <ProjectWorkspaceSwitcher
@@ -1440,22 +1438,18 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage
+            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage
               ? "min-h-[100dvh]"
-              : isRecruitPage
-                ? "min-h-0 flex-1"
-                : "min-h-[calc(100dvh-3.75rem)]"
+              : "min-h-[calc(100dvh-3.75rem)]"
           }
         >
           <main
             className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
-                : isRoadmapEditPage || isVotePage || isIssuesPage
+                : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage
                   ? "min-h-[100dvh]"
-                  : isRecruitPage
-                    ? "flex min-h-0 flex-1 flex-col"
-                    : ""
+                  : ""
             }`}
           >
             <div
@@ -1466,12 +1460,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                     ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
                     : isVotePage
                       ? "mx-auto max-w-2xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                      : isIssuesPage
+                      : isIssuesPage || isRecruitPage
                         ? "mx-auto max-w-3xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                      : isRoadmapEditPage
-                        ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
-                        : isRecruitPage
-                          ? "min-h-0 flex-1 overflow-y-auto pb-bottom-nav"
+                        : isRoadmapEditPage
+                          ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
                           : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >

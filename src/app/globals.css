@@ -380,6 +380,11 @@ html.moni-issues-drill .app-bottom-nav {
   display: none !important;
 }
 
+/* 募集タブの詳細・新規作成: 下タブを隠す */
+html.moni-recruit-drill .app-bottom-nav {
+  display: none !important;
+}
+
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;
