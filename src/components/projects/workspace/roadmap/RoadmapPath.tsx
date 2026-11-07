@@ -164,9 +164,17 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     }));
   }, [count, measuredYs]);
 
-  /** 横置きは同じ行の本線ではなく、上のマス／下のマスへつなぐ（CreateSpace と同じ） */
+  const fullPath = buildStraightPath(points);
+  const clearedEnd = clearedEndIndex(segmentCleared, points.length);
+  const clearedPath = clearedEnd >= 1 ? buildStraightPath(points.slice(0, clearedEnd + 1)) : "";
+
+  /**
+   * 横置きは同じ行の本線ではなく上下へつなぐ。
+   * 上の棒: その行まで到達していればオレンジ／下の棒: 次へ進んでいればオレンジ、未クリアは灰色。
+   * 太さは本線と同じ 14。
+   */
   const sideLinks = useMemo(() => {
-    const links: Array<{ from: Point; to: Point; key: string }> = [];
+    const links: Array<{ from: Point; to: Point; key: string; cleared: boolean }> = [];
     items.forEach((item, index) => {
       const main = points[index];
       if (!main) return;
@@ -178,20 +186,31 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
           y: main.y,
         };
         const baseKey = `${item.key ?? index}-${side.key}`;
-        if (prev) links.push({ from: prev, to: sidePoint, key: `${baseKey}-prev` });
-        if (next) links.push({ from: next, to: sidePoint, key: `${baseKey}-next` });
+        if (prev) {
+          links.push({
+            from: prev,
+            to: sidePoint,
+            key: `${baseKey}-prev`,
+            cleared: clearedEnd >= index,
+          });
+        }
+        if (next) {
+          links.push({
+            from: next,
+            to: sidePoint,
+            key: `${baseKey}-next`,
+            // 未到達は灰色。いま取り組んでいる行（到達済み）ならオレンジ
+            cleared: clearedEnd >= index,
+          });
+        }
       }
     });
     return links;
-  }, [items, points]);
+  }, [items, points, clearedEnd]);
 
   const contentHeight = hasBelow && measuredYs && measuredYs.length > 0
     ? Math.max(...measuredYs) + NODE_SIZE / 2 + 24
     : TOP_PAD + Math.max(count, 1) * STEP_Y - ROW_GAP + 12;
-
-  const fullPath = buildStraightPath(points);
-  const end = clearedEndIndex(segmentCleared, points.length);
-  const clearedPath = end >= 1 ? buildStraightPath(points.slice(0, end + 1)) : "";
 
   return (
     <div ref={rootRef} className={`relative mx-auto w-full max-w-md ${className}`}>
@@ -227,15 +246,15 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
                 key={link.key}
                 d={`M ${link.from.x} ${link.from.y} L ${link.to.x} ${link.to.y}`}
                 fill="none"
-                stroke="#F97316"
-                strokeWidth={10}
+                stroke={link.cleared ? "#F97316" : "#D4D4D8"}
+                strokeWidth={14}
                 strokeLinecap="round"
               />
             ))}
           </svg>
         ) : null}
 
-        {/* 本線だけでも横棒を描く */}
+        {/* 本線1マスだけのときも横置きの棒を描く */}
         {count <= 1 && sideLinks.length > 0 ? (
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
@@ -249,8 +268,8 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
                 key={link.key}
                 d={`M ${link.from.x} ${link.from.y} L ${link.to.x} ${link.to.y}`}
                 fill="none"
-                stroke="#F97316"
-                strokeWidth={10}
+                stroke={link.cleared ? "#F97316" : "#D4D4D8"}
+                strokeWidth={14}
                 strokeLinecap="round"
               />
             ))}

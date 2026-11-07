@@ -327,7 +327,7 @@ export default function WorkspaceOverview() {
                         const sideCurrent = side.status === "in_progress";
                         const sideTone = sideComplete
                           ? ("done" as const)
-                          : sideCurrent
+                          : sideCurrent || current
                             ? ("active" as const)
                             : upcoming
                               ? ("upcoming" as const)
@@ -338,7 +338,7 @@ export default function WorkspaceOverview() {
                           children: (
                             <RoadmapPathNode
                               tone={sideTone}
-                              sparkle={sideCurrent}
+                              sparkle={current || sideCurrent}
                               selected={selectedPhaseId === side.id}
                               onClick={() => setSelectedPhaseId(side.id)}
                               aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
