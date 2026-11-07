@@ -496,8 +496,8 @@ export function RoadmapCreateSpace({
           <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
           <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
             {tx(
-              `1つ目は広い側、2つ目は同じ側の外側、3つ目は2つ目の逆側に置きます（各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個）。上下にスライドして場所を変えられます。`,
-              `1st on the wider side, 2nd outside it, 3rd opposite the 2nd (max ${ROADMAP_MAX_SIDES_PER_PARENT} per step). Slide to move.`,
+              `1つ目は広い側、2つ目以降は直前の横マスと逆側に置きます（各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個）。上下にスライドして場所を変えられます。`,
+              `1st on the wider side, then alternate left/right (max ${ROADMAP_MAX_SIDES_PER_PARENT} per step). Slide to move.`,
             )}
           </p>
         </div>
