@@ -7,9 +7,10 @@ import {
   getTutorialPrompt,
   loadLocalBattle,
   loadLocalProfile,
+  saveLocalPromptFromSeed,
   submitLocalIdea,
 } from "@/lib/idea-league/localStore";
-import { isSaturday, leagueNow, saturdayWeekKey, saturdayWindow } from "@/lib/idea-league/calendar";
+import { leagueNow, saturdayWeekKey, saturdayWindow, scheduleFor } from "@/lib/idea-league/calendar";
 import { promptForWeek } from "@/lib/idea-league/prompts";
 import {
   LEAGUE_TIER_META,
@@ -187,7 +188,11 @@ async function ensureRemoteWeek(
   }
   const prompt = promptForWeek(weekKey);
   const { startsAt, endsAt } = saturdayWindow(weekKey);
-  const status = isSaturday(leagueNow()) && saturdayWeekKey(leagueNow()) === weekKey ? "active" : "upcoming";
+  const sched = scheduleFor(leagueNow());
+  const status =
+    sched.weekKey === weekKey && (sched.phase === "submit" || sched.phase === "vote")
+      ? "active"
+      : "upcoming";
   const { data: created, error: createErr } = await client
     .from("idea_league_weeks")
     .insert({
@@ -361,6 +366,9 @@ export async function loadLeagueBattle(
       };
     });
 
+    const sched = scheduleFor(leagueNow());
+    const peersHidden = sched.phase === "submit";
+
     // If only me in group, fall back to demo bots for livelier UX
     if (members.length < 3) {
       const local = loadLocalBattle(me);
@@ -392,22 +400,51 @@ export async function loadLeagueBattle(
           highlighted: Boolean(meta?.highlight),
         };
       })
+      .filter((s) => (peersHidden ? s.isMe : true))
       .sort((a, b) => b.voteCount - a.voteCount);
 
     return {
       week,
       tier: profile.tier,
       groupId,
-      members,
+      members: peersHidden ? members.filter((m) => m.isMe) : members,
       submissions,
       myMembershipId: String(mem.id),
       mySubmission: submissions.find((s) => s.isMe) ?? null,
       myVoteSubmissionId,
       promotionCutoff: PROMOTION_SLOTS,
       demo: false,
+      phase: sched.phase,
+      peersHidden,
+      displayResultsWeekKey: sched.displayResultsWeekKey,
+      seedPlantId: null,
     };
   } catch {
     return loadLocalBattle(me);
+  }
+}
+
+export async function saveLeaguePromptFromSeed(
+  client: SupabaseClient | null,
+  me: MeIdentity,
+  input: { plantId: string; title: string; body: string },
+): Promise<LeagueBattleState> {
+  const local = saveLocalPromptFromSeed(me, input);
+  if (!client) return local;
+  try {
+    const weekKey = saturdayWeekKey(leagueNow());
+    const week = await ensureRemoteWeek(client, weekKey);
+    if (!week) return local;
+    await client
+      .from("idea_league_weeks")
+      .update({
+        prompt_title: input.title.trim().slice(0, 80),
+        prompt_body: input.body.trim(),
+      })
+      .eq("id", week.id);
+    return loadLeagueBattle(client, me);
+  } catch {
+    return local;
   }
 }
 
@@ -476,10 +513,11 @@ export async function finalizeLeagueIfNeeded(
   client: SupabaseClient | null,
   me: MeIdentity,
 ): Promise<LeagueProfileState> {
+  const sched = scheduleFor(leagueNow());
+  if (sched.phase !== "results") return loadLeagueProfile(client, me.userId);
   const local = finalizeLocalWeek(me.userId);
   if (!client) return local;
   try {
-    if (isSaturday(leagueNow())) return loadLeagueProfile(client, me.userId);
     const battle = await loadLeagueBattle(client, me);
     if (battle.demo) return local;
 

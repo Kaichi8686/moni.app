@@ -164,10 +164,10 @@ const CLOSED_TABS: NavItem[] = [
       (p === "/" && tab === "chat") ||
       p === "/discover" ||
       p.startsWith("/discover/") ||
-      p === "/contest" ||
-      p.startsWith("/contest/") ||
       p === "/league" ||
-      p.startsWith("/league/"),
+      p.startsWith("/league/") ||
+      p === "/contest" ||
+      p.startsWith("/contest/"),
   },
 ];
 

@@ -156,18 +156,9 @@ export default function DiscoverPage() {
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Idea League</p>
           <p className="mt-1 text-sm font-semibold text-zinc-900">
-            毎週土曜限定のランキングバトル。同じリーグ内で投票し、上位3名が昇格。
+            花の種からお題を作り、土曜11時〜日曜11時に提出。投票のあと水曜に結果。
           </p>
           <p className="mt-2 text-sm font-semibold text-emerald-700">リーグへ →</p>
-        </Link>
-
-        <Link
-          href="/idea?spark=contest"
-          className="block overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-white to-[#EEF0FF] p-4 shadow-sm transition active:scale-[0.99]"
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-600">{t("contestNav")}</p>
-          <p className="mt-1 text-sm font-semibold text-zinc-900">{t("contestDiscoverCard")}</p>
-          <p className="mt-2 text-sm font-semibold text-[#5E6AD2]">{t("contestDiscoverCta")}</p>
         </Link>
 
         {msg ? <p className="text-sm text-violet-700">{msg}</p> : null}

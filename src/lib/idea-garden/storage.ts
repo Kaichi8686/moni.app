@@ -1,5 +1,5 @@
 import type { GardenDraft, GardenScreen, GardenState, GrowPhase, PlantedIdea, SundayPhase } from "@/lib/idea-garden/types";
-import { addDaysToDateKey, tokyoDateKey, weekKeyFor } from "@/lib/idea-garden/calendar";
+import { addDaysToDateKey, gardenBusinessDateKey, weekKeyFor } from "@/lib/idea-garden/calendar";
 
 /** レガシー（ユーザー未分離）キー — 初回だけ個人キーへ移行 */
 export const GARDEN_STORAGE_KEY_LEGACY = "moni.ideaGarden.v1";
@@ -114,7 +114,7 @@ export function stabilizeDraftScreen(screen: GardenScreen): GardenScreen {
 export function ideaStreakDays(plants: PlantedIdea[]): number {
   const days = new Set(plants.map((p) => p.dateKey));
   if (days.size === 0) return 0;
-  const today = tokyoDateKey();
+  const today = gardenBusinessDateKey();
   let cursor = days.has(today) ? today : addDaysToDateKey(today, -1);
   if (!days.has(cursor)) return 0;
   let streak = 0;
@@ -127,7 +127,7 @@ export function ideaStreakDays(plants: PlantedIdea[]): number {
 
 /** 今日の途中下書きが有効なら返す（完了時は draft=null で消す） */
 export function usableDraft(plants: PlantedIdea[], draft: GardenDraft | null | undefined): GardenDraft | null {
-  if (!draft || draft.dateKey !== tokyoDateKey()) return null;
+  if (!draft || draft.dateKey !== gardenBusinessDateKey()) return null;
 
   // 日曜ゴールド完了後は sunday 下書きだけ無効（棚の＋からの種袋フローは同日でも再開可）
   const sundayDone = goldDoneThisWeek(plants, weekKeyFor());

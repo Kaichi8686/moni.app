@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** 旧URL互換 → AIタブのコンテスト側へ */
+/** 旧コンテスト入口 → アイデアリーグへ */
 export default function ContestPage() {
-  redirect("/idea?spark=contest");
+  redirect("/idea?spark=league");
 }

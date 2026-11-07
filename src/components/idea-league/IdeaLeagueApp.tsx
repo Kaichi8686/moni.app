@@ -12,10 +12,11 @@ import {
   finalizeLeagueIfNeeded,
   loadLeagueBattle,
   loadLeagueProfile,
+  saveLeaguePromptFromSeed,
   submitLeagueIdea,
   type MeIdentity,
 } from "@/lib/idea-league/api";
-import { isSaturday, leagueNow } from "@/lib/idea-league/calendar";
+import { scheduleFor } from "@/lib/idea-league/calendar";
 import type { LeagueBattleState, LeagueProfileState } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
@@ -23,33 +24,63 @@ import { supabase, supabaseEnabled } from "@/lib/supabase";
 type Props = {
   embedded?: boolean;
   hideChrome?: boolean;
+  onOpenGarden?: () => void;
 };
 
-export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
+export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   const { tx } = useI18n();
   const [me, setMe] = useState<MeIdentity | null>(null);
   const [profile, setProfile] = useState<LeagueProfileState | null>(null);
   const [battle, setBattle] = useState<LeagueBattleState | null>(null);
+  const [publishedBattle, setPublishedBattle] = useState<LeagueBattleState | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const saturday = isSaturday(leagueNow());
+  const [tick, setTick] = useState(0);
 
-  const reload = useCallback(async (identity: MeIdentity) => {
-    const client = supabaseEnabled ? supabase : null;
-    const p = await loadLeagueProfile(client, identity.userId);
-    setProfile(p);
-    if (p.tutorialCompleted && saturday) {
-      const b = await loadLeagueBattle(client, identity);
-      setBattle(b);
-    } else {
-      setBattle(null);
-      if (p.tutorialCompleted && !saturday) {
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const sched = scheduleFor();
+
+  const reload = useCallback(
+    async (identity: MeIdentity) => {
+      const client = supabaseEnabled ? supabase : null;
+      const p = await loadLeagueProfile(client, identity.userId);
+      setProfile(p);
+      if (!p.tutorialCompleted) {
+        setBattle(null);
+        setPublishedBattle(null);
+        return;
+      }
+
+      const phase = scheduleFor().phase;
+      if (phase === "results") {
         await finalizeLeagueIfNeeded(client, identity);
         const refreshed = await loadLeagueProfile(client, identity.userId);
         setProfile(refreshed);
       }
-    }
-  }, [saturday]);
+
+      const current = await loadLeagueBattle(client, identity);
+      setBattle(current);
+
+      const displayKey = current.displayResultsWeekKey;
+      if (displayKey && displayKey !== current.week.weekKey) {
+        const { loadLocalBattle } = await import("@/lib/idea-league/localStore");
+        setPublishedBattle(loadLocalBattle(identity, { weekKey: displayKey }));
+      } else if (phase === "results") {
+        setPublishedBattle(current);
+      } else if (displayKey === current.week.weekKey && phase !== "submit") {
+        setPublishedBattle(null);
+      } else {
+        setPublishedBattle(null);
+      }
+    },
+    // tick forces phase refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +124,12 @@ export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
     };
   }, [reload, tx]);
 
+  const openGarden =
+    onOpenGarden ??
+    (() => {
+      if (typeof window !== "undefined") window.location.href = "/idea";
+    });
+
   const shell = (body: ReactNode) => (
     <div
       className={`relative min-h-[100dvh] bg-gradient-to-b from-[#FFF8EF] via-[#F4F7FF] to-[#E8F7F0] ${
@@ -125,9 +162,7 @@ export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
   }
 
   if (err) {
-    return shell(
-      <p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>,
-    );
+    return shell(<p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>);
   }
 
   if (!profile.tutorialCompleted) {
@@ -144,10 +179,14 @@ export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
     );
   }
 
-  if (saturday && battle) {
+  const phase = sched.phase;
+  const inBattle = phase === "submit" || phase === "vote" || phase === "results";
+
+  if (inBattle && battle) {
     return shell(
       <LeagueBattleScreen
-        battle={battle}
+        battle={{ ...battle, phase }}
+        publishedBattle={publishedBattle}
         onSubmit={async (input) => {
           const client = supabaseEnabled ? supabase : null;
           const next = await submitLeagueIdea(client, me, input);
@@ -162,5 +201,22 @@ export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
     );
   }
 
-  return shell(<LeagueWaitingScreen profile={profile} />);
+  return shell(
+    <LeagueWaitingScreen
+      profile={profile}
+      userId={me.userId}
+      currentPrompt={
+        battle
+          ? { title: battle.week.promptTitle, body: battle.week.promptBody }
+          : undefined
+      }
+      publishedBattle={publishedBattle}
+      onOpenGarden={openGarden}
+      onSavePrompt={async (input) => {
+        const client = supabaseEnabled ? supabase : null;
+        const next = await saveLeaguePromptFromSeed(client, me, input);
+        setBattle(next);
+      }}
+    />,
+  );
 }
