@@ -486,6 +486,7 @@ export function IssueCreateWizard({
   const nameDialogOpen = Boolean(namePrompt || renameId);
 
   return createPortal(
+    <>
     <div
       className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overscroll-none bg-white ${
         exiting ? "issue-create-wizard-out" : entered ? "issue-create-wizard-in" : "translate-x-full"
@@ -679,63 +680,6 @@ export function IssueCreateWizard({
             {error && step === "files" ? <p className="px-3 pt-2 text-sm text-rose-600">{error}</p> : null}
           </div>
 
-          <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex flex-col items-end gap-2">
-            {fabOpen ? (
-              <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-1 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
-                {(
-                  [
-                    ["doc", tx("ドキュメント", "Document"), <FileText key="d" className="h-5 w-5 text-[#4285F4]" />],
-                    ["board", tx("ホワイトボード", "Whiteboard"), <StickyNote key="b" className="h-5 w-5 text-[#7C3AED]" />],
-                    ["canvas", tx("作業スペース", "Workspace"), <PenTool key="c" className="h-5 w-5 text-[#E65100]" />],
-                    ["photo", tx("写真依頼", "Photo request"), <ImageIcon key="p" className="h-5 w-5 text-[#2E7D32]" />],
-                    ["link", tx("リンク依頼", "Link request"), <Link2 key="l" className="h-5 w-5 text-[#1565C0]" />],
-                  ] as const
-                ).map(([kind, label, icon]) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    disabled={creating}
-                    onClick={() => openNamePrompt(kind)}
-                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-                  >
-                    {icon}
-                    {label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <button
-              type="button"
-              disabled={creating}
-              onClick={() => setFabOpen((v) => !v)}
-              className="pointer-events-auto inline-flex h-14 min-w-[7.5rem] items-center justify-center gap-2 rounded-2xl bg-white px-5 text-[15px] font-semibold text-[#202124] shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-              aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
-            >
-              {fabOpen ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5 text-[#1a73e8]" />}
-              {fabOpen ? tx("閉じる", "Close") : tx("新規", "New")}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-        <div className="mx-auto max-w-lg">
-          {step === "details" ? (
-            <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={!canGoNext} onClick={goToFiles}>
-              {tx("次へ", "Next")}
-            </DuoButton>
-          ) : (
-            <DuoButton
-              type="button"
-              tone="orange"
-              size="lg"
-              fullWidth
-              disabled={saving || !canGoNext}
-              onClick={() => void finish()}
-            >
-              {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
-            </DuoButton>
-          )}
         </div>
       </div>
 
@@ -953,7 +897,71 @@ export function IssueCreateWizard({
             document.body,
           )
         : null}
-    </div>,
+    </div>
+
+    {!exiting ? (
+      <>
+        {step === "files" ? (
+          <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-[305] flex flex-col items-end gap-2">
+            {fabOpen ? (
+              <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-1 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+                {(
+                  [
+                    ["doc", tx("ドキュメント", "Document"), <FileText key="d" className="h-5 w-5 text-[#4285F4]" />],
+                    ["board", tx("ホワイトボード", "Whiteboard"), <StickyNote key="b" className="h-5 w-5 text-[#7C3AED]" />],
+                    ["canvas", tx("作業スペース", "Workspace"), <PenTool key="c" className="h-5 w-5 text-[#E65100]" />],
+                    ["photo", tx("写真依頼", "Photo request"), <ImageIcon key="p" className="h-5 w-5 text-[#2E7D32]" />],
+                    ["link", tx("リンク依頼", "Link request"), <Link2 key="l" className="h-5 w-5 text-[#1565C0]" />],
+                  ] as const
+                ).map(([kind, label, icon]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    disabled={creating}
+                    onClick={() => openNamePrompt(kind)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                  >
+                    {icon}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              disabled={creating}
+              onClick={() => setFabOpen((v) => !v)}
+              className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
+              aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
+            >
+              {fabOpen ? <X className="h-8 w-8" aria-hidden strokeWidth={3} /> : <Plus className="h-8 w-8" aria-hidden strokeWidth={3} />}
+            </button>
+          </div>
+        ) : null}
+
+        <div className="fixed inset-x-0 bottom-0 z-[304] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+          <div className="mx-auto max-w-lg">
+            {step === "details" ? (
+              <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={!canGoNext} onClick={goToFiles}>
+                {tx("次へ", "Next")}
+              </DuoButton>
+            ) : (
+              <DuoButton
+                type="button"
+                tone="orange"
+                size="lg"
+                fullWidth
+                disabled={saving || !canGoNext}
+                onClick={() => void finish()}
+              >
+                {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
+              </DuoButton>
+            )}
+          </div>
+        </div>
+      </>
+    ) : null}
+    </>,
     document.body,
   );
 }
