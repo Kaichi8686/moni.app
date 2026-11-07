@@ -1194,10 +1194,10 @@ export function IssueTaskFilesPanel({
                     type="button"
                     disabled={creating}
                     onClick={() => setFabOpen((v) => !v)}
-                    className="pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_5px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
+                    className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
                     aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
                   >
-                    {fabOpen ? <X className="h-6 w-6" aria-hidden strokeWidth={2.5} /> : <Plus className="h-7 w-7" aria-hidden strokeWidth={2.5} />}
+                    {fabOpen ? <X className="h-8 w-8" aria-hidden strokeWidth={3} /> : <Plus className="h-8 w-8" aria-hidden strokeWidth={3} />}
                   </button>
                 </div>
               ) : null}
