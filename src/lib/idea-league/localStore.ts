@@ -1,11 +1,10 @@
 import { scheduleFor, saturdayWeekKey, saturdayWindow, leagueNow } from "@/lib/idea-league/calendar";
 import { promptForWeek, TUTORIAL_PROMPT } from "@/lib/idea-league/prompts";
-import {
-  LEAGUE_GROUP_SIZE,
-  PROMOTION_SLOTS,
-  nextLeagueTier,
-  parseLeagueTier,
-} from "@/lib/idea-league/tiers";
+import { PROMOTION_SLOTS, nextLeagueTier, parseLeagueTier } from "@/lib/idea-league/tiers";
+
+function isRealUserId(userId: string): boolean {
+  return Boolean(userId) && !userId.startsWith("bot-") && !userId.startsWith("bot");
+}
 import type {
   LeagueBattleState,
   LeagueHistoryEntry,
@@ -96,26 +95,6 @@ function ensureProfile(store: StoreShape, userId: string) {
   return store.profiles[userId]!;
 }
 
-function botName(i: number): string {
-  const names = [
-    "あおい",
-    "ハルト",
-    "ユイ",
-    "ソラ",
-    "レン",
-    "ミオ",
-    "カイ",
-    "ヒナ",
-    "タクト",
-    "ナツキ",
-    "リコ",
-    "シュン",
-    "マナ",
-    "コウ",
-  ];
-  return names[i % names.length] ?? `Player ${i + 1}`;
-}
-
 function ensureWeekGroup(
   store: StoreShape,
   weekKey: string,
@@ -152,19 +131,6 @@ function ensureWeekGroup(
   const weekBucket = store.weeks[weekKey]!;
   const groupKey = `${tier}-0`;
   if (!weekBucket.groups[groupKey]) {
-    const bots = Array.from({ length: LEAGUE_GROUP_SIZE - 1 }, (_, i) => ({
-      membershipId: `m-${weekKey}-${tier}-bot-${i}`,
-      userId: `bot-${tier}-${i}`,
-      displayName: botName(i),
-      avatarUrl: null as string | null,
-      voteScore: Math.max(0, 12 - i + ((hash(`${weekKey}-${i}`) % 5) - 2)),
-      submission: {
-        id: `s-${weekKey}-${tier}-bot-${i}`,
-        title: `アイデア案 ${i + 1}`,
-        content: `${prompt.title} への解決案です。小さな習慣から変えていきます。（デモ）`,
-        appeal: null as string | null,
-      },
-    }));
     weekBucket.groups[groupKey] = {
       groupId: `g-${weekKey}-${tier}-0`,
       tier,
@@ -176,12 +142,26 @@ function ensureWeekGroup(
           avatarUrl: me.avatarUrl,
           voteScore: 0,
         },
-        ...bots,
       ],
       votes: {},
     };
   } else {
     const g = weekBucket.groups[groupKey]!;
+    // 旧デモの架空ユーザーを除去
+    g.members = g.members.filter((m) => isRealUserId(m.userId));
+    const botSubIds = new Set(
+      Object.entries(g.votes)
+        .filter(([voterId]) => !isRealUserId(voterId))
+        .map(([, subId]) => subId),
+    );
+    for (const voterId of Object.keys(g.votes)) {
+      if (!isRealUserId(voterId)) delete g.votes[voterId];
+    }
+    // ボット提出への票も落とす（提出自体は members から消えている）
+    for (const [voterId, subId] of Object.entries(g.votes)) {
+      if (botSubIds.has(subId) || subId.includes("-bot-")) delete g.votes[voterId];
+    }
+
     const mine = g.members.find((m) => m.userId === me.userId);
     if (!mine) {
       g.members.unshift({
@@ -191,7 +171,6 @@ function ensureWeekGroup(
         avatarUrl: me.avatarUrl,
         voteScore: 0,
       });
-      if (g.members.length > LEAGUE_GROUP_SIZE) g.members.pop();
     } else {
       mine.displayName = me.displayName;
       mine.avatarUrl = me.avatarUrl;
@@ -200,21 +179,17 @@ function ensureWeekGroup(
   return weekBucket.groups[groupKey]!;
 }
 
-function hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-
 function rankedMembers(
   group: StoreShape["weeks"][string]["groups"][string],
   meUserId: string,
   highlight: boolean,
 ): LeagueMember[] {
-  const sorted = [...group.members].sort((a, b) => {
-    if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
-    return a.membershipId.localeCompare(b.membershipId);
-  });
+  const sorted = [...group.members]
+    .filter((m) => isRealUserId(m.userId))
+    .sort((a, b) => {
+      if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
+      return a.membershipId.localeCompare(b.membershipId);
+    });
   return sorted.map((m, i) => {
     const rank = i + 1;
     const promoted = rank <= PROMOTION_SLOTS;
@@ -354,13 +329,15 @@ export function loadLocalBattle(
   week.status =
     phase === "submit" || phase === "vote" ? "active" : phase === "results" ? "ended" : "upcoming";
 
-  // sync vote scores from votes map
+  // sync vote scores from votes map（実ユーザーのみ）
   const voteCounts: Record<string, number> = {};
-  for (const subId of Object.values(group.votes)) {
+  for (const [voterId, subId] of Object.entries(group.votes)) {
+    if (!isRealUserId(voterId)) continue;
     voteCounts[subId] = (voteCounts[subId] ?? 0) + 1;
   }
   for (const m of group.members) {
-    if (m.submission) m.voteScore = voteCounts[m.submission.id] ?? m.voteScore;
+    if (!isRealUserId(m.userId)) continue;
+    if (m.submission) m.voteScore = voteCounts[m.submission.id] ?? 0;
   }
 
   writeStore(store);
@@ -368,7 +345,7 @@ export function loadLocalBattle(
   const peersHidden = phase === "submit";
   const members = rankedMembers(group, me.userId, profile.highlight);
   const submissions: LeagueSubmission[] = group.members
-    .filter((m) => m.submission)
+    .filter((m) => isRealUserId(m.userId) && m.submission)
     .filter((m) => (peersHidden ? m.userId === me.userId : true))
     .map((m) => {
       const s = m.submission!;
@@ -460,17 +437,15 @@ export function castLocalVote(
   if (!target || target.userId === me.userId) return loadLocalBattle(me);
   group.votes[me.userId] = submissionId;
 
-  // recompute scores: base bot scores + votes
+  // 実ユーザーの投票のみでスコア再計算
   const voteCounts: Record<string, number> = {};
-  for (const subId of Object.values(group.votes)) {
+  for (const [voterId, subId] of Object.entries(group.votes)) {
+    if (!isRealUserId(voterId)) continue;
     voteCounts[subId] = (voteCounts[subId] ?? 0) + 1;
   }
   for (const m of group.members) {
-    if (!m.submission) continue;
-    const base = m.userId.startsWith("bot-")
-      ? Math.max(0, 8 - Number(m.userId.split("-").pop() ?? 0))
-      : 0;
-    m.voteScore = base + (voteCounts[m.submission.id] ?? 0);
+    if (!m.submission || !isRealUserId(m.userId)) continue;
+    m.voteScore = voteCounts[m.submission.id] ?? 0;
   }
   writeStore(store);
   return loadLocalBattle(me);

@@ -3,6 +3,7 @@ import type { LeagueTier } from "@/lib/idea-league/types";
 export const LEAGUE_TIERS: LeagueTier[] = ["bronze", "silver", "gold", "platinum", "diamond"];
 
 export const PROMOTION_SLOTS = 3;
+/** 同一ティア内グループの目安人数（実ユーザーのみ・ボットなし） */
 export const LEAGUE_GROUP_SIZE = 15;
 
 export type LeagueTierMeta = {

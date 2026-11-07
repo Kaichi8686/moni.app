@@ -369,12 +369,6 @@ export async function loadLeagueBattle(
     const sched = scheduleFor(leagueNow());
     const peersHidden = sched.phase === "submit";
 
-    // If only me in group, fall back to demo bots for livelier UX
-    if (members.length < 3) {
-      const local = loadLocalBattle(me);
-      return { ...local, week, demo: true };
-    }
-
     const myVoteSubmissionId =
       myVote && (myVote as { submission_id?: string }).submission_id
         ? String((myVote as { submission_id: string }).submission_id)
