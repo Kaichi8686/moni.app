@@ -584,9 +584,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
             {!clusterOpen && projectClusterUnlocked ? (
               <button
                 type="button"
-                className={`app-bottom-nav-cluster-toggle is-expand ${
-                  openOnlyActive ? "has-hidden-active" : ""
-                }`}
+                className="app-bottom-nav-cluster-toggle is-expand"
                 aria-expanded={false}
                 aria-controls="app-bottom-nav-open-tabs"
                 aria-label={expandLabel}
@@ -594,7 +592,6 @@ function AppBottomNavInner({ className }: { className?: string }) {
                 onClick={toggleCluster}
               >
                 <ChevronRight className="app-bottom-nav-cluster-chevron" strokeWidth={2.25} aria-hidden />
-                {openOnlyActive ? <span className="app-bottom-nav-cluster-dot" aria-hidden /> : null}
               </button>
             ) : null}
           </div>

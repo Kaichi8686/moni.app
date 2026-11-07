@@ -519,17 +519,6 @@ html.moni-recruit-drill .app-bottom-nav {
   flex-shrink: 0;
 }
 
-.app-bottom-nav-cluster-dot {
-  position: absolute;
-  top: 0.45rem;
-  right: 0.15rem;
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 9999px;
-  background: #18181b;
-  box-shadow: 0 0 0 1.5px #fff;
-}
-
 /* Open-set tabs: grow out to the right from the project pill */
 .app-bottom-nav-open-tabs {
   position: relative;
