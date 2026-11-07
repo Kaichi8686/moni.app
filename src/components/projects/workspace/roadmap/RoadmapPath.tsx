@@ -10,7 +10,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { useRoadmapTrackScrollCenter } from "@/components/projects/workspace/roadmap/useRoadmapTrackScrollCenter";
+import { RoadmapTrackViewport } from "@/components/projects/workspace/roadmap/RoadmapTrackViewport";
 
 const PATH_OFFSETS_PX = [0, -28, -40, -28, 0, 28, 40, 28] as const;
 const NODE_SIZE = 80;
@@ -124,7 +124,6 @@ type Props = {
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredYs, setMeasuredYs] = useState<number[] | null>(null);
-  const scrollRef = useRoadmapTrackScrollCenter([children, segmentCleared]);
 
   const items = useMemo(() => {
     const list: ReactElement<ItemProps>[] = [];
@@ -235,11 +234,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
 
   return (
     <div ref={rootRef} className={`relative w-full ${className}`}>
-      <div
-        ref={scrollRef}
-        className="flex w-full justify-center overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-      <div className="relative shrink-0 overflow-visible" style={{ width: TRACK_WIDTH, minHeight: contentHeight }}>
+      <RoadmapTrackViewport width={TRACK_WIDTH} minHeight={contentHeight}>
         {count > 1 && fullPath ? (
           <svg
             className="pointer-events-none absolute left-0 top-0 z-0 overflow-visible"
@@ -341,8 +336,7 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
             </div>
           );
         })}
-      </div>
-      </div>
+      </RoadmapTrackViewport>
 
       {items.map((item, index) =>
         item.props.below ? (
