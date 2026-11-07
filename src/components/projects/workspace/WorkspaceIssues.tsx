@@ -19,9 +19,10 @@ import {
 import {
   ISSUE_STEP_MEMORY_TTL_MS,
   markIssueStepLeft,
-  readRecentIssueStep,
-  rememberIssueStep,
+  readRecentIssueScreen,
+  rememberIssueScreen,
   resolveCurrentPhaseId,
+  type RememberedIssueScreen,
 } from "@/lib/workspace/issueStepMemory";
 import type { Issue, Phase } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -110,6 +111,28 @@ export default function WorkspaceIssues() {
     return { kind: "step", phaseId: resolveCurrentPhaseId(sortedPhases) };
   }
 
+  function toScreen(remembered: RememberedIssueScreen): Screen | null {
+    if (remembered.kind === "step") {
+      return { kind: "step", phaseId: remembered.phaseId };
+    }
+    if (!isTaskGenre(remembered.genre)) return null;
+    if (remembered.kind === "genre") {
+      return { kind: "genre", phaseId: remembered.phaseId, genre: remembered.genre };
+    }
+    return {
+      kind: "task",
+      phaseId: remembered.phaseId,
+      genre: remembered.genre,
+      issueId: remembered.issueId,
+    };
+  }
+
+  function toRemembered(next: Screen): RememberedIssueScreen {
+    if (next.kind === "step") return { kind: "step", phaseId: next.phaseId };
+    if (next.kind === "genre") return { kind: "genre", phaseId: next.phaseId, genre: next.genre };
+    return { kind: "task", phaseId: next.phaseId, genre: next.genre, issueId: next.issueId };
+  }
+
   useEffect(() => {
     if (entryHandled.current) return;
     // phases 未取得のまま「未設定」で確定しない（ロード待ち）
@@ -163,21 +186,25 @@ export default function WorkspaceIssues() {
       return;
     }
 
-    // クエリなし: 短時間の離脱なら直前の実ステップ、それ以外はいまのステップ
+    // クエリなし: 短時間の離脱なら直前の画面（ジャンル一覧・課題含む）、それ以外はいまのステップ
     entryHandled.current = true;
     const validIds = new Set(sortedPhases.map((item) => item.id));
-    const remembered = readRecentIssueStep(projectId, validIds);
+    const issueIds = new Set(issues.map((item) => item.id));
+    const remembered = readRecentIssueScreen(projectId, { validPhaseIds: validIds, issueIds });
     if (remembered) {
-      setScreen({ kind: "step", phaseId: remembered });
-      return;
+      const restored = toScreen(remembered);
+      if (restored) {
+        setScreen(restored);
+        return;
+      }
     }
     setScreen(focusCurrentStep());
   }, [issues, loading, projectId, sortedPhases]);
 
-  // 見ている実ステップを記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
+  // 見ている画面を記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
   useEffect(() => {
     if (!projectId || !screen || loading) return;
-    rememberIssueStep(projectId, screen.phaseId);
+    rememberIssueScreen(projectId, toRemembered(screen));
     let leftAtMs: number | null = null;
 
     const onVisibility = () => {
@@ -189,12 +216,12 @@ export default function WorkspaceIssues() {
       if (leftAtMs != null && Date.now() - leftAtMs > ISSUE_STEP_MEMORY_TTL_MS) {
         const next = focusCurrentStep();
         setScreen(next);
-        rememberIssueStep(projectId, next.phaseId);
+        rememberIssueScreen(projectId, toRemembered(next));
         setAddingGenre(false);
         setCreating(false);
         setError("");
       } else {
-        rememberIssueStep(projectId, screen.phaseId);
+        rememberIssueScreen(projectId, toRemembered(screen));
       }
       leftAtMs = null;
     };
@@ -209,8 +236,8 @@ export default function WorkspaceIssues() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- screen.phaseId で十分
-  }, [loading, projectId, screen?.phaseId, sortedPhases]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- screen 全体を覚える
+  }, [loading, projectId, screen, sortedPhases]);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
