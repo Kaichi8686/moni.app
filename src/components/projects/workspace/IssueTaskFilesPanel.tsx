@@ -11,6 +11,7 @@ import {
   Link2,
   MoreVertical,
   PenTool,
+  Plus,
   StickyNote,
   X,
 } from "lucide-react";
@@ -622,6 +623,7 @@ export function IssueTaskFilesPanel({
 
     if (openFile.kind === "photo" || openFile.kind === "link") {
       const items = fileItems(openFile);
+      const canAdd = canEdit && !submitted;
       return createPortal(
         <div className="fixed inset-0 z-[240] flex flex-col bg-white">
           <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 px-3 py-2">
@@ -635,79 +637,81 @@ export function IssueTaskFilesPanel({
             </button>
             <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{openFile.title}</p>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <p className="mb-3 text-[13px] text-zinc-500">
               {openFile.kind === "photo"
                 ? tx("担当者が写真をここに追加します。", "Assignees add photos here.")
                 : tx("担当者がリンクをここに追加します。", "Assignees add links here.")}
             </p>
-            {items.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
-                {tx("まだ何もありません", "Nothing yet")}
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {items.map((item) => (
-                  <li key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-                    {openFile.kind === "photo" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- slot photo
-                      <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
-                    ) : (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#1565C0] hover:bg-zinc-50"
-                      >
-                        <ExternalLink className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">{item.title || item.url}</span>
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                  {openFile.kind === "photo" ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- slot photo
+                    <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
+                  ) : (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#1565C0] hover:bg-zinc-50"
+                    >
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">{item.title || item.url}</span>
+                    </a>
+                  )}
+                </div>
+              ))}
+
+              {canAdd ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => {
+                      if (openFile.kind === "photo") slotPhotoInputRef.current?.click();
+                      else {
+                        setLinkDraftOpen(true);
+                        setError("");
+                      }
+                    }}
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-10 text-[14px] font-bold text-[#9A5B1F] transition hover:bg-[#FFF3E0] disabled:opacity-50"
+                  >
+                    <Plus className="h-6 w-6" aria-hidden strokeWidth={2.5} />
+                    {openFile.kind === "photo"
+                      ? uploading
+                        ? tx("アップロード中…", "Uploading…")
+                        : items.length === 0
+                          ? tx("写真を追加", "Add photos")
+                          : tx("さらに写真を追加", "Add more photos")
+                      : items.length === 0
+                        ? tx("リンクを追加", "Add link")
+                        : tx("さらにリンクを追加", "Add another link")}
+                    {items.length === 0 ? (
+                      <span className="text-[12px] font-semibold text-[#9A5B1F]/70">
+                        {tx("まだ何もありません", "Nothing yet")}
+                      </span>
+                    ) : null}
+                  </button>
+                  {openFile.kind === "photo" ? (
+                    <input
+                      ref={slotPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => void addPhotosToOpenSlot(event.target.files)}
+                    />
+                  ) : null}
+                </>
+              ) : items.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
+                  {tx("まだ何もありません", "Nothing yet")}
+                </p>
+              ) : null}
+            </div>
             {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
           </div>
-          {canEdit && !submitted ? (
-            <div className="shrink-0 border-t border-zinc-100 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              {openFile.kind === "photo" ? (
-                <>
-                  <DuoButton
-                    type="button"
-                    tone="orange"
-                    size="lg"
-                    fullWidth
-                    disabled={uploading}
-                    onClick={() => slotPhotoInputRef.current?.click()}
-                  >
-                    {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を入れる", "Add photo")}
-                  </DuoButton>
-                  <input
-                    ref={slotPhotoInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => void addPhotosToOpenSlot(event.target.files)}
-                  />
-                </>
-              ) : (
-                <DuoButton
-                  type="button"
-                  tone="orange"
-                  size="lg"
-                  fullWidth
-                  onClick={() => {
-                    setLinkDraftOpen(true);
-                    setError("");
-                  }}
-                >
-                  {tx("リンクを入れる", "Add link")}
-                </DuoButton>
-              )}
-            </div>
-          ) : null}
         </div>,
         document.body,
       );
