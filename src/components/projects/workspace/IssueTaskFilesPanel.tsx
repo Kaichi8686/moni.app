@@ -15,7 +15,10 @@ import {
   X,
 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
-import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
+import {
+  ProjectGoogleDocsShell,
+  type ProjectGoogleDocsShellHandle,
+} from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -143,6 +146,8 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
   return tx("作業スペース", "Workspace");
 }
 
+const DOC_EDITOR_CLASS = "moni-doc-editor";
+
 function DocEditorViewport({ children }: { children: ReactNode }) {
   const [box, setBox] = useState({ top: 0, height: 0, left: 0, width: 0 });
   useEffect(() => {
@@ -208,6 +213,7 @@ export function IssueTaskFilesPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const slotPhotoInputRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
   const submitted = isIssueSubmitted(issue);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
   const canSubmit = canEdit && !submitted && requiredFilesReady(files);
@@ -262,12 +268,21 @@ export function IssueTaskFilesPanel({
     setLinkDraftOpen(false);
   }, []);
 
+  const closeDocEditor = useCallback(() => {
+    // ドキュメントタブと同様、シェル側の完了チェック経由で戻る
+    closeEditor();
+  }, [closeEditor]);
+
   useEffect(() => {
     if (!openFile) {
       registerBackHandler(null);
       return;
     }
     registerBackHandler(() => {
+      if (openFile.kind === "doc") {
+        void editorShellRef.current?.flushAndSave().finally(() => closeDocEditor());
+        return true;
+      }
       closeEditor();
       return true;
     });
@@ -277,7 +292,15 @@ export function IssueTaskFilesPanel({
       registerBackHandler(null);
       document.body.style.overflow = previousOverflow;
     };
-  }, [closeEditor, openFile, registerBackHandler]);
+  }, [closeDocEditor, closeEditor, openFile, registerBackHandler]);
+
+  // 課題内ドキュメント編集中もメインタブと同じくヘッダー等を隠す
+  useEffect(() => {
+    if (!openFile || openFile.kind !== "doc") return;
+    const root = document.documentElement;
+    root.classList.add(DOC_EDITOR_CLASS);
+    return () => root.classList.remove(DOC_EDITOR_CLASS);
+  }, [openFile]);
 
   async function openExisting(file: IssueWorkFile) {
     setError("");
@@ -545,6 +568,7 @@ export function IssueTaskFilesPanel({
           ) : null}
           <div className="min-h-0 flex-1">
             <ProjectGoogleDocsShell
+              ref={editorShellRef}
               activeDocId={openFile.refId}
               documents={[{ id: openFile.refId, content: docContent }]}
               docTitle={docTitle}
@@ -555,9 +579,11 @@ export function IssueTaskFilesPanel({
               autoSave={canEdit}
               wordCount={wordCountFromDocContent(docContent)}
               updatedByLabel={assignee}
-              onBack={closeEditor}
+              hideSidebar
+              fullscreen
+              onBack={closeDocEditor}
               onUploadImage={
-                uid
+                canEdit && uid
                   ? async (file) => {
                       if (!supabase) throw new Error("upload unavailable");
                       const uploaded = await uploadProjectImage(supabase, uid, "project-doc", issue.projectId, file);

@@ -11,6 +11,7 @@ import {
   Highlighter,
   ImagePlus,
   Italic,
+  Link2,
   List,
   ListOrdered,
   Plus,
@@ -707,6 +708,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                         className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
                         onClick={insertLink}
                       >
+                        <Link2 className="h-4 w-4 text-[#5f6368]" />
                         リンクを追加
                       </button>
                     </div>
