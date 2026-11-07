@@ -58,6 +58,7 @@ type Props = {
   canEdit: boolean;
   onBack: () => void;
   onSaveWork: (patch: Partial<IssueWork>) => Promise<void>;
+  onDelete?: () => Promise<void>;
   registerBackHandler: (handler: (() => boolean) | null) => void;
 };
 
@@ -180,6 +181,7 @@ export function IssueTaskFilesPanel({
   canEdit,
   onBack,
   onSaveWork,
+  onDelete,
   registerBackHandler,
 }: Props) {
   const { tx, locale } = useI18n();
@@ -188,6 +190,9 @@ export function IssueTaskFilesPanel({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [issueMenuOpen, setIssueMenuOpen] = useState(false);
+  const [confirmDeleteIssue, setConfirmDeleteIssue] = useState(false);
+  const [deletingIssue, setDeletingIssue] = useState(false);
   const [openFileId, setOpenFileId] = useState<string | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   const [docTitle, setDocTitle] = useState("");
@@ -742,6 +747,41 @@ export function IssueTaskFilesPanel({
           </p>
           <h1 className="truncate text-xl font-bold tracking-tight text-zinc-950">{issue.title}</h1>
         </div>
+        {canEdit && onDelete ? (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+              aria-label={tx("課題の操作", "Issue options")}
+              aria-expanded={issueMenuOpen}
+              onClick={() => setIssueMenuOpen((open) => !open)}
+            >
+              <MoreVertical className="h-5 w-5" aria-hidden />
+            </button>
+            {issueMenuOpen ? (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40"
+                  aria-label={tx("閉じる", "Close")}
+                  onClick={() => setIssueMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[140px] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-[#d93025] hover:bg-[#fce8e6]"
+                    onClick={() => {
+                      setIssueMenuOpen(false);
+                      setConfirmDeleteIssue(true);
+                    }}
+                  >
+                    {tx("削除する", "Delete")}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700">
@@ -1057,6 +1097,58 @@ export function IssueTaskFilesPanel({
             document.body,
           )
         : null}
+
+      {confirmDeleteIssue ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal
+            aria-labelledby="issue-delete-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+          >
+            <h3 id="issue-delete-title" className="text-base font-semibold text-[#202124]">
+              {tx("課題を削除しますか？", "Delete this task?")}
+            </h3>
+            <p className="mt-2 text-sm text-[#5f6368]">
+              {tx(
+                `「${issue.title}」を削除します。この操作は取り消せません。`,
+                `“${issue.title}” will be deleted. This can’t be undone.`,
+              )}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                disabled={deletingIssue}
+                onClick={() => setConfirmDeleteIssue(false)}
+              >
+                {tx("キャンセル", "Cancel")}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-[#d93025] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c5221f] disabled:opacity-60"
+                disabled={deletingIssue}
+                onClick={() => {
+                  void (async () => {
+                    if (!onDelete) return;
+                    try {
+                      setDeletingIssue(true);
+                      setError("");
+                      await onDelete();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : tx("削除に失敗しました", "Failed to delete"));
+                      setConfirmDeleteIssue(false);
+                      setDeletingIssue(false);
+                    }
+                  })();
+                }}
+              >
+                {deletingIssue ? tx("削除中…", "Deleting…") : tx("削除する", "Delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

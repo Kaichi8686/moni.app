@@ -375,6 +375,11 @@ html.moni-doc-editor .project-workspace-header {
   display: none !important;
 }
 
+/* 課題タブのジャンル一覧・課題詳細: 下タブを隠す */
+html.moni-issues-drill .app-bottom-nav {
+  display: none !important;
+}
+
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;

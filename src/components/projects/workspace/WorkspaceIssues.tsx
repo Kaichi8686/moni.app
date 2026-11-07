@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
@@ -10,7 +10,12 @@ import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFi
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
-import { listStepTaskGenres, MAX_CUSTOM_TASK_GENRES, resolveGenreMeta } from "@/lib/workspace/taskGenres";
+import {
+  isCustomTaskGenreId,
+  listStepTaskGenres,
+  MAX_CUSTOM_TASK_GENRES,
+  resolveGenreMeta,
+} from "@/lib/workspace/taskGenres";
 import {
   ISSUE_STEP_MEMORY_TTL_MS,
   markIssueStepLeft,
@@ -61,6 +66,7 @@ export default function WorkspaceIssues() {
     canEdit,
     createIssue,
     saveIssueWork,
+    deleteIssue,
     coachingContext,
     saveCoachingContext,
     registerBackHandler,
@@ -69,7 +75,16 @@ export default function WorkspaceIssues() {
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
   const [error, setError] = useState("");
+  const [genreMenuId, setGenreMenuId] = useState<string | null>(null);
+  const [confirmDeleteGenreId, setConfirmDeleteGenreId] = useState<string | null>(null);
   const entryHandled = useRef(false);
+
+  // ジャンル一覧・課題詳細では下タブを隠す
+  useEffect(() => {
+    const drill = screen?.kind === "genre" || screen?.kind === "task";
+    document.documentElement.classList.toggle("moni-issues-drill", Boolean(drill));
+    return () => document.documentElement.classList.remove("moni-issues-drill");
+  }, [screen?.kind]);
 
   const sortedPhases = useMemo(
     () => [...phases].sort((a, b) => a.order - b.order),
@@ -246,6 +261,10 @@ export default function WorkspaceIssues() {
         canEdit={canEdit}
         onBack={() => setScreen({ kind: "genre", phaseId: screen.phaseId, genre: activeGenre })}
         onSaveWork={(patch) => saveIssueWork(activeIssue.id, patch)}
+        onDelete={async () => {
+          await deleteIssue(activeIssue.id);
+          setScreen({ kind: "genre", phaseId: screen.phaseId, genre: activeGenre });
+        }}
         registerBackHandler={registerBackHandler}
       />
     );
@@ -467,33 +486,77 @@ export default function WorkspaceIssues() {
             const meta = resolveGenreMeta(genre, customGenres);
             const Icon = meta.icon;
             const openCount = openCountFor(phaseId, genre);
+            const canDeleteGenre = canEdit && isCustomTaskGenreId(genre);
+            const menuOpen = genreMenuId === genre;
             return (
-              <DuoButton
-                key={genre}
-                type="button"
-                tone="peach"
-                size="md"
-                fullWidth
-                onClick={() => setScreen({ kind: "genre", phaseId, genre })}
-                className={LIST_DUO}
-              >
-                <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
-                  <Icon className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
-                  <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
-                    {locale === "en" ? meta.hintEn : meta.hintJa}
+              <div key={genre} className="relative flex items-stretch gap-2">
+                <DuoButton
+                  type="button"
+                  tone="peach"
+                  size="md"
+                  fullWidth
+                  onClick={() => {
+                    setGenreMenuId(null);
+                    setScreen({ kind: "genre", phaseId, genre });
+                  }}
+                  className={`${LIST_DUO} !min-w-0 flex-1`}
+                >
+                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
+                    <Icon className="h-4 w-4" aria-hidden />
                   </span>
-                </span>
-                {openCount > 0 ? (
-                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
-                    {openCount}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
+                    <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
+                      {locale === "en" ? meta.hintEn : meta.hintJa}
+                    </span>
                   </span>
-                ) : (
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                )}
-              </DuoButton>
+                  {openCount > 0 ? (
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                      {openCount}
+                    </span>
+                  ) : (
+                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  )}
+                </DuoButton>
+                {canDeleteGenre ? (
+                  <div className="relative shrink-0 self-center">
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#F0B85A] bg-white text-[#9A5B1F] shadow-[0_2px_0_#F0B85A] transition-[transform,box-shadow] duration-75 active:translate-y-[2px] active:shadow-none"
+                      aria-label={tx("ジャンルの操作", "Genre options")}
+                      aria-expanded={menuOpen}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setGenreMenuId(menuOpen ? null : genre);
+                      }}
+                    >
+                      <MoreVertical className="h-5 w-5" aria-hidden />
+                    </button>
+                    {menuOpen ? (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-40"
+                          aria-label={tx("閉じる", "Close")}
+                          onClick={() => setGenreMenuId(null)}
+                        />
+                        <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[140px] overflow-hidden rounded-xl border border-[#F0B85A]/70 bg-white py-1 shadow-[0_8px_20px_rgba(154,91,31,0.18)]">
+                          <button
+                            type="button"
+                            className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-[#d93025] hover:bg-[#fce8e6]"
+                            onClick={() => {
+                              setGenreMenuId(null);
+                              setConfirmDeleteGenreId(genre);
+                            }}
+                          >
+                            {tx("削除する", "Delete")}
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -506,6 +569,56 @@ export default function WorkspaceIssues() {
           </p>
         ) : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+
+        {confirmDeleteGenreId ? (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+            <div
+              role="dialog"
+              aria-modal
+              aria-labelledby="genre-delete-title"
+              className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            >
+              <h3 id="genre-delete-title" className="text-base font-semibold text-[#202124]">
+                {tx("ジャンルを削除しますか？", "Delete this genre?")}
+              </h3>
+              <p className="mt-2 text-sm text-[#5f6368]">
+                {tx(
+                  `「${resolveGenreMeta(confirmDeleteGenreId, customGenres).ja}」を削除します。この操作は取り消せません。`,
+                  `“${resolveGenreMeta(confirmDeleteGenreId, customGenres).en}” will be deleted. This can’t be undone.`,
+                )}
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                  onClick={() => setConfirmDeleteGenreId(null)}
+                >
+                  {tx("キャンセル", "Cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#d93025] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c5221f]"
+                  onClick={() => {
+                    const targetId = confirmDeleteGenreId;
+                    setConfirmDeleteGenreId(null);
+                    void (async () => {
+                      try {
+                        setError("");
+                        await saveCoachingContext({
+                          customTaskGenres: customGenres.filter((g) => g.id !== targetId),
+                        });
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : tx("削除に失敗しました", "Failed to delete"));
+                      }
+                    })();
+                  }}
+                >
+                  {tx("削除する", "Delete")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
