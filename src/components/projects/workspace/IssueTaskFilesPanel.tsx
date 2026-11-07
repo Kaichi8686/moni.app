@@ -11,11 +11,15 @@ import {
   Link2,
   MoreVertical,
   PenTool,
+  Plus,
   StickyNote,
   X,
 } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
-import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
+import {
+  ProjectGoogleDocsShell,
+  type ProjectGoogleDocsShellHandle,
+} from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -143,6 +147,8 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
   return tx("作業スペース", "Workspace");
 }
 
+const DOC_EDITOR_CLASS = "moni-doc-editor";
+
 function DocEditorViewport({ children }: { children: ReactNode }) {
   const [box, setBox] = useState({ top: 0, height: 0, left: 0, width: 0 });
   useEffect(() => {
@@ -208,6 +214,7 @@ export function IssueTaskFilesPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const slotPhotoInputRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
   const submitted = isIssueSubmitted(issue);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
   const canSubmit = canEdit && !submitted && requiredFilesReady(files);
@@ -262,12 +269,21 @@ export function IssueTaskFilesPanel({
     setLinkDraftOpen(false);
   }, []);
 
+  const closeDocEditor = useCallback(() => {
+    // ドキュメントタブと同様、シェル側の完了チェック経由で戻る
+    closeEditor();
+  }, [closeEditor]);
+
   useEffect(() => {
     if (!openFile) {
       registerBackHandler(null);
       return;
     }
     registerBackHandler(() => {
+      if (openFile.kind === "doc") {
+        void editorShellRef.current?.flushAndSave().finally(() => closeDocEditor());
+        return true;
+      }
       closeEditor();
       return true;
     });
@@ -277,7 +293,15 @@ export function IssueTaskFilesPanel({
       registerBackHandler(null);
       document.body.style.overflow = previousOverflow;
     };
-  }, [closeEditor, openFile, registerBackHandler]);
+  }, [closeDocEditor, closeEditor, openFile, registerBackHandler]);
+
+  // 課題内ドキュメント編集中もメインタブと同じくヘッダー等を隠す
+  useEffect(() => {
+    if (!openFile || openFile.kind !== "doc") return;
+    const root = document.documentElement;
+    root.classList.add(DOC_EDITOR_CLASS);
+    return () => root.classList.remove(DOC_EDITOR_CLASS);
+  }, [openFile]);
 
   async function openExisting(file: IssueWorkFile) {
     setError("");
@@ -545,6 +569,7 @@ export function IssueTaskFilesPanel({
           ) : null}
           <div className="min-h-0 flex-1">
             <ProjectGoogleDocsShell
+              ref={editorShellRef}
               activeDocId={openFile.refId}
               documents={[{ id: openFile.refId, content: docContent }]}
               docTitle={docTitle}
@@ -555,9 +580,11 @@ export function IssueTaskFilesPanel({
               autoSave={canEdit}
               wordCount={wordCountFromDocContent(docContent)}
               updatedByLabel={assignee}
-              onBack={closeEditor}
+              hideSidebar
+              fullscreen
+              onBack={closeDocEditor}
               onUploadImage={
-                uid
+                canEdit && uid
                   ? async (file) => {
                       if (!supabase) throw new Error("upload unavailable");
                       const uploaded = await uploadProjectImage(supabase, uid, "project-doc", issue.projectId, file);
@@ -596,6 +623,7 @@ export function IssueTaskFilesPanel({
 
     if (openFile.kind === "photo" || openFile.kind === "link") {
       const items = fileItems(openFile);
+      const canAdd = canEdit && !submitted;
       return createPortal(
         <div className="fixed inset-0 z-[240] flex flex-col bg-white">
           <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 px-3 py-2">
@@ -609,79 +637,81 @@ export function IssueTaskFilesPanel({
             </button>
             <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{openFile.title}</p>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <p className="mb-3 text-[13px] text-zinc-500">
               {openFile.kind === "photo"
                 ? tx("担当者が写真をここに追加します。", "Assignees add photos here.")
                 : tx("担当者がリンクをここに追加します。", "Assignees add links here.")}
             </p>
-            {items.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
-                {tx("まだ何もありません", "Nothing yet")}
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {items.map((item) => (
-                  <li key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-                    {openFile.kind === "photo" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- slot photo
-                      <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
-                    ) : (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#1565C0] hover:bg-zinc-50"
-                      >
-                        <ExternalLink className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">{item.title || item.url}</span>
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                  {openFile.kind === "photo" ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- slot photo
+                    <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
+                  ) : (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#1565C0] hover:bg-zinc-50"
+                    >
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">{item.title || item.url}</span>
+                    </a>
+                  )}
+                </div>
+              ))}
+
+              {canAdd ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => {
+                      if (openFile.kind === "photo") slotPhotoInputRef.current?.click();
+                      else {
+                        setLinkDraftOpen(true);
+                        setError("");
+                      }
+                    }}
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-10 text-[14px] font-bold text-[#9A5B1F] transition hover:bg-[#FFF3E0] disabled:opacity-50"
+                  >
+                    <Plus className="h-6 w-6" aria-hidden strokeWidth={2.5} />
+                    {openFile.kind === "photo"
+                      ? uploading
+                        ? tx("アップロード中…", "Uploading…")
+                        : items.length === 0
+                          ? tx("写真を追加", "Add photos")
+                          : tx("さらに写真を追加", "Add more photos")
+                      : items.length === 0
+                        ? tx("リンクを追加", "Add link")
+                        : tx("さらにリンクを追加", "Add another link")}
+                    {items.length === 0 ? (
+                      <span className="text-[12px] font-semibold text-[#9A5B1F]/70">
+                        {tx("まだ何もありません", "Nothing yet")}
+                      </span>
+                    ) : null}
+                  </button>
+                  {openFile.kind === "photo" ? (
+                    <input
+                      ref={slotPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => void addPhotosToOpenSlot(event.target.files)}
+                    />
+                  ) : null}
+                </>
+              ) : items.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
+                  {tx("まだ何もありません", "Nothing yet")}
+                </p>
+              ) : null}
+            </div>
             {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
           </div>
-          {canEdit && !submitted ? (
-            <div className="shrink-0 border-t border-zinc-100 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              {openFile.kind === "photo" ? (
-                <>
-                  <DuoButton
-                    type="button"
-                    tone="orange"
-                    size="lg"
-                    fullWidth
-                    disabled={uploading}
-                    onClick={() => slotPhotoInputRef.current?.click()}
-                  >
-                    {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を入れる", "Add photo")}
-                  </DuoButton>
-                  <input
-                    ref={slotPhotoInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => void addPhotosToOpenSlot(event.target.files)}
-                  />
-                </>
-              ) : (
-                <DuoButton
-                  type="button"
-                  tone="orange"
-                  size="lg"
-                  fullWidth
-                  onClick={() => {
-                    setLinkDraftOpen(true);
-                    setError("");
-                  }}
-                >
-                  {tx("リンクを入れる", "Add link")}
-                </DuoButton>
-              )}
-            </div>
-          ) : null}
         </div>,
         document.body,
       );
@@ -729,7 +759,7 @@ export function IssueTaskFilesPanel({
   }
 
   return (
-    <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3 pb-28">
+    <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3 pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -901,30 +931,33 @@ export function IssueTaskFilesPanel({
         </ul>
       </div>
 
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      {!requiredFilesReady(files) && !submitted ? (
-        <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
-          {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
-        </p>
-      ) : null}
-
-      <DuoButton
-        type="button"
-        tone={submitted ? "lime" : "orange"}
-        size="lg"
-        fullWidth
-        disabled={!canSubmit}
-        onClick={() => {
-          if (!requiredFilesReady(files)) return;
-          void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
-        }}
-        className="!text-[16px]"
-      >
-        {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-      </DuoButton>
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+          {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
+          {!requiredFilesReady(files) && !submitted ? (
+            <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
+              {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+            </p>
+          ) : null}
+          <DuoButton
+            type="button"
+            tone={submitted ? "lime" : "orange"}
+            size="lg"
+            fullWidth
+            disabled={!canSubmit}
+            onClick={() => {
+              if (!requiredFilesReady(files)) return;
+              void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
+            }}
+            className="!text-[16px]"
+          >
+            {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
+          </DuoButton>
+        </div>
+      </div>
 
       {canEdit && !submitted ? (
-        <div className="pointer-events-none fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex flex-col items-end gap-2 md:bottom-8">
+        <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex flex-col items-end gap-2">
           {fabOpen ? (
             <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
               <button

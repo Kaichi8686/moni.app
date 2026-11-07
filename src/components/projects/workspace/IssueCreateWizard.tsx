@@ -16,6 +16,7 @@ import {
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 import { createProjectBoard, deleteProjectBoard } from "@/lib/projects/whiteboard/boardApi";
 import { supabase } from "@/lib/supabase";
 import {
@@ -29,14 +30,17 @@ import {
 } from "@/lib/workspace/issueCreateDraft";
 import { dateInputToIso } from "@/lib/workspace/issueWork";
 import {
+  appendFileItem,
   createWorkFileId,
   defaultTitle,
+  normalizeExternalUrl,
   newCanvasWorkFile,
   newLinkSlotFile,
   newPhotoSlotFile,
   removeWorkFile,
   setWorkFileRequired,
   type IssueWorkFile,
+  type IssueWorkFileItem,
   type IssueWorkFileKind,
 } from "@/lib/workspace/issueWorkFiles";
 import type { Member, TaskGenre } from "@/lib/workspace/types";
@@ -143,6 +147,11 @@ export function IssueCreateWizard({
   const [namePrompt, setNamePrompt] = useState<IssueWorkFileKind | null>(null);
   const [draftName, setDraftName] = useState("");
   const [renameId, setRenameId] = useState<string | null>(null);
+  const [draftSlotItems, setDraftSlotItems] = useState<IssueWorkFileItem[]>([]);
+  const [draftLinkUrl, setDraftLinkUrl] = useState("");
+  const [draftLinkTitle, setDraftLinkTitle] = useState("");
+  const [uploadingDraft, setUploadingDraft] = useState(false);
+  const draftPhotoRef = useRef<HTMLInputElement>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -238,11 +247,20 @@ export function IssueCreateWizard({
     setStep("files");
   }
 
+  function clearDraftSlotExtras() {
+    setDraftSlotItems([]);
+    setDraftLinkUrl("");
+    setDraftLinkTitle("");
+    setUploadingDraft(false);
+    if (draftPhotoRef.current) draftPhotoRef.current.value = "";
+  }
+
   function openNamePrompt(kind: IssueWorkFileKind) {
     setFabOpen(false);
     setRenameId(null);
     setNamePrompt(kind);
     setDraftName(defaultTitle(kind));
+    clearDraftSlotExtras();
     setError("");
   }
 
@@ -252,7 +270,54 @@ export function IssueCreateWizard({
     setNamePrompt(null);
     setRenameId(file.id);
     setDraftName(file.title || defaultTitle(file.kind));
+    clearDraftSlotExtras();
     setError("");
+  }
+
+  async function addDraftPhotos(list: FileList | null) {
+    if (!list || !uid || !supabase) return;
+    setUploadingDraft(true);
+    setError("");
+    try {
+      const added: IssueWorkFileItem[] = [];
+      for (const file of Array.from(list)) {
+        const uploaded = await uploadProjectImage(supabase, uid, "issue-photo", projectId, file);
+        added.push({
+          id: createWorkFileId(),
+          url: uploaded.publicUrl,
+          title: file.name.replace(/\.[^.]+$/, "") || undefined,
+          addedBy: uid,
+          addedAt: new Date().toISOString(),
+        });
+      }
+      setDraftSlotItems((prev) => [...prev, ...added]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("写真を追加できませんでした", "Couldn’t add the photo"));
+    } finally {
+      setUploadingDraft(false);
+      if (draftPhotoRef.current) draftPhotoRef.current.value = "";
+    }
+  }
+
+  function addDraftLink() {
+    const url = normalizeExternalUrl(draftLinkUrl);
+    if (!url) {
+      setError(tx("正しいURLを入力してください", "Enter a valid URL"));
+      return;
+    }
+    setError("");
+    setDraftSlotItems((prev) => [
+      ...prev,
+      {
+        id: createWorkFileId(),
+        url,
+        title: draftLinkTitle.trim() || undefined,
+        addedBy: uid ?? undefined,
+        addedAt: new Date().toISOString(),
+      },
+    ]);
+    setDraftLinkUrl("");
+    setDraftLinkTitle("");
   }
 
   function handleTitleTap(file: IssueWorkFile) {
@@ -310,12 +375,15 @@ export function IssueCreateWizard({
         next = newCanvasWorkFile(name);
       } else if (namePrompt === "photo") {
         next = newPhotoSlotFile(name);
+        for (const item of draftSlotItems) next = appendFileItem(next, item);
       } else {
         next = newLinkSlotFile(name);
+        for (const item of draftSlotItems) next = appendFileItem(next, item);
       }
       setFiles((prev) => replaceWorkFileInPlace(prev, next));
       setNamePrompt(null);
       setDraftName("");
+      clearDraftSlotExtras();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
     } finally {
@@ -705,9 +773,10 @@ export function IssueCreateWizard({
                 onClick={() => {
                   setNamePrompt(null);
                   setRenameId(null);
+                  clearDraftSlotExtras();
                 }}
               />
-              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+              <div className="relative z-10 max-h-[min(90dvh,720px)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
                 <h2 className="text-base font-bold text-zinc-900">
                   {renameId ? tx("名前を変更", "Rename") : tx("ファイル名", "File name")}
                 </h2>
@@ -721,10 +790,114 @@ export function IssueCreateWizard({
                     if (e.key === "Enter") {
                       e.preventDefault();
                       if (renameId) void saveRename();
-                      else void createNamedFile();
+                      else if (namePrompt !== "photo" && namePrompt !== "link") void createNamedFile();
                     }
                   }}
                 />
+
+                {!renameId && namePrompt === "photo" ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[12px] font-semibold text-zinc-600">
+                      {tx("写真（任意・何枚でも）", "Photos (optional, any number)")}
+                    </p>
+                    {draftSlotItems.length > 0 ? (
+                      <ul className="grid grid-cols-3 gap-2">
+                        {draftSlotItems.map((item) => (
+                          <li key={item.id} className="relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- draft preview */}
+                            <img src={item.url} alt={item.title || ""} className="aspect-square w-full object-cover" />
+                            <button
+                              type="button"
+                              className="absolute right-1 top-1 rounded-full bg-black/55 p-1 text-white"
+                              aria-label={tx("削除", "Remove")}
+                              onClick={() => setDraftSlotItems((prev) => prev.filter((x) => x.id !== item.id))}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={uploadingDraft || !uid}
+                      onClick={() => draftPhotoRef.current?.click()}
+                      className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-6 text-[13px] font-bold text-[#9A5B1F] disabled:opacity-50"
+                    >
+                      <Plus className="h-5 w-5" aria-hidden />
+                      {uploadingDraft ? tx("アップロード中…", "Uploading…") : tx("写真を追加", "Add photos")}
+                    </button>
+                    <input
+                      ref={draftPhotoRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => void addDraftPhotos(e.target.files)}
+                    />
+                  </div>
+                ) : null}
+
+                {!renameId && namePrompt === "link" ? (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[12px] font-semibold text-zinc-600">
+                      {tx("リンク（任意・何個でも）", "Links (optional, any number)")}
+                    </p>
+                    {draftSlotItems.length > 0 ? (
+                      <ul className="space-y-2">
+                        {draftSlotItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-[13px]"
+                          >
+                            <Link2 className="h-4 w-4 shrink-0 text-[#1565C0]" aria-hidden />
+                            <span className="min-w-0 flex-1 truncate font-semibold text-[#1565C0]">
+                              {item.title || item.url}
+                            </span>
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full p-1 text-zinc-500 hover:bg-zinc-200"
+                              aria-label={tx("削除", "Remove")}
+                              onClick={() => setDraftSlotItems((prev) => prev.filter((x) => x.id !== item.id))}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <label className="block text-[12px] font-semibold text-zinc-700">
+                      {tx("URL", "URL")}
+                      <input
+                        type="url"
+                        value={draftLinkUrl}
+                        onChange={(e) => setDraftLinkUrl(e.target.value)}
+                        placeholder="https://"
+                        className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+                      />
+                    </label>
+                    <label className="block text-[12px] font-semibold text-zinc-700">
+                      {tx("タイトル（任意）", "Title (optional)")}
+                      <input
+                        type="text"
+                        value={draftLinkTitle}
+                        onChange={(e) => setDraftLinkTitle(e.target.value)}
+                        placeholder={tx("表示名", "Display name")}
+                        className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!draftLinkUrl.trim()}
+                      onClick={addDraftLink}
+                      className="flex w-full items-center justify-center gap-1 rounded-2xl border border-dashed border-[#F0B85A] bg-[#FFF8EE] px-4 py-3 text-[13px] font-bold text-[#9A5B1F] disabled:opacity-40"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden />
+                      {tx("リストに追加", "Add to list")}
+                    </button>
+                  </div>
+                ) : null}
+
                 {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
                 <div className="mt-4 flex justify-end gap-2">
                   <button
@@ -733,6 +906,7 @@ export function IssueCreateWizard({
                     onClick={() => {
                       setNamePrompt(null);
                       setRenameId(null);
+                      clearDraftSlotExtras();
                     }}
                   >
                     {tx("キャンセル", "Cancel")}
@@ -741,7 +915,7 @@ export function IssueCreateWizard({
                     type="button"
                     tone="orange"
                     size="md"
-                    disabled={creating}
+                    disabled={creating || uploadingDraft}
                     onClick={() => {
                       if (renameId) void saveRename();
                       else void createNamedFile();
