@@ -116,7 +116,7 @@ export function GenreCreateWizard({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overflow-x-hidden overscroll-none bg-white ${
+      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overscroll-none bg-white ${
         exiting ? "issue-create-wizard-out" : entered ? "issue-create-wizard-in" : "translate-x-full"
       }`}
       role="dialog"

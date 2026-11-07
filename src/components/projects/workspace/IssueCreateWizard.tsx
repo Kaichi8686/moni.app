@@ -267,7 +267,11 @@ export function IssueCreateWizard({
   }
 
   async function createNamedFile() {
-    if (!namePrompt || !uid) return;
+    if (!namePrompt) return;
+    if (!uid) {
+      setError(tx("ログインが必要です", "Sign in required"));
+      return;
+    }
     const name = draftName.trim() || defaultTitle(namePrompt);
     setCreating(true);
     setError("");
@@ -402,7 +406,7 @@ export function IssueCreateWizard({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overflow-x-hidden overscroll-none bg-white ${
+      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overscroll-none bg-white ${
         exiting ? "issue-create-wizard-out" : entered ? "issue-create-wizard-in" : "translate-x-full"
       }`}
       role="dialog"
@@ -685,67 +689,71 @@ export function IssueCreateWizard({
         </div>
       ) : null}
 
-      {nameDialogOpen ? (
-        <div className="fixed inset-0 z-[310] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <button
-            type="button"
-            className="absolute inset-0"
-            aria-label={tx("閉じる", "Close")}
-            onClick={() => {
-              setNamePrompt(null);
-              setRenameId(null);
-            }}
-          />
-          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-            <h2 className="text-base font-bold text-zinc-900">
-              {renameId ? tx("名前を変更", "Rename") : tx("ファイル名", "File name")}
-            </h2>
-            <input
-              value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
-              onBlur={resetViewportZoom}
-              className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (renameId) void saveRename();
-                  else void createNamedFile();
-                }
-              }}
-            />
-            <div className="mt-4 flex justify-end gap-2">
+      {nameDialogOpen
+        ? createPortal(
+            <div className="fixed inset-0 z-[310] flex items-end justify-center bg-black/40 p-4 sm:items-center">
               <button
                 type="button"
-                className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                className="absolute inset-0"
+                aria-label={tx("閉じる", "Close")}
                 onClick={() => {
                   setNamePrompt(null);
                   setRenameId(null);
                 }}
-              >
-                {tx("キャンセル", "Cancel")}
-              </button>
-              <DuoButton
-                type="button"
-                tone="orange"
-                size="md"
-                disabled={creating}
-                onClick={() => {
-                  if (renameId) void saveRename();
-                  else void createNamedFile();
-                }}
-                className="!px-4 !py-2 !text-[14px]"
-              >
-                {creating
-                  ? tx("保存中…", "Saving…")
-                  : renameId
-                    ? tx("保存", "Save")
-                    : tx("追加", "Add")}
-              </DuoButton>
-            </div>
-          </div>
-        </div>
-      ) : null}
+              />
+              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+                <h2 className="text-base font-bold text-zinc-900">
+                  {renameId ? tx("名前を変更", "Rename") : tx("ファイル名", "File name")}
+                </h2>
+                <input
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onBlur={resetViewportZoom}
+                  className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (renameId) void saveRename();
+                      else void createNamedFile();
+                    }
+                  }}
+                />
+                {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                    onClick={() => {
+                      setNamePrompt(null);
+                      setRenameId(null);
+                    }}
+                  >
+                    {tx("キャンセル", "Cancel")}
+                  </button>
+                  <DuoButton
+                    type="button"
+                    tone="orange"
+                    size="md"
+                    disabled={creating}
+                    onClick={() => {
+                      if (renameId) void saveRename();
+                      else void createNamedFile();
+                    }}
+                    className="!px-4 !py-2 !text-[14px]"
+                  >
+                    {creating
+                      ? tx("保存中…", "Saving…")
+                      : renameId
+                        ? tx("保存", "Save")
+                        : tx("追加", "Add")}
+                  </DuoButton>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>,
     document.body,
   );

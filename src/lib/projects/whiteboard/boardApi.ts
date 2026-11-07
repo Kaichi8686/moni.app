@@ -38,15 +38,44 @@ export async function listProjectBoards(projectId: string): Promise<BoardSummary
   return (data ?? []) as BoardSummary[];
 }
 
+function isUniqueTitleConflict(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "23505") return true;
+  const msg = (error.message ?? "").toLowerCase();
+  return msg.includes("duplicate") || msg.includes("unique");
+}
+
+/** project_id + title がユニークなので、衝突時は「名前 2」…と採番する */
+async function resolveUniqueBoardTitle(projectId: string, rawTitle: string): Promise<string> {
+  const base = rawTitle.trim() || "無題のボード";
+  if (!supabase) return base;
+  const { data } = await supabase.from("project_boards").select("title").eq("project_id", projectId);
+  const taken = new Set((data ?? []).map((row) => String((row as { title?: string }).title ?? "")));
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 100; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base} ${Date.now().toString(36)}`;
+}
+
 export async function createProjectBoard(projectId: string, uid: string, title: string): Promise<BoardSummary> {
   if (!supabase) throw new Error("Supabase が未設定です。");
-  const { data, error } = await supabase
-    .from("project_boards")
-    .insert({ project_id: projectId, title, created_by: uid })
-    .select("id, title, updated_at")
-    .single();
-  if (error || !data) throw new Error(error?.message ?? "ボードの作成に失敗しました。");
-  return data as BoardSummary;
+  let nextTitle = await resolveUniqueBoardTitle(projectId, title);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const { data, error } = await supabase
+      .from("project_boards")
+      .insert({ project_id: projectId, title: nextTitle, created_by: uid })
+      .select("id, title, updated_at")
+      .single();
+    if (!error && data) return data as BoardSummary;
+    if (!isUniqueTitleConflict(error)) {
+      throw new Error(error?.message ?? "ボードの作成に失敗しました。");
+    }
+    // 競合が続いたら採番し直す
+    nextTitle = await resolveUniqueBoardTitle(projectId, title);
+  }
+  throw new Error("ボードの作成に失敗しました。同名のボードが多すぎます。");
 }
 
 export async function renameProjectBoard(boardId: string, title: string): Promise<void> {
