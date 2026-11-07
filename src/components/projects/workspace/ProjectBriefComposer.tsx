@@ -29,7 +29,8 @@ function useIsClient() {
 }
 
 /**
- * ゴール初回入力の全画面。うっすらフェードインし、戻るで破棄確認、下で一歩を踏み出す。
+ * ゴール初回入力の全画面。
+ * 画面切替の演出は親の SceneVeil（育てると同じベール）側。ここは差し替え後の中身だけ。
  */
 export function ProjectBriefComposer({
   projectName,
@@ -46,20 +47,17 @@ export function ProjectBriefComposer({
 }: Props) {
   const { tx } = useI18n();
   const portalReady = useIsClient();
-  const [entered, setEntered] = useState(false);
   const [exiting, setExiting] = useState(false);
 
   const name = projectName.trim() || tx("プロジェクト", "Project");
   const title = tx(`「${name}」のゴール`, `Goal of “${name}”`);
 
   useEffect(() => {
-    const id = window.requestAnimationFrame(() => setEntered(true));
     const prevOverflow = document.body.style.overflow;
     const prevHtmlOverflowX = document.documentElement.style.overflowX;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflowX = "hidden";
     return () => {
-      window.cancelAnimationFrame(id);
       document.body.style.overflow = prevOverflow;
       document.documentElement.style.overflowX = prevHtmlOverflowX;
     };
@@ -79,13 +77,7 @@ export function ProjectBriefComposer({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overscroll-none bg-[#FFFCF8] ${
-        exiting
-          ? "project-brief-composer-out"
-          : entered
-            ? "project-brief-composer-in"
-            : "opacity-0"
-      }`}
+      className="fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overscroll-none bg-[#FFFCF8]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="project-brief-composer-title"
