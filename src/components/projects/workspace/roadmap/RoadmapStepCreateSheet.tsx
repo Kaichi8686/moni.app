@@ -137,7 +137,7 @@ export function RoadmapStepCreateSheet({
               onChange={(event) => setTitle(event.target.value)}
               disabled={locked}
               placeholder={tx("例：ヒアリング", "e.g. Interviews")}
-              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-sm outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <RoadmapMarkPicker
@@ -160,7 +160,7 @@ export function RoadmapStepCreateSheet({
               disabled={locked}
               placeholder={tx("例：10人に話を聞く", "e.g. Talk to 10 people")}
               rows={2}
-              className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
           <div>
@@ -174,7 +174,7 @@ export function RoadmapStepCreateSheet({
               disabled={locked}
               placeholder={tx("このステップでやること", "What you’ll do in this step")}
               rows={3}
-              className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-orange-400 disabled:opacity-60"
+              className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 px-3 py-2.5 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
         </div>
