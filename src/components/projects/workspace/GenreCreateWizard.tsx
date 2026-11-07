@@ -60,11 +60,14 @@ export function GenreCreateWizard({
   useEffect(() => {
     setPortalReady(true);
     const id = window.requestAnimationFrame(() => setEntered(true));
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
+    const prevHtmlOverflowX = document.documentElement.style.overflowX;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflowX = "hidden";
     return () => {
       window.cancelAnimationFrame(id);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overflowX = prevHtmlOverflowX;
     };
   }, []);
 
@@ -113,31 +116,30 @@ export function GenreCreateWizard({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[300] flex flex-col bg-white ${
+      className={`fixed inset-0 z-[300] flex w-full max-w-[100vw] flex-col overflow-x-hidden overscroll-none bg-white ${
         exiting ? "issue-create-wizard-out" : entered ? "issue-create-wizard-in" : "translate-x-full"
       }`}
       role="dialog"
       aria-modal="true"
       aria-label={tx("ジャンルを作成", "Create genre")}
     >
-      <button
-        type="button"
-        disabled={saving}
-        onClick={requestClose}
-        className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
-        aria-label={tx("戻る", "Back")}
-      >
-        <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-      </button>
-
-      <div className="flex shrink-0 items-center border-b border-zinc-100 py-2 pl-16 pr-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <h1 className="min-w-0 flex-1 truncate text-[17px] font-extrabold text-zinc-900">
+      <div className="flex shrink-0 items-center gap-3 border-b border-zinc-100 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={requestClose}
+          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
+          aria-label={tx("戻る", "Back")}
+        >
+          <ArrowLeft className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+        </button>
+        <h1 className="min-w-0 flex-1 truncate text-[20px] font-extrabold leading-tight text-zinc-900">
           {tx("ジャンルを作成", "Create genre")}
         </h1>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-4">
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-4">
+        <div className="mx-auto flex w-full min-w-0 max-w-lg flex-col gap-5">
           <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
             <span className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white ${colorKey}`}>
               <SelectedIcon className="h-5 w-5" aria-hidden />
@@ -250,7 +252,7 @@ export function GenreCreateWizard({
             role="dialog"
             aria-modal
             aria-labelledby="genre-create-discard-title"
-            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            className="w-full max-w-sm rounded-2xl bg-white px-5 py-6 text-center shadow-xl"
           >
             <h3 id="genre-create-discard-title" className="text-base font-semibold text-[#202124]">
               {tx("入力内容を捨てますか？", "Discard what you entered?")}
@@ -261,20 +263,20 @@ export function GenreCreateWizard({
                 "Everything you’ve entered will be lost. Go back anyway? This can’t be undone.",
               )}
             </p>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col items-stretch gap-3">
               <button
                 type="button"
-                className="rounded-lg px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
-                onClick={() => setConfirmDiscard(false)}
-              >
-                {tx("キャンセル", "Cancel")}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-[#d93025] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c5221f]"
+                className="rounded-xl bg-[#d93025] px-4 py-3 text-sm font-semibold text-white hover:bg-[#c5221f]"
                 onClick={closeWizard}
               >
                 {tx("捨てて戻る", "Discard")}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl px-4 py-3 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                {tx("キャンセル", "Cancel")}
               </button>
             </div>
           </div>

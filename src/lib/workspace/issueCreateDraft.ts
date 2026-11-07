@@ -67,6 +67,54 @@ export function clearIssueCreateDraft(projectId: string, phaseId: string | null,
   }
 }
 
+function openSessionKey(projectId: string): string {
+  return `moni:issueCreateOpen:v1:${projectId}`;
+}
+
+/** 課題作成ウィザードを開いていることを覚える（他タブへ行っても再開するため） */
+export function markIssueCreateOpen(projectId: string, phaseId: string | null, genre: string) {
+  if (typeof window === "undefined" || !projectId || !genre) return;
+  try {
+    window.sessionStorage.setItem(
+      openSessionKey(projectId),
+      JSON.stringify({ phaseId, genre, openedAt: Date.now() }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearIssueCreateOpen(projectId: string) {
+  if (typeof window === "undefined" || !projectId) return;
+  try {
+    window.sessionStorage.removeItem(openSessionKey(projectId));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readIssueCreateOpen(
+  projectId: string,
+): { phaseId: string | null; genre: string } | null {
+  if (typeof window === "undefined" || !projectId) return null;
+  try {
+    const raw = window.sessionStorage.getItem(openSessionKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { phaseId?: unknown; genre?: unknown };
+    const genre = typeof parsed.genre === "string" ? parsed.genre : "";
+    if (!genre) return null;
+    const phaseId =
+      parsed.phaseId === null
+        ? null
+        : typeof parsed.phaseId === "string"
+          ? parsed.phaseId
+          : null;
+    return { phaseId, genre };
+  } catch {
+    return null;
+  }
+}
+
 /** 公開時: 必須を先に、作成順は維持 */
 export function orderFilesForPublish(files: IssueWorkFile[]): IssueWorkFile[] {
   const required = files.filter((file) => file.required);
