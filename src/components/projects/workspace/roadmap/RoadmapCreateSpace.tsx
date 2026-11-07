@@ -9,7 +9,7 @@ import {
   roadmapPathSideCenter,
 } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
-import { useRoadmapTrackScrollCenter } from "@/components/projects/workspace/roadmap/useRoadmapTrackScrollCenter";
+import { RoadmapTrackViewport } from "@/components/projects/workspace/roadmap/RoadmapTrackViewport";
 import {
   RoadmapStepMark,
   resolveRoadmapMarkId,
@@ -192,7 +192,6 @@ export function RoadmapCreateSpace({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const introTimersRef = useRef<number[]>([]);
   const [draft, setDraft] = useState<CreateSpaceDraft | null>(null);
-  const scrollRef = useRoadmapTrackScrollCenter([existingSteps.length, existingSides.length, draft?.id]);
   const [anchorIndex, setAnchorIndex] = useState(0);
   const [introPhase, setIntroPhase] = useState<IntroPhase>("idle");
   const [dragKind, setDragKind] = useState<"masu" | "prev" | "next" | null>(null);
@@ -467,14 +466,11 @@ export function RoadmapCreateSpace({
           </p>
         </div>
 
-        <div
-          ref={scrollRef}
-          className="mt-5 flex w-full justify-center overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-        <div
-          ref={rootRef}
-          className="relative shrink-0"
-          style={{ width: TRACK_W, minHeight: contentHeight }}
+        <RoadmapTrackViewport
+          className="mt-5"
+          width={TRACK_W}
+          minHeight={contentHeight}
+          trackRef={rootRef}
         >
           {/* 灰棒は最下層 */}
           <svg
@@ -642,8 +638,7 @@ export function RoadmapCreateSpace({
               </RoadmapPathNode>
             </div>
           ) : null}
-        </div>
-        </div>
+        </RoadmapTrackViewport>
 
         {error ? (
           <p className="mx-auto mt-3 w-full max-w-lg rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
