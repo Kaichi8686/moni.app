@@ -1,21 +1,24 @@
 "use client";
 
-import { Minus, Trash2, Trophy } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { Check, Trash2, Trophy } from "lucide-react";
 import type { IdeaWithTally } from "@/lib/projects/ideaVoting/types";
-import { voteBtnGhost, voteCard, voteChip } from "@/components/projects/idea-voting/voteUi";
+import { voteCard, voteChip } from "@/components/projects/idea-voting/voteUi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   idea: IdeaWithTally;
   rank?: number;
-  canVote: boolean;
-  canUnvote: boolean;
   votingClosed: boolean;
-  hideTallies?: boolean;
+  /** 結果バー・票数を出す */
+  showResults?: boolean;
+  /** 結果バーの上限（候補中の最大票数） */
+  resultBarMax?: number;
+  /** チェックで選ぶモード（投票ボタンはフッター側） */
+  selectMode?: boolean;
+  selected?: boolean;
+  canSelect?: boolean;
   canDelete: boolean;
-  onVote: (id: string) => void;
-  onUnvote: (id: string) => void;
+  onToggleSelect?: (id: string) => void;
   onDelete: (id: string) => void;
 };
 
@@ -32,31 +35,41 @@ function formatPostedAt(iso: string, locale: "ja" | "en"): string {
 export function IdeaCard({
   idea,
   rank,
-  canVote,
-  canUnvote,
   votingClosed,
-  hideTallies = false,
+  showResults = false,
+  resultBarMax = 1,
+  selectMode = false,
+  selected = false,
+  canSelect = false,
   canDelete,
-  onVote,
-  onUnvote,
+  onToggleSelect,
   onDelete,
 }: Props) {
   const { tx, locale } = useI18n();
-  const isTop = Boolean(rank && rank <= 3 && votingClosed);
+  const isTop = Boolean(rank && rank <= 3 && votingClosed && showResults);
   const voted = idea.myVotes > 0;
-  const voteLabel = votingClosed
-    ? tx("終了", "Closed")
-    : canVote
-      ? voted
-        ? tx("追加", "Add")
-        : tx("投票", "Vote")
-      : voted
-        ? tx("投票済", "Voted")
-        : tx("上限", "Max");
+  const checked = selected || voted;
+  const max = Math.max(1, resultBarMax);
+  const barPct = showResults ? Math.min(100, Math.round((idea.votes / max) * 100)) : 0;
+  const selectable = selectMode && !votingClosed && (canSelect || voted);
 
   return (
-    <article className={`${voteCard} rounded-2xl ${isTop && rank === 1 ? "border-zinc-900" : ""} px-3 py-2.5`}>
-      <div className="flex items-start gap-3">
+    <article
+      className={`${voteCard} rounded-2xl ${isTop && rank === 1 ? "border-zinc-900" : ""} ${
+        checked && !votingClosed ? "border-[#FF9600]/40 bg-orange-50/40" : ""
+      } px-3 py-2.5`}
+    >
+      <button
+        type="button"
+        disabled={!selectable}
+        onClick={() => {
+          if (!selectable || !onToggleSelect) return;
+          onToggleSelect(idea.id);
+        }}
+        className="flex w-full items-start gap-3 text-left disabled:cursor-default"
+        aria-pressed={checked}
+        aria-label={tx("候補を選ぶ", "Select option")}
+      >
         <div className="min-w-0 flex-1">
           {isTop ? (
             <p className={`${voteChip} mb-1.5 border-zinc-900 text-zinc-900`}>
@@ -68,52 +81,59 @@ export function IdeaCard({
           <p className="mt-1.5 text-[11px] text-zinc-400">
             {idea.authorName ?? tx("匿名", "Anonymous")}
             <span> · {formatPostedAt(idea.createdAt, locale)}</span>
-            {!hideTallies && idea.voters > 0 ? (
+            {showResults && idea.voters > 0 ? (
               <span> · {tx(`${idea.voters}人`, `${idea.voters} people`)}</span>
             ) : null}
             {idea.myVotes > 0 ? (
               <span className="text-zinc-700"> · {tx(`あなた ${idea.myVotes}`, `you ${idea.myVotes}`)}</span>
             ) : null}
           </p>
+
+          {showResults ? (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-[#FF9600] transition-[width] duration-300"
+                  style={{ width: `${barPct}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-zinc-900">
+                {idea.votes}
+                <span className="ml-0.5 text-[10px] font-medium text-zinc-400">{tx("票", "votes")}</span>
+              </span>
+            </div>
+          ) : null}
         </div>
-        <div className="flex w-[5.25rem] shrink-0 flex-col items-end gap-1">
-          <p className="text-right">
-            <span className={`text-[15px] font-semibold tabular-nums tracking-tight ${hideTallies ? "text-zinc-300" : "text-zinc-900"}`}>
-              {hideTallies ? "—" : idea.votes}
-            </span>
-            <span className="ml-0.5 text-[10px] text-zinc-400">{hideTallies ? tx("締切後", "After close") : tx("票", "votes")}</span>
-          </p>
-          <DuoButton
-            type="button"
-            tone={votingClosed || !canVote ? "zinc" : "orange"}
-            size="md"
-            fullWidth
-            disabled={votingClosed || !canVote}
-            onClick={() => onVote(idea.id)}
-            className="!min-h-[2.5rem] !px-2 !py-2.5 !text-[13px]"
-            aria-label={voted ? tx("さらに投票する", "Vote again") : tx("投票する", "Vote")}
+
+        {selectMode && !votingClosed ? (
+          <span
+            className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition ${
+              checked
+                ? "border-[#FF9600] bg-[#FF9600] text-white"
+                : canSelect
+                  ? "border-zinc-300 bg-white text-transparent"
+                  : "border-zinc-200 bg-zinc-50 text-transparent"
+            }`}
+            aria-hidden
           >
-            {voteLabel}
-          </DuoButton>
-          {canUnvote ? (
-            <button type="button" onClick={() => onUnvote(idea.id)} className={`${voteBtnGhost} h-7 w-full rounded-xl text-[11px] text-zinc-500`}>
-              <Minus className="h-3 w-3" aria-hidden />
-              {tx("取消", "Undo")}
-            </button>
-          ) : null}
-          {canDelete ? (
-            <button
-              type="button"
-              onClick={() => onDelete(idea.id)}
-              className="inline-flex items-center gap-0.5 text-[10px] text-zinc-400 hover:text-rose-600"
-              aria-label={tx("この選択肢を削除", "Delete this option")}
-            >
-              <Trash2 className="h-3 w-3" />
-              {tx("削除", "Delete")}
-            </button>
-          ) : null}
+            <Check className="h-4 w-4" strokeWidth={3} />
+          </span>
+        ) : null}
+      </button>
+
+      {canDelete ? (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => onDelete(idea.id)}
+            className="inline-flex items-center gap-0.5 text-[10px] text-zinc-400 hover:text-rose-600"
+            aria-label={tx("この選択肢を削除", "Delete this option")}
+          >
+            <Trash2 className="h-3 w-3" />
+            {tx("削除", "Delete")}
+          </button>
         </div>
-      </div>
+      ) : null}
     </article>
   );
 }

@@ -63,6 +63,7 @@ export default function WorkspaceVoteCreate() {
   const [description, setDescription] = useState("");
   const [anonymous, setAnonymous] = useState(true);
   const [allowMultiple, setAllowMultiple] = useState(false);
+  const [hideResultsUntilClose, setHideResultsUntilClose] = useState(false);
   const [options, setOptions] = useState(["", ""]);
   const [closesAt, setClosesAt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -78,10 +79,11 @@ export default function WorkspaceVoteCreate() {
       Boolean(description.trim()) ||
       Boolean(closesAt.trim()) ||
       allowMultiple ||
+      hideResultsUntilClose ||
       !anonymous ||
       options.some((item) => item.trim())
     );
-  }, [title, description, closesAt, allowMultiple, anonymous, options]);
+  }, [title, description, closesAt, allowMultiple, hideResultsUntilClose, anonymous, options]);
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setVisible(true));
@@ -121,6 +123,7 @@ export default function WorkspaceVoteCreate() {
         anonymous,
         votesPerPerson,
         maxVotesPerIdea,
+        hideResultsUntilClose,
       });
       const author = anonymous ? null : tx("メンバー", "Member");
       for (const text of filledOptions) {
@@ -200,6 +203,13 @@ export default function WorkspaceVoteCreate() {
             detail={tx("1人あたり何票でも入れられます", "Each person can cast as many votes as they want")}
             checked={allowMultiple}
             onChange={setAllowMultiple}
+          />
+          <div className="border-t border-zinc-100" />
+          <ToggleRow
+            label={tx("結果を締切まで非公開", "Hide results until close")}
+            detail={tx("締切まで誰も票数を見れません", "Nobody can see tallies until the vote closes")}
+            checked={hideResultsUntilClose}
+            onChange={setHideResultsUntilClose}
           />
         </section>
 

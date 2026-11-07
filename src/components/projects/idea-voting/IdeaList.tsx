@@ -9,14 +9,19 @@ type Props = {
   votingSettings: IdeaVotingSettings;
   votingClosed: boolean;
   sortByVotes: boolean;
-  hideTallies?: boolean;
+  /** 結果バーを出す */
+  showResults?: boolean;
+  /** 結果バーの上限（候補中の最大票数） */
+  resultBarMax?: number;
+  /** チェック選択モード */
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
   votesRemaining: number;
   currentUid: string | null;
   isOwner: boolean;
   /** 投票のみ（選択肢の削除・編集なし） */
   voteOnly?: boolean;
-  onVote: (id: string) => void;
-  onUnvote: (id: string) => void;
+  onToggleSelect?: (id: string) => void;
   onDelete: (id: string) => void;
 };
 
@@ -25,13 +30,15 @@ export function IdeaList({
   votingSettings,
   votingClosed,
   sortByVotes,
-  hideTallies = false,
+  showResults = false,
+  resultBarMax = 1,
+  selectMode = false,
+  selectedIds,
   votesRemaining,
   currentUid,
   isOwner,
   voteOnly = false,
-  onVote,
-  onUnvote,
+  onToggleSelect,
   onDelete,
 }: Props) {
   const { tx } = useI18n();
@@ -50,17 +57,25 @@ export function IdeaList({
   }
 
   const rankById = new Map<string, number>();
-  if (votingClosed && !hideTallies) {
+  if (votingClosed && showResults) {
     const ranked = [...ideas].sort((a, b) => b.votes - a.votes || a.createdAt.localeCompare(b.createdAt));
     ranked.slice(0, 3).forEach((idea, i) => rankById.set(idea.id, i + 1));
   }
 
+  const pendingSelectedCount = selectedIds
+    ? [...selectedIds].filter((id) => (ideas.find((i) => i.id === id)?.myVotes ?? 0) <= 0).length
+    : 0;
+
   return (
     <ul className="space-y-1.5">
       {display.map((idea) => {
-        const canVote =
-          !votingClosed && votesRemaining > 0 && idea.myVotes < votingSettings.maxVotesPerIdea;
-        const canUnvote = !votingClosed && idea.myVotes > 0;
+        const alreadyVoted = idea.myVotes > 0;
+        const isSelected = Boolean(selectedIds?.has(idea.id));
+        const canToggle =
+          !votingClosed &&
+          !alreadyVoted &&
+          (isSelected ||
+            (votesRemaining > pendingSelectedCount && idea.myVotes < votingSettings.maxVotesPerIdea));
         const canDelete =
           !voteOnly && Boolean(currentUid) && (isOwner || idea.authorId === currentUid);
         return (
@@ -68,13 +83,14 @@ export function IdeaList({
             <IdeaCard
               idea={idea}
               rank={rankById.get(idea.id)}
-              canVote={canVote}
-              canUnvote={canUnvote}
               votingClosed={votingClosed}
-              hideTallies={hideTallies}
+              showResults={showResults}
+              resultBarMax={resultBarMax}
+              selectMode={selectMode}
+              selected={isSelected || alreadyVoted}
+              canSelect={canToggle}
               canDelete={canDelete}
-              onVote={onVote}
-              onUnvote={onUnvote}
+              onToggleSelect={onToggleSelect}
               onDelete={onDelete}
             />
           </li>
