@@ -11,6 +11,12 @@ import {
   listProjectRecruitments,
   type ProjectRecruitment,
 } from "@/lib/projects/projectRecruitments";
+import {
+  countPendingApplicationsByRecruitment,
+  listRecruitmentApplications,
+  reviewRecruitmentApplication,
+  type RecruitmentApplication,
+} from "@/lib/projects/projectRecruitmentApplications";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
 
@@ -76,6 +82,10 @@ export default function WorkspaceRecruit() {
   const [saving, setSaving] = useState(false);
   const [listLoading, setListLoading] = useState(true);
   const [rows, setRows] = useState<ProjectRecruitment[]>([]);
+  const [pendingByRecruitment, setPendingByRecruitment] = useState<Map<string, number>>(new Map());
+  const [applicants, setApplicants] = useState<RecruitmentApplication[]>([]);
+  const [applicantsLoading, setApplicantsLoading] = useState(false);
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterId>("all");
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -159,6 +169,12 @@ export default function WorkspaceRecruit() {
       }
       const list = await listProjectRecruitments(supabase, projectId);
       setRows(list.filter((r) => r.projectId === projectId));
+      try {
+        const counts = await countPendingApplicationsByRecruitment(supabase, projectId);
+        setPendingByRecruitment(counts);
+      } catch {
+        setPendingByRecruitment(new Map());
+      }
     } catch (e) {
       showNotice(e instanceof Error ? e.message : tx("募集の取得に失敗しました", "Failed to load recruitments"));
     } finally {
@@ -166,10 +182,38 @@ export default function WorkspaceRecruit() {
     }
   }, [project, projectId, projectMeta, uid, isOwner, showNotice, tx]);
 
+  const loadApplicants = useCallback(
+    async (recruitmentId: string) => {
+      if (!supabase) {
+        setApplicants([]);
+        return;
+      }
+      setApplicantsLoading(true);
+      try {
+        const list = await listRecruitmentApplications(supabase, recruitmentId);
+        setApplicants(list);
+      } catch (e) {
+        setApplicants([]);
+        showNotice(e instanceof Error ? e.message : tx("応募の取得に失敗しました", "Failed to load applicants"));
+      } finally {
+        setApplicantsLoading(false);
+      }
+    },
+    [showNotice, tx],
+  );
+
   useEffect(() => {
     if (loading || !project) return;
     void loadList();
   }, [loading, project, loadList]);
+
+  useEffect(() => {
+    if (panel?.kind !== "detail") {
+      setApplicants([]);
+      return;
+    }
+    void loadApplicants(panel.row.id);
+  }, [panel, loadApplicants]);
 
   useEffect(() => {
     return () => clearExitTimer();
@@ -244,6 +288,33 @@ export default function WorkspaceRecruit() {
     } finally {
       setClosingId(null);
     }
+  }
+
+  async function onReviewApplicant(applicationId: string, action: "accept" | "reject") {
+    if (!supabase || !canEdit) return;
+    setReviewBusyId(applicationId);
+    try {
+      await reviewRecruitmentApplication(supabase, { applicationId, action });
+      showNotice(
+        action === "accept"
+          ? tx("応募を承認しました", "Application accepted")
+          : tx("応募を拒否しました", "Application rejected"),
+      );
+      if (panel?.kind === "detail") await loadApplicants(panel.row.id);
+      await loadList();
+      await reload();
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : tx("処理に失敗しました", "Failed to review"));
+    } finally {
+      setReviewBusyId(null);
+    }
+  }
+
+  function applicantStatusLabel(status: RecruitmentApplication["status"]): string {
+    if (status === "accepted") return tx("承認済み", "Accepted");
+    if (status === "rejected") return tx("拒否", "Rejected");
+    if (status === "cancelled") return tx("取消", "Cancelled");
+    return tx("審査中", "Pending");
   }
 
   const openCount = useMemo(() => rows.filter((r) => r.status === "open").length, [rows]);
@@ -354,6 +425,7 @@ export default function WorkspaceRecruit() {
             filteredRows.map((r) => {
               const open = r.status === "open";
               const sub = metaLine(r);
+              const pendingCount = pendingByRecruitment.get(r.id) ?? 0;
               return (
                 <DuoButton
                   key={r.id}
@@ -375,13 +447,22 @@ export default function WorkspaceRecruit() {
                     >
                       {[
                         open ? tx("公開中", "Open") : tx("締切済み", "Closed"),
+                        pendingCount > 0
+                          ? tx(`応募 ${pendingCount}人`, `${pendingCount} applicants`)
+                          : null,
                         sub || (r.message ? r.message.slice(0, 40) : ""),
                       ]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
                   </span>
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  {pendingCount > 0 ? (
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                      {pendingCount}
+                    </span>
+                  ) : (
+                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  )}
                 </DuoButton>
               );
             })
@@ -575,6 +656,84 @@ export default function WorkspaceRecruit() {
                   <dd className="mt-0.5 text-zinc-900">{detailRow.compensation || "—"}</dd>
                 </div>
               </dl>
+
+              <section className="space-y-2.5">
+                <h2 className="text-[13px] font-bold text-zinc-900">
+                  {tx(`応募者 ${applicants.length}`, `Applicants ${applicants.length}`)}
+                </h2>
+                {applicantsLoading ? (
+                  <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+                ) : applicants.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-center text-sm text-zinc-500">
+                    {tx("まだ応募はありません。", "No applications yet.")}
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {applicants.map((app) => {
+                      const pending = app.status === "pending";
+                      return (
+                        <li
+                          key={app.id}
+                          className="rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm shadow-zinc-900/[0.03]"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-[13px] font-bold text-zinc-600">
+                              {app.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={app.avatarUrl} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                (app.displayName.trim().charAt(0) || "?").toUpperCase()
+                              )}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-[14px] font-bold text-zinc-900">{app.displayName}</p>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    pending
+                                      ? "bg-amber-50 text-amber-800"
+                                      : app.status === "accepted"
+                                        ? "bg-emerald-50 text-emerald-800"
+                                        : "bg-zinc-100 text-zinc-600"
+                                  }`}
+                                >
+                                  {applicantStatusLabel(app.status)}
+                                </span>
+                              </div>
+                              {app.message ? (
+                                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-600">
+                                  {app.message}
+                                </p>
+                              ) : null}
+                              {canEdit && pending ? (
+                                <div className="mt-2.5 flex gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={reviewBusyId === app.id}
+                                    className="inline-flex min-h-[36px] flex-1 items-center justify-center rounded-xl bg-zinc-900 text-[12px] font-bold text-white disabled:opacity-50"
+                                    onClick={() => void onReviewApplicant(app.id, "accept")}
+                                  >
+                                    {reviewBusyId === app.id ? "…" : tx("承認", "Accept")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={reviewBusyId === app.id}
+                                    className="inline-flex min-h-[36px] flex-1 items-center justify-center rounded-xl border border-zinc-300 bg-white text-[12px] font-bold text-zinc-700 disabled:opacity-50"
+                                    onClick={() => void onReviewApplicant(app.id, "reject")}
+                                  >
+                                    {tx("拒否", "Reject")}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
               {detailRow.status === "open" && canEdit ? (
                 <DuoButton
                   type="button"
