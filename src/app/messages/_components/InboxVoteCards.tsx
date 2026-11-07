@@ -17,7 +17,8 @@ const CARD_SHELL =
   "flex w-[8rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white";
 
 /** 作成・投票する = アイデアタブと同系の大きめ DuoButton */
-const CARD_BTN = "!mt-1 !min-h-[2.35rem] !rounded-2xl !px-2 !py-2 !text-[12px] !leading-none";
+const CARD_BTN =
+  "!mt-1 !min-h-[2.35rem] !rounded-2xl !px-2 !py-2 !text-[12px] !leading-none !shadow-none enabled:active:!translate-y-0";
 
 const CARD_TITLE =
   "min-h-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
