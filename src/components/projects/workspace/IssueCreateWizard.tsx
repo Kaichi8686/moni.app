@@ -276,7 +276,17 @@ export function IssueCreateWizard({
       aria-modal="true"
       aria-label={tx("課題を作成", "Create task")}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={requestClose}
+        className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
+        aria-label={tx("戻る", "Back")}
+      >
+        <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+      </button>
+
+      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 py-2 pl-16 pr-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-extrabold text-zinc-900">
           {step === "details" ? tx("課題を作成", "Create task") : tx("ファイルを用意", "Prepare files")}
         </h1>
@@ -462,16 +472,7 @@ export function IssueCreateWizard({
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-lg items-center gap-3">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={requestClose}
-            className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-6 w-6" strokeWidth={2.5} aria-hidden />
-          </button>
+        <div className="mx-auto max-w-lg">
           {step === "details" ? (
             <DuoButton
               type="button"
@@ -483,7 +484,6 @@ export function IssueCreateWizard({
                 setError("");
                 setStep("files");
               }}
-              className="!flex-1"
             >
               {tx("次へ", "Next")}
             </DuoButton>
@@ -495,7 +495,6 @@ export function IssueCreateWizard({
               fullWidth
               disabled={saving || !canGoNext}
               onClick={() => void finish()}
-              className="!flex-1"
             >
               {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
             </DuoButton>
