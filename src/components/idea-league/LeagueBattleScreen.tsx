@@ -272,9 +272,12 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
         )
       ) : null}
 
-      {battle.demo ? (
+      {battle.members.length <= 1 ? (
         <p className="text-center text-[11px] font-medium text-zinc-400">
-          {tx("デモグループで動作中（DB未適用時）", "Running in demo group (DB not applied)")}
+          {tx(
+            "同じリーグに参加している登録ユーザーの順位が表示されます。",
+            "Ranks show registered users in your league group.",
+          )}
         </p>
       ) : null}
     </div>
