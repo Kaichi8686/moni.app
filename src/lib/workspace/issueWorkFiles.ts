@@ -319,3 +319,13 @@ export function appendFileItem(
     updatedAt: new Date().toISOString(),
   };
 }
+
+export function removeFileItem(file: IssueWorkFile, itemId: string): IssueWorkFile {
+  const items = fileItems(file).filter((item) => item.id !== itemId);
+  return {
+    ...file,
+    items,
+    url: items[0]?.url,
+    updatedAt: new Date().toISOString(),
+  };
+}

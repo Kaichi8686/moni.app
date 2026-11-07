@@ -21,6 +21,7 @@ import {
   type ProjectGoogleDocsShellHandle,
 } from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
+import { IssuePhotoViewer } from "@/components/projects/workspace/IssuePhotoViewer";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { wordCountFromDocContent } from "@/lib/projects/documents";
@@ -43,6 +44,7 @@ import {
   newLinkSlotFile,
   newPhotoSlotFile,
   normalizeExternalUrl,
+  removeFileItem,
   removeWorkFile,
   requiredFilesReady,
   sortWorkFilesByUpdated,
@@ -211,6 +213,7 @@ export function IssueTaskFilesPanel({
   const [linkTitle, setLinkTitle] = useState("");
   const [namePrompt, setNamePrompt] = useState<IssueWorkFileKind | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [photoViewerItemId, setPhotoViewerItemId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const slotPhotoInputRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -267,6 +270,7 @@ export function IssueTaskFilesPanel({
     setFabOpen(false);
     setMenuId(null);
     setLinkDraftOpen(false);
+    setPhotoViewerItemId(null);
   }, []);
 
   const closeDocEditor = useCallback(() => {
@@ -280,6 +284,10 @@ export function IssueTaskFilesPanel({
       return;
     }
     registerBackHandler(() => {
+      if (photoViewerItemId) {
+        setPhotoViewerItemId(null);
+        return true;
+      }
       if (openFile.kind === "doc") {
         void editorShellRef.current?.flushAndSave().finally(() => closeDocEditor());
         return true;
@@ -293,7 +301,7 @@ export function IssueTaskFilesPanel({
       registerBackHandler(null);
       document.body.style.overflow = previousOverflow;
     };
-  }, [closeDocEditor, closeEditor, openFile, registerBackHandler]);
+  }, [closeDocEditor, closeEditor, openFile, photoViewerItemId, registerBackHandler]);
 
   // 課題内ドキュメント編集中もメインタブと同じくヘッダー等を隠す
   useEffect(() => {
@@ -430,6 +438,13 @@ export function IssueTaskFilesPanel({
       setUploading(false);
       if (slotPhotoInputRef.current) slotPhotoInputRef.current.value = "";
     }
+  }
+
+  async function deletePhotoItem(itemId: string) {
+    if (!canEdit || !openFile || openFile.kind !== "photo") return;
+    const next = removeFileItem(openFile, itemId);
+    await persistFiles(upsertWorkFile(files, next));
+    if (fileItems(next).length === 0) setPhotoViewerItemId(null);
   }
 
   async function addLinkToOpenSlot() {
@@ -647,8 +662,15 @@ export function IssueTaskFilesPanel({
               {items.map((item) => (
                 <div key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
                   {openFile.kind === "photo" ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- slot photo
-                    <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoViewerItemId(item.id)}
+                      className="block w-full bg-zinc-50 text-left"
+                      aria-label={item.title || tx("写真を開く", "Open photo")}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- slot photo */}
+                      <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain" />
+                    </button>
                   ) : (
                     <a
                       href={item.url}
@@ -712,6 +734,15 @@ export function IssueTaskFilesPanel({
             </div>
             {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
           </div>
+          {openFile.kind === "photo" && photoViewerItemId ? (
+            <IssuePhotoViewer
+              items={items}
+              initialItemId={photoViewerItemId}
+              canDelete={canEdit && !submitted}
+              onClose={() => setPhotoViewerItemId(null)}
+              onDelete={(itemId) => deletePhotoItem(itemId)}
+            />
+          ) : null}
         </div>,
         document.body,
       );
