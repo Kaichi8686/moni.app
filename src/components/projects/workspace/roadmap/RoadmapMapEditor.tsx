@@ -25,7 +25,7 @@ import {
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
-import { splitRoadmapPathLayout, normalizeLane } from "@/lib/roadmap/pathLayout";
+import { splitRoadmapPathLayout, sideSlotsForParent } from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -520,31 +520,29 @@ export function RoadmapMapEditor() {
             <RoadmapPathItem
               key={step.id}
               index={orderIndex}
-              sides={sidePhases
-                .map((side) => {
-                  const lane = normalizeLane(side.lane);
-                  if (lane !== -1 && lane !== 1) return null;
-                  const sideTone = "active" as const;
-                  const mainSparkle = isCurrent && step.status !== "completed";
-                  return {
-                    key: side.id,
-                    lane,
-                    children: (
-                      <RoadmapPathNode
-                        tone={sideTone}
-                        sparkle={mainSparkle || side.status === "in_progress"}
-                        selected={selectedId === side.id}
-                        onClick={() => {
-                          setSelectedId((current) => (current === side.id ? null : side.id));
-                        }}
-                        aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
-                      >
-                        <RoadmapStepMark markId={side.icon} index={orderIndex} tone={sideTone} />
-                      </RoadmapPathNode>
-                    ),
-                  };
-                })
-                .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot))}
+              sides={sideSlotsForParent(sidePhases).map((side) => {
+                const sideTone = "active" as const;
+                const mainSparkle = isCurrent && step.status !== "completed";
+                return {
+                  key: side.id,
+                  lane: side.lane,
+                  slotIndex: side.slotIndex,
+                  lowerCleared: side.status === "completed",
+                  children: (
+                    <RoadmapPathNode
+                      tone={sideTone}
+                      sparkle={mainSparkle || side.status === "in_progress"}
+                      selected={selectedId === side.id}
+                      onClick={() => {
+                        setSelectedId((current) => (current === side.id ? null : side.id));
+                      }}
+                      aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
+                    >
+                      <RoadmapStepMark markId={side.icon} index={orderIndex} tone={sideTone} />
+                    </RoadmapPathNode>
+                  ),
+                };
+              })}
             >
               <RoadmapPathNode
                 tone={tone}
@@ -671,6 +669,18 @@ export function RoadmapMapEditor() {
             order: step.order,
             status: step.status,
           }))}
+          existingSides={mainSteps.flatMap((step) =>
+            sideSlotsForParent(bySideOf.get(step.id) ?? []).map((side) => ({
+              id: side.id,
+              title: side.title,
+              icon: side.icon,
+              order: side.order,
+              status: side.status,
+              sideOf: step.id,
+              lane: side.lane,
+              slotIndex: side.slotIndex,
+            })),
+          )}
           busy={busy}
           onClose={closeCreateSpace}
           onPickPosition={pickSidePosition}
