@@ -1141,36 +1141,6 @@ html.moni-recruit-drill .app-bottom-nav {
   animation: issue-create-wizard-slide-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
-@keyframes project-brief-composer-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes project-brief-composer-fade-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-.project-brief-composer-in {
-  animation: project-brief-composer-fade-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.project-brief-composer-out {
-  animation: project-brief-composer-fade-out 200ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
 @keyframes issue-create-step-from-right {
   from {
     transform: translateX(100%);
@@ -1205,9 +1175,7 @@ html.moni-recruit-drill .app-bottom-nav {
   .issue-create-wizard-in,
   .issue-create-wizard-out,
   .issue-create-step-from-right,
-  .issue-create-step-from-left,
-  .project-brief-composer-in,
-  .project-brief-composer-out {
+  .issue-create-step-from-left {
     animation: none;
   }
 }

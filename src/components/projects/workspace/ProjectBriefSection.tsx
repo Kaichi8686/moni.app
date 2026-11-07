@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
 import { ProjectBriefComposer } from "@/components/projects/workspace/ProjectBriefComposer";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
@@ -23,8 +25,44 @@ function hasCoreBrief(brief: ProjectBrief): boolean {
   return Boolean(t.problemMotivation && t.projectGoal);
 }
 
+function reduceMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)
+  );
+}
+
+function subscribeNoop() {
+  return () => {};
+}
+
+function useIsClient() {
+  return useSyncExternalStore(subscribeNoop, () => true, () => false);
+}
+
+/**
+ * アイデアタブ「育てる」と同じうっすらベール切替（色は薄いオレンジ）。
+ * in: 0 → 0.88 / out: 0.88 → 0（画面差し替えはベールの裏で行う）
+ */
+function SceneVeil({ phase }: { phase: "in" | "out" }) {
+  return (
+    <motion.div
+      key={phase === "in" ? "brief-veil-in" : "brief-veil-out"}
+      className="pointer-events-none fixed inset-0 z-[310] bg-[#FFF4E8]"
+      initial={{ opacity: phase === "in" ? 0 : 0.88 }}
+      animate={{ opacity: phase === "in" ? 0.88 : 0 }}
+      transition={{
+        duration: phase === "in" ? 0.34 : 0.4,
+        ease: phase === "in" ? "easeInOut" : "easeOut",
+      }}
+      aria-hidden
+    />
+  );
+}
+
 export function ProjectBriefSection() {
   const { tx } = useI18n();
+  const portalReady = useIsClient();
   const { project, coachingContext, canEdit, reload, registerBackHandler } = useProjectWorkspace();
   const brief = resolveProjectBrief({
     coachingContext,
@@ -38,6 +76,16 @@ export function ProjectBriefSection() {
   const [error, setError] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  /** 育てる押下時と同じうっすら画面切替 */
+  const [sceneVeil, setSceneVeil] = useState<"idle" | "in" | "out">("idle");
+  const veilTimersRef = useRef<number[]>([]);
+
+  const clearVeilTimers = useCallback(() => {
+    for (const id of veilTimersRef.current) window.clearTimeout(id);
+    veilTimersRef.current = [];
+  }, []);
+
+  useEffect(() => () => clearVeilTimers(), [clearVeilTimers]);
 
   const isDirty =
     draft.problemMotivation.trim() !== brief.problemMotivation.trim() ||
@@ -45,21 +93,23 @@ export function ProjectBriefSection() {
     (!filled && Boolean(draft.problemMotivation.trim() || draft.projectGoal.trim()));
 
   const discardAndClose = useCallback(() => {
+    clearVeilTimers();
+    setSceneVeil("idle");
     setConfirmDiscard(false);
     setComposerOpen(false);
     setError("");
     setDraft(brief);
     if (project?.id) clearProjectBriefDraft(project.id);
-  }, [brief, project?.id]);
+  }, [brief, project?.id, clearVeilTimers]);
 
   const requestClose = useCallback(() => {
-    if (saving) return;
+    if (saving || sceneVeil !== "idle") return;
     if (isDirty) {
       setConfirmDiscard(true);
       return;
     }
     discardAndClose();
-  }, [saving, isDirty, discardAndClose]);
+  }, [saving, sceneVeil, isDirty, discardAndClose]);
 
   // 保存済みデータの同期（入力中ドラフトは localStorage 側を優先）
   useEffect(() => {
@@ -77,9 +127,9 @@ export function ProjectBriefSection() {
         projectGoal: stored.projectGoal,
       });
       setComposerOpen(true);
+      setSceneVeil("idle");
     } else {
       setDraft((prev) => {
-        // 作曲中はサーバ同期で上書きしない
         if (composerOpen) return prev;
         return saved;
       });
@@ -89,6 +139,57 @@ export function ProjectBriefSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per project/data change; ignore composerOpen to avoid clobber
   }, [coachingContext, project?.description, canEdit, project?.id]);
 
+  /** 育てるボタンと同じ: ベール in → 画面差し替え → ベール out */
+  const runVeilOpen = useCallback(() => {
+    if (composerOpen && sceneVeil === "idle") return;
+    if (sceneVeil === "in") return;
+
+    if (reduceMotion()) {
+      clearVeilTimers();
+      setSceneVeil("idle");
+      setComposerOpen(true);
+      return;
+    }
+
+    clearVeilTimers();
+    setSceneVeil("in");
+    const t1 = window.setTimeout(() => {
+      setComposerOpen(true);
+      setSceneVeil("out");
+      const t2 = window.setTimeout(() => setSceneVeil("idle"), 420);
+      veilTimersRef.current.push(t2);
+    }, 340);
+    veilTimersRef.current.push(t1);
+  }, [composerOpen, sceneVeil, clearVeilTimers]);
+
+  const prepareDraft = useCallback(() => {
+    if (!project) return;
+    const stored = readProjectBriefDraft(project.id);
+    if (stored && !filled) {
+      setDraft({
+        ...emptyProjectBrief(),
+        whatToDo: brief.whatToDo,
+        problemMotivation: stored.problemMotivation,
+        projectGoal: stored.projectGoal,
+      });
+    } else {
+      setDraft(brief);
+    }
+    setError("");
+    setConfirmDiscard(false);
+    writeProjectBriefDraft(project.id, {
+      open: true,
+      problemMotivation: stored && !filled ? stored.problemMotivation : brief.problemMotivation,
+      projectGoal: stored && !filled ? stored.projectGoal : brief.projectGoal,
+    });
+  }, [project, filled, brief]);
+
+  const openComposerWithVeil = useCallback(() => {
+    if (!canEdit || saving || !project) return;
+    prepareDraft();
+    runVeilOpen();
+  }, [canEdit, saving, project, prepareDraft, runVeilOpen]);
+
   useEffect(() => {
     if (!canEdit) return;
     const onEditRequest = () => {
@@ -97,7 +198,6 @@ export function ProjectBriefSection() {
         description: project?.description,
       });
       setDraft(next);
-      setComposerOpen(true);
       setConfirmDiscard(false);
       setError("");
       if (project?.id) {
@@ -107,10 +207,11 @@ export function ProjectBriefSection() {
           projectGoal: next.projectGoal,
         });
       }
+      runVeilOpen();
     };
     window.addEventListener("moni:edit-project-brief", onEditRequest);
     return () => window.removeEventListener("moni:edit-project-brief", onEditRequest);
-  }, [canEdit, coachingContext, project?.description, project?.id]);
+  }, [canEdit, coachingContext, project?.description, project?.id, runVeilOpen]);
 
   // ドラフト永続化（他サイト・他タブへ行っても残す）
   useEffect(() => {
@@ -146,29 +247,6 @@ export function ProjectBriefSection() {
     return () => registerBackHandler(null);
   }, [composerOpen, confirmDiscard, registerBackHandler, requestClose]);
 
-  function openComposer() {
-    if (!canEdit || saving || !project) return;
-    const stored = readProjectBriefDraft(project.id);
-    if (stored && !filled) {
-      setDraft({
-        ...emptyProjectBrief(),
-        whatToDo: brief.whatToDo,
-        problemMotivation: stored.problemMotivation,
-        projectGoal: stored.projectGoal,
-      });
-    } else {
-      setDraft(brief);
-    }
-    setError("");
-    setConfirmDiscard(false);
-    setComposerOpen(true);
-    writeProjectBriefDraft(project.id, {
-      open: true,
-      problemMotivation: stored && !filled ? stored.problemMotivation : brief.problemMotivation,
-      projectGoal: stored && !filled ? stored.projectGoal : brief.projectGoal,
-    });
-  }
-
   async function save() {
     if (!canEdit || !project) return;
     const trimmedMotivation = draft.problemMotivation.trim();
@@ -193,6 +271,8 @@ export function ProjectBriefSection() {
         projectGoal: trimmedGoal,
       });
       clearProjectBriefDraft(project.id);
+      clearVeilTimers();
+      setSceneVeil("idle");
       setComposerOpen(false);
       setConfirmDiscard(false);
       await reload();
@@ -214,7 +294,7 @@ export function ProjectBriefSection() {
 
   if (!project) return null;
   if (!filled && !canEdit) return null;
-  if (filled && !composerOpen) return null;
+  if (filled && !composerOpen && sceneVeil === "idle") return null;
 
   return (
     <>
@@ -224,7 +304,7 @@ export function ProjectBriefSection() {
             projectName={project.name}
             goal=""
             emptyHint={tx("タップしてゴールを書く", "Tap to write your goal")}
-            onClick={openComposer}
+            onClick={openComposerWithVeil}
           />
         </section>
       ) : null}
@@ -250,6 +330,10 @@ export function ProjectBriefSection() {
           onSubmit={() => void save()}
         />
       ) : null}
+
+      {portalReady && (sceneVeil === "in" || sceneVeil === "out")
+        ? createPortal(<SceneVeil phase={sceneVeil} />, document.body)
+        : null}
     </>
   );
 }
