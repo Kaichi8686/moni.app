@@ -165,7 +165,9 @@ const CLOSED_TABS: NavItem[] = [
       p === "/discover" ||
       p.startsWith("/discover/") ||
       p === "/contest" ||
-      p.startsWith("/contest/"),
+      p.startsWith("/contest/") ||
+      p === "/league" ||
+      p.startsWith("/league/"),
   },
 ];
 

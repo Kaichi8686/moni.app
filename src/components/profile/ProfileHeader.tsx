@@ -7,7 +7,9 @@ import { ProfileActionButtons } from "@/components/profile/ProfileActionButtons"
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { ProfileSkillsTraits } from "@/components/profile/ProfileSkillsTraits";
 import { ProfileStats } from "@/components/profile/ProfileStats";
+import { LeagueTierBadge } from "@/components/idea-league/LeagueTierBadge";
 import { MONI_TIER_META, type MoniTier } from "@/lib/gamification/moniTier";
+import type { LeagueTier } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { countryLabel } from "@/lib/profile/countries";
 import { genderLabel } from "@/lib/profile/gender";
@@ -28,6 +30,7 @@ type Props = {
   onBackgroundUpdated?: () => void;
   viewerId: string | null;
   moniTier?: MoniTier | null;
+  leagueTier?: LeagueTier | null;
   profileUserId?: string;
 };
 
@@ -43,6 +46,7 @@ export function ProfileHeader({
   onBackgroundUpdated,
   viewerId,
   moniTier,
+  leagueTier,
   profileUserId,
 }: Props) {
   const { locale, tx } = useI18n();
@@ -232,6 +236,15 @@ export function ProfileHeader({
                 <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-[11px] font-semibold tracking-tight text-zinc-600">
                   {tierMeta.label}
                 </span>
+              ) : null}
+              {leagueTier ? (
+                <Link
+                  href="/league"
+                  className="inline-flex items-center rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 transition hover:bg-amber-100"
+                  title={tx("アイデアリーグ", "Idea League")}
+                >
+                  <LeagueTierBadge tier={leagueTier} size="sm" animated={leagueTier !== "bronze"} />
+                </Link>
               ) : null}
             </div>
             <p className="text-[13px] font-medium text-zinc-500">@{profile.username}</p>
