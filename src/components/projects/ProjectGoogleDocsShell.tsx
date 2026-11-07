@@ -566,15 +566,19 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     [rememberSelection, restoreSelection, scheduleAutoSave, scheduleFlush],
   );
 
-  const onPickImage = useCallback(
-    async (file: File | null) => {
-      if (!file || !onUploadImage || !autoSave) return;
+  const onPickImages = useCallback(
+    async (list: FileList | File[] | null) => {
+      if (!list || !onUploadImage || !autoSave) return;
+      const files = Array.from(list).filter((file) => file.type.startsWith("image/") || /\.(heic|heif)$/i.test(file.name));
+      if (files.length === 0) return;
       setImageErr("");
       setImageBusy(true);
       setInsertOpen(false);
       try {
-        const url = await onUploadImage(file);
-        insertImageAtCursor(url);
+        for (const file of files) {
+          const url = await onUploadImage(file);
+          insertImageAtCursor(url);
+        }
       } catch (e) {
         setImageErr(e instanceof Error ? e.message : "画像の追加に失敗しました。");
       } finally {
@@ -720,8 +724,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 ref={fileInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                multiple
                 className="hidden"
-                onChange={(e) => void onPickImage(e.target.files?.[0] ?? null)}
+                onChange={(e) => void onPickImages(e.target.files)}
               />
             </>
           ) : null}
