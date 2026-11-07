@@ -69,6 +69,46 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     description: "資金調達を記録",
     descriptionEn: "Recorded fundraising",
   },
+  {
+    id: "league_bronze",
+    label: "ブロンズリーグ",
+    labelEn: "Bronze League",
+    icon: "🥉",
+    description: "アイデアリーグに初参加",
+    descriptionEn: "Joined Idea League",
+  },
+  {
+    id: "league_silver",
+    label: "シルバーリーグ",
+    labelEn: "Silver League",
+    icon: "🥈",
+    description: "シルバーリーグへ昇格",
+    descriptionEn: "Promoted to Silver League",
+  },
+  {
+    id: "league_gold",
+    label: "ゴールドリーグ",
+    labelEn: "Gold League",
+    icon: "🥇",
+    description: "ゴールドリーグへ昇格",
+    descriptionEn: "Promoted to Gold League",
+  },
+  {
+    id: "league_platinum",
+    label: "プラチナリーグ",
+    labelEn: "Platinum League",
+    icon: "💠",
+    description: "プラチナリーグへ昇格",
+    descriptionEn: "Promoted to Platinum League",
+  },
+  {
+    id: "league_diamond",
+    label: "ダイヤモンドリーグ",
+    labelEn: "Diamond League",
+    icon: "💎",
+    description: "ダイヤモンドリーグへ到達",
+    descriptionEn: "Reached Diamond League",
+  },
 ];
 
 const BADGE_MAP = new Map(BADGE_DEFINITIONS.map((b) => [b.id, b]));

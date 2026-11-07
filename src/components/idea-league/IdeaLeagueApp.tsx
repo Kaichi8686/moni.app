@@ -1,0 +1,166 @@
+"use client";
+
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { AppBottomNav } from "@/components/AppBottomNav";
+import { AppBrandHeader } from "@/components/AppBrandHeader";
+import { LeagueBattleScreen } from "@/components/idea-league/LeagueBattleScreen";
+import { LeagueTutorialFlow } from "@/components/idea-league/LeagueTutorialFlow";
+import { LeagueWaitingScreen } from "@/components/idea-league/LeagueWaitingScreen";
+import {
+  castLeagueVote,
+  completeTutorial,
+  finalizeLeagueIfNeeded,
+  loadLeagueBattle,
+  loadLeagueProfile,
+  submitLeagueIdea,
+  type MeIdentity,
+} from "@/lib/idea-league/api";
+import { isSaturday, leagueNow } from "@/lib/idea-league/calendar";
+import type { LeagueBattleState, LeagueProfileState } from "@/lib/idea-league/types";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { supabase, supabaseEnabled } from "@/lib/supabase";
+
+type Props = {
+  embedded?: boolean;
+  hideChrome?: boolean;
+};
+
+export function IdeaLeagueApp({ embedded, hideChrome }: Props) {
+  const { tx } = useI18n();
+  const [me, setMe] = useState<MeIdentity | null>(null);
+  const [profile, setProfile] = useState<LeagueProfileState | null>(null);
+  const [battle, setBattle] = useState<LeagueBattleState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const saturday = isSaturday(leagueNow());
+
+  const reload = useCallback(async (identity: MeIdentity) => {
+    const client = supabaseEnabled ? supabase : null;
+    const p = await loadLeagueProfile(client, identity.userId);
+    setProfile(p);
+    if (p.tutorialCompleted && saturday) {
+      const b = await loadLeagueBattle(client, identity);
+      setBattle(b);
+    } else {
+      setBattle(null);
+      if (p.tutorialCompleted && !saturday) {
+        await finalizeLeagueIfNeeded(client, identity);
+        const refreshed = await loadLeagueProfile(client, identity.userId);
+        setProfile(refreshed);
+      }
+    }
+  }, [saturday]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setErr("");
+      try {
+        let identity: MeIdentity = {
+          userId: "local-guest",
+          displayName: tx("あなた", "You"),
+          avatarUrl: null,
+        };
+        if (supabase && supabaseEnabled) {
+          const { data } = await supabase.auth.getUser();
+          const uid = data.user?.id;
+          if (uid) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("display_name, username, avatar_url")
+              .eq("id", uid)
+              .maybeSingle();
+            const row = (prof ?? {}) as Record<string, unknown>;
+            identity = {
+              userId: uid,
+              displayName: String(row.display_name || row.username || tx("あなた", "You")),
+              avatarUrl: (row.avatar_url as string | null) ?? null,
+            };
+          }
+        }
+        if (cancelled) return;
+        setMe(identity);
+        await reload(identity);
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : "failed");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reload, tx]);
+
+  const shell = (body: ReactNode) => (
+    <div
+      className={`relative min-h-[100dvh] bg-gradient-to-b from-[#FFF8EF] via-[#F4F7FF] to-[#E8F7F0] ${
+        embedded || hideChrome ? "" : "pb-bottom-nav"
+      }`}
+    >
+      {hideChrome ? null : (
+        <header className="sticky top-0 z-30 border-b border-zinc-100/80 bg-white/90 backdrop-blur">
+          <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
+            <AppBrandHeader bare />
+            <p className="mt-1 text-center text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#FF9600]">
+              {tx("アイデアリーグ", "Idea League")}
+            </p>
+          </div>
+        </header>
+      )}
+      {body}
+      {embedded || hideChrome ? null : <AppBottomNav />}
+    </div>
+  );
+
+  if (loading || !me || !profile) {
+    return shell(
+      <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-24 animate-pulse rounded-3xl bg-white/70" />
+        ))}
+      </div>,
+    );
+  }
+
+  if (err) {
+    return shell(
+      <p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>,
+    );
+  }
+
+  if (!profile.tutorialCompleted) {
+    return shell(
+      <LeagueTutorialFlow
+        onComplete={async (input) => {
+          const client = supabaseEnabled ? supabase : null;
+          return completeTutorial(client, me, input);
+        }}
+        onFinished={() => {
+          void reload(me);
+        }}
+      />,
+    );
+  }
+
+  if (saturday && battle) {
+    return shell(
+      <LeagueBattleScreen
+        battle={battle}
+        onSubmit={async (input) => {
+          const client = supabaseEnabled ? supabase : null;
+          const next = await submitLeagueIdea(client, me, input);
+          setBattle(next);
+        }}
+        onVote={async (submissionId) => {
+          const client = supabaseEnabled ? supabase : null;
+          const next = await castLeagueVote(client, me, submissionId);
+          setBattle(next);
+        }}
+      />,
+    );
+  }
+
+  return shell(<LeagueWaitingScreen profile={profile} />);
+}

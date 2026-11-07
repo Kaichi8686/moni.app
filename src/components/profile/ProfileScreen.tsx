@@ -8,6 +8,8 @@ import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { computeMoniTier } from "@/lib/gamification/moniTier";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { loadLeagueProfile } from "@/lib/idea-league/api";
+import type { LeagueTier } from "@/lib/idea-league/types";
 import { loadProfileGamification } from "@/lib/gamification/profileGamification";
 import { syncUserBadges } from "@/lib/gamification/syncBadges";
 import type { ProfileGamification } from "@/lib/gamification/profileGamification";
@@ -33,6 +35,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [gamification, setGamification] = useState<ProfileGamification | null>(null);
+  const [leagueTier, setLeagueTier] = useState<LeagueTier | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [loading, setLoading] = useState(Boolean(supabase));
@@ -67,6 +70,12 @@ export function ProfileScreen({ userId: propUserId }: Props) {
         }
         const gam = await loadProfileGamification(supabase, targetId);
         setProfile(view);
+        try {
+          const league = await loadLeagueProfile(supabaseEnabled ? supabase : null, targetId);
+          setLeagueTier(league.tutorialCompleted ? league.tier : null);
+        } catch {
+          setLeagueTier(null);
+        }
         if (uid === targetId && gam.gamificationReady) {
           try {
             const synced = await syncUserBadges(supabase, targetId, gam.activityStreak, gam.badges);
@@ -269,6 +278,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
                   })
                 : null
             }
+            leagueTier={leagueTier}
           />
         </div>
       ) : null}

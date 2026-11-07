@@ -2374,3 +2374,32 @@ html.moni-doc-editor .project-workspace-header {
     animation: none;
   }
 }
+
+/* Idea League — crown / glow motion */
+@keyframes league-crown-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes league-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[league-crown-bob_2\.4s_ease-in-out_infinite\] {
+    animation: none !important;
+  }
+}
