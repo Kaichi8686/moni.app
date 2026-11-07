@@ -41,14 +41,14 @@ function useIsClient() {
 }
 
 /**
- * アイデアタブ「育てる」と同じうっすらベール切替。
+ * アイデアタブ「育てる」と同じうっすらベール切替（色は薄いオレンジ）。
  * in: 0 → 0.88 / out: 0.88 → 0（画面差し替えはベールの裏で行う）
  */
 function SceneVeil({ phase }: { phase: "in" | "out" }) {
   return (
     <motion.div
       key={phase === "in" ? "brief-veil-in" : "brief-veil-out"}
-      className="pointer-events-none fixed inset-0 z-[310] bg-[#F4FFE8]"
+      className="pointer-events-none fixed inset-0 z-[310] bg-[#FFF4E8]"
       initial={{ opacity: phase === "in" ? 0 : 0.88 }}
       animate={{ opacity: phase === "in" ? 0.88 : 0 }}
       transition={{
