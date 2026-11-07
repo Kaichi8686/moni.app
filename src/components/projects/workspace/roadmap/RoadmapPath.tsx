@@ -17,9 +17,10 @@ const ROW_GAP = 40;
 /** 進行中マスの外枠が切れないよう余白を確保 */
 const TOP_PAD = 20;
 const STEP_Y = NODE_SIZE + ROW_GAP;
-const TRACK_WIDTH = 360;
+/** 横置きのすき間を確保するため本線トラックを少し広げる */
+const TRACK_WIDTH = 400;
 /** 本線マスから横置きマスまでの距離（CreateSpace と同じ） */
-const SIDE_GAP = 88;
+const SIDE_GAP = 120;
 
 /** 作成空間などでも同じ並びを使うための公開定数 */
 export const ROADMAP_PATH_LAYOUT = {
@@ -111,7 +112,7 @@ type Props = {
  * マスと線を同じ座標系で描く。
  * - 本線マス: 中央 + offset
  * - 横置き: 同じ Y で左右へ
- * - 線: 本線中心を太い直線で接続＋横置きへ短い棒
+ * - 線: 本線同士を縦につなぎ、横置きは作成空間と同じく上下の本線マスへ
  */
 export function RoadmapPath({ children, segmentCleared, className = "" }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -163,17 +164,22 @@ export function RoadmapPath({ children, segmentCleared, className = "" }: Props)
     }));
   }, [count, measuredYs]);
 
+  /** 横置きは同じ行の本線ではなく、上のマス／下のマスへつなぐ（CreateSpace と同じ） */
   const sideLinks = useMemo(() => {
     const links: Array<{ from: Point; to: Point; key: string }> = [];
     items.forEach((item, index) => {
       const main = points[index];
       if (!main) return;
+      const prev = points[index - 1];
+      const next = points[index + 1];
       for (const side of item.props.sides ?? []) {
         const sidePoint = {
           x: roadmapPathSideCenter(index, side.lane).x,
           y: main.y,
         };
-        links.push({ from: main, to: sidePoint, key: `${item.key ?? index}-${side.key}` });
+        const baseKey = `${item.key ?? index}-${side.key}`;
+        if (prev) links.push({ from: prev, to: sidePoint, key: `${baseKey}-prev` });
+        if (next) links.push({ from: next, to: sidePoint, key: `${baseKey}-next` });
       }
     });
     return links;
