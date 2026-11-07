@@ -25,7 +25,12 @@ import {
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
-import { splitRoadmapPathLayout, sideSlotsForParent } from "@/lib/roadmap/pathLayout";
+import {
+  nextSidePlacement,
+  ROADMAP_MAX_SIDES_PER_PARENT,
+  splitRoadmapPathLayout,
+  sideSlotsForParent,
+} from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -247,11 +252,39 @@ export function RoadmapMapEditor() {
     if (!roadmap.canEdit || !pendingSideDraft) {
       throw new Error(tx("追加できるマスがありません", "Nothing to add"));
     }
+    const sideOf = pendingSideDraft.sideOf;
+    if (sideOf) {
+      const siblings = bySideOf.get(sideOf) ?? [];
+      if (siblings.length >= ROADMAP_MAX_SIDES_PER_PARENT) {
+        throw new Error(
+          tx(
+            `横マスは各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個までです。`,
+            `Each step can have up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps.`,
+          ),
+        );
+      }
+      const placement = nextSidePlacement(
+        siblings.map((side) => ({
+          sideOf,
+          lane: side.lane,
+          order: side.order,
+        })),
+        sideOf,
+        pendingSideDraft.lane,
+      );
+      if (!placement) {
+        throw new Error(
+          tx(
+            `横マスは各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個までです。`,
+            `Each step can have up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps.`,
+          ),
+        );
+      }
+    }
     setBusy(true);
     setError("");
     try {
       const start = new Date();
-      const sideOf = pendingSideDraft.sideOf;
       // 親が無い（空マップ）ときは本線の先頭として追加
       await roadmap.createPhase({
         title: values.title,

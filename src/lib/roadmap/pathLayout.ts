@@ -56,3 +56,46 @@ export function sideSlotsForParent<T extends PathLayoutPhase>(
     ...right.map((side, slotIndex) => ({ ...side, lane: 1 as const, slotIndex })),
   ];
 }
+
+/** 1つの本線マスにぶら下げられる横マスの上限 */
+export const ROADMAP_MAX_SIDES_PER_PARENT = 3;
+
+export type SidePlacement = { lane: -1 | 1; slotIndex: number };
+
+/**
+ * 次の横マスの位置:
+ * - 1個目: preferredLane（広い側）
+ * - 2個目: 1個目と同じ側の外側
+ * - 3個目: 2個目と逆側
+ * - すでに3個ある親には置けない
+ */
+export function nextSidePlacement(
+  sides: Array<{ sideOf: string; lane?: number | null; order: number }>,
+  sideOf: string | null,
+  preferredLane: -1 | 1,
+): SidePlacement | null {
+  if (!sideOf) {
+    return { lane: preferredLane, slotIndex: 0 };
+  }
+  const mine = sides
+    .filter((side) => side.sideOf === sideOf)
+    .sort((a, b) => a.order - b.order);
+  if (mine.length >= ROADMAP_MAX_SIDES_PER_PARENT) return null;
+
+  if (mine.length === 0) {
+    return { lane: preferredLane, slotIndex: 0 };
+  }
+
+  if (mine.length === 1) {
+    const firstLane = normalizeLane(mine[0]?.lane);
+    const lane: -1 | 1 = firstLane === -1 || firstLane === 1 ? firstLane : preferredLane;
+    const slotIndex = mine.filter((side) => normalizeLane(side.lane) === lane).length;
+    return { lane, slotIndex };
+  }
+
+  const secondLane = normalizeLane(mine[1]?.lane);
+  const lane: -1 | 1 =
+    secondLane === 1 ? -1 : secondLane === -1 ? 1 : preferredLane === 1 ? -1 : 1;
+  const slotIndex = mine.filter((side) => normalizeLane(side.lane) === lane).length;
+  return { lane, slotIndex };
+}

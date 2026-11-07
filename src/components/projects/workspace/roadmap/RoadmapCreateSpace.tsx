@@ -16,6 +16,10 @@ import {
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {
+  nextSidePlacement,
+  ROADMAP_MAX_SIDES_PER_PARENT,
+} from "@/lib/roadmap/pathLayout";
 
 export type CreateSpaceExistingStep = {
   id: string;
@@ -88,7 +92,7 @@ function existingCenter(index: number) {
   return roadmapPathNodeCenter(index);
 }
 
-function laneForAnchor(anchorIndex: number, existingCount: number): -1 | 1 {
+function widerLaneForAnchor(anchorIndex: number, existingCount: number): -1 | 1 {
   if (existingCount <= 0) return 1;
   const i = Math.min(Math.max(anchorIndex, 0), existingCount - 1);
   const path = existingCenter(i);
@@ -97,13 +101,15 @@ function laneForAnchor(anchorIndex: number, existingCount: number): -1 | 1 {
   return rightSpace >= leftSpace ? 1 : -1;
 }
 
-function nextSlotIndex(
+function placementForAnchor(
   sides: CreateSpaceExistingSide[],
-  sideOf: string | null,
-  lane: -1 | 1,
-): number {
-  if (!sideOf) return 0;
-  return sides.filter((side) => side.sideOf === sideOf && side.lane === lane).length;
+  steps: CreateSpaceExistingStep[],
+  anchorIndex: number,
+) {
+  const clamped =
+    steps.length === 0 ? 0 : Math.min(Math.max(anchorIndex, 0), steps.length - 1);
+  const sideOf = steps[clamped]?.id ?? null;
+  return nextSidePlacement(sides, sideOf, widerLaneForAnchor(clamped, steps.length));
 }
 
 /** その行の広い側・既存の外側スロットに追加マスを置く */
@@ -265,11 +271,20 @@ export function RoadmapCreateSpace({
     (index: number) => {
       const clamped =
         existingSteps.length === 0 ? 0 : Math.min(Math.max(index, 0), existingSteps.length - 1);
+      const placement = placementForAnchor(existingSides, existingSteps, clamped);
+      if (!placement) {
+        setError(
+          tx(
+            `このマスの横は${ROADMAP_MAX_SIDES_PER_PARENT}個までです。別のマスへスライドしてください。`,
+            `Up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps here. Slide to another step.`,
+          ),
+        );
+        return;
+      }
+      setError("");
       setAnchorIndex(clamped);
       const links = linksForAnchor(existingSteps, clamped);
       const sideOf = existingSteps[clamped]?.id ?? null;
-      const lane = laneForAnchor(clamped, existingSteps.length);
-      const slotIndex = nextSlotIndex(existingSides, sideOf, lane);
       setDraft((prev) =>
         prev
           ? {
@@ -278,25 +293,43 @@ export function RoadmapCreateSpace({
               nextId: links.nextId,
               insertAt: links.insertAt,
               sideOf,
-              lane,
-              slotIndex,
+              lane: placement.lane,
+              slotIndex: placement.slotIndex,
             }
           : prev,
       );
     },
-    [existingSteps, existingSides],
+    [existingSteps, existingSides, tx],
   );
 
   const spawnDraft = useCallback(() => {
     if (busy) return;
     setDraft((current) => {
       if (current) return current;
-      // いま取り組んでいるマスと同じステップから開始（既存横マスの外側へ）
-      const startAnchor = currentStepIndex(existingSteps);
+      // いま取り組んでいるマスから開始。埋まっていれば空きのある親へ
+      let startAnchor = currentStepIndex(existingSteps);
+      let placement = placementForAnchor(existingSides, existingSteps, startAnchor);
+      if (!placement && existingSteps.length > 0) {
+        for (let i = 0; i < existingSteps.length; i++) {
+          const candidate = placementForAnchor(existingSides, existingSteps, i);
+          if (candidate) {
+            startAnchor = i;
+            placement = candidate;
+            break;
+          }
+        }
+      }
+      if (!placement) {
+        setError(
+          tx(
+            `横マスは各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個までです。`,
+            `Each step can have up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps.`,
+          ),
+        );
+        return current;
+      }
       const links = linksForAnchor(existingSteps, startAnchor);
       const sideOf = existingSteps[startAnchor]?.id ?? null;
-      const lane = laneForAnchor(startAnchor, existingSteps.length);
-      const slotIndex = nextSlotIndex(existingSides, sideOf, lane);
       const next: CreateSpaceDraft = {
         id: newDraftId(),
         icon: resolveRoadmapMarkId(undefined, existingSteps.length + existingSides.length),
@@ -304,8 +337,8 @@ export function RoadmapCreateSpace({
         nextId: links.nextId,
         insertAt: links.insertAt,
         sideOf,
-        lane,
-        slotIndex,
+        lane: placement.lane,
+        slotIndex: placement.slotIndex,
         done: false,
       };
       setAnchorIndex(startAnchor);
@@ -313,7 +346,7 @@ export function RoadmapCreateSpace({
       queueMicrotask(() => runSelectionIntro(next));
       return next;
     });
-  }, [busy, existingSteps, existingSides, runSelectionIntro]);
+  }, [busy, existingSteps, existingSides, runSelectionIntro, tx]);
 
   // 横追加で開いたらすぐマスを出す（もう一度＋を押させない）
   useEffect(() => {
@@ -416,7 +449,10 @@ export function RoadmapCreateSpace({
     return d;
   }, [existingCenters]);
 
-  const draftLane = draft?.lane ?? laneForAnchor(anchorIndex, existingSteps.length);
+  const draftLane =
+    draft?.lane ??
+    placementForAnchor(existingSides, existingSteps, anchorIndex)?.lane ??
+    widerLaneForAnchor(anchorIndex, existingSteps.length);
   const draftSlot = draft?.slotIndex ?? 0;
   const draftCenter = useMemo(() => {
     const snapped = draftCenterForAnchor(
@@ -460,8 +496,8 @@ export function RoadmapCreateSpace({
           <h1 className="text-lg font-bold text-zinc-950">{tx("マスを追加してつなぐ", "Add and connect steps")}</h1>
           <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
             {tx(
-              "いまのステップの広い側にマスを置きます。すでに横にあるマスの外側へ足せます。上下にスライドして場所を変え、棒で接続を調整できます。",
-              "Place on the wider side of your current step, outside any existing side steps. Slide to move, drag bars to reconnect.",
+              `1つ目は広い側、2つ目は同じ側の外側、3つ目は2つ目の逆側に置きます（各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個）。上下にスライドして場所を変えられます。`,
+              `1st on the wider side, 2nd outside it, 3rd opposite the 2nd (max ${ROADMAP_MAX_SIDES_PER_PARENT} per step). Slide to move.`,
             )}
           </p>
         </div>
