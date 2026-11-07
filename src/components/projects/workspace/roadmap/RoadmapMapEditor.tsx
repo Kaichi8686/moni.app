@@ -527,7 +527,8 @@ export function RoadmapMapEditor() {
                   key: side.id,
                   lane: side.lane,
                   slotIndex: side.slotIndex,
-                  lowerCleared: side.status === "completed",
+                  /** 編集画面は横棒も含めすべてオレンジ */
+                  lowerCleared: true,
                   children: (
                     <RoadmapPathNode
                       tone={sideTone}
