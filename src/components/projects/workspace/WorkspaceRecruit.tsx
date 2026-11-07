@@ -497,7 +497,6 @@ export default function WorkspaceRecruit() {
                   placeholder={tx("例: デザイナー、広報", "e.g. Designer, PR")}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  autoFocus
                 />
               </label>
               <label className="block">
