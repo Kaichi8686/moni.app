@@ -47,6 +47,7 @@ import {
   removeFileItem,
   removeWorkFile,
   requiredFilesReady,
+  resolveDraftLinkCreation,
   sortWorkFilesByUpdated,
   upsertWorkFile,
   type IssueWorkFile,
@@ -466,8 +467,20 @@ export function IssueTaskFilesPanel({
         await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
       } else {
-        next = newLinkSlotFile(name);
-        for (const item of draftSlotItems) next = appendFileItem(next, item);
+        const resolved = resolveDraftLinkCreation({
+          fileName: name,
+          draftItems: draftSlotItems,
+          pendingUrl: draftLinkUrl,
+          pendingTitle: draftLinkTitle,
+          addedBy: uid,
+        });
+        if ("error" in resolved) {
+          setError(tx("正しいURLを入力してください", "Enter a valid URL"));
+          setCreating(false);
+          return;
+        }
+        next = newLinkSlotFile(resolved.title);
+        for (const item of resolved.items) next = appendFileItem(next, item);
         await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
       }
@@ -1273,7 +1286,10 @@ export function IssueTaskFilesPanel({
                 {namePrompt === "link" ? (
                   <div className="mt-4 space-y-2">
                     <p className="text-[12px] font-semibold text-zinc-600">
-                      {tx("リンク（任意・何個でも）", "Links (optional, any number)")}
+                      {tx(
+                        "リンク（任意・何個でも。追加を押すと入力中のURLも入ります）",
+                        "Links (optional. Create also saves the URL you’re typing)",
+                      )}
                     </p>
                     {draftSlotItems.length > 0 ? (
                       <ul className="space-y-2">

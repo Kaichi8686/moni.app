@@ -329,3 +329,59 @@ export function removeFileItem(file: IssueWorkFile, itemId: string): IssueWorkFi
     updatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * 名前入力ダイアログで入れたリンクを作成時に確実に items へ載せる。
+ * - リスト追加済みの draftItems
+ * - まだリストに入れていない pendingUrl
+ * - ファイル名欄に URL だけ打った場合
+ */
+export function resolveDraftLinkCreation(input: {
+  fileName: string;
+  draftItems: IssueWorkFileItem[];
+  pendingUrl: string;
+  pendingTitle?: string;
+  addedBy?: string;
+}): { title: string; items: IssueWorkFileItem[] } | { error: "invalid_url" } {
+  const items: IssueWorkFileItem[] = [...input.draftItems];
+  const pendingRaw = input.pendingUrl.trim();
+  if (pendingRaw) {
+    const url = normalizeExternalUrl(pendingRaw);
+    if (!url) return { error: "invalid_url" };
+    if (!items.some((item) => item.url === url)) {
+      items.push({
+        id: createWorkFileId(),
+        url,
+        title: input.pendingTitle?.trim() || undefined,
+        addedBy: input.addedBy,
+        addedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  let title = input.fileName.trim();
+  if (items.length === 0) {
+    const fromName = normalizeExternalUrl(title);
+    if (fromName) {
+      let hostTitle: string | undefined;
+      try {
+        hostTitle = new URL(fromName).hostname || undefined;
+      } catch {
+        hostTitle = undefined;
+      }
+      items.push({
+        id: createWorkFileId(),
+        url: fromName,
+        title: hostTitle,
+        addedBy: input.addedBy,
+        addedAt: new Date().toISOString(),
+      });
+      title = defaultTitle("link");
+    }
+  }
+
+  return {
+    title: title || defaultTitle("link"),
+    items,
+  };
+}
