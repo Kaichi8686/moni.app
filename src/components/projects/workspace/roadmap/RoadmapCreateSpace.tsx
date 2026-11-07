@@ -449,6 +449,42 @@ export function RoadmapCreateSpace({
     return d;
   }, [existingCenters]);
 
+  /** 保存済み横マスの棒（最内は上下の本線、外側は内側の横マスへ） */
+  const existingSideLinks = useMemo(() => {
+    const links: Array<{ key: string; d: string }> = [];
+    for (const side of existingSides) {
+      const mainIndex = existingSteps.findIndex((step) => step.id === side.sideOf);
+      if (mainIndex < 0) continue;
+      const main = existingCenters[mainIndex];
+      if (!main) continue;
+      const slot = Math.max(side.slotIndex, 0);
+      const sidePoint = roadmapPathSideCenter(mainIndex, side.lane, slot);
+      if (slot === 0) {
+        const prev = existingCenters[mainIndex - 1];
+        const next = existingCenters[mainIndex + 1];
+        if (prev) {
+          links.push({
+            key: `${side.id}-prev`,
+            d: `M ${prev.x} ${prev.y} L ${sidePoint.x} ${sidePoint.y}`,
+          });
+        }
+        if (next) {
+          links.push({
+            key: `${side.id}-next`,
+            d: `M ${next.x} ${next.y} L ${sidePoint.x} ${sidePoint.y}`,
+          });
+        }
+      } else {
+        const inner = roadmapPathSideCenter(mainIndex, side.lane, slot - 1);
+        links.push({
+          key: `${side.id}-inner`,
+          d: `M ${inner.x} ${inner.y} L ${sidePoint.x} ${sidePoint.y}`,
+        });
+      }
+    }
+    return links;
+  }, [existingSides, existingSteps, existingCenters]);
+
   const draftLane =
     draft?.lane ??
     placementForAnchor(existingSides, existingSteps, anchorIndex)?.lane ??
@@ -526,6 +562,16 @@ export function RoadmapCreateSpace({
                 strokeLinejoin="round"
               />
             ) : null}
+            {existingSideLinks.map((link) => (
+              <path
+                key={link.key}
+                d={link.d}
+                fill="none"
+                stroke="#D4D4D8"
+                strokeWidth={14}
+                strokeLinecap="round"
+              />
+            ))}
           </svg>
 
           {/* オレンジ棒：現存マスより下。棒自体を掴んで付け替え */}
