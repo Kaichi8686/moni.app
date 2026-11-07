@@ -1,31 +1,30 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
-  createCustomTaskGenreId,
-  CUSTOM_TASK_GENRE_LABEL_MAX,
+  isCustomTaskGenreId,
   listStepTaskGenres,
   MAX_CUSTOM_TASK_GENRES,
-  nextCustomColorKey,
-  normalizeCustomTaskGenreLabel,
   resolveGenreMeta,
 } from "@/lib/workspace/taskGenres";
 import {
   ISSUE_STEP_MEMORY_TTL_MS,
   markIssueStepLeft,
-  readRecentIssueStep,
-  rememberIssueStep,
+  readRecentIssueScreen,
+  rememberIssueScreen,
   resolveCurrentPhaseId,
+  type RememberedIssueScreen,
 } from "@/lib/workspace/issueStepMemory";
-import type { CustomTaskGenreDef, Issue, Phase } from "@/lib/workspace/types";
+import type { Issue, Phase } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 /** null = ステップ未設定の課題用バケット */
@@ -68,6 +67,7 @@ export default function WorkspaceIssues() {
     canEdit,
     createIssue,
     saveIssueWork,
+    deleteIssue,
     coachingContext,
     saveCoachingContext,
     registerBackHandler,
@@ -75,11 +75,17 @@ export default function WorkspaceIssues() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [creating, setCreating] = useState(false);
   const [addingGenre, setAddingGenre] = useState(false);
-  const [draftGenreLabel, setDraftGenreLabel] = useState("");
-  const [draftGenreHint, setDraftGenreHint] = useState("");
   const [error, setError] = useState("");
-  const [savingGenre, setSavingGenre] = useState(false);
+  const [genreMenuId, setGenreMenuId] = useState<string | null>(null);
+  const [confirmDeleteGenreId, setConfirmDeleteGenreId] = useState<string | null>(null);
   const entryHandled = useRef(false);
+
+  // ジャンル一覧・課題詳細では下タブを隠す
+  useEffect(() => {
+    const drill = screen?.kind === "genre" || screen?.kind === "task";
+    document.documentElement.classList.toggle("moni-issues-drill", Boolean(drill));
+    return () => document.documentElement.classList.remove("moni-issues-drill");
+  }, [screen?.kind]);
 
   const sortedPhases = useMemo(
     () => [...phases].sort((a, b) => a.order - b.order),
@@ -103,6 +109,28 @@ export default function WorkspaceIssues() {
 
   function focusCurrentStep(): Screen {
     return { kind: "step", phaseId: resolveCurrentPhaseId(sortedPhases) };
+  }
+
+  function toScreen(remembered: RememberedIssueScreen): Screen | null {
+    if (remembered.kind === "step") {
+      return { kind: "step", phaseId: remembered.phaseId };
+    }
+    if (!isTaskGenre(remembered.genre)) return null;
+    if (remembered.kind === "genre") {
+      return { kind: "genre", phaseId: remembered.phaseId, genre: remembered.genre };
+    }
+    return {
+      kind: "task",
+      phaseId: remembered.phaseId,
+      genre: remembered.genre,
+      issueId: remembered.issueId,
+    };
+  }
+
+  function toRemembered(next: Screen): RememberedIssueScreen {
+    if (next.kind === "step") return { kind: "step", phaseId: next.phaseId };
+    if (next.kind === "genre") return { kind: "genre", phaseId: next.phaseId, genre: next.genre };
+    return { kind: "task", phaseId: next.phaseId, genre: next.genre, issueId: next.issueId };
   }
 
   useEffect(() => {
@@ -158,21 +186,25 @@ export default function WorkspaceIssues() {
       return;
     }
 
-    // クエリなし: 短時間の離脱なら直前の実ステップ、それ以外はいまのステップ
+    // クエリなし: 短時間の離脱なら直前の画面（ジャンル一覧・課題含む）、それ以外はいまのステップ
     entryHandled.current = true;
     const validIds = new Set(sortedPhases.map((item) => item.id));
-    const remembered = readRecentIssueStep(projectId, validIds);
+    const issueIds = new Set(issues.map((item) => item.id));
+    const remembered = readRecentIssueScreen(projectId, { validPhaseIds: validIds, issueIds });
     if (remembered) {
-      setScreen({ kind: "step", phaseId: remembered });
-      return;
+      const restored = toScreen(remembered);
+      if (restored) {
+        setScreen(restored);
+        return;
+      }
     }
     setScreen(focusCurrentStep());
   }, [issues, loading, projectId, sortedPhases]);
 
-  // 見ている実ステップを記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
+  // 見ている画面を記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
   useEffect(() => {
     if (!projectId || !screen || loading) return;
-    rememberIssueStep(projectId, screen.phaseId);
+    rememberIssueScreen(projectId, toRemembered(screen));
     let leftAtMs: number | null = null;
 
     const onVisibility = () => {
@@ -184,12 +216,12 @@ export default function WorkspaceIssues() {
       if (leftAtMs != null && Date.now() - leftAtMs > ISSUE_STEP_MEMORY_TTL_MS) {
         const next = focusCurrentStep();
         setScreen(next);
-        rememberIssueStep(projectId, next.phaseId);
+        rememberIssueScreen(projectId, toRemembered(next));
         setAddingGenre(false);
         setCreating(false);
         setError("");
       } else {
-        rememberIssueStep(projectId, screen.phaseId);
+        rememberIssueScreen(projectId, toRemembered(screen));
       }
       leftAtMs = null;
     };
@@ -204,8 +236,8 @@ export default function WorkspaceIssues() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- screen.phaseId で十分
-  }, [loading, projectId, screen?.phaseId, sortedPhases]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- screen 全体を覚える
+  }, [loading, projectId, screen, sortedPhases]);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
@@ -240,50 +272,6 @@ export default function WorkspaceIssues() {
     return issuesFor(phaseId, genre).filter((issue) => !isIssueSubmitted(issue)).length;
   }
 
-  async function addCustomGenre(event: FormEvent) {
-    event.preventDefault();
-    if (!screen || screen.kind !== "step") return;
-    const stepScreen = screen;
-    const labelJa = normalizeCustomTaskGenreLabel(draftGenreLabel);
-    if (!labelJa) {
-      setError(tx("ジャンル名を入力してください", "Enter a genre name"));
-      return;
-    }
-    if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
-      setError(tx(`ジャンルは最大${MAX_CUSTOM_TASK_GENRES}個までです`, `You can add up to ${MAX_CUSTOM_TASK_GENRES} genres`));
-      return;
-    }
-    const duplicate = customGenres.some(
-      (g) =>
-        g.labelJa.toLowerCase() === labelJa.toLowerCase() &&
-        (g.phaseId ?? null) === stepScreen.phaseId,
-    );
-    if (duplicate) {
-      setError(tx("同じ名前のジャンルがすでにあります", "That genre name already exists"));
-      return;
-    }
-    setSavingGenre(true);
-    setError("");
-    try {
-      const next: CustomTaskGenreDef = {
-        id: createCustomTaskGenreId(),
-        labelJa,
-        hintJa: draftGenreHint.trim().slice(0, 60) || undefined,
-        colorKey: nextCustomColorKey(customGenres.length),
-        phaseId: stepScreen.phaseId ?? undefined,
-      };
-      await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
-      setDraftGenreLabel("");
-      setDraftGenreHint("");
-      setAddingGenre(false);
-      setScreen({ kind: "genre", phaseId: stepScreen.phaseId, genre: next.id });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("ジャンルを追加できませんでした", "Couldn’t add the genre"));
-    } finally {
-      setSavingGenre(false);
-    }
-  }
-
   if (!screen) {
     return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   }
@@ -300,6 +288,10 @@ export default function WorkspaceIssues() {
         canEdit={canEdit}
         onBack={() => setScreen({ kind: "genre", phaseId: screen.phaseId, genre: activeGenre })}
         onSaveWork={(patch) => saveIssueWork(activeIssue.id, patch)}
+        onDelete={async () => {
+          await deleteIssue(activeIssue.id);
+          setScreen({ kind: "genre", phaseId: screen.phaseId, genre: activeGenre });
+        }}
         registerBackHandler={registerBackHandler}
       />
     );
@@ -433,8 +425,6 @@ export default function WorkspaceIssues() {
       setAddingGenre(false);
       setCreating(false);
       setError("");
-      setDraftGenreLabel("");
-      setDraftGenreHint("");
       setScreen({ kind: "step", phaseId: nextId });
     }
 
@@ -448,7 +438,16 @@ export default function WorkspaceIssues() {
               size="md"
               onClick={() => {
                 setError("");
-                setAddingGenre((v) => !v);
+                if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
+                  setError(
+                    tx(
+                      `ジャンルは最大${MAX_CUSTOM_TASK_GENRES}個までです`,
+                      `You can add up to ${MAX_CUSTOM_TASK_GENRES} genres`,
+                    ),
+                  );
+                  return;
+                }
+                setAddingGenre(true);
               }}
               className="!gap-1 !px-3 !py-2.5 !text-[13px]"
             >
@@ -493,52 +492,18 @@ export default function WorkspaceIssues() {
         </div>
 
         {addingGenre && canEdit ? (
-          <form
-            className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3"
-            onSubmit={(event) => void addCustomGenre(event)}
-          >
-            <p className="text-sm font-semibold text-zinc-900">{tx("このステップの新しいジャンル", "New genre for this step")}</p>
-            <input
-              value={draftGenreLabel}
-              onChange={(event) => setDraftGenreLabel(event.target.value)}
-              maxLength={CUSTOM_TASK_GENRE_LABEL_MAX}
-              placeholder={tx("例: 撮影・編集", "e.g. Filming & editing")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-              autoFocus
-            />
-            <input
-              value={draftGenreHint}
-              onChange={(event) => setDraftGenreHint(event.target.value)}
-              maxLength={60}
-              placeholder={tx("説明（任意）", "Description (optional)")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-            />
-            <div className="flex gap-2.5">
-              <DuoButton
-                type="button"
-                tone="zinc"
-                size="md"
-                onClick={() => {
-                  setAddingGenre(false);
-                  setDraftGenreLabel("");
-                  setDraftGenreHint("");
-                  setError("");
-                }}
-                className="flex-1 !text-[15px]"
-              >
-                {tx("キャンセル", "Cancel")}
-              </DuoButton>
-              <DuoButton
-                type="submit"
-                tone="orange"
-                size="md"
-                disabled={savingGenre || !draftGenreLabel.trim()}
-                className="flex-[2] !text-[15px]"
-              >
-                {savingGenre ? tx("追加中…", "Adding…") : tx("追加する", "Add")}
-              </DuoButton>
-            </div>
-          </form>
+          <GenreCreateWizard
+            phaseId={phaseId}
+            existingCount={customGenres.length}
+            existingLabels={customGenres
+              .filter((g) => (g.phaseId ?? null) === phaseId || !g.phaseId)
+              .map((g) => g.labelJa)}
+            onClose={() => setAddingGenre(false)}
+            onComplete={async (next) => {
+              await saveCoachingContext({ customTaskGenres: [...customGenres, next] });
+              setScreen({ kind: "genre", phaseId, genre: next.id });
+            }}
+          />
         ) : null}
 
         <div className="flex flex-col gap-2.5">
@@ -548,33 +513,77 @@ export default function WorkspaceIssues() {
             const meta = resolveGenreMeta(genre, customGenres);
             const Icon = meta.icon;
             const openCount = openCountFor(phaseId, genre);
+            const canDeleteGenre = canEdit && isCustomTaskGenreId(genre);
+            const menuOpen = genreMenuId === genre;
             return (
-              <DuoButton
-                key={genre}
-                type="button"
-                tone="peach"
-                size="md"
-                fullWidth
-                onClick={() => setScreen({ kind: "genre", phaseId, genre })}
-                className={LIST_DUO}
-              >
-                <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
-                  <Icon className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
-                  <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
-                    {locale === "en" ? meta.hintEn : meta.hintJa}
+              <div key={genre} className="relative flex items-stretch gap-2">
+                <DuoButton
+                  type="button"
+                  tone="peach"
+                  size="md"
+                  fullWidth
+                  onClick={() => {
+                    setGenreMenuId(null);
+                    setScreen({ kind: "genre", phaseId, genre });
+                  }}
+                  className={`${LIST_DUO} !min-w-0 flex-1`}
+                >
+                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
+                    <Icon className="h-4 w-4" aria-hidden />
                   </span>
-                </span>
-                {openCount > 0 ? (
-                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
-                    {openCount}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
+                    <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
+                      {locale === "en" ? meta.hintEn : meta.hintJa}
+                    </span>
                   </span>
-                ) : (
-                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                )}
-              </DuoButton>
+                  {openCount > 0 ? (
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                      {openCount}
+                    </span>
+                  ) : (
+                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  )}
+                </DuoButton>
+                {canDeleteGenre ? (
+                  <div className="relative shrink-0 self-center">
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#F0B85A] bg-white text-[#9A5B1F] shadow-[0_2px_0_#F0B85A] transition-[transform,box-shadow] duration-75 active:translate-y-[2px] active:shadow-none"
+                      aria-label={tx("ジャンルの操作", "Genre options")}
+                      aria-expanded={menuOpen}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setGenreMenuId(menuOpen ? null : genre);
+                      }}
+                    >
+                      <MoreVertical className="h-5 w-5" aria-hidden />
+                    </button>
+                    {menuOpen ? (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-40"
+                          aria-label={tx("閉じる", "Close")}
+                          onClick={() => setGenreMenuId(null)}
+                        />
+                        <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[140px] overflow-hidden rounded-xl border border-[#F0B85A]/70 bg-white py-1 shadow-[0_8px_20px_rgba(154,91,31,0.18)]">
+                          <button
+                            type="button"
+                            className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-[#d93025] hover:bg-[#fce8e6]"
+                            onClick={() => {
+                              setGenreMenuId(null);
+                              setConfirmDeleteGenreId(genre);
+                            }}
+                          >
+                            {tx("削除する", "Delete")}
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -587,6 +596,56 @@ export default function WorkspaceIssues() {
           </p>
         ) : null}
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+
+        {confirmDeleteGenreId ? (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+            <div
+              role="dialog"
+              aria-modal
+              aria-labelledby="genre-delete-title"
+              className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            >
+              <h3 id="genre-delete-title" className="text-base font-semibold text-[#202124]">
+                {tx("ジャンルを削除しますか？", "Delete this genre?")}
+              </h3>
+              <p className="mt-2 text-sm text-[#5f6368]">
+                {tx(
+                  `「${resolveGenreMeta(confirmDeleteGenreId, customGenres).ja}」を削除します。この操作は取り消せません。`,
+                  `“${resolveGenreMeta(confirmDeleteGenreId, customGenres).en}” will be deleted. This can’t be undone.`,
+                )}
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                  onClick={() => setConfirmDeleteGenreId(null)}
+                >
+                  {tx("キャンセル", "Cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#d93025] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c5221f]"
+                  onClick={() => {
+                    const targetId = confirmDeleteGenreId;
+                    setConfirmDeleteGenreId(null);
+                    void (async () => {
+                      try {
+                        setError("");
+                        await saveCoachingContext({
+                          customTaskGenres: customGenres.filter((g) => g.id !== targetId),
+                        });
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : tx("削除に失敗しました", "Failed to delete"));
+                      }
+                    })();
+                  }}
+                >
+                  {tx("削除する", "Delete")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }

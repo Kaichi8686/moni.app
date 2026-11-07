@@ -1,5 +1,16 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Hammer, Megaphone, MessagesSquare, PenLine, Tag } from "lucide-react";
+import {
+  Camera,
+  ClipboardList,
+  Hammer,
+  Lightbulb,
+  Megaphone,
+  MessagesSquare,
+  Music,
+  PenLine,
+  Star,
+  Tag,
+} from "lucide-react";
 import type { BuiltinTaskGenre, CustomTaskGenreDef, TaskGenre } from "@/lib/workspace/types";
 
 export const BUILTIN_TASK_GENRES = ["think", "make", "talk", "spread", "run"] as const satisfies readonly BuiltinTaskGenre[];
@@ -65,13 +76,28 @@ const BUILTIN_GENRE_META: Record<BuiltinTaskGenre, GenreDisplayMeta> = {
   },
 };
 
-const CUSTOM_COLOR_PRESETS: Array<Pick<GenreDisplayMeta, "chip" | "iconBg">> = [
+export const CUSTOM_COLOR_PRESETS: Array<Pick<GenreDisplayMeta, "chip" | "iconBg">> = [
   { chip: "bg-rose-50 text-rose-700", iconBg: "bg-rose-500" },
   { chip: "bg-teal-50 text-teal-700", iconBg: "bg-teal-500" },
   { chip: "bg-amber-50 text-amber-800", iconBg: "bg-amber-500" },
   { chip: "bg-fuchsia-50 text-fuchsia-700", iconBg: "bg-fuchsia-500" },
   { chip: "bg-cyan-50 text-cyan-700", iconBg: "bg-cyan-500" },
   { chip: "bg-lime-50 text-lime-800", iconBg: "bg-lime-600" },
+  { chip: "bg-indigo-50 text-indigo-700", iconBg: "bg-indigo-500" },
+  { chip: "bg-orange-50 text-orange-700", iconBg: "bg-orange-500" },
+];
+
+export const CUSTOM_GENRE_ICON_PRESETS: Array<{ key: string; icon: LucideIcon; labelJa: string; labelEn: string }> = [
+  { key: "tag", icon: Tag, labelJa: "タグ", labelEn: "Tag" },
+  { key: "pen", icon: PenLine, labelJa: "ペン", labelEn: "Pen" },
+  { key: "hammer", icon: Hammer, labelJa: "つくる", labelEn: "Make" },
+  { key: "talk", icon: MessagesSquare, labelJa: "話す", labelEn: "Talk" },
+  { key: "megaphone", icon: Megaphone, labelJa: "広める", labelEn: "Spread" },
+  { key: "clipboard", icon: ClipboardList, labelJa: "運営", labelEn: "Ops" },
+  { key: "camera", icon: Camera, labelJa: "カメラ", labelEn: "Camera" },
+  { key: "music", icon: Music, labelJa: "音楽", labelEn: "Music" },
+  { key: "lightbulb", icon: Lightbulb, labelJa: "ひらめき", labelEn: "Idea" },
+  { key: "star", icon: Star, labelJa: "スター", labelEn: "Star" },
 ];
 
 export const MAX_CUSTOM_TASK_GENRES = 12;
@@ -121,13 +147,20 @@ export function parseCustomTaskGenres(raw: unknown): CustomTaskGenreDef[] {
       typeof o.hintEn === "string" && o.hintEn.trim() ? o.hintEn.trim().slice(0, 60) : undefined;
     const colorKey =
       typeof o.colorKey === "string" && o.colorKey.trim() ? o.colorKey.trim().slice(0, 32) : undefined;
+    const iconKeyRaw = typeof o.iconKey === "string" ? o.iconKey.trim().slice(0, 24) : "";
+    const iconKey = CUSTOM_GENRE_ICON_PRESETS.some((p) => p.key === iconKeyRaw) ? iconKeyRaw : undefined;
     const phaseIdRaw = typeof o.phaseId === "string" ? o.phaseId.trim() : "";
     const phaseId = phaseIdRaw.length > 0 ? phaseIdRaw.slice(0, 64) : undefined;
     seen.add(id);
-    out.push({ id, labelJa, labelEn, hintJa, hintEn, colorKey, phaseId });
+    out.push({ id, labelJa, labelEn, hintJa, hintEn, colorKey, iconKey, phaseId });
     if (out.length >= MAX_CUSTOM_TASK_GENRES) break;
   }
   return out;
+}
+
+export function resolveCustomGenreIcon(iconKey?: string): LucideIcon {
+  const hit = CUSTOM_GENRE_ICON_PRESETS.find((p) => p.key === iconKey);
+  return hit?.icon ?? Tag;
 }
 
 /** ジャンルがこのステップ向けか（legacy の phaseId なしはどのステップでも使える） */
@@ -161,7 +194,7 @@ export function resolveGenreMeta(
     en: def?.labelEn?.trim() || label,
     hintJa: def?.hintJa?.trim() || "自分で追加したジャンル",
     hintEn: def?.hintEn?.trim() || "Custom genre",
-    icon: Tag,
+    icon: resolveCustomGenreIcon(def?.iconKey),
     chip: colors.chip,
     iconBg: colors.iconBg,
   };

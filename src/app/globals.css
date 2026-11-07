@@ -375,6 +375,11 @@ html.moni-doc-editor .project-workspace-header {
   display: none !important;
 }
 
+/* 課題タブのジャンル一覧・課題詳細: 下タブを隠す */
+html.moni-issues-drill .app-bottom-nav {
+  display: none !important;
+}
+
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;
@@ -1142,9 +1147,41 @@ html.moni-doc-editor .project-workspace-header {
   animation: issue-create-wizard-slide-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
+@keyframes issue-create-step-from-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes issue-create-step-from-left {
+  from {
+    transform: translateX(-28%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.issue-create-step-from-right {
+  animation: issue-create-step-from-right 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.issue-create-step-from-left {
+  animation: issue-create-step-from-left 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .issue-create-wizard-in,
-  .issue-create-wizard-out {
+  .issue-create-wizard-out,
+  .issue-create-step-from-right,
+  .issue-create-step-from-left {
     animation: none;
   }
 }

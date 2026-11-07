@@ -168,6 +168,7 @@ type Ctx = {
     workFiles?: IssueWork["workFiles"];
   }) => Promise<string | null>;
   saveIssueWork: (issueId: string, patch: Partial<IssueWork>) => Promise<void>;
+  deleteIssue: (issueId: string) => Promise<void>;
   saveCoachingContext: (patch: Partial<CoachingContext>) => Promise<void>;
   seedPhasesFromSituation: (situation: UserSituation) => Promise<void>;
   updateIssue: (
@@ -1041,6 +1042,16 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     [canEdit, issues],
   );
 
+  const deleteIssue = useCallback(
+    async (issueId: string) => {
+      if (!supabase || !canEdit) return;
+      const { error: err } = await supabase.from("project_issues").delete().eq("id", issueId);
+      if (err) throw new Error(err.message);
+      setIssues((prev) => prev.filter((item) => item.id !== issueId));
+    },
+    [canEdit],
+  );
+
   const migratedIssueIds = useRef(new Set<string>());
   useEffect(() => {
     if (!canEdit || loading) return;
@@ -1129,6 +1140,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         updateIssueStatus,
         createIssue,
         saveIssueWork,
+        deleteIssue,
         saveCoachingContext,
         seedPhasesFromSituation,
         updateIssue,
@@ -1168,6 +1180,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       updateIssueStatus,
       createIssue,
       saveIssueWork,
+      deleteIssue,
       saveCoachingContext,
       seedPhasesFromSituation,
       updateIssue,
@@ -1189,7 +1202,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   /** 投票（作成・詳細）はヘッダーなし（戻るは画面側の固定ボタン） */
   const isVotePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/ideas(?:\/|$)/));
   const isVoteCreatePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/ideas\/new\/?$/));
-  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage;
+  /** 課題タブはヘッダーなし */
+  const isIssuesPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/issues(?:\/|$)/));
+  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage || isIssuesPage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1207,7 +1222,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           isRecruitPage ? "flex flex-col" : ""
         }`}
       >
-        {isCoachChat || isRoadmapEditPage || isVotePage ? null : (
+        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage ? null : (
         <header className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4">
           <div className={`mx-auto ${isRecruitPage ? "max-w-none" : "max-w-3xl"}`}>
             <div className="flex items-center justify-between gap-2">
@@ -1405,7 +1420,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat || isRoadmapEditPage || isVotePage
+            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage
               ? "min-h-[100dvh]"
               : isRecruitPage
                 ? "min-h-0 flex-1"
@@ -1416,7 +1431,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
-                : isRoadmapEditPage || isVotePage
+                : isRoadmapEditPage || isVotePage || isIssuesPage
                   ? "min-h-[100dvh]"
                   : isRecruitPage
                     ? "flex min-h-0 flex-1 flex-col"
@@ -1431,6 +1446,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                     ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
                     : isVotePage
                       ? "mx-auto max-w-2xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
+                      : isIssuesPage
+                        ? "mx-auto max-w-3xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
                       : isRoadmapEditPage
                         ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
                         : isRecruitPage

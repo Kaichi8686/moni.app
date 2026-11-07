@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
@@ -18,6 +18,13 @@ import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { createProjectBoard, deleteProjectBoard } from "@/lib/projects/whiteboard/boardApi";
 import { supabase } from "@/lib/supabase";
+import {
+  clearIssueCreateDraft,
+  orderFilesForPublish,
+  readIssueCreateDraft,
+  replaceWorkFileInPlace,
+  writeIssueCreateDraft,
+} from "@/lib/workspace/issueCreateDraft";
 import { dateInputToIso } from "@/lib/workspace/issueWork";
 import {
   createWorkFileId,
@@ -27,8 +34,6 @@ import {
   newPhotoSlotFile,
   removeWorkFile,
   setWorkFileRequired,
-  sortWorkFilesByUpdated,
-  upsertWorkFile,
   type IssueWorkFile,
   type IssueWorkFileKind,
 } from "@/lib/workspace/issueWorkFiles";
@@ -97,6 +102,18 @@ function FileKindIcon({ kind }: { kind: IssueWorkFileKind }) {
   );
 }
 
+/** iOS など入力後の拡大を元に戻す */
+function resetViewportZoom() {
+  if (typeof document === "undefined") return;
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  const prev = meta.getAttribute("content") || "width=device-width, initial-scale=1";
+  meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1");
+  window.setTimeout(() => {
+    meta.setAttribute("content", prev.includes("width=") ? prev : "width=device-width, initial-scale=1");
+  }, 80);
+}
+
 export function IssueCreateWizard({
   projectId,
   phaseId,
@@ -107,10 +124,13 @@ export function IssueCreateWizard({
   onComplete,
 }: Props) {
   const { tx } = useI18n();
+  const lastTitleTap = useRef<{ id: string; at: number } | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   const [entered, setEntered] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [step, setStep] = useState<Step>("details");
+  const [stepAnim, setStepAnim] = useState<"idle" | "to-files" | "to-details">("idle");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
@@ -120,13 +140,13 @@ export function IssueCreateWizard({
   const [fabOpen, setFabOpen] = useState(false);
   const [namePrompt, setNamePrompt] = useState<IssueWorkFileKind | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
-  const sortedFiles = useMemo(() => sortWorkFilesByUpdated(files), [files]);
   const canGoNext = Boolean(title.trim());
   const isDirty = useMemo(
     () =>
@@ -139,6 +159,35 @@ export function IssueCreateWizard({
     [title, description, assignees, dueDate, beginAt, files],
   );
 
+  // 下書き復元（完了してから書き込み開始）
+  useEffect(() => {
+    const draft = readIssueCreateDraft(projectId, phaseId, genre);
+    if (draft) {
+      setStep(draft.step);
+      setTitle(draft.title);
+      setDescription(draft.description);
+      setAssignees(draft.assignees);
+      setDueDate(draft.dueDate);
+      setBeginAt(draft.beginAt);
+      setFiles(draft.files);
+    }
+    setHydrated(true);
+  }, [projectId, phaseId, genre]);
+
+  // 下書き保存
+  useEffect(() => {
+    if (!hydrated) return;
+    writeIssueCreateDraft(projectId, phaseId, genre, {
+      step,
+      title,
+      description,
+      assignees,
+      dueDate,
+      beginAt,
+      files,
+    });
+  }, [hydrated, projectId, phaseId, genre, step, title, description, assignees, dueDate, beginAt, files]);
+
   useEffect(() => {
     setPortalReady(true);
     const id = window.requestAnimationFrame(() => setEntered(true));
@@ -150,7 +199,8 @@ export function IssueCreateWizard({
     };
   }, []);
 
-  function closeWizard() {
+  function clearDraftAndClose() {
+    clearIssueCreateDraft(projectId, phaseId, genre);
     setConfirmDiscard(false);
     setExiting(true);
     window.setTimeout(() => onClose(), 220);
@@ -158,18 +208,55 @@ export function IssueCreateWizard({
 
   function requestClose() {
     if (saving) return;
+    // ファイル画面の戻る → 詳細へ（確認なし・データ保持）
+    if (step === "files") {
+      setError("");
+      setFabOpen(false);
+      setMenuId(null);
+      setStepAnim("to-details");
+      setStep("details");
+      return;
+    }
     if (isDirty) {
       setConfirmDiscard(true);
       return;
     }
-    closeWizard();
+    clearDraftAndClose();
+  }
+
+  function goToFiles() {
+    if (!canGoNext) return;
+    setError("");
+    setStepAnim("to-files");
+    setStep("files");
   }
 
   function openNamePrompt(kind: IssueWorkFileKind) {
     setFabOpen(false);
+    setRenameId(null);
     setNamePrompt(kind);
     setDraftName(defaultTitle(kind));
     setError("");
+  }
+
+  function openRename(file: IssueWorkFile) {
+    setFabOpen(false);
+    setMenuId(null);
+    setNamePrompt(null);
+    setRenameId(file.id);
+    setDraftName(file.title || defaultTitle(file.kind));
+    setError("");
+  }
+
+  function handleTitleTap(file: IssueWorkFile) {
+    const now = Date.now();
+    const prev = lastTitleTap.current;
+    if (prev && prev.id === file.id && now - prev.at < 350) {
+      lastTitleTap.current = null;
+      openRename(file);
+      return;
+    }
+    lastTitleTap.current = { id: file.id, at: now };
   }
 
   async function createNamedFile() {
@@ -215,11 +302,44 @@ export function IssueCreateWizard({
       } else {
         next = newLinkSlotFile(name);
       }
-      setFiles((prev) => upsertWorkFile(prev, next));
+      setFiles((prev) => replaceWorkFileInPlace(prev, next));
       setNamePrompt(null);
       setDraftName("");
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function saveRename() {
+    if (!renameId) return;
+    const file = files.find((item) => item.id === renameId);
+    if (!file) {
+      setRenameId(null);
+      return;
+    }
+    const name = draftName.trim() || defaultTitle(file.kind);
+    setCreating(true);
+    setError("");
+    try {
+      if (file.kind === "doc" && supabase) {
+        await supabase.from("project_documents").update({ title: name }).eq("id", file.refId);
+      }
+      if (file.kind === "board" && supabase) {
+        await supabase.from("project_boards").update({ title: name }).eq("id", file.refId);
+      }
+      setFiles((prev) =>
+        replaceWorkFileInPlace(prev, {
+          ...file,
+          title: name,
+          // 位置を動かさないため updatedAt は変えない
+        }),
+      );
+      setRenameId(null);
+      setDraftName("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("名前を変えられませんでした", "Couldn’t rename"));
     } finally {
       setCreating(false);
     }
@@ -241,7 +361,9 @@ export function IssueCreateWizard({
   }
 
   function toggleRequired(file: IssueWorkFile) {
-    setFiles((prev) => upsertWorkFile(prev, setWorkFileRequired(file, !file.required)));
+    // 作成中は並びを変えず、必須フラグだけ更新
+    const next = setWorkFileRequired(file, !file.required);
+    setFiles((prev) => replaceWorkFileInPlace(prev, { ...next, updatedAt: file.updatedAt }));
   }
 
   async function finish() {
@@ -255,8 +377,9 @@ export function IssueCreateWizard({
         assigneeIds: assignees,
         dueDate: dateInputToIso(dueDate),
         beginAt: dateInputToIso(beginAt),
-        workFiles: files,
+        workFiles: orderFilesForPublish(files),
       });
+      clearIssueCreateDraft(projectId, phaseId, genre);
       setExiting(true);
       window.setTimeout(() => onClose(), 180);
     } catch (e) {
@@ -267,6 +390,8 @@ export function IssueCreateWizard({
 
   if (!portalReady) return null;
 
+  const nameDialogOpen = Boolean(namePrompt || renameId);
+
   return createPortal(
     <div
       className={`fixed inset-0 z-[300] flex flex-col bg-white ${
@@ -276,32 +401,45 @@ export function IssueCreateWizard({
       aria-modal="true"
       aria-label={tx("課題を作成", "Create task")}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={requestClose}
+        className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
+        aria-label={tx("戻る", "Back")}
+      >
+        <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+      </button>
+
+      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 py-2 pl-16 pr-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-extrabold text-zinc-900">
           {step === "details" ? tx("課題を作成", "Create task") : tx("ファイルを用意", "Prepare files")}
         </h1>
-        {step === "files" ? (
-          <button
-            type="button"
-            onClick={() => setStep("details")}
-            className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-zinc-600 hover:bg-zinc-100"
-          >
-            {tx("詳細へ", "Details")}
-          </button>
-        ) : null}
       </div>
 
-      {step === "details" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-4">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* 詳細 */}
+        <div
+          className={`absolute inset-0 overflow-y-auto px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-4 ${
+            step === "details"
+              ? stepAnim === "to-details"
+                ? "issue-create-step-from-left"
+                : ""
+              : "pointer-events-none"
+          }`}
+          style={step === "details" ? undefined : { visibility: "hidden" }}
+          aria-hidden={step !== "details"}
+        >
           <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
             <label className="block space-y-1.5">
               <span className="text-[12px] font-semibold text-zinc-700">{tx("名前", "Name")}</span>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                onBlur={resetViewportZoom}
                 placeholder={tx("課題名", "Task name")}
-                className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[15px] outline-none focus:border-[#FF9600]"
-                autoFocus
+                className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px] outline-none focus:border-[#FF9600]"
+                autoFocus={step === "details"}
               />
             </label>
             <label className="block space-y-1.5">
@@ -309,9 +447,10 @@ export function IssueCreateWizard({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                onBlur={resetViewportZoom}
                 rows={4}
                 placeholder={tx("何をする課題か（任意）", "What should be done (optional)")}
-                className="w-full resize-y rounded-2xl border border-zinc-200 px-3 py-2.5 text-[14px] outline-none focus:border-[#FF9600]"
+                className="w-full resize-y rounded-2xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
               />
             </label>
             <div className="space-y-1.5">
@@ -330,7 +469,8 @@ export function IssueCreateWizard({
                   type="date"
                   value={beginAt}
                   onChange={(e) => setBeginAt(e.target.value)}
-                  className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[14px]"
+                  onBlur={resetViewportZoom}
+                  className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px]"
                 />
               </label>
               <label className="block space-y-1.5">
@@ -339,19 +479,27 @@ export function IssueCreateWizard({
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[14px]"
+                  onBlur={resetViewportZoom}
+                  className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px]"
                 />
               </label>
             </div>
-            {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-            <p className="text-[11px] text-zinc-400">
-              {tx(`ジャンル: ${genre}`, `Genre: ${genre}`)}
-              {phaseId ? "" : ` · ${tx("ステップ未設定", "No step")}`}
-            </p>
+            {error && step === "details" ? <p className="text-sm text-rose-600">{error}</p> : null}
           </div>
         </div>
-      ) : (
-        <div className="relative min-h-0 flex-1 overflow-y-auto pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
+
+        {/* ファイル */}
+        <div
+          className={`absolute inset-0 overflow-y-auto pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] ${
+            step === "files"
+              ? stepAnim === "to-files"
+                ? "issue-create-step-from-right"
+                : ""
+              : "pointer-events-none"
+          }`}
+          style={step === "files" ? undefined : { visibility: "hidden" }}
+          aria-hidden={step !== "files"}
+        >
           <div className="mx-auto w-full max-w-lg px-2 pt-2">
             <p className="px-2 pb-2 text-[13px] text-zinc-500">
               {tx(
@@ -360,12 +508,12 @@ export function IssueCreateWizard({
               )}
             </p>
             <ul className="divide-y divide-[#e8eaed]">
-              {sortedFiles.length === 0 ? (
+              {files.length === 0 ? (
                 <li className="px-3 py-14 text-center text-[14px] text-zinc-500">
                   {tx("まだファイルはありません。右下の＋から追加。", "No files yet. Add with + below.")}
                 </li>
               ) : (
-                sortedFiles.map((file) => (
+                files.map((file) => (
                   <li
                     key={file.id}
                     className={`relative flex items-center gap-1 pr-2 ${
@@ -374,7 +522,11 @@ export function IssueCreateWizard({
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
                       <FileKindIcon kind={file.kind} />
-                      <span className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => handleTitleTap(file)}
+                      >
                         <span className="block truncate text-[15px] text-[#202124]">
                           {file.title || defaultTitle(file.kind)}
                         </span>
@@ -382,7 +534,7 @@ export function IssueCreateWizard({
                           {kindLabel(file.kind, tx)}
                           {file.required ? ` · ${tx("必須", "Required")}` : ""}
                         </span>
-                      </span>
+                      </button>
                     </div>
                     <DuoButton
                       type="button"
@@ -407,6 +559,13 @@ export function IssueCreateWizard({
                         <div className="absolute right-2 top-full z-50 min-w-[140px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
                           <button
                             type="button"
+                            className="block w-full px-4 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f8f9fa]"
+                            onClick={() => openRename(file)}
+                          >
+                            {tx("名前を変更", "Rename")}
+                          </button>
+                          <button
+                            type="button"
                             className="block w-full px-4 py-2.5 text-left text-[14px] text-[#d93025] hover:bg-[#fce8e6]"
                             onClick={() => void deleteFile(file)}
                           >
@@ -419,7 +578,7 @@ export function IssueCreateWizard({
                 ))
               )}
             </ul>
-            {error ? <p className="px-3 pt-2 text-sm text-rose-600">{error}</p> : null}
+            {error && step === "files" ? <p className="px-3 pt-2 text-sm text-rose-600">{error}</p> : null}
           </div>
 
           <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex flex-col items-end gap-2">
@@ -459,32 +618,12 @@ export function IssueCreateWizard({
             </button>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-lg items-center gap-3">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={requestClose}
-            className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-6 w-6" strokeWidth={2.5} aria-hidden />
-          </button>
+        <div className="mx-auto max-w-lg">
           {step === "details" ? (
-            <DuoButton
-              type="button"
-              tone="orange"
-              size="lg"
-              fullWidth
-              disabled={!canGoNext}
-              onClick={() => {
-                setError("");
-                setStep("files");
-              }}
-              className="!flex-1"
-            >
+            <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={!canGoNext} onClick={goToFiles}>
               {tx("次へ", "Next")}
             </DuoButton>
           ) : (
@@ -495,7 +634,6 @@ export function IssueCreateWizard({
               fullWidth
               disabled={saving || !canGoNext}
               onClick={() => void finish()}
-              className="!flex-1"
             >
               {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
             </DuoButton>
@@ -531,7 +669,7 @@ export function IssueCreateWizard({
               <button
                 type="button"
                 className="rounded-lg bg-[#d93025] px-4 py-2 text-sm font-semibold text-white hover:bg-[#c5221f]"
-                onClick={closeWizard}
+                onClick={clearDraftAndClose}
               >
                 {tx("捨てて戻る", "Discard")}
               </button>
@@ -540,22 +678,32 @@ export function IssueCreateWizard({
         </div>
       ) : null}
 
-      {namePrompt ? (
+      {nameDialogOpen ? (
         <div className="fixed inset-0 z-[310] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <button type="button" className="absolute inset-0" aria-label={tx("閉じる", "Close")} onClick={() => setNamePrompt(null)} />
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label={tx("閉じる", "Close")}
+            onClick={() => {
+              setNamePrompt(null);
+              setRenameId(null);
+            }}
+          />
           <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
             <h2 className="text-base font-bold text-zinc-900">
-              {tx("ファイル名", "File name")}
+              {renameId ? tx("名前を変更", "Rename") : tx("ファイル名", "File name")}
             </h2>
             <input
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
-              className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+              onBlur={resetViewportZoom}
+              className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  void createNamedFile();
+                  if (renameId) void saveRename();
+                  else void createNamedFile();
                 }
               }}
             />
@@ -563,7 +711,10 @@ export function IssueCreateWizard({
               <button
                 type="button"
                 className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
-                onClick={() => setNamePrompt(null)}
+                onClick={() => {
+                  setNamePrompt(null);
+                  setRenameId(null);
+                }}
               >
                 {tx("キャンセル", "Cancel")}
               </button>
@@ -572,10 +723,17 @@ export function IssueCreateWizard({
                 tone="orange"
                 size="md"
                 disabled={creating}
-                onClick={() => void createNamedFile()}
+                onClick={() => {
+                  if (renameId) void saveRename();
+                  else void createNamedFile();
+                }}
                 className="!px-4 !py-2 !text-[14px]"
               >
-                {creating ? tx("作成中…", "Creating…") : tx("追加", "Add")}
+                {creating
+                  ? tx("保存中…", "Saving…")
+                  : renameId
+                    ? tx("保存", "Save")
+                    : tx("追加", "Add")}
               </DuoButton>
             </div>
           </div>
