@@ -15,6 +15,7 @@ import {
   ideaVotingRealtimeTable,
   resolveIdeaVotingBackend,
   setMyVote,
+  updateVoteEvent,
   type IdeaVoteEventWithCount,
   type IdeaVoteRow,
 } from "@/lib/projects/ideaVoting/ideaVotingApi";
@@ -53,6 +54,7 @@ export default function WorkspaceIdeaVoting() {
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const messagesHref = `/messages?project=${encodeURIComponent(projectId)}`;
   const selected = eventParam ? (events.find((e) => e.id === eventParam) ?? null) : null;
@@ -219,6 +221,10 @@ export default function WorkspaceIdeaVoting() {
     [selectedIds, tallies.mine],
   );
   const canSubmitVote = !closed && !submitting && pendingSelection.length > 0 && pendingSelection.length <= votesRemaining;
+  /** 期限なし投票は作成者だけ手動で締め切れる */
+  const canCloseManually = Boolean(
+    selected && !closed && !selected.closesAt && uid && selected.createdBy === uid,
+  );
 
   function applyMyVoteLocal(ideaId: string, nextCount: number) {
     if (!uid) return;
@@ -270,6 +276,27 @@ export default function WorkspaceIdeaVoting() {
     }
   }
 
+  async function handleCloseVote() {
+    if (!selected || !canCloseManually || closing) return;
+    const ok = window.confirm(
+      tx(
+        "本当にこの投票を締め切りますか？締切後は投票できなくなり、結果が表示されます。",
+        "Really close this vote? Voting will stop and results will be shown.",
+      ),
+    );
+    if (!ok) return;
+    setClosing(true);
+    setError("");
+    try {
+      await updateVoteEvent(selected, { closed: true });
+      setEvents((prev) => prev.map((ev) => (ev.id === selected.id ? { ...ev, closed: true } : ev)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tx("締め切りに失敗しました", "Couldn’t close the vote"));
+    } finally {
+      setClosing(false);
+    }
+  }
+
   if (loading || !hydrated) {
     return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
   }
@@ -309,7 +336,13 @@ export default function WorkspaceIdeaVoting() {
         : tx("右のチェックで選んで、下の「投票する」を押してください。", "Check options on the right, then tap Vote below.");
 
   return (
-    <div className="relative mx-auto max-w-2xl space-y-3 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-12">
+    <div
+      className={`relative mx-auto max-w-2xl space-y-3 pt-12 ${
+        canCloseManually
+          ? "pb-[calc(7.25rem+env(safe-area-inset-bottom,0px))]"
+          : "pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
+      }`}
+    >
       {backButton}
       <header className="border-b border-zinc-200 pb-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -382,13 +415,23 @@ export default function WorkspaceIdeaVoting() {
 
       {!closed ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-          <div className="mx-auto max-w-lg">
+          <div className="mx-auto flex max-w-lg flex-col items-stretch gap-1.5">
+            {canCloseManually ? (
+              <button
+                type="button"
+                disabled={closing || submitting}
+                onClick={() => void handleCloseVote()}
+                className="mx-auto px-2 py-1 text-[12px] font-medium text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline disabled:opacity-50"
+              >
+                {closing ? tx("締め切り中…", "Closing…") : tx("締め切り", "Close vote")}
+              </button>
+            ) : null}
             <DuoButton
               type="button"
               tone="orange"
               size="lg"
               fullWidth
-              disabled={!canSubmitVote}
+              disabled={!canSubmitVote || closing}
               onClick={() => void handleSubmitVotes()}
             >
               {submitting
