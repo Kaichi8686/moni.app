@@ -759,7 +759,7 @@ export function IssueTaskFilesPanel({
   }
 
   return (
-    <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3 pb-28">
+    <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3 pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -931,30 +931,33 @@ export function IssueTaskFilesPanel({
         </ul>
       </div>
 
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      {!requiredFilesReady(files) && !submitted ? (
-        <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
-          {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
-        </p>
-      ) : null}
-
-      <DuoButton
-        type="button"
-        tone={submitted ? "lime" : "orange"}
-        size="lg"
-        fullWidth
-        disabled={!canSubmit}
-        onClick={() => {
-          if (!requiredFilesReady(files)) return;
-          void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
-        }}
-        className="!text-[16px]"
-      >
-        {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-      </DuoButton>
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+          {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
+          {!requiredFilesReady(files) && !submitted ? (
+            <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
+              {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+            </p>
+          ) : null}
+          <DuoButton
+            type="button"
+            tone={submitted ? "lime" : "orange"}
+            size="lg"
+            fullWidth
+            disabled={!canSubmit}
+            onClick={() => {
+              if (!requiredFilesReady(files)) return;
+              void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
+            }}
+            className="!text-[16px]"
+          >
+            {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
+          </DuoButton>
+        </div>
+      </div>
 
       {canEdit && !submitted ? (
-        <div className="pointer-events-none fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex flex-col items-end gap-2 md:bottom-8">
+        <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex flex-col items-end gap-2">
           {fabOpen ? (
             <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
               <button
