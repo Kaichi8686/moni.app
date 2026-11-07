@@ -13,16 +13,17 @@ type Props = {
   projectId: string;
 };
 
+/** 1枚＝横幅いっぱい（スクロールで切り替わる）。途中切れ防止で min-w-full */
 const CARD_SHELL =
-  "flex w-[8rem] shrink-0 snap-start flex-col overflow-visible rounded-2xl border border-zinc-200 bg-white";
+  "flex w-full min-w-full shrink-0 snap-start flex-col overflow-visible rounded-2xl border border-zinc-200 bg-white";
 
 /** 作成・投票する = アイデアタブと同じ Duo 立体ボタン（下帯シャドウ＋押下） */
-const CARD_BTN = "!mt-1 !min-h-[2.5rem] !px-2 !py-2.5 !text-[13px]";
+const CARD_BTN = "!mt-1 !min-h-[2.75rem] !px-3 !py-2.5 !text-[14px]";
 
 const CARD_TITLE =
-  "min-h-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
+  "min-h-0 flex-1 truncate text-center text-[15px] font-extrabold leading-snug tracking-tight text-zinc-900";
 
-/** プロジェクトメッセージ: 検索欄と名前一覧のあいだに置く縦長の投票カード */
+/** プロジェクトメッセージ: 検索欄と名前一覧のあいだに置く投票カード（横フル幅カルーセル） */
 export function InboxVoteCards({ projectId }: Props) {
   const router = useRouter();
   const { tx } = useI18n();
@@ -55,12 +56,12 @@ export function InboxVoteCards({ projectId }: Props) {
 
   return (
     <div className="shrink-0 border-b border-zinc-100 bg-white px-4 py-2.5">
-      <div className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <article className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
           <div className="flex h-[4.25rem] items-center justify-center overflow-hidden rounded-t-2xl bg-[#FF9600]">
             <Plus className="h-8 w-8 text-white" strokeWidth={2.5} aria-hidden />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3 pt-1.5">
+          <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2">
             <p className={CARD_TITLE}>{tx("投票を作る", "Create vote")}</p>
             <DuoButton
               type="button"
@@ -80,7 +81,7 @@ export function InboxVoteCards({ projectId }: Props) {
             <div className="flex h-[4.25rem] items-center justify-center overflow-hidden rounded-t-2xl bg-[#FF9600]">
               <Vote className="h-8 w-8 text-white" strokeWidth={2.25} aria-hidden />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3 pt-1.5">
+            <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2">
               <p className={CARD_TITLE}>{ev.title}</p>
               <DuoButton
                 type="button"
