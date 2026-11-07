@@ -416,6 +416,16 @@ export default function WorkspaceIdeaVoting() {
       {!closed ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
           <div className="mx-auto flex max-w-lg flex-col items-stretch gap-1.5">
+            {canCloseManually ? (
+              <button
+                type="button"
+                disabled={closing || submitting}
+                onClick={() => void handleCloseVote()}
+                className="mx-auto px-2 py-1 text-[12px] font-medium text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline disabled:opacity-50"
+              >
+                {closing ? tx("締め切り中…", "Closing…") : tx("締め切り", "Close vote")}
+              </button>
+            ) : null}
             <DuoButton
               type="button"
               tone="orange"
@@ -430,16 +440,6 @@ export default function WorkspaceIdeaVoting() {
                   ? tx(`投票する（${pendingSelection.length}）`, `Vote (${pendingSelection.length})`)
                   : tx("投票する", "Vote")}
             </DuoButton>
-            {canCloseManually ? (
-              <button
-                type="button"
-                disabled={closing || submitting}
-                onClick={() => void handleCloseVote()}
-                className="mx-auto px-2 py-1 text-[12px] font-medium text-zinc-500 underline-offset-2 transition hover:text-zinc-800 hover:underline disabled:opacity-50"
-              >
-                {closing ? tx("締め切り中…", "Closing…") : tx("締め切り", "Close vote")}
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
