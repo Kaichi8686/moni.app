@@ -8,6 +8,7 @@ import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWi
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
+import { readIssueCreateDraft, readIssueCreateOpen } from "@/lib/workspace/issueCreateDraft";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
@@ -57,6 +58,12 @@ function stepLabel(
 const LIST_DUO =
   "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
 
+function shouldResumeIssueCreate(projectId: string, phaseId: string | null, genre: string): boolean {
+  const open = readIssueCreateOpen(projectId);
+  if (open && open.genre === genre && (open.phaseId ?? null) === (phaseId ?? null)) return true;
+  return Boolean(readIssueCreateDraft(projectId, phaseId, genre));
+}
+
 /** ジャンル／課題への右スライドパネル（作成ウィザードと同系） */
 function IssuesSlidePanel({
   children,
@@ -89,9 +96,9 @@ function IssuesSlidePanel({
 
   return (
     <div
-      className={`fixed inset-0 ${zClass} overflow-y-auto overscroll-contain bg-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
+      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
     >
-      <div className="mx-auto w-full max-w-3xl">{children}</div>
+      <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
     </div>
   );
 }
@@ -245,11 +252,22 @@ export default function WorkspaceIssues() {
       const restored = toScreen(remembered);
       if (restored) {
         setScreen(restored);
+        if (restored.kind === "genre" && shouldResumeIssueCreate(projectId, restored.phaseId, restored.genre)) {
+          setCreating(true);
+        }
         return;
       }
     }
     setScreen(focusCurrentStep());
   }, [issues, loading, projectId, sortedPhases]);
+
+  // 課題作成中に他画面へ行っても、開いていた作成画面を再開する
+  useEffect(() => {
+    if (!screen || screen.kind !== "genre" || creating) return;
+    if (shouldResumeIssueCreate(projectId, screen.phaseId, screen.genre)) {
+      setCreating(true);
+    }
+  }, [screen, projectId, creating]);
 
   // 見ている画面を記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
   useEffect(() => {
