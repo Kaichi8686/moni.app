@@ -8,6 +8,7 @@ import {
   listOpenRecruitmentsForDiscover,
   type ProjectRecruitment,
 } from "@/lib/projects/projectRecruitments";
+import { applyToRecruitment } from "@/lib/projects/projectRecruitmentApplications";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -87,27 +88,27 @@ export function DiscoverRecruitBoard() {
     });
   }, [rows, query]);
 
-  async function submitJoin(projectId: string) {
+  async function submitJoin(row: ProjectRecruitment) {
     if (!supabase || !uid) {
       setToast(tx("ログインが必要です。", "Please sign in."));
       window.setTimeout(() => setToast(""), 2800);
       return;
     }
-    setBusyId(projectId);
+    setBusyId(row.projectId);
     try {
-      const { error } = await supabase.from("project_join_requests").insert({
-        project_id: projectId,
-        requester_id: uid,
+      await applyToRecruitment(supabase, {
+        recruitmentId: row.id,
+        projectId: row.projectId,
+        applicantId: uid,
         message: joinMsgDraft.trim() || tx("参加したいです", "I'd like to join"),
       });
-      if (error) {
-        setToast(error.message);
-        return;
-      }
-      setPendingIds((prev) => new Set(prev).add(projectId));
+      setPendingIds((prev) => new Set(prev).add(row.projectId));
       setDetail(null);
       setJoinMsgDraft("");
       setToast(tx("参加申請を送信しました。", "Join request sent."));
+      window.setTimeout(() => setToast(""), 2800);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : tx("送信に失敗しました", "Failed to send"));
       window.setTimeout(() => setToast(""), 2800);
     } finally {
       setBusyId(null);
@@ -299,7 +300,7 @@ export function DiscoverRecruitBoard() {
                             <button
                               type="button"
                               disabled={busyId === detail.projectId}
-                              onClick={() => void submitJoin(detail.projectId)}
+                              onClick={() => void submitJoin(detail)}
                               className="min-h-[44px] rounded-xl border border-sky-600 bg-sky-50 text-sm font-semibold text-sky-900 disabled:opacity-50"
                             >
                               {busyId === detail.projectId
