@@ -323,7 +323,7 @@ export default function WorkspaceRecruit() {
         ) : null}
 
         <div className="flex flex-col gap-2.5">
-          {canEdit ? (
+          {canEdit && filter === "all" ? (
             <DuoButton type="button" tone="orange" size="md" fullWidth onClick={openCreate} className={LIST_DUO}>
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/25 text-white">
                 <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -345,9 +345,7 @@ export default function WorkspaceRecruit() {
               {filter === "closed"
                 ? tx("締切済みの募集はありません。", "No closed recruitments.")
                 : filter === "open"
-                  ? canEdit
-                    ? tx("公開中の募集はありません。「募集を追加」から作れます。", "No open recruitments. Tap Add to create one.")
-                    : tx("公開中の募集はありません。", "No open recruitments.")
+                  ? tx("公開中の募集はありません。", "No open recruitments.")
                   : canEdit
                     ? tx("まだ募集がありません。「募集を追加」から作れます。", "No recruitments yet. Tap Add to create one.")
                     : tx("まだ募集がありません。", "No recruitments yet.")}
