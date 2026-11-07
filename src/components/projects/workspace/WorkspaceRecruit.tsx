@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { Megaphone, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   closeProjectRecruitment,
@@ -14,6 +15,12 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { supabase } from "@/lib/supabase";
 
 type WorkFormat = "online" | "in_person" | "other";
+type FilterId = "all" | "open" | "closed";
+type Panel = { kind: "detail"; row: ProjectRecruitment } | { kind: "create" };
+
+const SLIDE_OUT_MS = 220;
+const LIST_DUO =
+  "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
 
 function formatWeeklyHours(raw: string): string {
   const trimmed = raw.trim();
@@ -32,6 +39,36 @@ function metaLine(row: ProjectRecruitment): string {
   return [row.skillName, row.duration, row.compensation].filter(Boolean).join(" · ");
 }
 
+function RecruitSlidePanel({
+  children,
+  exiting,
+  zClass = "z-[200]",
+}: {
+  children: ReactNode;
+  exiting?: boolean;
+  zClass?: string;
+}) {
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const motionClass = exiting
+    ? "issue-create-wizard-out"
+    : entered
+      ? "issue-create-wizard-in"
+      : "translate-x-full";
+
+  return (
+    <div
+      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
+    >
+      <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
+    </div>
+  );
+}
+
 export default function WorkspaceRecruit() {
   const { tx } = useI18n();
   const { project, projectMeta, projectId, loading, uid, canEdit, isOwner, reload } = useProjectWorkspace();
@@ -40,9 +77,11 @@ export default function WorkspaceRecruit() {
   const [listLoading, setListLoading] = useState(true);
   const [rows, setRows] = useState<ProjectRecruitment[]>([]);
   const [closingId, setClosingId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ProjectRecruitment | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createEntered, setCreateEntered] = useState(false);
+  const [filter, setFilter] = useState<FilterId>("all");
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [panelExiting, setPanelExiting] = useState(false);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [role, setRole] = useState("");
@@ -66,19 +105,40 @@ export default function WorkspaceRecruit() {
     setPostToBoard(true);
   }, []);
 
+  const clearExitTimer = useCallback(() => {
+    if (exitTimer.current) {
+      clearTimeout(exitTimer.current);
+      exitTimer.current = null;
+    }
+  }, []);
+
+  const closePanel = useCallback(() => {
+    if (panelExiting) return;
+    setPanelExiting(true);
+    clearExitTimer();
+    exitTimer.current = setTimeout(() => {
+      setPanel(null);
+      setPanelExiting(false);
+      exitTimer.current = null;
+    }, SLIDE_OUT_MS);
+  }, [panelExiting, clearExitTimer]);
+
   const openCreate = useCallback(() => {
     if (!canEdit) return;
-    setCreateOpen(true);
-    setCreateEntered(false);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setCreateEntered(true));
-    });
-  }, [canEdit]);
+    clearExitTimer();
+    setPanelExiting(false);
+    resetForm();
+    setPanel({ kind: "create" });
+  }, [canEdit, clearExitTimer, resetForm]);
 
-  const closeCreate = useCallback(() => {
-    setCreateEntered(false);
-    window.setTimeout(() => setCreateOpen(false), 280);
-  }, []);
+  const openDetail = useCallback(
+    (row: ProjectRecruitment) => {
+      clearExitTimer();
+      setPanelExiting(false);
+      setPanel({ kind: "detail", row });
+    },
+    [clearExitTimer],
+  );
 
   const loadList = useCallback(async () => {
     if (!supabase || !project) {
@@ -112,13 +172,24 @@ export default function WorkspaceRecruit() {
   }, [loading, project, loadList]);
 
   useEffect(() => {
-    if (!createOpen) return;
+    return () => clearExitTimer();
+  }, [clearExitTimer]);
+
+  // 詳細・作成パネル表示中は下タブを隠す
+  useEffect(() => {
+    const drill = Boolean(panel);
+    document.documentElement.classList.toggle("moni-recruit-drill", drill);
+    return () => document.documentElement.classList.remove("moni-recruit-drill");
+  }, [panel]);
+
+  useEffect(() => {
+    if (!panel) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeCreate();
+      if (event.key === "Escape") closePanel();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [createOpen, closeCreate]);
+  }, [panel, closePanel]);
 
   async function onCreate() {
     if (!supabase || !uid || !project || !canEdit) return;
@@ -144,8 +215,8 @@ export default function WorkspaceRecruit() {
         postToSkillBoard: postToBoard,
         makeProjectPublic: projectMeta?.visibility !== "public",
       });
-      resetForm();
-      closeCreate();
+      closePanel();
+      window.setTimeout(() => resetForm(), SLIDE_OUT_MS + 40);
       await loadList();
       await reload();
       showNotice(tx("募集を公開しました", "Recruitment published"));
@@ -156,14 +227,15 @@ export default function WorkspaceRecruit() {
     }
   }
 
-  async function onClose(id: string, e?: MouseEvent) {
-    e?.stopPropagation();
-    e?.preventDefault();
+  async function onClose(id: string) {
     if (!supabase || !canEdit) return;
     setClosingId(id);
     try {
       await closeProjectRecruitment(supabase, id, projectId);
-      if (detail?.id === id) setDetail(null);
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "closed" as const } : r)));
+      if (panel?.kind === "detail" && panel.row.id === id) {
+        setPanel({ kind: "detail", row: { ...panel.row, status: "closed" } });
+      }
       await loadList();
       await reload();
       showNotice(tx("募集を締め切りました", "Recruitment closed"));
@@ -173,6 +245,15 @@ export default function WorkspaceRecruit() {
       setClosingId(null);
     }
   }
+
+  const openCount = useMemo(() => rows.filter((r) => r.status === "open").length, [rows]);
+  const closedCount = useMemo(() => rows.filter((r) => r.status === "closed").length, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (filter === "open") return rows.filter((r) => r.status === "open");
+    if (filter === "closed") return rows.filter((r) => r.status === "closed");
+    return rows;
+  }, [rows, filter]);
 
   if (loading) {
     return (
@@ -195,186 +276,171 @@ export default function WorkspaceRecruit() {
     { id: "other", label: tx("その他", "Other") },
   ];
 
-  const openRows = rows.filter((r) => r.status === "open");
-  const closedRows = rows.filter((r) => r.status === "closed");
+  const filters: Array<{ id: FilterId; label: string; count: number }> = [
+    { id: "all", label: tx("すべて", "All"), count: rows.length },
+    { id: "open", label: tx("公開中", "Open"), count: openCount },
+    { id: "closed", label: tx("締切済み", "Closed"), count: closedCount },
+  ];
+
+  const showPanel = Boolean(panel) || panelExiting;
+  const detailRow = panel?.kind === "detail" ? panel.row : null;
 
   return (
-    <div className="flex min-h-full flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-5 pb-6 sm:px-6 sm:py-6">
+    <>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 pb-bottom-nav">
         {notice ? (
           <p className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
             {notice}
           </p>
         ) : null}
 
-        <section className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-zinc-500">
-                {tx(`${project.name} の募集`, `Recruiting for ${project.name}`)}
-              </p>
-              <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-950 sm:text-2xl">
-                {tx("欲しい人材を募集", "Recruit talent")}
-              </h2>
-              <p className="mt-1 text-[13px] leading-relaxed text-zinc-500">
-                {tx(
-                  "新規作成から募集を追加できます。出した募集は下の一覧から確認・締切できます。",
-                  "Add openings with New. Review and close them in the list below.",
-                )}
-              </p>
-            </div>
-            <Megaphone className="mt-1 h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
-          </div>
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80">
+          {filters.map((f) => {
+            const active = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
+                  active ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                }`}
+                aria-pressed={active}
+              >
+                {f.label}
+                <span className={`ml-1 tabular-nums ${active ? "text-zinc-500" : "text-zinc-400"}`}>
+                  {f.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-          {canEdit ? (
-            <button
-              type="button"
-              className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 active:scale-[0.99] sm:w-auto"
-              onClick={openCreate}
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-              {tx("新規作成", "New")}
-            </button>
-          ) : (
-            <p className="text-sm text-zinc-500">
-              {tx("募集の編集はオーナー・管理者のみできます。", "Only owners and admins can manage recruitment.")}
-            </p>
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <h3 className="text-base font-semibold text-zinc-950">
-            {tx(`公開中の募集（${openRows.length}）`, `Open recruitments (${openRows.length})`)}
-          </h3>
-          {listLoading ? (
-            <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
-          ) : openRows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
-              {canEdit
-                ? tx(
-                    "まだ公開中の募集はありません。「新規作成」から追加できます。",
-                    "No open recruitments yet. Tap New to add one.",
-                  )
-                : tx("まだ公開中の募集はありません。", "No open recruitments yet.")}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {openRows.map((r) => (
-                <li key={r.id}>
-                  <div className="flex items-stretch overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 px-4 py-3.5 text-left transition hover:bg-zinc-50"
-                      onClick={() => setDetail(r)}
-                    >
-                      <p className="truncate text-sm font-semibold text-zinc-950">{r.title}</p>
-                      {r.message ? (
-                        <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-zinc-600">{r.message}</p>
-                      ) : null}
-                      {metaLine(r) ? (
-                        <p className="mt-1.5 text-[11px] text-zinc-400">{metaLine(r)}</p>
-                      ) : null}
-                      <p className="mt-2 text-[11px] font-medium text-zinc-500">
-                        {tx("タップして詳細を見る", "Tap for details")}
-                      </p>
-                    </button>
-                    {canEdit ? (
-                      <div className="flex shrink-0 items-center border-l border-zinc-100 px-2">
-                        <button
-                          type="button"
-                          disabled={closingId === r.id}
-                          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-700 disabled:opacity-50"
-                          onClick={(e) => void onClose(r.id, e)}
-                        >
-                          {closingId === r.id ? "…" : tx("締め切る", "Close")}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {closedRows.length > 0 ? (
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-zinc-500">
-              {tx(`締め切り済み（${closedRows.length}）`, `Closed (${closedRows.length})`)}
-            </h3>
-            <ul className="space-y-2">
-              {closedRows.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    className="w-full rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-left"
-                    onClick={() => setDetail(r)}
-                  >
-                    <p className="truncate text-sm font-medium text-zinc-500 line-through decoration-zinc-300">
-                      {r.title}
-                    </p>
-                    {metaLine(r) ? (
-                      <p className="mt-1 text-[11px] text-zinc-400">{metaLine(r)}</p>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {!canEdit ? (
+          <p className="text-center text-[12px] text-zinc-500">
+            {tx("募集の編集はオーナー・管理者のみできます。", "Only owners and admins can manage recruitment.")}
+          </p>
         ) : null}
+
+        <div className="flex flex-col gap-2.5">
+          {canEdit ? (
+            <DuoButton type="button" tone="orange" size="md" fullWidth onClick={openCreate} className={LIST_DUO}>
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/25 text-white">
+                <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate">{tx("募集を追加", "Add recruitment")}</span>
+                <span className="truncate text-[11px] font-semibold text-white/80">
+                  {tx("欲しい人材を公開する", "Post an opening")}
+                </span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+            </DuoButton>
+          ) : null}
+
+          {listLoading ? (
+            <p className="py-6 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+          ) : filteredRows.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+              {filter === "closed"
+                ? tx("締切済みの募集はありません。", "No closed recruitments.")
+                : filter === "open"
+                  ? canEdit
+                    ? tx("公開中の募集はありません。「募集を追加」から作れます。", "No open recruitments. Tap Add to create one.")
+                    : tx("公開中の募集はありません。", "No open recruitments.")
+                  : canEdit
+                    ? tx("まだ募集がありません。「募集を追加」から作れます。", "No recruitments yet. Tap Add to create one.")
+                    : tx("まだ募集がありません。", "No recruitments yet.")}
+            </p>
+          ) : (
+            filteredRows.map((r) => {
+              const open = r.status === "open";
+              const sub = metaLine(r);
+              return (
+                <DuoButton
+                  key={r.id}
+                  type="button"
+                  tone={open ? "peach" : "zinc"}
+                  size="md"
+                  fullWidth
+                  onClick={() => openDetail(r)}
+                  className={LIST_DUO}
+                >
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className={`line-clamp-2 ${open ? "" : "line-through decoration-zinc-400/70"}`}>
+                      {r.title}
+                    </span>
+                    <span
+                      className={`truncate text-[11px] font-semibold ${
+                        open ? "text-[#9A5B1F]/80" : "text-zinc-500"
+                      }`}
+                    >
+                      {[
+                        open ? tx("公開中", "Open") : tx("締切済み", "Closed"),
+                        sub || (r.message ? r.message.slice(0, 40) : ""),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                </DuoButton>
+              );
+            })
+          )}
+        </div>
       </div>
 
-      {createOpen ? (
-        <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-labelledby="recruit-create-title">
-          <button
-            type="button"
-            className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-out ${
-              createEntered ? "opacity-100" : "opacity-0"
-            }`}
-            aria-label={tx("閉じる", "Close")}
-            onClick={closeCreate}
-          />
-          <div
-            className={`absolute inset-x-0 bottom-0 mx-auto flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-2xl border border-zinc-200 bg-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:bottom-4 sm:max-h-[85vh] sm:rounded-2xl ${
-              createEntered ? "translate-y-0" : "translate-y-full"
-            }`}
-          >
-            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-4 py-3">
-              <h3 id="recruit-create-title" className="text-sm font-semibold text-zinc-900">
-                {tx("欲しい人材を募集", "Recruit talent")}
-              </h3>
+      {showPanel && panel?.kind === "create" ? (
+        <RecruitSlidePanel exiting={panelExiting} zClass="z-[220]">
+          <div className="flex flex-col gap-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100"
-                aria-label={tx("閉じる", "Close")}
-                onClick={closeCreate}
+                onClick={closePanel}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
+                aria-label={tx("戻る", "Back")}
               >
-                <X className="h-4 w-4" aria-hidden />
+                <ArrowLeft className="h-5 w-5" />
               </button>
+              <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-zinc-950">
+                {tx("募集を追加", "Add recruitment")}
+              </h1>
             </div>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-              <input
-                className="min-h-[48px] w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
-                placeholder={tx("欲しい人材・姿勢（必須）", "Wanted talent / mindset (required)")}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                autoFocus
-              />
-              <textarea
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400"
-                rows={4}
-                placeholder={tx("募集文・ビジョン（任意）", "Recruitment message / vision (optional)")}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-              />
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
+                  {tx("欲しい人材・姿勢（必須）", "Wanted talent / mindset (required)")}
+                </span>
+                <input
+                  className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px] outline-none focus:border-[#FF9600]"
+                  placeholder={tx("例: デザイナー、広報", "e.g. Designer, PR")}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
+                  {tx("募集文・ビジョン（任意）", "Recruitment message / vision (optional)")}
+                </span>
+                <textarea
+                  className="w-full resize-y rounded-2xl border border-zinc-200 px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
+                  rows={4}
+                  placeholder={tx("どんな仲間と何をしたいか", "Who you want and what you’ll build")}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
+              </label>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block min-w-0">
                   <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
                     {tx("役割", "Role")}
                   </span>
                   <input
-                    className="min-h-[48px] w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
-                    placeholder={tx("例: デザイナー、広報", "e.g. Designer, PR")}
+                    className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px] outline-none focus:border-[#FF9600]"
+                    placeholder={tx("例: デザイナー", "e.g. Designer")}
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   />
@@ -384,7 +450,7 @@ export default function WorkspaceRecruit() {
                     {tx("報酬", "Compensation")}
                   </span>
                   <input
-                    className="min-h-[48px] w-full rounded-xl border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+                    className="min-h-[48px] w-full rounded-2xl border border-zinc-200 px-3 text-[16px] outline-none focus:border-[#FF9600]"
                     placeholder={tx("例: なし、成果報酬", "e.g. Unpaid, revenue share")}
                     value={compensation}
                     onChange={(e) => setCompensation(e.target.value)}
@@ -394,17 +460,17 @@ export default function WorkspaceRecruit() {
                   <span className="mb-1 block text-[11px] font-semibold text-zinc-500">
                     {tx("週の参加時間", "Hours / week")}
                   </span>
-                  <div className="flex min-h-[48px] items-center gap-2 rounded-xl border border-zinc-200 px-3 focus-within:border-zinc-400">
-                    <span className="shrink-0 text-sm text-zinc-500">{tx("週", "Weekly")}</span>
+                  <div className="flex min-h-[48px] items-center gap-2 rounded-2xl border border-zinc-200 px-3 focus-within:border-[#FF9600]">
+                    <span className="shrink-0 text-[16px] text-zinc-500">{tx("週", "Weekly")}</span>
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-[16px] outline-none"
                       placeholder={tx("例: 5", "e.g. 5")}
                       value={weeklyHours}
                       onChange={(e) => setWeeklyHours(e.target.value)}
                     />
-                    <span className="shrink-0 text-sm text-zinc-500">{tx("時間", "hrs")}</span>
+                    <span className="shrink-0 text-[16px] text-zinc-500">{tx("時間", "hrs")}</span>
                   </div>
                 </label>
               </div>
@@ -434,7 +500,7 @@ export default function WorkspaceRecruit() {
                 </div>
               </fieldset>
 
-              <label className="flex items-start gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-[12px] text-zinc-700">
+              <label className="flex items-start gap-2 rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-[13px] text-zinc-700">
                 <input
                   type="checkbox"
                   className="mt-0.5"
@@ -454,85 +520,79 @@ export default function WorkspaceRecruit() {
                   "Shown on Explore → Recruiting. Private projects are switched to public.",
                 )}
               </p>
-              <button
+              <DuoButton
                 type="button"
+                tone="orange"
+                size="lg"
+                fullWidth
                 disabled={saving || !title.trim()}
-                className="w-full min-h-[48px] rounded-xl bg-zinc-900 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => void onCreate()}
               >
                 {saving ? tx("公開中…", "Publishing…") : tx("この内容で募集を追加する", "Add this recruitment")}
-              </button>
+              </DuoButton>
             </div>
           </div>
-        </div>
+        </RecruitSlidePanel>
       ) : null}
 
-      {detail ? (
-        <div
-          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setDetail(null)}
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white shadow-2xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 flex items-center justify-between border-b border-zinc-100 bg-white px-4 py-3">
-              <h3 className="text-sm font-semibold text-zinc-900">{tx("募集詳細", "Recruitment details")}</h3>
+      {showPanel && detailRow ? (
+        <RecruitSlidePanel exiting={panelExiting} zClass="z-[220]">
+          <div className="flex flex-col gap-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100"
-                aria-label={tx("閉じる", "Close")}
-                onClick={() => setDetail(null)}
+                onClick={closePanel}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
+                aria-label={tx("戻る", "Back")}
               >
-                <X className="h-4 w-4" aria-hidden />
+                <ArrowLeft className="h-5 w-5" />
               </button>
-            </div>
-            <div className="space-y-4 px-4 py-4">
-              <div>
-                <p className="text-xl font-bold leading-snug tracking-tight text-zinc-950">{detail.title}</p>
-                <p className="mt-1 text-[12px] font-medium text-zinc-500">
-                  {detail.status === "open"
-                    ? tx("公開中（閲覧のみ・編集不可）", "Open (view only · not editable)")
-                    : tx("締め切り済み（閲覧のみ）", "Closed (view only)")}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-semibold text-zinc-500">
+                  {detailRow.status === "open" ? tx("公開中", "Open") : tx("締切済み", "Closed")}
                 </p>
+                <h1 className="truncate text-lg font-bold text-zinc-950">{detailRow.title}</h1>
               </div>
-              {detail.message ? (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">{detail.message}</p>
+            </div>
+
+            <div className="space-y-4">
+              {detailRow.message ? (
+                <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-zinc-800">{detailRow.message}</p>
               ) : (
                 <p className="text-sm text-zinc-400">{tx("募集文はありません。", "No message.")}</p>
               )}
-              <dl className="grid gap-3 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm">
+              <dl className="grid gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm">
                 <div>
                   <dt className="text-[11px] font-semibold text-zinc-500">{tx("役割", "Role")}</dt>
-                  <dd className="mt-0.5 text-zinc-900">{detail.skillName || "—"}</dd>
+                  <dd className="mt-0.5 text-zinc-900">{detailRow.skillName || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold text-zinc-500">
                     {tx("週の参加時間・形式", "Hours / format")}
                   </dt>
-                  <dd className="mt-0.5 text-zinc-900">{detail.duration || "—"}</dd>
+                  <dd className="mt-0.5 text-zinc-900">{detailRow.duration || "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold text-zinc-500">{tx("報酬", "Compensation")}</dt>
-                  <dd className="mt-0.5 text-zinc-900">{detail.compensation || "—"}</dd>
+                  <dd className="mt-0.5 text-zinc-900">{detailRow.compensation || "—"}</dd>
                 </div>
               </dl>
-              {detail.status === "open" && canEdit ? (
-                <button
+              {detailRow.status === "open" && canEdit ? (
+                <DuoButton
                   type="button"
-                  disabled={closingId === detail.id}
-                  className="w-full min-h-[44px] rounded-xl border border-zinc-300 bg-white text-sm font-semibold text-zinc-800 disabled:opacity-50"
-                  onClick={() => void onClose(detail.id)}
+                  tone="zinc"
+                  size="lg"
+                  fullWidth
+                  disabled={closingId === detailRow.id}
+                  onClick={() => void onClose(detailRow.id)}
                 >
-                  {closingId === detail.id ? "…" : tx("この募集を締め切る", "Close this recruitment")}
-                </button>
+                  {closingId === detailRow.id ? "…" : tx("この募集を締め切る", "Close this recruitment")}
+                </DuoButton>
               ) : null}
             </div>
           </div>
-        </div>
+        </RecruitSlidePanel>
       ) : null}
-    </div>
+    </>
   );
 }
