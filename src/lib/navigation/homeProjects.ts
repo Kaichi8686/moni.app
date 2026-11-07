@@ -1,3 +1,5 @@
+import { hasOpenProjectBriefDraft } from "@/lib/projects/projectBriefDraft";
+
 /** Glide風プロジェクトホーム（キューブ一覧。未オープン時 / ?list=1） */
 export const HOME_PROJECTS_HREF = "/projects";
 
@@ -13,12 +15,16 @@ export function projectOverviewHref(projectId: string) {
 
 /**
  * ボトムナビ「ホーム」用。
+ * ゴール入力ドラフトが開いていれば概要へ（一覧＝メインタブに戻さない）。
  * 一覧モード中はキューブ一覧へ。そうでなければ最後のプロジェクト、なければ一覧。
  */
 export function resolveHomeProjectsHref(
   lastProjectId?: string | null,
   preferList = false,
 ): string {
+  if (lastProjectId && hasOpenProjectBriefDraft(lastProjectId)) {
+    return projectOverviewHref(lastProjectId);
+  }
   if (preferList) return `${HOME_PROJECTS_HREF}?list=1`;
   if (lastProjectId) return projectOverviewHref(lastProjectId);
   return HOME_PROJECTS_HREF;

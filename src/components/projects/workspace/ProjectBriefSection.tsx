@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ProjectBriefComposer } from "@/components/projects/workspace/ProjectBriefComposer";
+import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { parseCoachingContext } from "@/lib/projects/coachingContext";
+import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import {
-  applyBriefToCoachingContext,
-  composeProjectDescription,
+  clearProjectBriefDraft,
+  readProjectBriefDraft,
+  writeProjectBriefDraft,
+} from "@/lib/projects/projectBriefDraft";
+import {
   emptyProjectBrief,
   resolveProjectBrief,
   trimProjectBrief,
   type ProjectBrief,
 } from "@/lib/projects/projectBrief";
-import { supabase } from "@/lib/supabase";
 
 function hasCoreBrief(brief: ProjectBrief): boolean {
   const t = trimProjectBrief(brief);
@@ -21,27 +25,68 @@ function hasCoreBrief(brief: ProjectBrief): boolean {
 
 export function ProjectBriefSection() {
   const { tx } = useI18n();
-  const { project, coachingContext, canEdit, reload } = useProjectWorkspace();
+  const { project, coachingContext, canEdit, reload, registerBackHandler } = useProjectWorkspace();
   const brief = resolveProjectBrief({
     coachingContext,
     description: project?.description,
   });
   const filled = hasCoreBrief(brief);
 
-  const [editing, setEditing] = useState(!filled && canEdit);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [draft, setDraft] = useState<ProjectBrief>(brief);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
-    const next = resolveProjectBrief({
-      coachingContext,
-      description: project?.description,
-    });
-    setDraft(next);
-    // 未入力なら概要で最初に打たせる。入力済みの閲覧モードは save 側で戻す。
-    setEditing(!hasCoreBrief(next) && canEdit);
+  const isDirty =
+    draft.problemMotivation.trim() !== brief.problemMotivation.trim() ||
+    draft.projectGoal.trim() !== brief.projectGoal.trim() ||
+    (!filled && Boolean(draft.problemMotivation.trim() || draft.projectGoal.trim()));
+
+  const discardAndClose = useCallback(() => {
+    setConfirmDiscard(false);
+    setComposerOpen(false);
     setError("");
+    setDraft(brief);
+    if (project?.id) clearProjectBriefDraft(project.id);
+  }, [brief, project?.id]);
+
+  const requestClose = useCallback(() => {
+    if (saving) return;
+    if (isDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    discardAndClose();
+  }, [saving, isDirty, discardAndClose]);
+
+  // 保存済みデータの同期（入力中ドラフトは localStorage 側を優先）
+  useEffect(() => {
+    if (!project?.id) return;
+    const saved = resolveProjectBrief({
+      coachingContext,
+      description: project.description,
+    });
+    const stored = readProjectBriefDraft(project.id);
+    if (stored?.open && canEdit && !hasCoreBrief(saved)) {
+      setDraft({
+        ...emptyProjectBrief(),
+        whatToDo: saved.whatToDo,
+        problemMotivation: stored.problemMotivation,
+        projectGoal: stored.projectGoal,
+      });
+      setComposerOpen(true);
+    } else {
+      setDraft((prev) => {
+        // 作曲中はサーバ同期で上書きしない
+        if (composerOpen) return prev;
+        return saved;
+      });
+    }
+    setError("");
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per project/data change; ignore composerOpen to avoid clobber
   }, [coachingContext, project?.description, canEdit, project?.id]);
 
   useEffect(() => {
@@ -52,34 +97,83 @@ export function ProjectBriefSection() {
         description: project?.description,
       });
       setDraft(next);
-      setEditing(true);
+      setComposerOpen(true);
+      setConfirmDiscard(false);
       setError("");
-      window.requestAnimationFrame(() => {
-        document.getElementById("project-brief")?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
+      if (project?.id) {
+        writeProjectBriefDraft(project.id, {
+          open: true,
+          problemMotivation: next.problemMotivation,
+          projectGoal: next.projectGoal,
         });
-      });
+      }
     };
     window.addEventListener("moni:edit-project-brief", onEditRequest);
     return () => window.removeEventListener("moni:edit-project-brief", onEditRequest);
-  }, [canEdit, coachingContext, project?.description]);
+  }, [canEdit, coachingContext, project?.description, project?.id]);
 
-  if (!project) return null;
-  if (!filled && !canEdit) return null;
-  // 入力済みの閲覧はゴールバナー → 詳細シート側。ここでは未入力フォームと編集だけ。
-  if (filled && !editing) return null;
-
-  async function save() {
-    if (!canEdit || !supabase || !project) return;
-    const nextBrief: ProjectBrief = {
-      ...emptyProjectBrief(),
-      whatToDo: brief.whatToDo,
+  // ドラフト永続化（他サイト・他タブへ行っても残す）
+  useEffect(() => {
+    if (!project?.id || !hydrated || !canEdit) return;
+    if (!composerOpen) return;
+    writeProjectBriefDraft(project.id, {
+      open: true,
       problemMotivation: draft.problemMotivation,
       projectGoal: draft.projectGoal,
-    };
-    const trimmed = trimProjectBrief(nextBrief);
-    if (!trimmed.problemMotivation || !trimmed.projectGoal) {
+    });
+  }, [
+    composerOpen,
+    draft.problemMotivation,
+    draft.projectGoal,
+    project?.id,
+    hydrated,
+    canEdit,
+  ]);
+
+  useEffect(() => {
+    if (!composerOpen) {
+      registerBackHandler(null);
+      return;
+    }
+    registerBackHandler(() => {
+      if (confirmDiscard) {
+        setConfirmDiscard(false);
+        return true;
+      }
+      requestClose();
+      return true;
+    });
+    return () => registerBackHandler(null);
+  }, [composerOpen, confirmDiscard, registerBackHandler, requestClose]);
+
+  function openComposer() {
+    if (!canEdit || saving || !project) return;
+    const stored = readProjectBriefDraft(project.id);
+    if (stored && !filled) {
+      setDraft({
+        ...emptyProjectBrief(),
+        whatToDo: brief.whatToDo,
+        problemMotivation: stored.problemMotivation,
+        projectGoal: stored.projectGoal,
+      });
+    } else {
+      setDraft(brief);
+    }
+    setError("");
+    setConfirmDiscard(false);
+    setComposerOpen(true);
+    writeProjectBriefDraft(project.id, {
+      open: true,
+      problemMotivation: stored && !filled ? stored.problemMotivation : brief.problemMotivation,
+      projectGoal: stored && !filled ? stored.projectGoal : brief.projectGoal,
+    });
+  }
+
+  async function save() {
+    if (!canEdit || !project) return;
+    const trimmedMotivation = draft.problemMotivation.trim();
+    const trimmedGoal = draft.projectGoal.trim();
+    if (!trimmedMotivation || !trimmedGoal) {
       setError(
         tx(
           "きっかけとゴールの両方を入力してください。",
@@ -91,137 +185,71 @@ export function ProjectBriefSection() {
     setSaving(true);
     setError("");
     try {
-      const descriptionText = composeProjectDescription(trimmed);
-      const nextCoaching = applyBriefToCoachingContext(parseCoachingContext(coachingContext), trimmed);
-      const payload: Record<string, unknown> = {
-        description: descriptionText,
-        coaching_context: nextCoaching,
-        updated_at: new Date().toISOString(),
-      };
-      let { error: updateError } = await supabase.from("projects").update(payload).eq("id", project.id);
-      if (updateError) {
-        const schemaMismatch =
-          updateError.code === "42703" ||
-          updateError.code === "PGRST204" ||
-          updateError.message.includes("does not exist") ||
-          updateError.message.includes("schema cache");
-        if (schemaMismatch) {
-          const { coaching_context: _drop, ...withoutCoaching } = payload;
-          void _drop;
-          const retry = await supabase.from("projects").update(withoutCoaching).eq("id", project.id);
-          updateError = retry.error;
-        }
-      }
-      if (updateError) throw new Error(updateError.message);
+      await persistProjectMotivationAndGoal({
+        projectId: project.id,
+        coachingContext,
+        description: project.description,
+        problemMotivation: trimmedMotivation,
+        projectGoal: trimmedGoal,
+      });
+      clearProjectBriefDraft(project.id);
+      setComposerOpen(false);
+      setConfirmDiscard(false);
       await reload();
-      setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : tx("保存に失敗しました", "Couldn’t save"));
+      if (e instanceof Error && e.message === "BRIEF_INCOMPLETE") {
+        setError(
+          tx(
+            "きっかけとゴールの両方を入力してください。",
+            "Please fill in both the motivation and the goal.",
+          ),
+        );
+      } else {
+        setError(e instanceof Error ? e.message : tx("保存に失敗しました", "Couldn’t save"));
+      }
     } finally {
       setSaving(false);
     }
   }
 
-  if (editing && canEdit) {
-    const isFirstFill = !filled;
-    return (
-      <section
-        id="project-brief"
-        className="rounded-2xl border border-orange-200/80 bg-orange-50/40 px-4 py-4 sm:px-5"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">
-              {tx("プロジェクトのゴール", "Project goal")}
-            </h2>
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
-              {isFirstFill
-                ? tx(
-                    "まず、なぜ始めたかとゴールを書いておきましょう。ロードマップの土台になります。",
-                    "Start by writing why you began and the goal. It becomes the base for your roadmap.",
-                  )
-                : tx("きっかけとゴールを編集できます。", "You can edit the motivation and goal.")}
-            </p>
-          </div>
-          {filled ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setDraft(brief);
-                setEditing(false);
-                setError("");
-              }}
-              className="shrink-0 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900 disabled:opacity-50"
-            >
-              {tx("キャンセル", "Cancel")}
-            </button>
-          ) : null}
-        </div>
+  if (!project) return null;
+  if (!filled && !canEdit) return null;
+  if (filled && !composerOpen) return null;
 
-        <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="text-[12px] font-semibold text-zinc-700">
-              {tx(
-                "どのようなことを解決したくてこのプロジェクトを思いついたか",
-                "What problem made you think of this project?",
-              )}
-            </span>
-            <textarea
-              className="mt-1.5 min-h-[5rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-              rows={3}
-              placeholder={tx(
-                "例: 学校の行事告知がバラバラで、みんな見逃しがちだった",
-                "e.g. Event notices were scattered and people kept missing them",
-              )}
-              value={draft.problemMotivation}
-              onChange={(e) => setDraft((b) => ({ ...b, problemMotivation: e.target.value }))}
-              onFocus={(e) => {
-                const el = e.currentTarget;
-                window.setTimeout(() => {
-                  el.scrollIntoView({ block: "center", behavior: "smooth" });
-                }, 50);
-              }}
-              disabled={saving}
-            />
-          </label>
-          <label className="block">
-            <span className="text-[12px] font-semibold text-zinc-700">
-              {tx("このプロジェクトのゴール", "Project goal")}
-            </span>
-            <textarea
-              className="mt-1.5 min-h-[4rem] w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-              rows={2}
-              placeholder={tx(
-                "例: 文化祭までに、クラス全員が見られる告知アプリを公開する",
-                "e.g. Ship a notice app the whole class can use by the school festival",
-              )}
-              value={draft.projectGoal}
-              onChange={(e) => setDraft((b) => ({ ...b, projectGoal: e.target.value }))}
-              onFocus={(e) => {
-                const el = e.currentTarget;
-                window.setTimeout(() => {
-                  el.scrollIntoView({ block: "center", behavior: "smooth" });
-                }, 50);
-              }}
-              disabled={saving}
-            />
-          </label>
-        </div>
+  return (
+    <>
+      {hydrated && !filled && canEdit && !composerOpen ? (
+        <section id="project-brief" className="px-0">
+          <ProjectGoalBanner
+            projectName={project.name}
+            goal=""
+            emptyHint={tx("タップしてゴールを書く", "Tap to write your goal")}
+            onClick={openComposer}
+          />
+        </section>
+      ) : null}
 
-        {error ? <p className="mt-2 text-[12px] text-rose-600">{error}</p> : null}
-
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void save()}
-          className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
-        >
-          {saving ? tx("保存中…", "Saving…") : tx("保存する", "Save")}
-        </button>
-      </section>
-    );
-  }
-
-  return null;
+      {composerOpen && canEdit ? (
+        <ProjectBriefComposer
+          projectName={project.name}
+          problemMotivation={draft.problemMotivation}
+          projectGoal={draft.projectGoal}
+          saving={saving}
+          error={error}
+          confirmDiscard={confirmDiscard}
+          onChange={(next) =>
+            setDraft((prev) => ({
+              ...prev,
+              problemMotivation: next.problemMotivation,
+              projectGoal: next.projectGoal,
+            }))
+          }
+          onBack={requestClose}
+          onConfirmDiscard={discardAndClose}
+          onCancelDiscard={() => setConfirmDiscard(false)}
+          onSubmit={() => void save()}
+        />
+      ) : null}
+    </>
+  );
 }
