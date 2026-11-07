@@ -7,7 +7,6 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   isProjectId,
   mailInboxHref,
-  readMailProjectScope,
   writeMailProjectScope,
 } from "@/lib/messages/mailScope";
 import { closeProjectCluster, openProjectCluster } from "@/lib/navigation/projectCluster";
@@ -31,7 +30,9 @@ export function ConversationHeader({
   const { tx } = useI18n();
   const searchParams = useSearchParams();
   const projectFromUrl = searchParams.get("project");
-  const projectId = isProjectId(projectFromUrl) ? projectFromUrl : readMailProjectScope();
+  // 戻る先は URL の ?project= のみ。session scope 残りでプロフィール会話から
+  // プロジェクト inbox に戻してしまうのを防ぐ
+  const projectId = isProjectId(projectFromUrl) ? projectFromUrl : null;
   const backHref = mailInboxHref(projectId);
 
   const titleEl = (
