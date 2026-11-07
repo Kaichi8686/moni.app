@@ -1111,94 +1111,100 @@ export function IssueTaskFilesPanel({
         </ul>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
-          {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
-          {!requiredFilesReady(files) && !submitted ? (
-            <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
-              {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
-            </p>
-          ) : null}
-          <DuoButton
-            type="button"
-            tone={submitted ? "lime" : "orange"}
-            size="lg"
-            fullWidth
-            disabled={!canSubmit}
-            onClick={() => {
-              if (!requiredFilesReady(files)) return;
-              void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
-            }}
-            className="!text-[16px]"
-          >
-            {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-          </DuoButton>
-        </div>
-      </div>
+      {portalReady
+        ? createPortal(
+            <>
+              <div className="fixed inset-x-0 bottom-0 z-[220] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+                  {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
+                  {!requiredFilesReady(files) && !submitted ? (
+                    <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
+                      {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+                    </p>
+                  ) : null}
+                  <DuoButton
+                    type="button"
+                    tone={submitted ? "lime" : "orange"}
+                    size="lg"
+                    fullWidth
+                    disabled={!canSubmit}
+                    onClick={() => {
+                      if (!requiredFilesReady(files)) return;
+                      void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
+                    }}
+                    className="!text-[16px]"
+                  >
+                    {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
+                  </DuoButton>
+                </div>
+              </div>
 
-      {canEdit && !submitted ? (
-        <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-30 flex flex-col items-end gap-2">
-          {fabOpen ? (
-            <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => openNamePrompt("doc")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <DocIcon />
-                {tx("ドキュメント", "Document")}
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => openNamePrompt("board")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <BoardIcon />
-                {tx("ホワイトボード", "Whiteboard")}
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => openNamePrompt("canvas")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <PenTool className="h-5 w-5 text-[#E65100]" aria-hidden />
-                {tx("作業スペース", "Workspace")}
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => openNamePrompt("photo")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <PhotoIcon />
-                {tx("写真依頼", "Photo request")}
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => openNamePrompt("link")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <LinkIcon />
-                {tx("リンク依頼", "Link request")}
-              </button>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            disabled={creating}
-            onClick={() => setFabOpen((v) => !v)}
-            className="pointer-events-auto inline-flex h-14 min-w-[7.5rem] items-center justify-center gap-2 rounded-2xl bg-white px-5 text-[15px] font-semibold text-[#202124] shadow-[0_2px_8px_rgba(0,0,0,0.18)] transition hover:shadow-[0_4px_14px_rgba(0,0,0,0.22)] disabled:opacity-50"
-            aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
-          >
-            {fabOpen ? <X className="h-5 w-5" aria-hidden /> : <span className="text-[22px] font-light leading-none text-[#1a73e8]">+</span>}
-            {fabOpen ? tx("閉じる", "Close") : tx("新規", "New")}
-          </button>
-        </div>
-      ) : null}
+              {canEdit && !submitted ? (
+                <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-[221] flex flex-col items-end gap-2">
+                  {fabOpen ? (
+                    <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+                      <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => openNamePrompt("doc")}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                      >
+                        <DocIcon />
+                        {tx("ドキュメント", "Document")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => openNamePrompt("board")}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                      >
+                        <BoardIcon />
+                        {tx("ホワイトボード", "Whiteboard")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => openNamePrompt("canvas")}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                      >
+                        <PenTool className="h-5 w-5 text-[#E65100]" aria-hidden />
+                        {tx("作業スペース", "Workspace")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => openNamePrompt("photo")}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                      >
+                        <PhotoIcon />
+                        {tx("写真依頼", "Photo request")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => openNamePrompt("link")}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
+                      >
+                        <LinkIcon />
+                        {tx("リンク依頼", "Link request")}
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => setFabOpen((v) => !v)}
+                    className="pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_5px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
+                    aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
+                  >
+                    {fabOpen ? <X className="h-6 w-6" aria-hidden strokeWidth={2.5} /> : <Plus className="h-7 w-7" aria-hidden strokeWidth={2.5} />}
+                  </button>
+                </div>
+              ) : null}
+            </>,
+            document.body,
+          )
+        : null}
 
       {namePrompt && portalReady
         ? createPortal(
