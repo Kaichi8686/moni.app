@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ConversationHeader } from "@/app/messages/_components/ConversationHeader";
 import { DmSharedSpacePanel } from "@/app/messages/_components/DmSharedSpacePanel";
 import { MessageBubble } from "@/app/messages/_components/MessageBubble";
@@ -23,7 +24,9 @@ import {
 } from "@/lib/messages/api";
 import { profileToSender } from "@/lib/messages/mappers";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
+import { isProjectId, writeMailProjectScope } from "@/lib/messages/mailScope";
 import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
+import { openProjectCluster } from "@/lib/navigation/projectCluster";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Message } from "@/lib/types/messages";
@@ -32,6 +35,17 @@ type Props = { conversationId: string };
 
 export function ConversationView({ conversationId }: Props) {
   const { tx } = useI18n();
+  const searchParams = useSearchParams();
+  const projectParam = searchParams.get("project");
+
+  useEffect(() => {
+    if (isProjectId(projectParam)) {
+      writeMailProjectScope(projectParam);
+      openProjectCluster();
+      return;
+    }
+    // URL に project が無い会話はプロフィール側（session scope は Inbox 側で管理）
+  }, [projectParam]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -335,7 +349,7 @@ export function ConversationView({ conversationId }: Props) {
 
   if (!userId) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-[#fafaf8]">
+      <div className="flex h-full min-h-0 flex-1 flex-col bg-[#fafaf8]">
         <ConversationHeader title={headerTitle} />
         <p className="flex flex-1 items-center justify-center px-4 text-center text-sm text-zinc-500">
           <a href="/login" className="font-medium text-violet-600 underline">
@@ -348,7 +362,7 @@ export function ConversationView({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[#fafaf8]">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#fafaf8]">
       <ConversationHeader
         title={headerTitle}
         subtitle={header.subtitle}

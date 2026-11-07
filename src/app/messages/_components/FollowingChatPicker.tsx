@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { openDirectMessage } from "@/lib/messages/openDirectMessage";
+import { clearMailProjectScope, conversationHref } from "@/lib/messages/mailScope";
 import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
 import { closeProjectCluster } from "@/lib/navigation/projectCluster";
 import { loadFollowingListRecent } from "@/lib/profile/followActions";
@@ -71,9 +72,10 @@ export function FollowingChatPicker({
     setOpeningId(null);
     if (result.ok) {
       markDirectConversationOpened(result.conversationId);
+      clearMailProjectScope();
       closeProjectCluster();
       onOpened();
-      router.push(`/messages/${result.conversationId}`);
+      router.push(conversationHref(result.conversationId));
       return;
     }
     setError(

@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, Menu } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { closeProjectCluster } from "@/lib/navigation/projectCluster";
+import {
+  isProjectId,
+  mailInboxHref,
+  readMailProjectScope,
+  writeMailProjectScope,
+} from "@/lib/messages/mailScope";
+import { closeProjectCluster, openProjectCluster } from "@/lib/navigation/projectCluster";
 
 type Props = {
   title: string;
@@ -22,6 +29,11 @@ export function ConversationHeader({
   menuAriaLabel,
 }: Props) {
   const { tx } = useI18n();
+  const searchParams = useSearchParams();
+  const projectFromUrl = searchParams.get("project");
+  const projectId = isProjectId(projectFromUrl) ? projectFromUrl : readMailProjectScope();
+  const backHref = mailInboxHref(projectId);
+
   const titleEl = (
     <>
       <h1 className="truncate text-lg font-semibold tracking-tight text-zinc-900">{title}</h1>
@@ -32,8 +44,16 @@ export function ConversationHeader({
   return (
     <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-2 py-2.5">
       <Link
-        href="/messages"
-        onClick={() => closeProjectCluster()}
+        href={backHref}
+        onClick={() => {
+          if (projectId) {
+            writeMailProjectScope(projectId);
+            openProjectCluster();
+          } else {
+            writeMailProjectScope(null);
+            closeProjectCluster();
+          }
+        }}
         className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-700 hover:bg-zinc-100"
         aria-label={tx("戻る", "Back")}
       >

@@ -28,6 +28,11 @@ import {
   subscribeProjectCluster,
   writeStoredProjectClusterOpen,
 } from "@/lib/navigation/projectCluster";
+import {
+  isProjectId,
+  readMailProjectScope,
+  subscribeMailProjectScope,
+} from "@/lib/messages/mailScope";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
@@ -348,6 +353,11 @@ function AppBottomNavInner({ className }: { className?: string }) {
     getListModeSnapshot,
     getServerFalseSnapshot,
   );
+  const mailProjectScope = useSyncExternalStore(
+    subscribeMailProjectScope,
+    readMailProjectScope,
+    () => null,
+  );
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
   const insideProject = isInsideProjectWorkspace(pathname);
@@ -370,7 +380,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const projectsHomeHref = resolveHomeProjectsHref(lastProjectId, listMode);
   const messagesProjectParam = searchParams.get("project");
   const onMessagesPath = pathname === "/messages" || pathname.startsWith("/messages/");
-  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}`;
+  const onProjectMail =
+    (onMessagesPath && isProjectId(messagesProjectParam)) ||
+    (onMessagesPath && pathname.startsWith("/messages/") && Boolean(mailProjectScope)) ||
+    isProjectIdeasPath(pathname);
+  const onProfileMail = onMessagesPath && !onProjectMail;
+  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}|${mailProjectScope ?? ""}`;
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
@@ -382,11 +397,11 @@ function AppBottomNavInner({ className }: { className?: string }) {
       // キューブ一覧：ブロック閉じ＋矢印なしを維持
       enterProjectListMode();
       setOpenPref(false);
-    } else if ((onMessagesPath && messagesProjectParam) || isProjectIdeasPath(pathname)) {
-      // プロジェクトブロックのメール／投票（メッセージ導線）
+    } else if (onProjectMail) {
+      // プロジェクト側メール／投票：ホームブロックを伸ばす（プロフィール側メールとは別）
       openProjectCluster();
       setOpenPref(true);
-    } else if (onMessagesPath || profileActive) {
+    } else if (onProfileMail || profileActive) {
       // プロフィール側メッセージ／プロフィール: プロフィールブロックを伸ばす
       closeProjectCluster();
       setOpenPref(false);
