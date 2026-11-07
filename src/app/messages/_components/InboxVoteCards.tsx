@@ -54,8 +54,14 @@ export function InboxVoteCards({ projectId }: Props) {
   if (!ready) return null;
 
   return (
-    <div className="shrink-0 border-b border-zinc-100 bg-white px-4 py-2.5">
-      <div className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    /*
+      横パディングを外側に置くと overflow のクリップ枠（額縁）になり、
+      スクロール中にカードが画面端より内側で切れる。スクロール面は全幅にし、
+      余白は内側スペーサーだけにする（カードサイズは変えない）。
+    */
+    <div className="shrink-0 border-b border-zinc-100 bg-white py-2.5">
+      <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="w-4 shrink-0" aria-hidden />
         <article className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
           <div className="flex h-[4.25rem] items-center justify-center overflow-hidden rounded-t-2xl bg-[#FF9600]">
             <Plus className="h-8 w-8 text-white" strokeWidth={2.5} aria-hidden />
@@ -97,6 +103,7 @@ export function InboxVoteCards({ projectId }: Props) {
             </div>
           </article>
         ))}
+        <div className="w-4 shrink-0" aria-hidden />
       </div>
     </div>
   );
