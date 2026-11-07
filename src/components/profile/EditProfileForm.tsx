@@ -16,10 +16,12 @@ import { sortedCountries } from "@/lib/profile/countries";
 import { GENDER_OPTIONS, isProfileGender, type ProfileGender } from "@/lib/profile/gender";
 import { normalizeTagList, parseStringTagArray } from "@/lib/profile/skillsTraits";
 import { parseInterestFields } from "@/lib/profile/interestFields";
+import { resolveProfileBio } from "@/lib/profile/resolveBio";
 import { parseSocialIssues } from "@/lib/profile/socialIssues";
 import { supabase } from "@/lib/supabase";
 
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
+const BIO_MAX_LENGTH = 240;
 
 export function EditProfileForm() {
   const router = useRouter();
@@ -29,6 +31,7 @@ export function EditProfileForm() {
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({
     displayName: "",
+    bio: "",
     birthday: "",
     gender: "" as ProfileGender | "",
     country: "",
@@ -59,10 +62,12 @@ export function EditProfileForm() {
       setUserId(uid);
       let data: Record<string, unknown> | null = null;
       for (const sel of [
-        "display_name,avatar_url,skills,traits,interest_fields,social_issues,birthday,age,gender,country,is_private",
-        "display_name,avatar_url,skills,traits,social_issues,birthday,age,gender,country,is_private",
-        "display_name,avatar_url,skills,traits,birthday,age,gender,country,is_private",
-        "display_name,avatar_url,skills,traits,birthday,age,gender,country",
+        "display_name,bio,goal,avatar_url,skills,traits,interest_fields,social_issues,birthday,age,gender,country,is_private",
+        "display_name,bio,goal,avatar_url,skills,traits,social_issues,birthday,age,gender,country,is_private",
+        "display_name,bio,goal,avatar_url,skills,traits,birthday,age,gender,country,is_private",
+        "display_name,bio,goal,avatar_url,skills,traits,birthday,age,gender,country",
+        "display_name,bio,avatar_url,skills,traits,interest_fields,social_issues,birthday,age,gender,country,is_private",
+        "display_name,goal,avatar_url,skills,traits,birthday,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,age,gender,country,is_private",
         "display_name,avatar_url,skills,traits,age,gender,country",
         "display_name,avatar_url,skills,traits,interest_fields,social_issues,is_private",
@@ -81,6 +86,10 @@ export function EditProfileForm() {
       const birthdayRaw = typeof data?.birthday === "string" ? data.birthday.slice(0, 10) : "";
       const next = {
         displayName: name,
+        bio: resolveProfileBio({
+          bio: typeof data?.bio === "string" ? data.bio : null,
+          goal: typeof data?.goal === "string" ? data.goal : null,
+        }).slice(0, BIO_MAX_LENGTH),
         birthday: birthdayRaw,
         gender: isProfileGender(data?.gender) ? data.gender : ("" as const),
         country: ((data?.country as string | null) ?? "").toUpperCase(),
@@ -149,8 +158,11 @@ export function EditProfileForm() {
     const socialIssues = parseSocialIssues(form.socialIssues);
     const birthday = parseBirthday(form.birthday);
     const ageNum = birthday ? ageFromBirthday(birthday) : null;
+    const bio = form.bio.trim().slice(0, BIO_MAX_LENGTH);
     const payload: Record<string, string | number | string[] | boolean | null> = {
       display_name: form.displayName.trim() || "ユーザー",
+      bio,
+      goal: bio,
       skills,
       traits,
       interest_fields: interestFields,
@@ -175,9 +187,17 @@ export function EditProfileForm() {
       delete withoutExtra.social_issues;
       delete withoutExtra.is_private;
       let fallback = await supabase.from("profiles").update(withoutExtra).eq("id", userId);
+      if (fallback.error && /bio|goal|does not exist/i.test(fallback.error.message)) {
+        const withoutBio = { ...withoutExtra };
+        delete withoutBio.bio;
+        delete withoutBio.goal;
+        fallback = await supabase.from("profiles").update(withoutBio).eq("id", userId);
+      }
       if (fallback.error) {
         const withoutSkills = { ...withoutExtra };
         delete withoutSkills.skills;
+        delete withoutSkills.bio;
+        delete withoutSkills.goal;
         fallback = await supabase.from("profiles").update(withoutSkills).eq("id", userId);
       }
       if (fallback.error) {
@@ -197,11 +217,11 @@ export function EditProfileForm() {
         );
         return;
       }
-      if (/is_private|does not exist/i.test(error.message)) {
+      if (/is_private|bio|does not exist/i.test(error.message)) {
         setMessage(
           tx(
-            "公開／非公開の保存には Supabase で apply_profile_instagram.sql を実行してください（他の項目は保存済み）。",
-            "Run apply_profile_instagram.sql in Supabase to save privacy (other fields were saved).",
+            "自己紹介・公開設定の保存には Supabase で apply_profile_instagram.sql を実行してください（他の項目は保存済み）。",
+            "Run apply_profile_instagram.sql in Supabase to save bio/privacy (other fields were saved).",
           ),
         );
         return;
@@ -340,6 +360,28 @@ export function EditProfileForm() {
               "You can change this anytime — pick something for now.",
             )}
           </p>
+        </div>
+
+        <div className={fieldCard}>
+          <div className="space-y-2 px-3.5 py-2.5">
+            <label className="block text-[12px] font-medium text-zinc-500" htmlFor="edit-bio">
+              {tx("自己紹介", "Bio")}
+            </label>
+            <textarea
+              id="edit-bio"
+              className="min-h-[96px] w-full resize-y bg-transparent text-[14px] leading-relaxed text-zinc-900 outline-none placeholder:text-zinc-400"
+              placeholder={tx(
+                "得意なことや挑戦したいことを書いてください",
+                "Tell others what you’re good at and want to try",
+              )}
+              value={form.bio}
+              maxLength={BIO_MAX_LENGTH}
+              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value.slice(0, BIO_MAX_LENGTH) }))}
+            />
+            <p className="text-right text-[11px] text-zinc-400">
+              {form.bio.length}/{BIO_MAX_LENGTH}
+            </p>
+          </div>
         </div>
 
         <div className={fieldCard}>
