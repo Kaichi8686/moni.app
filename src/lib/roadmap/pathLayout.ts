@@ -62,11 +62,16 @@ export const ROADMAP_MAX_SIDES_PER_PARENT = 3;
 
 export type SidePlacement = { lane: -1 | 1; slotIndex: number };
 
+function oppositeLane(lane: PathLane, fallback: -1 | 1): -1 | 1 {
+  if (lane === 1) return -1;
+  if (lane === -1) return 1;
+  return fallback === 1 ? -1 : 1;
+}
+
 /**
  * 次の横マスの位置:
  * - 1個目: preferredLane（広い側）
- * - 2個目: 1個目と同じ側の外側
- * - 3個目: 2個目と逆側
+ * - 2個目以降: 直前の横マスと逆側（左右交互）
  * - すでに3個ある親には置けない
  */
 export function nextSidePlacement(
@@ -86,16 +91,8 @@ export function nextSidePlacement(
     return { lane: preferredLane, slotIndex: 0 };
   }
 
-  if (mine.length === 1) {
-    const firstLane = normalizeLane(mine[0]?.lane);
-    const lane: -1 | 1 = firstLane === -1 || firstLane === 1 ? firstLane : preferredLane;
-    const slotIndex = mine.filter((side) => normalizeLane(side.lane) === lane).length;
-    return { lane, slotIndex };
-  }
-
-  const secondLane = normalizeLane(mine[1]?.lane);
-  const lane: -1 | 1 =
-    secondLane === 1 ? -1 : secondLane === -1 ? 1 : preferredLane === 1 ? -1 : 1;
+  const previous = mine[mine.length - 1];
+  const lane = oppositeLane(normalizeLane(previous?.lane), preferredLane);
   const slotIndex = mine.filter((side) => normalizeLane(side.lane) === lane).length;
   return { lane, slotIndex };
 }
