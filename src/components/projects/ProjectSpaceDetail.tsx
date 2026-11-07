@@ -744,9 +744,17 @@ export function ProjectSpaceDetail({ projectId }: Props) {
   }
 
   async function reviewJoinRequest(requestId: string, action: "accept" | "reject") {
-    if (!supabase) return;
+    if (!supabase || !selectedProject) return;
     const { error } = await supabase.rpc("project_review_join_request", { p_request_id: requestId, p_action: action });
     if (error) setActionErr(error.message);
+    if (!error && action === "accept") {
+      try {
+        const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+        await getOrCreateProjectConversation(supabase, selectedProject.id);
+      } catch (e) {
+        console.warn("[projects] project group conversation sync skipped:", e);
+      }
+    }
     await load();
   }
 

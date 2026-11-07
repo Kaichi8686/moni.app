@@ -1,5 +1,6 @@
 -- プロジェクト・グループ会話の取得／作成（メールタブ用）
 -- Supabase SQL Editor で実行
+-- 注意: 作成時の自動シード／参加トリガーは apply_project_group_chat_auto_seed.sql を実行。
 
 create or replace function public.get_or_create_project_conversation(p_project_id uuid)
 returns uuid

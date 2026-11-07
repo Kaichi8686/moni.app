@@ -302,6 +302,12 @@ export function ProjectsWorkspace({ projectId }: Props) {
       if (memErr) {
         setErr(`プロジェクトは作成されましたが、オーナーのメンバー登録に失敗しました: ${memErr.message}`);
       }
+      try {
+        const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+        await getOrCreateProjectConversation(supabase, data.id);
+      } catch (e) {
+        console.warn("[projects] project group conversation seed skipped:", e);
+      }
     }
     setForm({
       name: "",
@@ -333,6 +339,14 @@ export function ProjectsWorkspace({ projectId }: Props) {
     if (!supabase || !selected) return;
     const { error } = await supabase.rpc("project_review_join_request", { p_request_id: requestId, p_action: action });
     if (error) setErr(error.message);
+    if (!error && action === "accept") {
+      try {
+        const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+        await getOrCreateProjectConversation(supabase, selected.id);
+      } catch (e) {
+        console.warn("[projects] project group conversation sync skipped:", e);
+      }
+    }
     await loadProjectDetail(selected.id);
   }
 

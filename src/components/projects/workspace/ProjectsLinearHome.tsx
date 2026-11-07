@@ -203,6 +203,12 @@ export function ProjectsLinearHome() {
         { project_id: projectId, user_id: uid, role: "owner" },
         { onConflict: "project_id,user_id" },
       );
+      try {
+        const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
+        await getOrCreateProjectConversation(client, projectId);
+      } catch (e) {
+        console.warn("[projects] project group conversation seed skipped:", e);
+      }
       if (form.templateId) {
         try {
           await applyTemplateToProject({
