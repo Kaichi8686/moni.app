@@ -90,7 +90,7 @@ export function IdeaCard({
             fullWidth
             disabled={votingClosed || !canVote}
             onClick={() => onVote(idea.id)}
-            className="!rounded-xl !px-1 !py-1.5 !text-[11px] !leading-none !shadow-none enabled:active:!translate-y-0"
+            className="!min-h-[2.5rem] !px-2 !py-2.5 !text-[13px]"
             aria-label={voted ? tx("さらに投票する", "Vote again") : tx("投票する", "Vote")}
           >
             {voteLabel}

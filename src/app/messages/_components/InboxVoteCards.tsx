@@ -14,11 +14,10 @@ type Props = {
 };
 
 const CARD_SHELL =
-  "flex w-[8rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white";
+  "flex w-[8rem] shrink-0 snap-start flex-col overflow-visible rounded-2xl border border-zinc-200 bg-white";
 
-/** 作成・投票する = アイデアタブと同系の大きめ DuoButton */
-const CARD_BTN =
-  "!mt-1 !min-h-[2.35rem] !rounded-2xl !px-2 !py-2 !text-[12px] !leading-none !shadow-none enabled:active:!translate-y-0";
+/** 作成・投票する = アイデアタブと同じ Duo 立体ボタン（下帯シャドウ＋押下） */
+const CARD_BTN = "!mt-1 !min-h-[2.5rem] !px-2 !py-2.5 !text-[13px]";
 
 const CARD_TITLE =
   "min-h-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
@@ -56,12 +55,12 @@ export function InboxVoteCards({ projectId }: Props) {
 
   return (
     <div className="shrink-0 border-b border-zinc-100 bg-white px-4 py-2.5">
-      <div className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <article className={CARD_SHELL} style={{ height: "10.25rem" }}>
-          <div className="flex h-[42%] items-center justify-center rounded-t-2xl bg-[#FF9600]">
+      <div className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <article className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
+          <div className="flex h-[4.25rem] items-center justify-center overflow-hidden rounded-t-2xl bg-[#FF9600]">
             <Plus className="h-8 w-8 text-white" strokeWidth={2.5} aria-hidden />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-2 pt-1.5">
+          <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3 pt-1.5">
             <p className={CARD_TITLE}>{tx("投票を作る", "Create vote")}</p>
             <DuoButton
               type="button"
@@ -77,11 +76,11 @@ export function InboxVoteCards({ projectId }: Props) {
         </article>
 
         {events.map((ev) => (
-          <article key={ev.id} className={CARD_SHELL} style={{ height: "10.25rem" }}>
-            <div className="flex h-[42%] items-center justify-center rounded-t-2xl bg-[#FF9600]">
+          <article key={ev.id} className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
+            <div className="flex h-[4.25rem] items-center justify-center overflow-hidden rounded-t-2xl bg-[#FF9600]">
               <Vote className="h-8 w-8 text-white" strokeWidth={2.25} aria-hidden />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-2 pt-1.5">
+            <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3 pt-1.5">
               <p className={CARD_TITLE}>{ev.title}</p>
               <DuoButton
                 type="button"
