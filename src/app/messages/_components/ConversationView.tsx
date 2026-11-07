@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConversationHeader } from "@/app/messages/_components/ConversationHeader";
+import { DmSharedSpacePanel } from "@/app/messages/_components/DmSharedSpacePanel";
 import { MessageBubble } from "@/app/messages/_components/MessageBubble";
 import { MessageInput } from "@/app/messages/_components/MessageInput";
 import { PinnedMessages } from "@/app/messages/_components/PinnedMessages";
@@ -62,6 +63,7 @@ export function ConversationView({ conversationId }: Props) {
     Map<string, { id: string; displayName: string; avatarUrl?: string | null }>
   >(new Map());
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showDmSpace, setShowDmSpace] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -369,6 +371,10 @@ export function ConversationView({ conversationId }: Props) {
             ? () => setShowGroupInfo(true)
             : undefined
         }
+        onMenuClick={
+          header.type === "direct" && userId ? () => setShowDmSpace(true) : undefined
+        }
+        menuAriaLabel={tx("共有スペース", "Shared space")}
       />
 
       {toast ? (
@@ -431,6 +437,15 @@ export function ConversationView({ conversationId }: Props) {
           conversationId={conversationId}
           title={header.title}
           onClose={() => setShowGroupInfo(false)}
+        />
+      ) : null}
+
+      {showDmSpace && userId ? (
+        <DmSharedSpacePanel
+          conversationId={conversationId}
+          peerName={header.title || tx("相手", "Peer")}
+          uid={userId}
+          onClose={() => setShowDmSpace(false)}
         />
       ) : null}
     </div>
