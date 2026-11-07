@@ -170,9 +170,15 @@ function IdeaHubInner() {
   ) : null;
 
   return (
-    <div className={`relative min-h-[100dvh] bg-white ${hideBottomNav ? "" : "pb-bottom-nav"}`}>
+    <div
+      className={`relative bg-white ${
+        inAiChat
+          ? "flex h-[100dvh] flex-col overflow-hidden"
+          : `min-h-[100dvh] ${hideBottomNav ? "" : "pb-bottom-nav"}`
+      }`}
+    >
       {(view === "mine" && sparkMode === "league") || inAiChat ? (
-        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
             {inAiChat ? null : <AppBrandHeader bare />}
             <div className={inAiChat ? undefined : "mt-1"}>{sparkToggle}</div>
@@ -205,14 +211,16 @@ function IdeaHubInner() {
       ) : null}
 
       {inAiChat ? (
-        <IdeaInterviewApp
-          key={`${aiMode}-${chatKey}`}
-          variant="hub"
-          initialMode={aiMode}
-          onModeChange={setAiMode}
-          openHistoryOnMount={openHistoryOnChat}
-          startFreshOnMount={startFreshOnChat}
-        />
+        <div className="min-h-0 flex-1">
+          <IdeaInterviewApp
+            key={`${aiMode}-${chatKey}`}
+            variant="hub"
+            initialMode={aiMode}
+            onModeChange={setAiMode}
+            openHistoryOnMount={openHistoryOnChat}
+            startFreshOnMount={startFreshOnChat}
+          />
+        </div>
       ) : null}
 
       {view === "board" ? (

@@ -751,7 +751,8 @@ export function IdeaInterviewApp({
   }
 
   const shellClass = isHub
-    ? "flex h-[100dvh] min-h-[420px] w-full overflow-hidden bg-white"
+    ? // 親（IdeaHub）がトグル分を除いた残り高さを渡す。100dvh だと入力欄が画面下にはみ出す
+      "flex h-full min-h-0 w-full overflow-hidden bg-white"
     : isProject
       ? "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       : "flex h-[calc(100dvh-var(--bottom-nav-clearance))] min-h-0 w-full overflow-hidden bg-white";
@@ -1049,7 +1050,11 @@ export function IdeaInterviewApp({
         {isConsult || session.phase !== "results" ? (
           <form
             onSubmit={(e) => void onSubmit(e)}
-            className="shrink-0 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+            className={
+              isHub
+                ? "sticky bottom-0 z-20 shrink-0 border-t border-zinc-100 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+                : "shrink-0 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+            }
           >
             {!isConsult && session.phase === "chat" && session.userTurns >= 1 && !sending && !generating ? (
               <button
