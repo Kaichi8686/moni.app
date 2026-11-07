@@ -580,12 +580,24 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           : assigneeWriteFields(input.assigneeId ? [input.assigneeId] : []);
 
       const baseLabels = withBeginLabel(withGenreLabel(input.phaseId ? ["roadmap"] : [], genre), input.beginAt ?? null);
+      const workspaceText = (input.description ?? "").trim();
+      const workForPack: IssueWork = {
+        genre,
+        workspaceText,
+        workspaceBoard: null,
+        workFiles,
+        attachments: [],
+        submittedAt: null,
+      };
+      // 列が無い環境でも復元できるよう、作成時ファイルは description にも二重保存する
+      const packedDescription =
+        workFiles.length > 0 ? packWorkDescription(workForPack) : workspaceText;
 
       const row: Record<string, unknown> = {
         project_id: projectId,
         phase_id: input.phaseId ?? null,
         title,
-        description: (input.description ?? "").trim(),
+        description: packedDescription,
         status: input.status,
         priority: input.priority,
         assignee_id: assignees.assignee_id,
@@ -594,7 +606,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         begin_at: input.beginAt ?? null,
         labels: withAssigneeLabels(baseLabels, assignees.assignee_ids),
         genre,
-        workspace_text: (input.description ?? "").trim(),
+        workspace_text: workspaceText,
         work_files_json: workFiles,
         attachment_urls: [],
       };
@@ -606,25 +618,33 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         return { id, error: null };
       }
 
-      let result = await insertReturningId(row);
+      let payload: Record<string, unknown> = { ...row };
+      let result = await insertReturningId(payload);
       if (result.error && /assignee_ids|schema cache|42703/i.test(result.error.message)) {
-        const next = { ...row };
-        delete next.assignee_ids;
-        result = await insertReturningId(next);
+        payload = { ...payload };
+        delete payload.assignee_ids;
+        result = await insertReturningId(payload);
+      }
+      if (result.error && /work_files_json|schema cache|42703/i.test(result.error.message)) {
+        payload = { ...payload, description: packedDescription };
+        delete payload.work_files_json;
+        result = await insertReturningId(payload);
       }
       if (
         result.error &&
-        /genre|workspace_text|attachment_urls|begin_at|work_files_json|schema cache|42703/i.test(result.error.message)
+        /genre|workspace_text|attachment_urls|begin_at|schema cache|42703/i.test(result.error.message)
       ) {
-        result = await insertReturningId({
-          ...row,
-          genre: undefined,
-          workspace_text: undefined,
-          attachment_urls: undefined,
-          begin_at: undefined,
-          assignee_ids: undefined,
-          work_files_json: undefined,
-        });
+        // 任意列だけ外す。作成時ファイルは work_files_json か packed description で残す
+        payload = { ...payload };
+        delete payload.genre;
+        delete payload.workspace_text;
+        delete payload.attachment_urls;
+        delete payload.begin_at;
+        delete payload.assignee_ids;
+        if (!payload.work_files_json) {
+          payload.description = packedDescription;
+        }
+        result = await insertReturningId(payload);
       }
       if (result.error) throw result.error;
       await reload();

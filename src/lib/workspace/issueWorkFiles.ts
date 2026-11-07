@@ -151,12 +151,12 @@ export function serializeIssueWorkFiles(files: IssueWorkFile[]): IssueWorkFile[]
   }));
 }
 
-/** 旧・単一 workspaceBoard を作業スペースファイル1件として起こす */
+/** 旧・単一 workspaceBoard を作業スペースファイル1件として起こす（すでにファイル一覧がある場合は触らない） */
 export function ensureLegacyCanvasFile(
   files: IssueWorkFile[],
   board: IssueWorkspaceBoard | null | undefined,
 ): IssueWorkFile[] {
-  if (files.some((file) => file.kind === "canvas")) return files;
+  if (files.length > 0) return files;
   if (!board) return files;
   const now = new Date().toISOString();
   return [
@@ -168,7 +168,6 @@ export function ensureLegacyCanvasFile(
       updatedAt: now,
       canvasBoard: board,
     },
-    ...files,
   ];
 }
 
@@ -269,8 +268,13 @@ export function removeWorkFile(files: IssueWorkFile[], id: string): IssueWorkFil
   return files.filter((file) => file.id !== id);
 }
 
+/** 必須を先頭に。同じグループ内は更新が新しい順 */
 export function sortWorkFilesByUpdated(files: IssueWorkFile[]): IssueWorkFile[] {
-  return [...files].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return [...files].sort((a, b) => {
+    const req = Number(Boolean(b.required)) - Number(Boolean(a.required));
+    if (req !== 0) return req;
+    return b.updatedAt.localeCompare(a.updatedAt);
+  });
 }
 
 export function setWorkFileRequired(file: IssueWorkFile, required: boolean): IssueWorkFile {

@@ -524,11 +524,11 @@ export function IssueCreateWizard({
                   {tx("まだファイルはありません。右下の＋から追加。", "No files yet. Add with + below.")}
                 </li>
               ) : (
-                files.map((file) => (
+                orderFilesForPublish(files).map((file) => (
                   <li
                     key={file.id}
-                    className={`relative flex items-center gap-1 pr-2 ${
-                      file.required ? "bg-[#FFF4EC]" : "bg-white"
+                    className={`relative flex items-center gap-1 border-l-4 pr-2 ${
+                      file.required ? "border-l-[#FF9600] bg-[#FFF4EC]" : "border-l-transparent bg-white"
                     }`}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
@@ -538,12 +538,18 @@ export function IssueCreateWizard({
                         className="min-w-0 flex-1 text-left"
                         onClick={() => handleTitleTap(file)}
                       >
-                        <span className="block truncate text-[15px] text-[#202124]">
-                          {file.title || defaultTitle(file.kind)}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="block min-w-0 truncate text-[15px] text-[#202124]">
+                            {file.title || defaultTitle(file.kind)}
+                          </span>
+                          {file.required ? (
+                            <span className="shrink-0 rounded-md bg-[#FF9600] px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-white">
+                              {tx("必須", "Required")}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="mt-0.5 block truncate text-[12px] text-[#5f6368]">
                           {kindLabel(file.kind, tx)}
-                          {file.required ? ` · ${tx("必須", "Required")}` : ""}
                         </span>
                       </button>
                     </div>

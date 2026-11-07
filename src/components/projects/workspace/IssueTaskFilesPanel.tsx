@@ -828,8 +828,10 @@ export function IssueTaskFilesPanel({
               return (
               <li
                 key={file.id}
-                className={`relative flex items-center gap-1 pr-2 ${
-                  file.required ? "bg-[#FFF4EC]" : ""
+                className={`relative flex items-center gap-1 border-l-4 pr-2 ${
+                  file.required
+                    ? "border-l-[#FF9600] bg-[#FFF4EC]"
+                    : "border-l-transparent bg-white"
                 }`}
               >
                 <button
@@ -839,12 +841,18 @@ export function IssueTaskFilesPanel({
                 >
                   <FileIcon kind={file.kind} url={items[0]?.url || file.url} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-normal text-[#202124]">
-                      {file.title?.trim() || defaultTitle(file.kind)}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="block min-w-0 truncate text-[15px] font-normal text-[#202124]">
+                        {file.title?.trim() || defaultTitle(file.kind)}
+                      </span>
+                      {file.required ? (
+                        <span className="shrink-0 rounded-md bg-[#FF9600] px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-white">
+                          {tx("必須", "Required")}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="mt-0.5 block truncate text-[13px] text-[#5f6368]">
                       {kindLabel(file.kind, tx)}
-                      {file.required ? ` · ${tx("必須", "Required")}` : ""}
                       {file.required && file.completedAt ? ` · ${tx("できた", "Done")}` : ""}
                       {isCollectSlot(file) ? ` · ${tx(`${items.length}件`, `${items.length}`)}` : ""}
                       {file.updatedAt ? ` · ${formatUpdated(file.updatedAt, locale)}` : ""}
