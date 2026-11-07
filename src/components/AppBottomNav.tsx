@@ -29,9 +29,11 @@ import {
   writeStoredProjectClusterOpen,
 } from "@/lib/navigation/projectCluster";
 import {
+  clearMailProjectScope,
   isProjectId,
   readMailProjectScope,
   subscribeMailProjectScope,
+  writeMailProjectScope,
 } from "@/lib/messages/mailScope";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
@@ -389,10 +391,10 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const projectsHomeHref = resolveHomeProjectsHref(lastProjectId, listMode);
   const messagesProjectParam = searchParams.get("project");
   const onMessagesPath = pathname === "/messages" || pathname.startsWith("/messages/");
+  // URL の ?project=（と投票パス）だけで判定する。session scope 残りでプロフィール側会話を
+  // プロジェクト側扱いにしない（タブを押したのに反対側へ飛ぶ原因になっていた）
   const onProjectMail =
-    (onMessagesPath && isProjectId(messagesProjectParam)) ||
-    (onMessagesPath && pathname.startsWith("/messages/") && Boolean(mailProjectScope)) ||
-    isProjectIdeasPath(pathname);
+    (onMessagesPath && isProjectId(messagesProjectParam)) || isProjectIdeasPath(pathname);
   const onProfileMail = onMessagesPath && !onProjectMail;
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}|${mailProjectScope ?? ""}`;
 
@@ -460,6 +462,16 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const expandProfileBlock = useCallback(() => {
     setClusterOpen(false);
   }, [setClusterOpen]);
+
+  const goProfileMail = useCallback(() => {
+    clearMailProjectScope();
+    setClusterOpen(false);
+  }, [setClusterOpen]);
+
+  const goProjectMail = useCallback(() => {
+    if (lastProjectId) writeMailProjectScope(lastProjectId);
+    setClusterOpen(true);
+  }, [lastProjectId, setClusterOpen]);
 
   const toggleCluster = useCallback(() => {
     if (readProjectListMode()) return;
@@ -547,6 +559,21 @@ function AppBottomNavInner({ className }: { className?: string }) {
           : onProfileMail
         : item.match(pathname, tab, segment);
     const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
+    // href は clusterOpen ではなく「どちらのタブ群か」で決める。
+    // 開いている間も閉じ側 DOM は残るので、clusterOpen に合わせると
+    // プロフィール側メッセージのリンクがプロジェクト側 URL に化けて飛び移る。
+    const href =
+      item.id === "issues"
+        ? issuesHref
+        : item.id === "recruit"
+          ? recruitHref
+          : item.id === "mail"
+            ? side === "open"
+              ? projectMailHref
+              : "/messages"
+            : undefined;
+    const onNavigate =
+      item.id === "mail" ? (side === "open" ? goProjectMail : goProfileMail) : undefined;
     return (
       <NavLink
         key={`${side}-${item.id}`}
@@ -556,15 +583,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
         label={t(item.labelKey)}
         locale={locale}
         className={className}
-        href={
-          item.id === "issues"
-            ? issuesHref
-            : item.id === "recruit"
-              ? recruitHref
-              : item.id === "mail" && clusterOpen
-                ? projectMailHref
-                : undefined
-        }
+        href={href}
+        onNavigate={onNavigate}
       />
     );
   };
