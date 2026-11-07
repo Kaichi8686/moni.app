@@ -145,7 +145,9 @@ const CLOSED_TABS: NavItem[] = [
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => p === "/messages" || p.startsWith("/messages/") || isProjectIdeasPath(p),
+    // プロジェクト側メール（?project= / 投票）は開いたクラスタ側。ここでは pathname だけでは区別できないので
+    // 実際の active は render 時に onProfileMail で上書きする。
+    match: (p) => p === "/messages" || p.startsWith("/messages/"),
     badgeKey: "mail",
   },
   {
@@ -419,12 +421,15 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }
 
   const clusterOpen = openPref && projectClusterUnlocked;
+  // メッセージはプロジェクト側 / プロフィール側で別タブ扱い。閉じたクラスタにプロジェクトメールのマークを付けない
   const openSetActiveId =
-    OPEN_TABS.find((item) => item.match(pathname, tab, segment))?.id ??
-    (projectActive ? "projects" : null);
+    OPEN_TABS.find((item) =>
+      item.id === "mail" ? onProjectMail : item.match(pathname, tab, segment),
+    )?.id ?? (projectActive ? "projects" : null);
   const closedSetActiveId =
-    CLOSED_TABS.find((item) => item.match(pathname, tab, segment))?.id ??
-    (profileActive ? "profile" : null);
+    CLOSED_TABS.find((item) =>
+      item.id === "mail" ? onProfileMail : item.match(pathname, tab, segment),
+    )?.id ?? (profileActive ? "profile" : null);
 
   const { thumb: projectThumb, ready: projectThumbReady } = useSlidingThumb(
     projectPillRef,
@@ -534,12 +539,17 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const collapseLabel =
     locale === "ja" ? "メッセージ・課題・募集を隠す" : "Hide messages, issues, and recruiting";
 
-  const renderTab = (item: NavItem, className: string) => {
-    const active = item.match(pathname, tab, segment);
+  const renderTab = (item: NavItem, className: string, side: "open" | "closed") => {
+    const active =
+      item.id === "mail"
+        ? side === "open"
+          ? onProjectMail
+          : onProfileMail
+        : item.match(pathname, tab, segment);
     const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
     return (
       <NavLink
-        key={item.id}
+        key={`${side}-${item.id}`}
         item={item}
         active={active}
         badgeCount={badgeCount}
@@ -601,7 +611,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
             className="app-bottom-nav-open-tabs"
             {...(!clusterOpen ? { inert: true } : {})}
           >
-            {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra"))}
+            {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra", "open"))}
           </div>
 
           <button
@@ -625,7 +635,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
         >
           <SlidingThumb thumb={profileThumb} ready={profileThumbReady} />
           <div className="app-bottom-nav-default-tabs" {...(clusterOpen ? { inert: true } : {})}>
-            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default"))}
+            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default", "closed"))}
           </div>
           <div className={`app-bottom-nav-profile-slot ${profileActive ? "is-active" : ""}`}>
             <NavLink
