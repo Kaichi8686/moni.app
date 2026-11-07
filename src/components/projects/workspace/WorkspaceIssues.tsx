@@ -4,10 +4,10 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
-import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
-import { dateInputToIso, isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
+import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
   createCustomTaskGenreId,
@@ -77,10 +77,6 @@ export default function WorkspaceIssues() {
   const [addingGenre, setAddingGenre] = useState(false);
   const [draftGenreLabel, setDraftGenreLabel] = useState("");
   const [draftGenreHint, setDraftGenreHint] = useState("");
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftAssignees, setDraftAssignees] = useState<string[]>([]);
-  const [draftBegin, setDraftBegin] = useState("");
-  const [draftDue, setDraftDue] = useState("");
   const [error, setError] = useState("");
   const [savingGenre, setSavingGenre] = useState(false);
   const entryHandled = useRef(false);
@@ -288,38 +284,6 @@ export default function WorkspaceIssues() {
     }
   }
 
-  async function addTask(event: FormEvent) {
-    event.preventDefault();
-    if (!screen || screen.kind !== "genre" || !draftTitle.trim()) return;
-    const genreScreen = screen;
-    setError("");
-    try {
-      const beginAt = dateInputToIso(draftBegin);
-      const dueDate = dateInputToIso(draftDue);
-      if (beginAt && dueDate && beginAt > dueDate) {
-        setError(tx("やり始める日は期限より前にしてください", "Start before the deadline"));
-        return;
-      }
-      await createIssue({
-        title: draftTitle,
-        status: "todo",
-        priority: "medium",
-        assigneeIds: draftAssignees,
-        genre: genreScreen.genre,
-        phaseId: genreScreen.phaseId,
-        beginAt,
-        dueDate,
-      });
-      setDraftTitle("");
-      setDraftAssignees([]);
-      setDraftBegin("");
-      setDraftDue("");
-      setCreating(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("課題を追加できませんでした", "Couldn’t add the task"));
-    }
-  }
-
   if (!screen) {
     return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   }
@@ -374,7 +338,10 @@ export default function WorkspaceIssues() {
           {canEdit ? (
             <button
               type="button"
-              onClick={() => setCreating(true)}
+              onClick={() => {
+                setError("");
+                setCreating(true);
+              }}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
               aria-label={tx("課題を追加", "Add task")}
             >
@@ -383,46 +350,31 @@ export default function WorkspaceIssues() {
           ) : null}
         </div>
         {creating ? (
-          <form className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3" onSubmit={(event) => void addTask(event)}>
-            <input
-              value={draftTitle}
-              onChange={(event) => setDraftTitle(event.target.value)}
-              placeholder={tx("課題名", "Task name")}
-              className="min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-            />
-            <div>
-              <span className="text-sm font-semibold text-zinc-700">{tx("担当（複数可）", "Assignees")}</span>
-              <AssigneeMultiSelect
-                members={project?.members ?? []}
-                selectedIds={draftAssignees}
-                onChange={setDraftAssignees}
-                idPrefix="draft-assignee"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="font-semibold text-zinc-700">{tx("やり始める", "Start")}</span>
-                <input
-                  type="date"
-                  value={draftBegin}
-                  onChange={(event) => setDraftBegin(event.target.value)}
-                  className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="font-semibold text-zinc-700">{tx("期限", "Deadline")}</span>
-                <input
-                  type="date"
-                  value={draftDue}
-                  onChange={(event) => setDraftDue(event.target.value)}
-                  className="mt-1 min-h-[44px] w-full rounded-xl border border-zinc-200 px-3 text-sm"
-                />
-              </label>
-            </div>
-            <DuoButton type="submit" tone="orange" size="md" fullWidth className="!text-[15px]">
-              {tx("追加する", "Add")}
-            </DuoButton>
-          </form>
+          <IssueCreateWizard
+            projectId={projectId}
+            phaseId={phaseId}
+            genre={activeGenre}
+            members={project?.members ?? []}
+            uid={uid}
+            onClose={() => setCreating(false)}
+            onComplete={async (payload) => {
+              if (payload.beginAt && payload.dueDate && payload.beginAt > payload.dueDate) {
+                throw new Error(tx("やり始める日は期限より前にしてください", "Start before the deadline"));
+              }
+              await createIssue({
+                title: payload.title,
+                description: payload.description,
+                status: "todo",
+                priority: "medium",
+                assigneeIds: payload.assigneeIds,
+                genre: activeGenre,
+                phaseId,
+                beginAt: payload.beginAt,
+                dueDate: payload.dueDate,
+                workFiles: payload.workFiles,
+              });
+            }}
+          />
         ) : null}
         <div className="flex flex-col gap-2.5">
           {rows.map((issue) => {

@@ -291,14 +291,14 @@ export default function WorkspaceRoadmapView() {
             wrap(() => updateIssue(id, { dueDate: today ? endOfTodayIso() : null }))
           }
           onCreateIssue={(phaseId, title) =>
-            wrap(() =>
-              createIssue({
+            wrap(async () => {
+              await createIssue({
                 title,
                 status: "todo",
                 priority: "medium",
                 phaseId,
-              }),
-            )
+              });
+            })
           }
           onOpenIssue={(issue) => setDetailIssue(issue)}
           projectName={project?.name ?? ""}

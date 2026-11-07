@@ -37,6 +37,7 @@ import {
   type IssueWork,
   type TaskGenre,
 } from "@/lib/workspace/issueWork";
+import { serializeIssueWorkFiles } from "@/lib/workspace/issueWorkFiles";
 import { assigneeWriteFields, withAssigneeLabels } from "@/lib/workspace/issueAssignees";
 import { simplifyIssueText } from "@/lib/workspace/issuePlainLanguage";
 import {
@@ -164,7 +165,8 @@ type Ctx = {
     beginAt?: string | null;
     phaseId?: string | null;
     genre?: TaskGenre;
-  }) => Promise<void>;
+    workFiles?: IssueWork["workFiles"];
+  }) => Promise<string | null>;
   saveIssueWork: (issueId: string, patch: Partial<IssueWork>) => Promise<void>;
   saveCoachingContext: (patch: Partial<CoachingContext>) => Promise<void>;
   seedPhasesFromSituation: (situation: UserSituation) => Promise<void>;
@@ -539,11 +541,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       beginAt?: string | null;
       phaseId?: string | null;
       genre?: TaskGenre;
-    }) => {
-      if (!supabase || !canEdit || !uid) return;
+      workFiles?: IssueWork["workFiles"];
+    }): Promise<string | null> => {
+      if (!supabase || !canEdit || !uid) return null;
       const phase = input.phaseId ? phases.find((p) => p.id === input.phaseId) : undefined;
       const title = simplifyIssueText(input.title.trim());
       const genre = input.genre ?? "think";
+      const workFiles = serializeIssueWorkFiles(input.workFiles ?? []);
 
       let dueDate = input.dueDate ?? null;
       if (
@@ -590,25 +594,40 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         labels: withAssigneeLabels(baseLabels, assignees.assignee_ids),
         genre,
         workspace_text: (input.description ?? "").trim(),
+        work_files_json: workFiles,
         attachment_urls: [],
       };
-      let { error: err } = await supabase.from("project_issues").insert(row);
-      if (err && /assignee_ids|schema cache|42703/i.test(err.message)) {
-        delete row.assignee_ids;
-        ({ error: err } = await supabase.from("project_issues").insert(row));
+
+      async function insertReturningId(payload: Record<string, unknown>): Promise<{ id: string | null; error: Error | null }> {
+        const { data, error: err } = await supabase!.from("project_issues").insert(payload).select("id").maybeSingle();
+        if (err) return { id: null, error: new Error(err.message) };
+        const id = data && typeof (data as { id?: unknown }).id === "string" ? (data as { id: string }).id : null;
+        return { id, error: null };
       }
-      if (err && /genre|workspace_text|attachment_urls|begin_at|schema cache|42703/i.test(err.message)) {
-        ({ error: err } = await supabase.from("project_issues").insert({
+
+      let result = await insertReturningId(row);
+      if (result.error && /assignee_ids|schema cache|42703/i.test(result.error.message)) {
+        const next = { ...row };
+        delete next.assignee_ids;
+        result = await insertReturningId(next);
+      }
+      if (
+        result.error &&
+        /genre|workspace_text|attachment_urls|begin_at|work_files_json|schema cache|42703/i.test(result.error.message)
+      ) {
+        result = await insertReturningId({
           ...row,
           genre: undefined,
           workspace_text: undefined,
           attachment_urls: undefined,
           begin_at: undefined,
           assignee_ids: undefined,
-        }));
+          work_files_json: undefined,
+        });
       }
-      if (err) throw new Error(err.message);
+      if (result.error) throw result.error;
       await reload();
+      return result.id;
     },
     [canEdit, issues, phases, project, projectId, reload, schedules, uid],
   );

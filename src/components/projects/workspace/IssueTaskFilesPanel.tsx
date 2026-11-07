@@ -29,13 +29,18 @@ import { supabase } from "@/lib/supabase";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { daysUntilDue, isoToDateInput, isIssueSubmitted, type IssueWork } from "@/lib/workspace/issueWork";
 import {
+  appendFileItem,
   createWorkFileId,
   defaultTitle,
+  fileItems,
+  isCollectSlot,
+  markWorkFileComplete,
   newCanvasWorkFile,
-  newLinkWorkFile,
-  newPhotoWorkFile,
+  newLinkSlotFile,
+  newPhotoSlotFile,
   normalizeExternalUrl,
   removeWorkFile,
+  requiredFilesReady,
   sortWorkFilesByUpdated,
   upsertWorkFile,
   type IssueWorkFile,
@@ -132,8 +137,8 @@ function FileIcon({ kind, url }: { kind: IssueWorkFileKind; url?: string }) {
 function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => string) {
   if (kind === "doc") return tx("ドキュメント", "Document");
   if (kind === "board") return tx("ホワイトボード", "Whiteboard");
-  if (kind === "photo") return tx("写真", "Photo");
-  if (kind === "link") return tx("リンク", "Link");
+  if (kind === "photo") return tx("写真依頼", "Photo request");
+  if (kind === "link") return tx("リンク依頼", "Link request");
   return tx("作業スペース", "Workspace");
 }
 
@@ -193,11 +198,14 @@ export function IssueTaskFilesPanel({
   const [linkDraftOpen, setLinkDraftOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
+  const [namePrompt, setNamePrompt] = useState<IssueWorkFileKind | null>(null);
+  const [draftName, setDraftName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
+  const slotPhotoInputRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitted = isIssueSubmitted(issue);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
+  const canSubmit = canEdit && !submitted && requiredFilesReady(files);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
@@ -293,36 +301,44 @@ export function IssueTaskFilesPanel({
       setOpenFileId(file.id);
       return;
     }
-    if (file.kind === "link" && file.url) {
-      window.open(file.url, "_blank", "noopener,noreferrer");
+    if (isCollectSlot(file)) {
+      setOpenFileId(file.id);
       return;
     }
     setOpenFileId(file.id);
   }
 
-  async function createFile(kind: Exclude<IssueWorkFileKind, "photo" | "link">) {
-    if (!canEdit || !uid) return;
+  function openNamePrompt(kind: IssueWorkFileKind) {
+    setFabOpen(false);
+    setNamePrompt(kind);
+    setDraftName(defaultTitle(kind));
+    setError("");
+  }
+
+  async function createNamedFile() {
+    if (!canEdit || !uid || !namePrompt) return;
+    const name = draftName.trim() || defaultTitle(namePrompt);
     setCreating(true);
     setError("");
-    setFabOpen(false);
     try {
-      if (kind === "doc") {
+      let next: IssueWorkFile;
+      if (namePrompt === "doc") {
         if (!supabase) throw new Error(tx("ドキュメントを作成できません", "Can’t create a document"));
         const { data, error: err } = await supabase
           .from("project_documents")
           .insert({
             project_id: issue.projectId,
-            title: defaultTitle("doc"),
+            title: name,
             content: "",
             updated_by: uid,
           })
           .select("id,title,content,updated_at")
           .single();
         if (err || !data) throw new Error(err?.message ?? tx("ドキュメントの作成に失敗しました", "Couldn’t create document"));
-        const next: IssueWorkFile = {
+        next = {
           id: createWorkFileId(),
           kind: "doc",
-          title: data.title || defaultTitle("doc"),
+          title: data.title || name,
           refId: data.id,
           updatedAt: data.updated_at || new Date().toISOString(),
         };
@@ -330,25 +346,33 @@ export function IssueTaskFilesPanel({
         setDocTitle(next.title);
         setDocContent("");
         setOpenFileId(next.id);
-        return;
-      }
-      if (kind === "board") {
-        const board = await createProjectBoard(issue.projectId, uid, defaultTitle("board"));
-        const next: IssueWorkFile = {
+      } else if (namePrompt === "board") {
+        const board = await createProjectBoard(issue.projectId, uid, name);
+        next = {
           id: createWorkFileId(),
           kind: "board",
-          title: board.title || defaultTitle("board"),
+          title: board.title || name,
           refId: board.id,
           updatedAt: board.updated_at || new Date().toISOString(),
         };
         await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
-        return;
+      } else if (namePrompt === "canvas") {
+        next = newCanvasWorkFile(name);
+        await persistFiles(upsertWorkFile(files, next), next.canvasBoard ?? createEmptyBoard());
+        setCanvasDraft(next.canvasBoard ?? createEmptyBoard());
+        setOpenFileId(next.id);
+      } else if (namePrompt === "photo") {
+        next = newPhotoSlotFile(name);
+        await persistFiles(upsertWorkFile(files, next));
+        setOpenFileId(next.id);
+      } else {
+        next = newLinkSlotFile(name);
+        await persistFiles(upsertWorkFile(files, next));
+        setOpenFileId(next.id);
       }
-      const next = newCanvasWorkFile();
-      await persistFiles(upsertWorkFile(files, next), next.canvasBoard ?? createEmptyBoard());
-      setCanvasDraft(next.canvasBoard ?? createEmptyBoard());
-      setOpenFileId(next.id);
+      setNamePrompt(null);
+      setDraftName("");
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("作成に失敗しました", "Couldn’t create"));
     } finally {
@@ -356,32 +380,31 @@ export function IssueTaskFilesPanel({
     }
   }
 
-  async function addPhotoFiles(list: FileList | null) {
-    if (!list || !canEdit || !uid || !supabase) return;
-    setCreating(true);
+  async function addPhotosToOpenSlot(list: FileList | null) {
+    if (!list || !canEdit || !uid || !supabase || !openFile || openFile.kind !== "photo") return;
+    setUploading(true);
     setError("");
-    setFabOpen(false);
     try {
-      let nextFiles = files;
-      let openedId: string | null = null;
+      let next = openFile;
       for (const file of Array.from(list)) {
         const uploaded = await uploadProjectImage(supabase, uid, "issue-photo", issue.id, file);
-        const next = newPhotoWorkFile(uploaded.publicUrl, file.name.replace(/\.[^.]+$/, "") || undefined);
-        nextFiles = upsertWorkFile(nextFiles, next);
-        if (!openedId) openedId = next.id;
+        next = appendFileItem(next, {
+          url: uploaded.publicUrl,
+          title: file.name.replace(/\.[^.]+$/, "") || undefined,
+          addedBy: uid,
+        });
       }
-      await persistFiles(nextFiles);
-      if (openedId) setOpenFileId(openedId);
+      await persistFiles(upsertWorkFile(files, next));
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("写真を追加できませんでした", "Couldn’t add the photo"));
     } finally {
-      setCreating(false);
-      if (photoInputRef.current) photoInputRef.current.value = "";
+      setUploading(false);
+      if (slotPhotoInputRef.current) slotPhotoInputRef.current.value = "";
     }
   }
 
-  async function addLinkFile() {
-    if (!canEdit) return;
+  async function addLinkToOpenSlot() {
+    if (!canEdit || !openFile || openFile.kind !== "link") return;
     const url = normalizeExternalUrl(linkUrl);
     if (!url) {
       setError(tx("正しいURLを入力してください", "Enter a valid URL"));
@@ -390,17 +413,26 @@ export function IssueTaskFilesPanel({
     setCreating(true);
     setError("");
     try {
-      const next = newLinkWorkFile(url, linkTitle);
+      const next = appendFileItem(openFile, {
+        url,
+        title: linkTitle.trim() || undefined,
+        addedBy: uid ?? undefined,
+      });
       await persistFiles(upsertWorkFile(files, next));
       setLinkDraftOpen(false);
       setLinkUrl("");
       setLinkTitle("");
-      setFabOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("リンクを追加できませんでした", "Couldn’t add the link"));
     } finally {
       setCreating(false);
     }
+  }
+
+  async function toggleFileComplete(file: IssueWorkFile) {
+    if (!canEdit || submitted || !file.required) return;
+    const next = markWorkFileComplete(file, !file.completedAt);
+    await persistFiles(upsertWorkFile(files, next));
   }
 
   async function deleteFile(file: IssueWorkFile) {
@@ -557,28 +589,94 @@ export function IssueTaskFilesPanel({
       );
     }
 
-    if (openFile.kind === "photo" && openFile.url) {
+    if (openFile.kind === "photo" || openFile.kind === "link") {
+      const items = fileItems(openFile);
       return createPortal(
-        <div className="fixed inset-0 z-[240] flex flex-col bg-zinc-950">
-          <div className="flex shrink-0 items-center gap-2 px-3 py-2 text-white">
+        <div className="fixed inset-0 z-[240] flex flex-col bg-white">
+          <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200 px-3 py-2">
             <button
               type="button"
               onClick={closeEditor}
-              className="inline-flex h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold hover:bg-white/10"
+              className="inline-flex h-10 items-center gap-1 rounded-full px-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               {tx("戻る", "Back")}
             </button>
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold">{openFile.title}</p>
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{openFile.title}</p>
           </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element -- uploaded photo viewer */}
-            <img
-              src={openFile.url}
-              alt={openFile.title}
-              className="max-h-full max-w-full object-contain"
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <p className="mb-3 text-[13px] text-zinc-500">
+              {openFile.kind === "photo"
+                ? tx("担当者が写真をここに追加します。", "Assignees add photos here.")
+                : tx("担当者がリンクをここに追加します。", "Assignees add links here.")}
+            </p>
+            {items.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
+                {tx("まだ何もありません", "Nothing yet")}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {items.map((item) => (
+                  <li key={item.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                    {openFile.kind === "photo" ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- slot photo
+                      <img src={item.url} alt={item.title || ""} className="max-h-80 w-full object-contain bg-zinc-50" />
+                    ) : (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#1565C0] hover:bg-zinc-50"
+                      >
+                        <ExternalLink className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 truncate">{item.title || item.url}</span>
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
           </div>
+          {canEdit && !submitted ? (
+            <div className="shrink-0 border-t border-zinc-100 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {openFile.kind === "photo" ? (
+                <>
+                  <DuoButton
+                    type="button"
+                    tone="orange"
+                    size="lg"
+                    fullWidth
+                    disabled={uploading}
+                    onClick={() => slotPhotoInputRef.current?.click()}
+                  >
+                    {uploading ? tx("アップロード中…", "Uploading…") : tx("写真を入れる", "Add photo")}
+                  </DuoButton>
+                  <input
+                    ref={slotPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => void addPhotosToOpenSlot(event.target.files)}
+                  />
+                </>
+              ) : (
+                <DuoButton
+                  type="button"
+                  tone="orange"
+                  size="lg"
+                  fullWidth
+                  onClick={() => {
+                    setLinkDraftOpen(true);
+                    setError("");
+                  }}
+                >
+                  {tx("リンクを入れる", "Add link")}
+                </DuoButton>
+              )}
+            </div>
+          ) : null}
         </div>,
         document.body,
       );
@@ -685,26 +783,45 @@ export function IssueTaskFilesPanel({
               {tx("まだファイルはありません。右下の＋から追加できます。", "No files yet. Add one with + below.")}
             </li>
           ) : (
-            files.map((file) => (
-              <li key={file.id} className="relative flex items-center gap-1 pr-2">
+            files.map((file) => {
+              const items = fileItems(file);
+              return (
+              <li
+                key={file.id}
+                className={`relative flex items-center gap-1 pr-2 ${
+                  file.required ? "bg-[#FFF4EC]" : ""
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => void openExisting(file)}
-                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition hover:bg-[#f8f9fa] active:bg-[#f1f3f4] sm:px-4"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition hover:bg-[#f8f9fa]/80 active:bg-[#f1f3f4] sm:px-4"
                 >
-                  <FileIcon kind={file.kind} url={file.url} />
+                  <FileIcon kind={file.kind} url={items[0]?.url || file.url} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-normal text-[#202124]">
                       {file.title?.trim() || defaultTitle(file.kind)}
                     </span>
                     <span className="mt-0.5 block truncate text-[13px] text-[#5f6368]">
-                      {file.kind === "link" && file.url
-                        ? file.url.replace(/^https?:\/\//i, "")
-                        : kindLabel(file.kind, tx)}
+                      {kindLabel(file.kind, tx)}
+                      {file.required ? ` · ${tx("必須", "Required")}` : ""}
+                      {file.required && file.completedAt ? ` · ${tx("できた", "Done")}` : ""}
+                      {isCollectSlot(file) ? ` · ${tx(`${items.length}件`, `${items.length}`)}` : ""}
                       {file.updatedAt ? ` · ${formatUpdated(file.updatedAt, locale)}` : ""}
                     </span>
                   </span>
                 </button>
+                {canEdit && file.required && !submitted ? (
+                  <DuoButton
+                    type="button"
+                    tone={file.completedAt ? "lime" : "peach"}
+                    size="md"
+                    onClick={() => void toggleFileComplete(file)}
+                    className="!min-h-0 !px-3 !py-2 !text-[12px] !font-bold"
+                  >
+                    {file.completedAt ? tx("できた", "Done") : tx("できた？", "Done?")}
+                  </DuoButton>
+                ) : null}
                 {canEdit ? (
                   <button
                     type="button"
@@ -730,20 +847,27 @@ export function IssueTaskFilesPanel({
                   </>
                 ) : null}
               </li>
-            ))
+            );
+            })
           )}
         </ul>
       </div>
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      {!requiredFilesReady(files) && !submitted ? (
+        <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
+          {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+        </p>
+      ) : null}
 
       <DuoButton
         type="button"
         tone={submitted ? "lime" : "orange"}
         size="lg"
         fullWidth
-        disabled={!canEdit || submitted}
+        disabled={!canSubmit}
         onClick={() => {
+          if (!requiredFilesReady(files)) return;
           void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
         }}
         className="!text-[16px]"
@@ -751,14 +875,14 @@ export function IssueTaskFilesPanel({
         {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
       </DuoButton>
 
-      {canEdit ? (
+      {canEdit && !submitted ? (
         <div className="pointer-events-none fixed bottom-[calc(var(--bottom-nav-clearance)+0.75rem)] right-4 z-30 flex flex-col items-end gap-2 md:bottom-8">
           {fabOpen ? (
             <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
               <button
                 type="button"
                 disabled={creating}
-                onClick={() => void createFile("doc")}
+                onClick={() => openNamePrompt("doc")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
                 <DocIcon />
@@ -767,7 +891,7 @@ export function IssueTaskFilesPanel({
               <button
                 type="button"
                 disabled={creating}
-                onClick={() => void createFile("board")}
+                onClick={() => openNamePrompt("board")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
                 <BoardIcon />
@@ -776,7 +900,7 @@ export function IssueTaskFilesPanel({
               <button
                 type="button"
                 disabled={creating}
-                onClick={() => void createFile("canvas")}
+                onClick={() => openNamePrompt("canvas")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
                 <PenTool className="h-5 w-5 text-[#E65100]" aria-hidden />
@@ -785,24 +909,20 @@ export function IssueTaskFilesPanel({
               <button
                 type="button"
                 disabled={creating}
-                onClick={() => photoInputRef.current?.click()}
+                onClick={() => openNamePrompt("photo")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
                 <PhotoIcon />
-                {tx("写真", "Photo")}
+                {tx("写真依頼", "Photo request")}
               </button>
               <button
                 type="button"
                 disabled={creating}
-                onClick={() => {
-                  setFabOpen(false);
-                  setLinkDraftOpen(true);
-                  setError("");
-                }}
+                onClick={() => openNamePrompt("link")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
                 <LinkIcon />
-                {tx("リンク", "Link")}
+                {tx("リンク依頼", "Link request")}
               </button>
             </div>
           ) : null}
@@ -816,16 +936,51 @@ export function IssueTaskFilesPanel({
             {fabOpen ? <X className="h-5 w-5" aria-hidden /> : <span className="text-[22px] font-light leading-none text-[#1a73e8]">+</span>}
             {fabOpen ? tx("閉じる", "Close") : tx("新規", "New")}
           </button>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(event) => void addPhotoFiles(event.target.files)}
-          />
         </div>
       ) : null}
+
+      {namePrompt && portalReady
+        ? createPortal(
+            <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 p-4 sm:items-center">
+              <button type="button" className="absolute inset-0" aria-label={tx("閉じる", "Close")} onClick={() => setNamePrompt(null)} />
+              <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+                <h2 className="text-base font-bold text-zinc-900">{tx("ファイル名", "File name")}</h2>
+                <input
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-[#FF9600]"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void createNamedFile();
+                    }
+                  }}
+                />
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                    onClick={() => setNamePrompt(null)}
+                  >
+                    {tx("キャンセル", "Cancel")}
+                  </button>
+                  <DuoButton
+                    type="button"
+                    tone="orange"
+                    size="md"
+                    disabled={creating}
+                    onClick={() => void createNamedFile()}
+                    className="!px-4 !py-2 !text-[14px]"
+                  >
+                    {creating ? tx("作成中…", "Creating…") : tx("追加", "Add")}
+                  </DuoButton>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {linkDraftOpen && portalReady
         ? createPortal(
@@ -841,7 +996,7 @@ export function IssueTaskFilesPanel({
               />
               <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-base font-bold text-zinc-900">{tx("リンクを追加", "Add link")}</h2>
+                  <h2 className="text-base font-bold text-zinc-900">{tx("リンクを入れる", "Add link")}</h2>
                   <button
                     type="button"
                     className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100"
@@ -890,7 +1045,7 @@ export function IssueTaskFilesPanel({
                   <button
                     type="button"
                     disabled={creating || !linkUrl.trim()}
-                    onClick={() => void addLinkFile()}
+                    onClick={() => void addLinkToOpenSlot()}
                     className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1765cc] disabled:opacity-50"
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden />
