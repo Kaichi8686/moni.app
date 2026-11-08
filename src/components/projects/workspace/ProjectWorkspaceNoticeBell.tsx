@@ -112,7 +112,7 @@ export function ProjectWorkspaceNoticeBell({ userId, projectId, disabled }: Prop
       <button
         type="button"
         disabled={disabled}
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-[#374151] transition hover:bg-zinc-100/90 active:bg-zinc-200/80 disabled:opacity-50"
+        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-[#374151] shadow-sm ring-1 ring-zinc-200/70 transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-50"
         aria-label={
           hasUnread
             ? tx("このプロジェクトの通知（未読あり）", "Project notifications (unread)")
