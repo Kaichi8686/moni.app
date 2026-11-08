@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, MoreVertical, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreVertical, Trash2, X } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { IdeaStreakBadge } from "@/components/idea-garden/IdeaStreakBadge";
 import { IdeaStreakCalendar } from "@/components/idea-garden/IdeaStreakCalendar";
@@ -354,6 +354,22 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     setSceneVeil("in");
     window.setTimeout(() => {
       setGrow("question");
+      setSceneVeil("out");
+      window.setTimeout(() => setSceneVeil("idle"), 420);
+    }, 340);
+  };
+
+  /** プロジェクトのゴール CTA と同じ：ベール in → 画面差し替え → ベール out */
+  const goSundayTargetWithVeil = (plantId: string) => {
+    if (sceneVeil !== "idle") return;
+    setSundayPickId(plantId);
+    if (reduceMotion()) {
+      setSunday("target");
+      return;
+    }
+    setSceneVeil("in");
+    window.setTimeout(() => {
+      setSunday("target");
       setSceneVeil("out");
       window.setTimeout(() => setSceneVeil("idle"), 420);
     }, 340);
@@ -795,7 +811,21 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
       }
       return (
         <div className="relative flex min-h-[100dvh] flex-col bg-gradient-to-b from-[#FFF7D6] to-[#EAF8FF] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
-          {interruptUi}
+          {/* 花選びのバツ → 今週の花を見つける（start）へ直接戻る */}
+          <button
+            type="button"
+            onClick={() => {
+              setSundayPickId(null);
+              setTarget("");
+              setSituation("");
+              setInterruptOpen(false);
+              setSunday("start");
+            }}
+            aria-label={tx("閉じる", "Close")}
+            className="absolute right-4 top-[max(0.85rem,env(safe-area-inset-top))] z-50 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-[#3C3C3C] shadow-md"
+          >
+            <X className="h-5 w-5" strokeWidth={2.5} />
+          </button>
           <p className="mt-4 text-center text-[15px] font-extrabold text-[#3C3C3C]">
             {tx("選んでください", "Please choose")}
           </p>
@@ -833,14 +863,24 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             <DuoButton
               tone="orange"
               fullWidth
-              onClick={() => {
-                setSundayPickId(cur.id);
-                setSunday("target");
-              }}
+              disabled={sceneVeil !== "idle"}
+              onClick={() => goSundayTargetWithVeil(cur.id)}
             >
               {tx("決定", "Decide")}
             </DuoButton>
           </div>
+          <AnimatePresence>
+            {sceneVeil === "in" ? (
+              <motion.div
+                key="sunday-veil-in"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#FFF4E8]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.88 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.34, ease: "easeInOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
         </div>
       );
     }
@@ -856,7 +896,20 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             placeholder={tx("例：忙しい高校生", "e.g. busy high-school students")}
             buttonLabel={tx("次へ", "Next")}
             onSubmit={() => setSunday("situation")}
+            onBack={() => setSunday("pick-flower")}
           />
+          <AnimatePresence>
+            {sceneVeil === "out" ? (
+              <motion.div
+                key="sunday-veil-out"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#FFF4E8]"
+                initial={{ opacity: 0.88 }}
+                animate={{ opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
         </div>
       );
     }
@@ -875,6 +928,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             placeholder={tx("例：朝の通学で時間が足りないとき", "e.g. when rushing to school")}
             buttonLabel={tx("完了", "Done")}
             onSubmit={() => setSunday("gilding")}
+            onBack={() => setSunday("target")}
           />
         </div>
       );
@@ -1015,10 +1069,17 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     }
 
     if (screen.phase === "paused") {
+      const resumeIsSunday = resumeScreen?.kind === "sunday";
+      const pausedPlant =
+        resumeIsSunday && sundayPickId
+          ? plants.find((p) => p.id === sundayPickId) ?? null
+          : null;
       return (
         <div className="flex min-h-[calc(100dvh-7rem)] flex-col items-center bg-gradient-to-b from-[#E8F8FF] via-[#EAF9D8] to-[#DDF6A8] px-6 pb-10 pt-[max(2rem,env(safe-area-inset-top))]">
           <p className="mt-2 text-center text-[15px] font-extrabold text-[#3C3C3C]">
-            {tx("続きから育てよう", "Continue growing")}
+            {resumeIsSunday
+              ? tx("続きから進めよう", "Continue from where you left off")
+              : tx("続きから育てよう", "Continue growing")}
           </p>
           <DuoButton
             tone="orange"
@@ -1029,7 +1090,11 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             {tx("続ける", "Continue")}
           </DuoButton>
           <div className="mt-auto w-64">
-            <EmptyPotArt showSeed className="h-64 w-full" />
+            {pausedPlant ? (
+              <FlowerArt kind={pausedPlant.flowerKind} stage={4} className="h-64 w-full" />
+            ) : (
+              <EmptyPotArt showSeed className="h-64 w-full" />
+            )}
           </div>
         </div>
       );
@@ -1092,6 +1157,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             placeholder={tx("自由に書いてみよう", "Write freely…")}
             buttonLabel={tx("次へ", "Next")}
             onSubmit={() => setGrow("title")}
+            onBack={() => setGrow("plant")}
           />
           <AnimatePresence>
             {sceneVeil === "out" ? (
@@ -1123,6 +1189,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
               setGrowStage(0);
               setGrow("growing");
             }}
+            onBack={() => setGrow("question")}
             multiline={false}
             maxLength={40}
           />
