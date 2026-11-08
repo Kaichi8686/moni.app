@@ -359,6 +359,22 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     }, 340);
   };
 
+  /** プロジェクトのゴール CTA と同じ：ベール in → 画面差し替え → ベール out */
+  const goSundayTargetWithVeil = (plantId: string) => {
+    if (sceneVeil !== "idle") return;
+    setSundayPickId(plantId);
+    if (reduceMotion()) {
+      setSunday("target");
+      return;
+    }
+    setSceneVeil("in");
+    window.setTimeout(() => {
+      setSunday("target");
+      setSceneVeil("out");
+      window.setTimeout(() => setSceneVeil("idle"), 420);
+    }, 340);
+  };
+
   const growPhase = screen.kind === "grow" ? screen.phase : null;
   const sundayPhase = screen.kind === "sunday" ? screen.phase : null;
 
@@ -847,14 +863,24 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             <DuoButton
               tone="orange"
               fullWidth
-              onClick={() => {
-                setSundayPickId(cur.id);
-                setSunday("target");
-              }}
+              disabled={sceneVeil !== "idle"}
+              onClick={() => goSundayTargetWithVeil(cur.id)}
             >
               {tx("決定", "Decide")}
             </DuoButton>
           </div>
+          <AnimatePresence>
+            {sceneVeil === "in" ? (
+              <motion.div
+                key="sunday-veil-in"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#FFF4E8]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.88 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.34, ease: "easeInOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
         </div>
       );
     }
@@ -872,6 +898,18 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
             onSubmit={() => setSunday("situation")}
             onBack={() => setSunday("pick-flower")}
           />
+          <AnimatePresence>
+            {sceneVeil === "out" ? (
+              <motion.div
+                key="sunday-veil-out"
+                className="pointer-events-none absolute inset-0 z-40 bg-[#FFF4E8]"
+                initial={{ opacity: 0.88 }}
+                animate={{ opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              />
+            ) : null}
+          </AnimatePresence>
         </div>
       );
     }
