@@ -37,7 +37,7 @@ export function QuestionPanel({
     <div
       className={`relative flex h-full min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-8 ${
         onBack
-          ? "pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.25rem))]"
+          ? "pt-[max(5.25rem,calc(env(safe-area-inset-top)+4.25rem))]"
           : "pt-[max(1.25rem,env(safe-area-inset-top))]"
       }`}
     >
