@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, LogOut, Megaphone, MoreHorizontal, Settings, Share2, Trash2, UserPlus, Users, Radio } from "lucide-react";
+import { Calendar, LogOut, Megaphone, MoreHorizontal, Settings, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays } from "date-fns";
@@ -20,8 +20,9 @@ import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { leaveProject as leaveProjectApi } from "@/lib/projects/leaveProject";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
-import { ProjectInviteBellPanel } from "@/components/projects/ProjectInviteBellPanel";
+import { notifyProjectMembers } from "@/lib/projects/workspaceNotifications";
 import { ProjectInviteComposeModal } from "@/components/projects/ProjectInviteComposeModal";
+import { ProjectWorkspaceNoticeBell } from "@/components/projects/workspace/ProjectWorkspaceNoticeBell";
 import type { Issue, IssueStatus, IssueWorkflow, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import { applyIssueDueDatesForProject } from "@/lib/workspace/applyIssueDueDates";
 import { dueIsoForNewIssueInPhase, hasMeaningfulTargetDate } from "@/lib/workspace/issueDueSchedule";
@@ -221,7 +222,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [headerNotice, setHeaderNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [inviteBellOpen, setInviteBellOpen] = useState(false);
   const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
@@ -1040,6 +1040,15 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           .eq("id", issueId));
       }
       if (err) throw new Error(err.message);
+      const newlySubmitted = Boolean(next.submittedAt) && !issue.submittedAt;
+      if (newlySubmitted && uid) {
+        void notifyProjectMembers(supabase, {
+          projectId,
+          type: "issue_submitted",
+          body: `課題「${issue.title}」が提出されました。`,
+          excludeUserId: uid,
+        });
+      }
       setIssues((prev) =>
         prev.map((item) =>
           item.id === issueId
@@ -1059,7 +1068,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         ),
       );
     },
-    [canEdit, issues],
+    [canEdit, issues, projectId, uid],
   );
 
   const deleteIssue = useCallback(
@@ -1230,11 +1239,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
   }, [project?.id, project?.name]);
 
-  const onShareProject = useCallback(() => {
-    if (!project || !uid) return;
-    setInviteBellOpen(true);
-  }, [project, uid]);
-
   return (
     <WorkspaceCtx.Provider value={value}>
       <div
@@ -1254,7 +1258,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   icon={project?.icon}
                 />
               </div>
-              <div className="pointer-events-auto relative z-[110] shrink-0" ref={actionMenuRef}>
+              <div className="pointer-events-auto relative z-[110] flex shrink-0 items-center gap-0.5">
+                <ProjectWorkspaceNoticeBell userId={uid} projectId={projectId} disabled={!project} />
+                <div className="relative" ref={actionMenuRef}>
                 <button
                   type="button"
                   disabled={!project}
@@ -1370,18 +1376,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       <Settings className="h-4 w-4 text-[#6B7280]" aria-hidden />
                       {tx("プロジェクト設定", "Project settings")}
                     </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
-                      onClick={() => {
-                        setActionMenuOpen(false);
-                        void onShareProject();
-                      }}
-                    >
-                      <Share2 className="h-4 w-4 text-[#6B7280]" aria-hidden />
-                      {tx("通知を見る", "View notifications")}
-                    </button>
                     {project ? (
                       <>
                         <div className="my-1 border-t border-[#F1F3F5]" aria-hidden />
@@ -1426,6 +1420,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                     ) : null}
                   </div>
                 ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -1514,34 +1509,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             await confirmDeleteProject();
           }}
         />
-
-        {inviteBellOpen && uid && project ? (
-          <ProjectInviteBellPanel
-            open={inviteBellOpen}
-            onClose={() => setInviteBellOpen(false)}
-            userId={uid}
-            eligibleProjects={[
-              {
-                id: projectId,
-                owner_id: uid,
-                name: project.name,
-                description: project.description ?? "",
-                category: "",
-                tags: [],
-                thumbnail_url: projectMeta?.thumbnail_url ?? null,
-                visibility: projectMeta?.visibility ?? "public",
-                recruitment_target: projectMeta?.recruitment_target ?? "",
-                recruitment_message: projectMeta?.recruitment_message ?? "",
-                created_at: project.createdAt ?? new Date().toISOString(),
-                updated_at: project.updatedAt ?? new Date().toISOString(),
-              },
-            ]}
-            toast={(message) => {
-              setHeaderNotice(message);
-              window.setTimeout(() => setHeaderNotice(""), 3200);
-            }}
-          />
-        ) : null}
 
         {inviteComposeOpen && uid && project ? (
           <ProjectInviteComposeModal

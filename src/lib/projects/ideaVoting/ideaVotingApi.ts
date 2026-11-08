@@ -5,6 +5,7 @@ import {
   type IdeaVotingSettings,
   type ProjectIdea,
 } from "@/lib/projects/ideaVoting/types";
+import { notifyProjectMembers } from "@/lib/projects/workspaceNotifications";
 
 export type IdeaVoteRow = {
   ideaId: string;
@@ -776,7 +777,16 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
         "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,hide_results_until_close,created_at",
       )
       .single();
-    if (!withHide.error && withHide.data) return mapEventRow(withHide.data as EventDbRow);
+    if (!withHide.error && withHide.data) {
+      const created = mapEventRow(withHide.data as EventDbRow);
+      void notifyProjectMembers(client, {
+        projectId,
+        type: "vote_started",
+        body: `「${created.title}」の投票が始まりました。`,
+        excludeUserId: uid,
+      });
+      return created;
+    }
     if (withHide.error && /column|hide_results/i.test(withHide.error.message)) {
       // カラム未適用: 非公開フラグが必要なときは tasks.meta に逃がす。不要なら従来カラムだけで作成。
       if (!hideResultsUntilClose) {
@@ -789,7 +799,16 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
             "id,project_id,created_by,title,description,closes_at,closed,anonymous,votes_per_person,max_votes_per_idea,created_at",
           )
           .single();
-        if (!fallback.error && fallback.data) return mapEventRow(fallback.data as EventDbRow);
+        if (!fallback.error && fallback.data) {
+          const created = mapEventRow(fallback.data as EventDbRow);
+          void notifyProjectMembers(client, {
+            projectId,
+            type: "vote_started",
+            body: `「${created.title}」の投票が始まりました。`,
+            excludeUserId: uid,
+          });
+          return created;
+        }
         if (fallback.error && !isMissingRelation(fallback.error) && !/column/i.test(fallback.error.message)) {
           throw new Error(fallback.error.message);
         }
@@ -831,10 +850,17 @@ export async function createVoteEvent(projectId: string, uid: string, input: Cre
   if (error || !data) throw new Error(error?.message ?? "投票の作成に失敗しました。");
   const mapped = eventFromTask(data as TaskRow, projectId);
   if (!mapped) throw new Error("投票の作成に失敗しました。");
+  void notifyProjectMembers(client, {
+    projectId,
+    type: "vote_started",
+    body: `「${mapped.title}」の投票が始まりました。`,
+    excludeUserId: uid,
+  });
   return mapped;
 }
 
 export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEventInput): Promise<void> {
+  const closing = patch.closed === true && !event.closed;
   if (event.id === LEGACY_EVENT_ID) {
     await saveBoardSettings(event.projectId, {
       votesPerPerson: patch.votesPerPerson ?? event.votesPerPerson,
@@ -842,6 +868,16 @@ export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEve
       closed: patch.closed ?? event.closed,
       anonymous: patch.anonymous ?? event.anonymous,
     });
+    if (closing) {
+      const client = requireClient();
+      const { data: session } = await client.auth.getSession();
+      void notifyProjectMembers(client, {
+        projectId: event.projectId,
+        type: "vote_ended",
+        body: `「${event.title}」の投票が終了しました。`,
+        excludeUserId: session.session?.user.id ?? null,
+      });
+    }
     return;
   }
   const client = requireClient();
@@ -856,7 +892,18 @@ export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEve
     if (patch.maxVotesPerIdea !== undefined) row.max_votes_per_idea = clampLimit(patch.maxVotesPerIdea);
     if (patch.hideResultsUntilClose !== undefined) row.hide_results_until_close = Boolean(patch.hideResultsUntilClose);
     const { error } = await client.from("project_idea_events").update(row).eq("id", event.id);
-    if (!error) return;
+    if (!error) {
+      if (closing) {
+        const { data: session } = await client.auth.getSession();
+        void notifyProjectMembers(client, {
+          projectId: event.projectId,
+          type: "vote_ended",
+          body: `「${event.title}」の投票が終了しました。`,
+          excludeUserId: session.session?.user.id ?? null,
+        });
+      }
+      return;
+    }
     if (!isMissingRelation(error) && !/column/i.test(error.message)) throw new Error(error.message);
   }
 
@@ -884,6 +931,15 @@ export async function updateVoteEvent(event: IdeaVoteEvent, patch: UpdateVoteEve
     })
     .eq("id", event.id);
   if (error) throw new Error(error.message);
+  if (closing) {
+    const { data: session } = await client.auth.getSession();
+    void notifyProjectMembers(client, {
+      projectId: event.projectId,
+      type: "vote_ended",
+      body: `「${event.title}」の投票が終了しました。`,
+      excludeUserId: session.session?.user.id ?? null,
+    });
+  }
 }
 
 export async function deleteVoteEvent(event: IdeaVoteEvent): Promise<void> {
