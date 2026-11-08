@@ -33,8 +33,8 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   const [profile, setProfile] = useState<LeagueProfileState | null>(null);
   const [battle, setBattle] = useState<LeagueBattleState | null>(null);
   const [publishedBattle, setPublishedBattle] = useState<LeagueBattleState | null>(null);
-  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  // Re-render on a timer so scheduleFor() can advance phases without blanking the UI.
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -43,49 +43,45 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   }, []);
 
   const sched = scheduleFor();
+  void tick;
 
-  const reload = useCallback(
-    async (identity: MeIdentity) => {
-      const client = supabaseEnabled ? supabase : null;
-      const p = await loadLeagueProfile(client, identity.userId);
-      setProfile(p);
-      if (!p.tutorialCompleted) {
-        setBattle(null);
-        setPublishedBattle(null);
-        return;
-      }
+  const reload = useCallback(async (identity: MeIdentity) => {
+    const client = supabaseEnabled ? supabase : null;
+    const p = await loadLeagueProfile(client, identity.userId);
+    setProfile(p);
+    if (!p.tutorialCompleted) {
+      setBattle(null);
+      setPublishedBattle(null);
+      return;
+    }
 
-      const phase = scheduleFor().phase;
-      if (phase === "results") {
-        await finalizeLeagueIfNeeded(client, identity);
-        const refreshed = await loadLeagueProfile(client, identity.userId);
-        setProfile(refreshed);
-      }
+    const phase = scheduleFor().phase;
+    if (phase === "results") {
+      await finalizeLeagueIfNeeded(client, identity);
+      const refreshed = await loadLeagueProfile(client, identity.userId);
+      setProfile(refreshed);
+    }
 
-      const current = await loadLeagueBattle(client, identity);
-      setBattle(current);
+    const current = await loadLeagueBattle(client, identity);
+    setBattle(current);
 
-      const displayKey = current.displayResultsWeekKey;
-      if (displayKey && displayKey !== current.week.weekKey) {
-        const { loadLocalBattle } = await import("@/lib/idea-league/localStore");
-        setPublishedBattle(loadLocalBattle(identity, { weekKey: displayKey }));
-      } else if (phase === "results") {
-        setPublishedBattle(current);
-      } else if (displayKey === current.week.weekKey && phase !== "submit") {
-        setPublishedBattle(null);
-      } else {
-        setPublishedBattle(null);
-      }
-    },
-    // tick forces phase refresh
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tick],
-  );
+    const displayKey = current.displayResultsWeekKey;
+    if (displayKey && displayKey !== current.week.weekKey) {
+      const { loadLocalBattle } = await import("@/lib/idea-league/localStore");
+      setPublishedBattle(loadLocalBattle(identity, { weekKey: displayKey }));
+    } else if (phase === "results") {
+      setPublishedBattle(current);
+    } else if (displayKey === current.week.weekKey && phase !== "submit") {
+      setPublishedBattle(null);
+    } else {
+      setPublishedBattle(null);
+    }
+  }, []);
 
+  // Resolve identity + first load. Do not clear existing profile (avoids skeleton flicker).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
       setErr("");
       try {
         let identity: MeIdentity = {
@@ -115,14 +111,29 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
         await reload(identity);
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : "failed");
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [reload, tx]);
+
+  // Soft refresh on the phase timer only (skip tick=0 — boot effect owns first load).
+  useEffect(() => {
+    if (tick === 0 || !me) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await reload(me);
+      } catch {
+        // Keep last good frame; next tick retries.
+      }
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tick, me, reload]);
 
   const openGarden =
     onOpenGarden ??
@@ -151,7 +162,10 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
     </div>
   );
 
-  if (loading || !me || !profile) {
+  if (!me || !profile) {
+    if (err) {
+      return shell(<p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>);
+    }
     return shell(
       <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
         {[0, 1, 2].map((i) => (
@@ -159,10 +173,6 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
         ))}
       </div>,
     );
-  }
-
-  if (err) {
-    return shell(<p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>);
   }
 
   if (!profile.tutorialCompleted) {
