@@ -1,6 +1,8 @@
 "use client";
 
+import { ChevronLeft } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   title: string;
@@ -10,6 +12,8 @@ type Props = {
   placeholder: string;
   buttonLabel: string;
   onSubmit: () => void;
+  /** 前の画面へ（入力内容は親 state に残す） */
+  onBack?: () => void;
   multiline?: boolean;
   maxLength?: number;
 };
@@ -22,13 +26,25 @@ export function QuestionPanel({
   placeholder,
   buttonLabel,
   onSubmit,
+  onBack,
   multiline = true,
   maxLength = 500,
 }: Props) {
+  const { tx } = useI18n();
   const can = value.trim().length > 0;
 
   return (
-    <div className="flex h-full min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <div className="relative flex h-full min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label={tx("戻る", "Back")}
+          className="absolute left-4 top-[max(0.85rem,env(safe-area-inset-top))] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-[#3C3C3C] shadow-md"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+      ) : null}
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <h1 className="mt-6 text-center text-[22px] font-extrabold leading-snug tracking-tight text-[#3C3C3C]">
           {title}
