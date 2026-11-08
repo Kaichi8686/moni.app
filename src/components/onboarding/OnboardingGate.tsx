@@ -24,6 +24,7 @@ function shouldBypassOnboarding(pathname: string): boolean {
   if (pathname.startsWith("/dev")) return true;
   if (pathname.startsWith("/shift")) return true;
   if (pathname.startsWith("/bunkasai")) return true;
+  if (pathname === "/invest-sim" || pathname.startsWith("/invest-sim/")) return true;
   if (pathname.startsWith("/auth")) return true;
   if (pathname.startsWith("/api")) return true;
   return false;
