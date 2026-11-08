@@ -201,3 +201,4 @@ end $$;
 create index if not exists idx_project_notifications_user_project_unread
   on public.project_notifications (user_id, project_id, created_at desc)
   where read_at is null;
+
