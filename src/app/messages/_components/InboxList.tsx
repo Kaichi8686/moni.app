@@ -485,13 +485,22 @@ function ConversationRow({
             size="md"
           />
         ) : conversation.type === "project" ? (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-            {conversation.iconEmoji && conversation.iconEmoji !== "📁" ? (
-              <span className="text-2xl">{conversation.iconEmoji}</span>
-            ) : (
-              <FolderKanban className="h-6 w-6" aria-hidden />
-            )}
-          </div>
+          conversation.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote project thumbs; matches workspace img usage
+            <img
+              src={conversation.thumbnailUrl}
+              alt=""
+              className="h-14 w-14 rounded-full bg-zinc-100 object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+              {conversation.iconEmoji && conversation.iconEmoji !== "📁" ? (
+                <span className="text-2xl">{conversation.iconEmoji}</span>
+              ) : (
+                <FolderKanban className="h-6 w-6" aria-hidden />
+              )}
+            </div>
+          )
         ) : (
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sky-50 text-sky-700">
             {conversation.iconEmoji && conversation.iconEmoji !== "💬" ? (

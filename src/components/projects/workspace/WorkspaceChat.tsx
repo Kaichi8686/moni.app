@@ -104,8 +104,9 @@ function Avatar({ userId, name, url, size = 40 }: { userId?: string; name: strin
 
 export default function WorkspaceChat() {
   const { tx, locale } = useI18n();
-  const { projectId, project, loading, uid, canEdit } = useProjectWorkspace();
+  const { projectId, project, projectMeta, loading, uid, canEdit } = useProjectWorkspace();
   const photoLabel = tx("📷 写真", "📷 Photo");
+  const projectThumbnail = projectMeta?.thumbnail_url?.trim() || null;
 
   const [groupMessages, setGroupMessages] = useState<ChatMessage[]>([]);
   const [directMessages, setDirectMessages] = useState<ChatMessage[]>([]);
@@ -635,9 +636,18 @@ export default function WorkspaceChat() {
           onClick={() => openTalk("group")}
           className="flex w-full items-center gap-3 border-b border-[#F1F3F5] px-4 py-3 text-left transition hover:bg-[#F7F8F8] active:bg-[#F1F3F5]"
         >
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#06C755]/12 text-[#06C755]">
-            <Users className="h-6 w-6" aria-hidden />
-          </div>
+          {projectThumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote project thumbs
+            <img
+              src={projectThumbnail}
+              alt=""
+              className="h-12 w-12 shrink-0 rounded-full bg-zinc-100 object-cover"
+            />
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#06C755]/12 text-[#06C755]">
+              <Users className="h-6 w-6" aria-hidden />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-[14px] font-semibold text-[#1A1A1A]">
