@@ -12,7 +12,13 @@ export type ProjectNotificationType =
   | "project_invite"
   | "project_invite_accepted"
   | "project_invite_declined"
-  | "project_invite_resolved";
+  | "project_invite_resolved"
+  | "vote_started"
+  | "vote_ended"
+  | "member_added"
+  | "recruitment_applied"
+  | "issue_submitted"
+  | "roadmap_achieved";
 
 export type ProjectNotificationRow = {
   id: string;

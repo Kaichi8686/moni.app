@@ -9,6 +9,7 @@ import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import { enterProjectListMode, openProjectCluster } from "@/lib/navigation/projectCluster";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { loadMemberProjects, type MemberProjectLite } from "@/lib/projects/loadMemberProjects";
+import { fetchUnreadWorkspaceProjectIds } from "@/lib/projects/workspaceNotifications";
 import { rememberLastProject } from "@/lib/workspace/lastProject";
 import { supabase } from "@/lib/supabase";
 
@@ -84,6 +85,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<MemberProjectLite[]>([]);
   const [loading, setLoading] = useState(false);
+  const [unreadProjectIds, setUnreadProjectIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -93,14 +95,19 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
       const uid = data.session?.user.id;
       if (!uid) {
         setRows([]);
+        setUnreadProjectIds(new Set());
         return;
       }
-      const list = await loadMemberProjects(uid);
+      const [list, unread] = await Promise.all([
+        loadMemberProjects(uid),
+        fetchUnreadWorkspaceProjectIds(supabase, uid, projectId),
+      ]);
       setRows(list);
+      setUnreadProjectIds(unread);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     if (!open) return;
@@ -183,6 +190,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
             ) : null}
             {rows.map((row) => {
               const active = row.id === projectId;
+              const hasUnread = !active && unreadProjectIds.has(row.id);
               return (
                 <button
                   key={row.id}
@@ -204,6 +212,12 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
                   <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-zinc-900">
                     {row.name}
                   </span>
+                  {hasUnread ? (
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                      aria-label={tx("未読の通知あり", "Unread notifications")}
+                    />
+                  ) : null}
                   {active ? <Check className="h-4 w-4 shrink-0 text-zinc-800" aria-hidden /> : null}
                 </button>
               );

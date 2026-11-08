@@ -11,6 +11,7 @@ import {
   type PhaseTaskRowDb,
 } from "@/lib/roadmap/mapRows";
 import type { PhaseStatus, PhaseTask, RoadmapBusinessType, RoadmapPhase, RoadmapProjectMeta } from "@/lib/roadmap/types";
+import { notifyProjectMembers } from "@/lib/projects/workspaceNotifications";
 
 function isMissingTable(err: { message?: string } | null): boolean {
   const m = (err?.message ?? "").toLowerCase();
@@ -165,6 +166,16 @@ export function useRoadmapProject(projectId: string) {
         }
         throw new Error(err.message);
       }
+      const prevPhase = phases.find((phase) => phase.id === phaseId);
+      if (patch.status === "completed" && prevPhase && prevPhase.status !== "completed") {
+        const title = (patch.title !== undefined ? patch.title.trim() : prevPhase.title) || "ロードマップ";
+        void notifyProjectMembers(supabase, {
+          projectId,
+          type: "roadmap_achieved",
+          body: `ロードマップ「${title}」が達成されました。`,
+          excludeUserId: uid,
+        });
+      }
       // reload 前にローカルへ反映（シートが一瞬閉じたりアイコンが戻って見えないのを防ぐ）
       setPhases((prev) =>
         prev.map((phase) => {
@@ -184,7 +195,7 @@ export function useRoadmapProject(projectId: string) {
       );
       await reload();
     },
-    [canEdit, reload],
+    [canEdit, phases, projectId, reload, uid],
   );
 
   const deletePhase = useCallback(

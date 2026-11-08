@@ -8,9 +8,15 @@ export type ProjectNotificationType =
   | "project_invite"
   | "project_invite_accepted"
   | "project_invite_declined"
-  | "project_invite_resolved";
+  | "project_invite_resolved"
+  | "vote_started"
+  | "vote_ended"
+  | "member_added"
+  | "recruitment_applied"
+  | "issue_submitted"
+  | "roadmap_achieved";
 
-/** 自分宛の結果・招待だけ。他人の行動（参加申請が届いた / 相手が承認した等）は出さない */
+/** 自分宛の結果・招待だけ。他人の行動やワークスペース通知はホームのお知らせに出さない */
 const SELF_PROJECT_NOTIFICATION_TYPES = new Set<string>([
   "project_invite",
   "project_invite_resolved",
