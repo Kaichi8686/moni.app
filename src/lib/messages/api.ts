@@ -593,6 +593,23 @@ export async function fetchInboxConversations(
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, profileToSender(p)]));
 
+  const projectIds = [
+    ...new Set(
+      convs
+        .filter((c) => c.type === "project" && typeof c.project_id === "string" && c.project_id)
+        .map((c) => c.project_id as string),
+    ),
+  ];
+  const { data: projectRows } = projectIds.length
+    ? await client.from("projects").select("id, thumbnail_url").in("id", projectIds)
+    : { data: [] as { id: string; thumbnail_url: string | null }[] };
+  const thumbnailByProject = new Map(
+    (projectRows ?? []).map((p) => [
+      p.id as string,
+      ((p.thumbnail_url as string | null)?.trim() || null) as string | null,
+    ]),
+  );
+
   // Only hit count queries for threads that might have unread (last msg after last_read).
   const unreadCandidates = convIds.filter((cid) => {
     const last = lastByConv.get(cid);
@@ -619,8 +636,11 @@ export async function fetchInboxConversations(
     const last = lastByConv.get(id);
     const members = membersByConv.get(id) ?? [];
     const otherId = members.find((mid) => mid !== userId);
+    const projectId = (c.project_id as string | null) ?? null;
 
     return mapInboxRow(c, {
+      thumbnailUrl:
+        c.type === "project" && projectId ? (thumbnailByProject.get(projectId) ?? null) : null,
       unreadCount: unreadMap.get(id) ?? 0,
       isPinned: pinnedMap.get(id) ?? false,
       otherUser: c.type === "direct" && otherId ? profileMap.get(otherId) : undefined,

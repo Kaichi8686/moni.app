@@ -96,6 +96,8 @@ export type InboxConversation = {
   name: string | null;
   iconEmoji: string;
   projectId: string | null;
+  /** プロジェクト会話: projects.thumbnail_url（無いときは null） */
+  thumbnailUrl?: string | null;
   lastMessageAt: string;
   unreadCount: number;
   isPinned: boolean;

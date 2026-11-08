@@ -25,7 +25,7 @@ type Props = {
 type Mode = "members" | "following" | "projects" | "group";
 
 type UserRow = { id: string; display_name: string; avatar_url: string | null };
-type ProjectRow = { id: string; name: string; icon?: string | null };
+type ProjectRow = { id: string; name: string; icon?: string | null; thumbnail_url?: string | null };
 
 export function NewConversationModal({ currentUserId, projectId, onClose, onCreated }: Props) {
   const { tx } = useI18n();
@@ -35,6 +35,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
   const [followingPeers, setFollowingPeers] = useState<UserRow[]>([]);
   const [projectMembers, setProjectMembers] = useState<UserRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [scopedProjectThumb, setScopedProjectThumb] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,13 +55,16 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
       );
 
       const [{ data: owned }, { data: memberRows }] = await Promise.all([
-        client.from("projects").select("id, name, icon").eq("owner_id", currentUserId).limit(40),
+        client.from("projects").select("id, name, icon, thumbnail_url").eq("owner_id", currentUserId).limit(40),
         client.from("project_members").select("project_id").eq("user_id", currentUserId).limit(40),
       ]);
       const memberIds = [...new Set((memberRows ?? []).map((r) => r.project_id as string))];
       let joined: ProjectRow[] = [];
       if (memberIds.length) {
-        const { data } = await client.from("projects").select("id, name, icon").in("id", memberIds);
+        const { data } = await client
+          .from("projects")
+          .select("id, name, icon, thumbnail_url")
+          .in("id", memberIds);
         joined = (data ?? []) as ProjectRow[];
       }
       const map = new Map<string, ProjectRow>();
@@ -69,9 +73,10 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
 
       if (projectId) {
         const [{ data: project }, { data: mems }] = await Promise.all([
-          client.from("projects").select("owner_id").eq("id", projectId).maybeSingle(),
+          client.from("projects").select("owner_id, thumbnail_url").eq("id", projectId).maybeSingle(),
           client.from("project_members").select("user_id").eq("project_id", projectId),
         ]);
+        setScopedProjectThumb(((project?.thumbnail_url as string | null)?.trim() || null) as string | null);
         const ids = new Set<string>();
         const ownerId = project?.owner_id as string | undefined;
         if (ownerId && ownerId !== currentUserId) ids.add(ownerId);
@@ -96,6 +101,7 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
         }
       } else {
         setProjectMembers([]);
+        setScopedProjectThumb(null);
       }
     })();
   }, [currentUserId, projectId]);
@@ -281,9 +287,18 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                   onClick={() => void openProjectLine(projectId)}
                   className="flex w-full items-center gap-3 rounded-xl bg-emerald-50 px-3 py-3 text-left hover:bg-emerald-100/80"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600">
-                    <Users className="h-5 w-5" aria-hidden />
-                  </span>
+                  {scopedProjectThumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- remote project thumbs
+                    <img
+                      src={scopedProjectThumb}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-full bg-white object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600">
+                      <Users className="h-5 w-5" aria-hidden />
+                    </span>
+                  )}
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-zinc-900">
                       {tx("メンバー全員のグループ", "Group with all members")}
@@ -327,9 +342,18 @@ export function NewConversationModal({ currentUserId, projectId, onClose, onCrea
                     onClick={() => void openProjectLine(p.id)}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50"
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-lg">
-                      {p.icon?.trim() || <FolderKanban className="h-5 w-5 text-emerald-600" aria-hidden />}
-                    </span>
+                    {p.thumbnail_url?.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- remote project thumbs
+                      <img
+                        src={p.thumbnail_url.trim()}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-full bg-zinc-100 object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-lg">
+                        {p.icon?.trim() || <FolderKanban className="h-5 w-5 text-emerald-600" aria-hidden />}
+                      </span>
+                    )}
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-zinc-900">{p.name}</span>
                       <span className="block text-[11px] text-zinc-500">
