@@ -34,7 +34,13 @@ export function QuestionPanel({
   const can = value.trim().length > 0;
 
   return (
-    <div className="relative flex h-full min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <div
+      className={`relative flex h-full min-h-[100dvh] flex-col bg-gradient-to-b from-[#E8F8FF] via-[#F7FFF0] to-[#FFF8E7] px-5 pb-8 ${
+        onBack
+          ? "pt-[max(4.25rem,calc(env(safe-area-inset-top)+3.25rem))]"
+          : "pt-[max(1.25rem,env(safe-area-inset-top))]"
+      }`}
+    >
       {onBack ? (
         <button
           type="button"
@@ -46,7 +52,7 @@ export function QuestionPanel({
         </button>
       ) : null}
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        <h1 className="mt-6 text-center text-[22px] font-extrabold leading-snug tracking-tight text-[#3C3C3C]">
+        <h1 className="text-center text-[22px] font-extrabold leading-snug tracking-tight text-[#3C3C3C]">
           {title}
         </h1>
         {hint ? (
