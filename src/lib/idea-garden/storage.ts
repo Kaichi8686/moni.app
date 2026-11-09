@@ -108,11 +108,30 @@ export function stabilizeDraftScreen(screen: GardenScreen): GardenScreen {
 }
 
 /**
+ * 連続記録・カレンダー用の活動日。
+ * 平日の植えた日 + 日曜に金にした日（goldAt）を含める。
+ */
+export function ideaActivityDateKeys(plants: PlantedIdea[]): string[] {
+  const days = new Set<string>();
+  for (const p of plants) {
+    if (p.dateKey) days.add(p.dateKey);
+    if (!p.gold) continue;
+    if (p.goldAt) {
+      days.add(gardenBusinessDateKey(new Date(p.goldAt)));
+    } else if (p.weekKey) {
+      // レガシー: goldAt が無い場合はその週の日曜とみなす
+      days.add(addDaysToDateKey(p.weekKey, 6));
+    }
+  }
+  return [...days];
+}
+
+/**
  * アイデア出した連続日数（東京暦・Duolingo風）。
- * 今日未実施なら昨日から遡って数える。
+ * 今日未実施なら昨日から遡って数える。日曜の金化も含む。
  */
 export function ideaStreakDays(plants: PlantedIdea[]): number {
-  const days = new Set(plants.map((p) => p.dateKey));
+  const days = new Set(ideaActivityDateKeys(plants));
   if (days.size === 0) return 0;
   const today = gardenBusinessDateKey();
   let cursor = days.has(today) ? today : addDaysToDateKey(today, -1);
