@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState } from "react";
 import {
   PenLine,
   Sparkles,
@@ -31,39 +31,6 @@ import { addDays } from "date-fns";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
-
-type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-
-function ActionLink({
-  href,
-  icon: IconComponent,
-  label,
-  detail,
-  filled = false,
-}: {
-  href: string;
-  icon: Icon;
-  label: string;
-  detail?: string;
-  filled?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`flex min-h-[104px] flex-col justify-between rounded-2xl border p-4 transition active:scale-[0.99] ${
-        filled
-          ? "border-violet-600 bg-violet-600 text-white shadow-sm hover:bg-violet-700"
-          : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-300 hover:bg-zinc-50"
-      }`}
-    >
-      <IconComponent className="h-6 w-6" aria-hidden />
-      <div className="mt-4">
-        <p className="text-[15px] font-semibold">{label}</p>
-        {detail ? <p className={`mt-0.5 text-[12px] ${filled ? "text-violet-100" : "text-zinc-500"}`}>{detail}</p> : null}
-      </div>
-    </Link>
-  );
-}
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
@@ -186,7 +153,7 @@ export default function WorkspaceOverview() {
         : 0;
 
   return (
-    <div className="pb-8">
+    <div className="pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]">
       {/* 背景（background_url）と正方形写真（thumbnail_url）は別画像 */}
       <section className="-mx-4 -mt-4 border-b border-zinc-200 bg-white md:-mx-6 md:-mt-5">
         <div className="relative h-44 w-full overflow-hidden bg-zinc-100 sm:h-52">
@@ -476,17 +443,16 @@ export default function WorkspaceOverview() {
         }}
       />
 
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("進める", "Move forward")}</h2>
-        <ActionLink
-          href={`/projects/${projectId}/coach`}
-          icon={Sparkles}
-          label={tx("AI", "AI")}
-          detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
-          filled
-        />
-      </section>
       </div>
+
+      {/* アイデアタブと同系の Duo 丸ボタン（左下）→ AI コーチ */}
+      <Link
+        href={`/projects/${projectId}/coach`}
+        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
+        aria-label={tx("AI", "AI")}
+      >
+        <Sparkles className="h-8 w-8" aria-hidden strokeWidth={2.5} />
+      </Link>
     </div>
   );
 }
