@@ -233,14 +233,19 @@ export default function WorkspaceOverview() {
         {/* 未入力は写真ボタン風 CTA、入力後は同じ位置にゴールバナー */}
         <div className="mb-4">
           <ProjectBriefSection />
-          {project && projectGoal ? (
+        </div>
+        {project && projectGoal ? (
+          <div
+            className="sticky z-[90] mb-4 bg-white/95 py-2 backdrop-blur-sm"
+            style={{ top: "var(--project-workspace-header-offset, 3.75rem)" }}
+          >
             <ProjectGoalBanner
               projectName={project.name}
               goal={projectGoal}
               onClick={() => setGoalDetailOpen(true)}
             />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         {sortedPhases.length > 0 ? (
           <>
             <RoadmapPath
