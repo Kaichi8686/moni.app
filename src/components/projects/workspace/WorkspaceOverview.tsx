@@ -415,13 +415,14 @@ export default function WorkspaceOverview() {
 
       </div>
 
-      {/* アイデアタブと同系の Duo 丸ボタン（左下）→ AI コーチ */}
+      {/* アイデアタブと同系の Duo 角丸四角ボタン（左下）→ AI コーチ */}
       <Link
         href={`/projects/${projectId}/coach`}
-        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
+        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex select-none items-center justify-center gap-2 rounded-2xl bg-[#6B5CF6] px-5 py-3.5 text-[16px] font-extrabold leading-none tracking-tight text-white shadow-[0_4px_0_#4C3FBF] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
         aria-label={tx("AI", "AI")}
       >
-        <Sparkles className="h-8 w-8" aria-hidden strokeWidth={2.5} />
+        <Sparkles className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />
+        AI
       </Link>
     </div>
   );
