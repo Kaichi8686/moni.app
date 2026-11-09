@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState } from "react";
 import {
-  FileText,
   PenLine,
-  PenTool,
   Sparkles,
 } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
@@ -33,20 +31,6 @@ import { addDays } from "date-fns";
 
 /** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
 const ROADMAP_VISIBLE_LIMIT = 6;
-
-type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-
-function CompactLink({ href, icon: IconComponent, label }: { href: string; icon: Icon; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 text-center transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] sm:min-h-[104px]"
-    >
-      <IconComponent className="h-6 w-6 text-zinc-700 sm:h-7 sm:w-7" aria-hidden />
-      <span className="text-[13px] font-semibold text-zinc-800 sm:text-sm">{label}</span>
-    </Link>
-  );
-}
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
@@ -459,15 +443,6 @@ export default function WorkspaceOverview() {
         }}
       />
 
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
-        <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
-        <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
-      </section>
       </div>
 
       {/* アイデアタブと同系の Duo 丸ボタン（左下）→ AI コーチ */}
