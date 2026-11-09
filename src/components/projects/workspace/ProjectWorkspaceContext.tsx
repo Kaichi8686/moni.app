@@ -2,7 +2,17 @@
 
 import { Calendar, LogOut, Megaphone, MoreHorizontal, Settings, Trash2, UserPlus, Users, Radio } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { addDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { ProjectRow, ProjectMemberRow } from "@/lib/projects/types";
@@ -224,6 +234,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const workspaceHeaderRef = useRef<HTMLElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
   const [deletionVoteRevision, setDeletionVoteRevision] = useState(0);
   const [deletingProject, setDeletingProject] = useState(false);
@@ -1239,13 +1250,37 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
   }, [project?.id, project?.name]);
 
+  /** ゴール sticky の top 用にヘッダー実高さを CSS 変数へ */
+  useLayoutEffect(() => {
+    if (isImmersivePage) return;
+    const header = workspaceHeaderRef.current;
+    if (!header) return;
+    const sync = () => {
+      document.documentElement.style.setProperty(
+        "--project-workspace-header-offset",
+        `${Math.ceil(header.getBoundingClientRect().height)}px`,
+      );
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(header);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [isImmersivePage]);
+
   return (
     <WorkspaceCtx.Provider value={value}>
       <div
         className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""}`}
       >
         {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage ? null : (
-        <header className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4">
+        <header
+          ref={workspaceHeaderRef}
+          className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4"
+        >
           <div className="mx-auto max-w-3xl">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -1439,7 +1474,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           }
         >
           <main
-            className={`project-workspace-main min-w-0 overflow-x-clip bg-white ${
+            className={`project-workspace-main min-w-0 bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
                 : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage
