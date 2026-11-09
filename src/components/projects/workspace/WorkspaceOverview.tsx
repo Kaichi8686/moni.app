@@ -29,9 +29,6 @@ import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import { addDays } from "date-fns";
 
-/** 概要のロードマップカードは order 順で最大この件数まで常時表示 */
-const ROADMAP_VISIBLE_LIMIT = 6;
-
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
   const router = useRouter();
@@ -55,15 +52,10 @@ export default function WorkspaceOverview() {
   const projectGoal = projectBrief.projectGoal.trim();
   const problemMotivation = projectBrief.problemMotivation.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
-  const [expandState, setExpandState] = useState<{ projectId: string; open: boolean }>({
-    projectId,
-    open: false,
-  });
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
-  const roadmapExpanded = expandState.open && expandState.projectId === projectId;
   const photoUrl = projectMeta?.thumbnail_url?.trim() || "";
   const backgroundUrl = projectMeta?.background_url?.trim() || "";
 
@@ -84,13 +76,8 @@ export default function WorkspaceOverview() {
   const selectedPhaseLive = selectedPhaseId
     ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
     : null;
-  /** 本線だけを縦に数え、横置きは親行にぶら下げる */
+  /** 本線だけを縦に数え、横置きは親行にぶら下げる（最初から全件表示） */
   const displayPhases = mainPhases;
-  const visiblePhases = useMemo(
-    () => (roadmapExpanded ? displayPhases : displayPhases.slice(0, ROADMAP_VISIBLE_LIMIT)),
-    [displayPhases, roadmapExpanded],
-  );
-  const hiddenPhaseCount = Math.max(0, displayPhases.length - visiblePhases.length);
 
   const inProgressIndex = mainPhases.findIndex((phase) => phase.status === "in_progress");
   const firstOpenIndex = mainPhases.findIndex((phase) => phase.status !== "completed");
@@ -257,12 +244,12 @@ export default function WorkspaceOverview() {
         {sortedPhases.length > 0 ? (
           <>
             <RoadmapPath
-              segmentCleared={visiblePhases.map((phase) => {
+              segmentCleared={displayPhases.map((phase) => {
                 const index = mainPhases.findIndex((item) => item.id === phase.id);
                 return phase.status === "completed" || index < currentIndex;
               })}
             >
-              {visiblePhases.map((phase, visibleIndex) => {
+              {displayPhases.map((phase, visibleIndex) => {
                 const index = mainPhases.findIndex((item) => item.id === phase.id);
                 const complete = phase.status === "completed";
                 const current = phase.status === "in_progress" || (!complete && index === currentIndex);
@@ -316,23 +303,6 @@ export default function WorkspaceOverview() {
                 );
               })}
             </RoadmapPath>
-            {hiddenPhaseCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => setExpandState({ projectId, open: true })}
-                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-3 py-2.5 text-[13px] font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50"
-              >
-                {tx(`もっと見る（あと${hiddenPhaseCount}件）`, `Show more (${hiddenPhaseCount} more)`)}
-              </button>
-            ) : roadmapExpanded && displayPhases.length > ROADMAP_VISIBLE_LIMIT ? (
-              <button
-                type="button"
-                onClick={() => setExpandState({ projectId, open: false })}
-                className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-100"
-              >
-                {tx(`閉じる（${ROADMAP_VISIBLE_LIMIT}件まで表示）`, `Show fewer (up to ${ROADMAP_VISIBLE_LIMIT})`)}
-              </button>
-            ) : null}
           </>
         ) : (
           <RoadmapPath>
