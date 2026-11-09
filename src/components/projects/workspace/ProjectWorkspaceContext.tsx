@@ -1439,7 +1439,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           }
         >
           <main
-            className={`project-workspace-main min-w-0 overflow-x-hidden bg-white ${
+            className={`project-workspace-main min-w-0 overflow-x-clip bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
                 : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage

@@ -11,6 +11,7 @@ import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBrie
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
+import { StickyBelowWorkspaceHeader } from "@/components/projects/workspace/StickyBelowWorkspaceHeader";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
 import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
@@ -235,16 +236,13 @@ export default function WorkspaceOverview() {
           <ProjectBriefSection />
         </div>
         {project && projectGoal ? (
-          <div
-            className="sticky z-[90] mb-4 bg-white/95 py-2 backdrop-blur-sm"
-            style={{ top: "var(--project-workspace-header-offset, 3.75rem)" }}
-          >
+          <StickyBelowWorkspaceHeader>
             <ProjectGoalBanner
               projectName={project.name}
               goal={projectGoal}
               onClick={() => setGoalDetailOpen(true)}
             />
-          </div>
+          </StickyBelowWorkspaceHeader>
         ) : null}
         {sortedPhases.length > 0 ? (
           <>
