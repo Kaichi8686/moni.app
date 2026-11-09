@@ -26,6 +26,7 @@ import { dailyPromptFor } from "@/lib/idea-garden/prompts";
 import { SEED_BAGS } from "@/lib/idea-garden/seedBags";
 import {
   goldDoneThisWeek,
+  ideaActivityDateKeys,
   ideaStreakDays,
   loadGarden,
   plantForDate,
@@ -704,7 +705,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     const canStartSunday =
       isSunday() && !goldDoneThisWeek(plants, currentWeekKey) && sundayCandidates.length > 0;
     const streak = ideaStreakDays(plants);
-    const plantedDateKeys = plants.map((p) => p.dateKey);
+    const plantedDateKeys = ideaActivityDateKeys(plants);
 
     return (
       <div className="min-h-[calc(100dvh-7rem)] bg-gradient-to-b from-[#EAF8FF] to-[#F4F4F5]">
@@ -1004,7 +1005,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
     if (screen.phase === "pick-bag" || screen.phase === "bag-focus") {
       const kind = selectedKind ?? bag.id;
       const streak = ideaStreakDays(plants);
-      const plantedDateKeys = plants.map((p) => p.dateKey);
+      const plantedDateKeys = ideaActivityDateKeys(plants);
       return (
         <LayoutGroup id="idea-seed-bag">
           {screen.phase === "pick-bag" ? (
