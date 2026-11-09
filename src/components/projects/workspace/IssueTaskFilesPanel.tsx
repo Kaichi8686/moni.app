@@ -973,8 +973,12 @@ export function IssueTaskFilesPanel({
         <div className="min-w-0 flex-1">
           <p className="truncate text-[11px] font-semibold text-zinc-500">
             {stepLabel}
-            <span className="text-zinc-300"> · </span>
-            {genreLabel}
+            {genreLabel ? (
+              <>
+                <span className="text-zinc-300"> · </span>
+                {genreLabel}
+              </>
+            ) : null}
           </p>
           <h1 className="truncate text-xl font-bold tracking-tight text-zinc-950">
             {isMemo ? tx("メモ", "Memo") : issue.title}
@@ -1036,8 +1040,8 @@ export function IssueTaskFilesPanel({
       ) : (
         <p className="text-[13px] font-semibold text-zinc-500">
           {tx(
-            "このジャンル用のメモです。ドキュメントや写真などを自由に置けます。",
-            "Notes for this genre — add docs, photos, and more freely.",
+            "このステップ用のメモです。ドキュメントや写真などを自由に置けます。",
+            "Notes for this step — add docs, photos, and more freely.",
           )}
         </p>
       )}

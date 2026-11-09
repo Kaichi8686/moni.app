@@ -10,8 +10,8 @@ import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFi
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { readIssueCreateDraft, readIssueCreateOpen } from "@/lib/workspace/issueCreateDraft";
 import {
-  getGenreMemoFiles,
-  upsertGenreMemoFiles,
+  getStepMemoFiles,
+  upsertStepMemoFiles,
 } from "@/lib/workspace/genreMemos";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
@@ -38,7 +38,7 @@ type PhaseKey = string | null;
 type Screen =
   | { kind: "step"; phaseId: PhaseKey }
   | { kind: "genre"; phaseId: PhaseKey; genre: TaskGenre }
-  | { kind: "memo"; phaseId: PhaseKey; genre: TaskGenre }
+  | { kind: "memo"; phaseId: PhaseKey }
   | { kind: "task"; phaseId: PhaseKey; genre: TaskGenre; issueId: string };
 
 const SLIDE_OUT_MS = 220;
@@ -150,6 +150,7 @@ export default function WorkspaceIssues() {
     return () => document.documentElement.classList.remove("moni-issues-drill");
   }, [screen?.kind]);
 
+
   const sortedPhases = useMemo(
     () => [...phases].sort((a, b) => a.order - b.order),
     [phases],
@@ -191,9 +192,11 @@ export default function WorkspaceIssues() {
   }
 
   function toRemembered(next: Screen): RememberedIssueScreen {
-    if (next.kind === "step") return { kind: "step", phaseId: next.phaseId };
-    // メモ画面はジャンル一覧として覚える（再入場でメモを強制しない）
-    if (next.kind === "genre" || next.kind === "memo") {
+    // メモはステップとして覚える（再入場でメモを強制しない）
+    if (next.kind === "step" || next.kind === "memo") {
+      return { kind: "step", phaseId: next.phaseId };
+    }
+    if (next.kind === "genre") {
       return { kind: "genre", phaseId: next.phaseId, genre: next.genre };
     }
     return { kind: "task", phaseId: next.phaseId, genre: next.genre, issueId: next.issueId };
@@ -323,22 +326,22 @@ export default function WorkspaceIssues() {
     return map;
   }, [project?.members]);
 
-  const activeGenre = !screen || screen.kind === "step" ? null : screen.genre;
+  const activeGenre =
+    !screen || screen.kind === "step" || screen.kind === "memo" ? null : screen.genre;
   const activeIssue =
     screen && screen.kind === "task"
       ? issues.find((issue) => issue.id === screen.issueId) ?? null
       : null;
   const memoIssue = useMemo((): Issue | null => {
-    if (!screen || (screen.kind !== "memo" && screen.kind !== "genre") || !activeGenre) return null;
-    if (screen.kind !== "memo") return null;
+    if (!screen || screen.kind !== "memo") return null;
     const now = new Date().toISOString();
-    const workFiles = getGenreMemoFiles(coachingContext.genreMemos, screen.phaseId, activeGenre).map((file) => ({
+    const workFiles = getStepMemoFiles(coachingContext.genreMemos, screen.phaseId).map((file) => ({
       ...file,
       required: undefined,
       completedAt: undefined,
     }));
     return {
-      id: `genre-memo:${screen.phaseId ?? "none"}:${activeGenre}`,
+      id: `step-memo:${screen.phaseId ?? "none"}`,
       title: tx("メモ", "Memo"),
       status: "todo",
       priority: "no_priority",
@@ -348,13 +351,13 @@ export default function WorkspaceIssues() {
       createdAt: now,
       updatedAt: now,
       labels: [],
-      genre: activeGenre,
+      genre: "think",
       workspaceText: "",
       workspaceBoard: null,
       workFiles,
       attachments: [],
     };
-  }, [activeGenre, coachingContext.genreMemos, projectId, screen, tx]);
+  }, [coachingContext.genreMemos, projectId, screen, tx]);
 
   const stepGenres = useMemo(() => {
     if (!screen) return [] as TaskGenre[];
@@ -414,20 +417,18 @@ export default function WorkspaceIssues() {
   function goToNeighbor(nextId: PhaseKey) {
     setAddingGenre(false);
     setCreating(false);
+    setMemoExiting(false);
     setError("");
     setScreen({ kind: "step", phaseId: nextId });
   }
 
   const showGenrePanel =
-    ((screen.kind === "genre" || screen.kind === "memo" || screen.kind === "task") &&
-      Boolean(activeGenre) &&
-      !genreExiting) ||
+    ((screen.kind === "genre" || screen.kind === "task") && Boolean(activeGenre) && !genreExiting) ||
     genreExiting;
-  const showMemoPanel =
-    (screen.kind === "memo" && Boolean(memoIssue) && Boolean(activeGenre) && !memoExiting) || memoExiting;
+  const showMemoPanel = (screen.kind === "memo" && Boolean(memoIssue) && !memoExiting) || memoExiting;
   const showTaskPanel =
     (screen.kind === "task" && Boolean(activeIssue) && Boolean(activeGenre) && !taskExiting) || taskExiting;
-  const genreUnderlay = screen.kind === "task" || screen.kind === "memo" || taskExiting || memoExiting;
+  const genreUnderlay = screen.kind === "task" || taskExiting;
 
   const genreMeta = activeGenre ? resolveGenreMeta(activeGenre, customGenres) : null;
   const GenreIcon = genreMeta?.icon;
@@ -438,8 +439,20 @@ export default function WorkspaceIssues() {
   return (
     <>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-        {canEdit ? (
-          <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (genreExiting || taskExiting || memoExiting) return;
+              setMemoExiting(false);
+              setScreen({ kind: "memo", phaseId: stepPhaseId });
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-[#FF9600] shadow-sm transition hover:bg-[#FFF8EE]"
+            aria-label={tx("メモ", "Memo")}
+          >
+            <StickyNote className="h-5 w-5" aria-hidden strokeWidth={2.25} />
+          </button>
+          {canEdit ? (
             <DuoButton
               type="button"
               tone="orange"
@@ -462,8 +475,10 @@ export default function WorkspaceIssues() {
               <Plus className="h-4 w-4" aria-hidden />
               {tx("ジャンルを追加", "Add genre")}
             </DuoButton>
-          </div>
-        ) : null}
+          ) : (
+            <span className="h-10 w-10 shrink-0" aria-hidden />
+          )}
+        </div>
 
         <div className="flex items-center gap-2.5">
           <button
@@ -586,18 +601,6 @@ export default function WorkspaceIssues() {
                 aria-label={tx("戻る", "Back")}
               >
                 <ArrowLeft className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (genreExiting || taskExiting || memoExiting) return;
-                  setMemoExiting(false);
-                  setScreen({ kind: "memo", phaseId: screen.phaseId, genre: activeGenre });
-                }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-[#FF9600] shadow-sm transition hover:bg-[#FFF8EE]"
-                aria-label={tx("メモ", "Memo")}
-              >
-                <StickyNote className="h-5 w-5" aria-hidden strokeWidth={2.25} />
               </button>
               <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl text-white ${genreMeta.iconBg}`}>
                 <GenreIcon className="h-4 w-4" />
@@ -796,9 +799,9 @@ export default function WorkspaceIssues() {
         </IssuesSlidePanel>
       ) : null}
 
-      {showMemoPanel && memoIssue && activeGenre && genreMeta ? (
+      {showMemoPanel && memoIssue ? (
         <IssuesSlidePanel
-          key={`memo-${screen.phaseId ?? "none"}-${activeGenre}`}
+          key={`memo-${screen.phaseId ?? "none"}`}
           exiting={memoExiting}
           animateEnter
           zClass="z-[210]"
@@ -808,16 +811,12 @@ export default function WorkspaceIssues() {
             issue={memoIssue}
             members={project?.members ?? []}
             stepLabel={stepLabel(screen.phaseId, sortedPhases, tx)}
-            genreLabel={locale === "en" ? genreMeta.en : genreMeta.ja}
+            genreLabel=""
             uid={uid}
             canEdit={canEdit}
             onBack={() => {
               if (memoExiting) return;
-              scheduleExit("memo", {
-                kind: "genre",
-                phaseId: screen.phaseId,
-                genre: activeGenre,
-              });
+              scheduleExit("memo", { kind: "step", phaseId: screen.phaseId });
             }}
             onSaveWork={async (patch) => {
               const nextFiles = (patch.workFiles ?? memoIssue.workFiles).map((file) => ({
@@ -825,10 +824,9 @@ export default function WorkspaceIssues() {
                 required: undefined,
                 completedAt: undefined,
               }));
-              const nextMemos = upsertGenreMemoFiles(
+              const nextMemos = upsertStepMemoFiles(
                 coachingContext.genreMemos,
                 screen.phaseId,
-                activeGenre,
                 nextFiles,
               );
               await saveCoachingContext({ genreMemos: nextMemos });

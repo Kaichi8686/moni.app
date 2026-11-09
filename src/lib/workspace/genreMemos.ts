@@ -5,7 +5,12 @@ export type GenreMemoEntry = {
   updatedAt: string;
 };
 
-/** coaching_context.genreMemos のキー */
+/** coaching_context.genreMemos のキー（ステップ単位） */
+export function stepMemoKey(phaseId: string | null | undefined): string {
+  return phaseId ?? "none";
+}
+
+/** @deprecated 旧ジャンル単位キー。読み取り互換用 */
 export function genreMemoKey(phaseId: string | null | undefined, genre: string): string {
   return `${phaseId ?? "none"}::${genre}`;
 }
@@ -41,23 +46,21 @@ export function serializeGenreMemos(
   return out;
 }
 
-export function getGenreMemoFiles(
+export function getStepMemoFiles(
   memos: Record<string, GenreMemoEntry> | undefined,
   phaseId: string | null | undefined,
-  genre: string,
 ): IssueWorkFile[] {
   if (!memos) return [];
-  return memos[genreMemoKey(phaseId, genre)]?.workFiles ?? [];
+  return memos[stepMemoKey(phaseId)]?.workFiles ?? [];
 }
 
-export function upsertGenreMemoFiles(
+export function upsertStepMemoFiles(
   memos: Record<string, GenreMemoEntry> | undefined,
   phaseId: string | null | undefined,
-  genre: string,
   workFiles: IssueWorkFile[],
 ): Record<string, GenreMemoEntry> {
   const next = { ...(memos ?? {}) };
-  const key = genreMemoKey(phaseId, genre);
+  const key = stepMemoKey(phaseId);
   const serialized = serializeIssueWorkFiles(workFiles);
   if (serialized.length === 0) {
     delete next[key];

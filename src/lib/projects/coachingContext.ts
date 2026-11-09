@@ -51,7 +51,7 @@ export type CoachingContext = {
   weeklyCompletionGoal?: number;
   /** プロジェクト課題タブのカスタムジャンル */
   customTaskGenres?: CustomTaskGenreDef[];
-  /** ジャンルごとのメモファイル（課題なしの作業ファイル置き場） */
+  /** ステップごとのメモファイル（課題なしの作業ファイル置き場）。キーは phaseId または "none" */
   genreMemos?: Record<string, GenreMemoEntry>;
   /** 週のメモ（任意） */
   weeklyReview?: {
