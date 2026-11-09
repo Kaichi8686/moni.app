@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ComponentType } from "react";
 import {
-  FileText,
   PenLine,
-  PenTool,
   Sparkles,
 } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
@@ -63,18 +61,6 @@ function ActionLink({
         <p className="text-[15px] font-semibold">{label}</p>
         {detail ? <p className={`mt-0.5 text-[12px] ${filled ? "text-violet-100" : "text-zinc-500"}`}>{detail}</p> : null}
       </div>
-    </Link>
-  );
-}
-
-function CompactLink({ href, icon: IconComponent, label }: { href: string; icon: Icon; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 text-center transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99] sm:min-h-[104px]"
-    >
-      <IconComponent className="h-6 w-6 text-zinc-700 sm:h-7 sm:w-7" aria-hidden />
-      <span className="text-[13px] font-semibold text-zinc-800 sm:text-sm">{label}</span>
     </Link>
   );
 }
@@ -499,16 +485,6 @@ export default function WorkspaceOverview() {
           detail={tx("相談もアイデア出しもここから", "Ask or brainstorm from here")}
           filled
         />
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("ひらめき", "Create")}</h2>
-        <CompactLink href={`/projects/${projectId}/whiteboard`} icon={PenTool} label={tx("ボード", "Board")} />
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-zinc-950 sm:text-lg">{tx("資料", "Files")}</h2>
-        <CompactLink href={`/projects/${projectId}/documents`} icon={FileText} label={tx("資料", "Documents")} />
       </section>
       </div>
     </div>
