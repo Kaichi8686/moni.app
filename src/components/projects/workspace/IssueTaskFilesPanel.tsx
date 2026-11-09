@@ -68,6 +68,8 @@ type Props = {
   onSaveWork: (patch: Partial<IssueWork>) => Promise<void>;
   onDelete?: () => Promise<void>;
   registerBackHandler: (handler: (() => boolean) | null) => void;
+  /** memo: 課題メタ（期限・提出など）なしのジャンルメモ */
+  variant?: "issue" | "memo";
 };
 
 function DocIcon() {
@@ -193,8 +195,10 @@ export function IssueTaskFilesPanel({
   onSaveWork,
   onDelete,
   registerBackHandler,
+  variant = "issue",
 }: Props) {
   const { tx, locale } = useI18n();
+  const isMemo = variant === "memo";
   const [files, setFiles] = useState<IssueWorkFile[]>(() => sortWorkFilesByUpdated(issue.workFiles ?? []));
   const [fabOpen, setFabOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -225,9 +229,9 @@ export function IssueTaskFilesPanel({
   const draftPhotoRef = useRef<HTMLInputElement>(null);
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorShellRef = useRef<ProjectGoogleDocsShellHandle>(null);
-  const submitted = isIssueSubmitted(issue);
+  const submitted = isMemo ? false : isIssueSubmitted(issue);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
-  const canSubmit = canEdit && !submitted && requiredFilesReady(files);
+  const canSubmit = !isMemo && canEdit && !submitted && requiredFilesReady(files);
 
   const names = useMemo(() => {
     const map: Record<string, string> = {};
@@ -952,7 +956,11 @@ export function IssueTaskFilesPanel({
   }
 
   return (
-    <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-3 pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]">
+    <div
+      className={`relative mx-auto flex w-full max-w-3xl flex-col gap-3 ${
+        isMemo ? "pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]" : "pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
+      }`}
+    >
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -968,9 +976,11 @@ export function IssueTaskFilesPanel({
             <span className="text-zinc-300"> · </span>
             {genreLabel}
           </p>
-          <h1 className="truncate text-xl font-bold tracking-tight text-zinc-950">{issue.title}</h1>
+          <h1 className="truncate text-xl font-bold tracking-tight text-zinc-950">
+            {isMemo ? tx("メモ", "Memo") : issue.title}
+          </h1>
         </div>
-        {canEdit && onDelete ? (
+        {!isMemo && canEdit && onDelete ? (
           <div className="relative shrink-0">
             <button
               type="button"
@@ -1007,28 +1017,39 @@ export function IssueTaskFilesPanel({
         ) : null}
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700">
-        <p>
-          <span className="font-semibold text-zinc-800">{tx("期限", "Deadline")}</span>
-          <span className="mx-2 text-zinc-300">·</span>
-          {dueText}
+      {!isMemo ? (
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-700">
+          <p>
+            <span className="font-semibold text-zinc-800">{tx("期限", "Deadline")}</span>
+            <span className="mx-2 text-zinc-300">·</span>
+            {dueText}
+          </p>
+          <p className="mt-1 text-[13px] text-zinc-500">
+            {[
+              assignee,
+              issue.beginAt ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`) : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      ) : (
+        <p className="text-[13px] font-semibold text-zinc-500">
+          {tx(
+            "このジャンル用のメモです。ドキュメントや写真などを自由に置けます。",
+            "Notes for this genre — add docs, photos, and more freely.",
+          )}
         </p>
-        <p className="mt-1 text-[13px] text-zinc-500">
-          {[
-            assignee,
-            issue.beginAt ? tx(`開始 ${isoToDateInput(issue.beginAt)}`, `Start ${isoToDateInput(issue.beginAt)}`) : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      </div>
+      )}
 
       <div className="-mx-4 flex min-h-[min(52dvh,560px)] flex-col bg-white sm:mx-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-[#e8eaed]">
         <div className="sticky top-0 z-10 border-b border-[#e8eaed] bg-white px-3 pb-2 pt-2 sm:px-4">
           <div className="flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5">
             <FileText className="h-4 w-4 shrink-0 text-[#5f6368]" aria-hidden />
             <span className="min-w-0 flex-1 text-[14px] text-[#5f6368]">
-              {tx("この課題のファイル", "Files in this task")}
+              {isMemo
+                ? tx("メモのファイル", "Files in this memo")
+                : tx("この課題のファイル", "Files in this task")}
             </span>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a73e8] text-xs font-bold text-white">
               {userInitial}
@@ -1068,7 +1089,7 @@ export function IssueTaskFilesPanel({
                       <span className="block min-w-0 truncate text-[15px] font-normal text-[#202124]">
                         {file.title?.trim() || defaultTitle(file.kind)}
                       </span>
-                      {file.required ? (
+                      {!isMemo && file.required ? (
                         <span className="shrink-0 rounded-md bg-[#FF9600] px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-white">
                           {tx("必須", "Required")}
                         </span>
@@ -1076,13 +1097,13 @@ export function IssueTaskFilesPanel({
                     </span>
                     <span className="mt-0.5 block truncate text-[13px] text-[#5f6368]">
                       {kindLabel(file.kind, tx)}
-                      {file.required && file.completedAt ? ` · ${tx("できた", "Done")}` : ""}
+                      {!isMemo && file.required && file.completedAt ? ` · ${tx("できた", "Done")}` : ""}
                       {isCollectSlot(file) ? ` · ${tx(`${items.length}件`, `${items.length}`)}` : ""}
                       {file.updatedAt ? ` · ${formatUpdated(file.updatedAt, locale)}` : ""}
                     </span>
                   </span>
                 </button>
-                {canEdit && file.required && !submitted ? (
+                {!isMemo && canEdit && file.required && !submitted ? (
                   <DuoButton
                     type="button"
                     tone={file.completedAt ? "lime" : "peach"}
@@ -1127,33 +1148,45 @@ export function IssueTaskFilesPanel({
       {portalReady
         ? createPortal(
             <>
-              <div className="fixed inset-x-0 bottom-0 z-[220] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
-                <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
-                  {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
-                  {!requiredFilesReady(files) && !submitted ? (
-                    <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
-                      {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
-                    </p>
-                  ) : null}
-                  <DuoButton
-                    type="button"
-                    tone={submitted ? "lime" : "orange"}
-                    size="lg"
-                    fullWidth
-                    disabled={!canSubmit}
-                    onClick={() => {
-                      if (!requiredFilesReady(files)) return;
-                      void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
-                    }}
-                    className="!text-[16px]"
-                  >
-                    {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-                  </DuoButton>
+              {!isMemo ? (
+                <div className="fixed inset-x-0 bottom-0 z-[220] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+                  <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+                    {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
+                    {!requiredFilesReady(files) && !submitted ? (
+                      <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
+                        {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+                      </p>
+                    ) : null}
+                    <DuoButton
+                      type="button"
+                      tone={submitted ? "lime" : "orange"}
+                      size="lg"
+                      fullWidth
+                      disabled={!canSubmit}
+                      onClick={() => {
+                        if (!requiredFilesReady(files)) return;
+                        void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
+                      }}
+                      className="!text-[16px]"
+                    >
+                      {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
+                    </DuoButton>
+                  </div>
                 </div>
-              </div>
+              ) : error ? (
+                <p className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[220] max-w-sm -translate-x-1/2 rounded-full bg-rose-600 px-4 py-2 text-center text-sm font-semibold text-white shadow-lg">
+                  {error}
+                </p>
+              ) : null}
 
               {canEdit && !submitted ? (
-                <div className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] right-4 z-[221] flex flex-col items-end gap-2">
+                <div
+                  className={`pointer-events-none fixed right-4 z-[221] flex flex-col items-end gap-2 ${
+                    isMemo
+                      ? "bottom-[max(1.25rem,env(safe-area-inset-bottom))]"
+                      : "bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))]"
+                  }`}
+                >
                   {fabOpen ? (
                     <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-2 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
                       <button

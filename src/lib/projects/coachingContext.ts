@@ -1,6 +1,13 @@
 import { inferUserSituationFromLegacyCategory, parseUserSituation, type UserSituation } from "@/lib/projects/userSituation";
+import {
+  parseGenreMemos,
+  serializeGenreMemos,
+  type GenreMemoEntry,
+} from "@/lib/workspace/genreMemos";
 import { parseCustomTaskGenres } from "@/lib/workspace/taskGenres";
 import type { CustomTaskGenreDef } from "@/lib/workspace/types";
+
+export type { GenreMemoEntry };
 
 /** Step 1: 業種テンプレ（studentRoadmapTemplates と同じキー） */
 export type OnboardingBusinessCategoryKey = "food" | "retail" | "app" | "event" | "education" | "custom";
@@ -44,6 +51,8 @@ export type CoachingContext = {
   weeklyCompletionGoal?: number;
   /** プロジェクト課題タブのカスタムジャンル */
   customTaskGenres?: CustomTaskGenreDef[];
+  /** ジャンルごとのメモファイル（課題なしの作業ファイル置き場） */
+  genreMemos?: Record<string, GenreMemoEntry>;
   /** 週のメモ（任意） */
   weeklyReview?: {
     done?: string;
@@ -112,6 +121,8 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
 
   const customTaskGenres = parseCustomTaskGenres(o.customTaskGenres);
   const customTaskGenresOut = customTaskGenres.length > 0 ? customTaskGenres : undefined;
+  const genreMemosParsed = parseGenreMemos(o.genreMemos);
+  const genreMemosOut = Object.keys(genreMemosParsed).length > 0 ? genreMemosParsed : undefined;
 
   return {
     dreamStatement,
@@ -128,6 +139,7 @@ export function parseCoachingContext(raw: unknown): CoachingContext {
     teamActivityLastDate,
     weeklyCompletionGoal,
     customTaskGenres: customTaskGenresOut,
+    genreMemos: genreMemosOut,
     weeklyReview,
   };
 }
@@ -142,6 +154,11 @@ export function mergeCoachingContext(prev: CoachingContext, patch: Partial<Coach
     const parsed = parseCustomTaskGenres(patch.customTaskGenres);
     if (parsed.length > 0) next.customTaskGenres = parsed;
     else delete next.customTaskGenres;
+  }
+  if (patch.genreMemos !== undefined) {
+    const parsed = serializeGenreMemos(parseGenreMemos(patch.genreMemos));
+    if (Object.keys(parsed).length > 0) next.genreMemos = parsed;
+    else delete next.genreMemos;
   }
   if (patch.weeklyCompletionGoal !== undefined) {
     const g = patch.weeklyCompletionGoal;

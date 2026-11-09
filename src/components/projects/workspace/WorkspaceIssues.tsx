@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
@@ -9,6 +9,10 @@ import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWi
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { readIssueCreateDraft, readIssueCreateOpen } from "@/lib/workspace/issueCreateDraft";
+import {
+  getGenreMemoFiles,
+  upsertGenreMemoFiles,
+} from "@/lib/workspace/genreMemos";
 import { isoToDateInput, isIssueSubmitted, isTaskGenre, type TaskGenre } from "@/lib/workspace/issueWork";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import {
@@ -34,6 +38,7 @@ type PhaseKey = string | null;
 type Screen =
   | { kind: "step"; phaseId: PhaseKey }
   | { kind: "genre"; phaseId: PhaseKey; genre: TaskGenre }
+  | { kind: "memo"; phaseId: PhaseKey; genre: TaskGenre }
   | { kind: "task"; phaseId: PhaseKey; genre: TaskGenre; issueId: string };
 
 const SLIDE_OUT_MS = 220;
@@ -127,6 +132,7 @@ export default function WorkspaceIssues() {
   const [genreMenuOpen, setGenreMenuOpen] = useState(false);
   const [confirmDeleteGenre, setConfirmDeleteGenre] = useState(false);
   const [genreExiting, setGenreExiting] = useState(false);
+  const [memoExiting, setMemoExiting] = useState(false);
   const [taskExiting, setTaskExiting] = useState(false);
   const entryHandled = useRef(false);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -137,9 +143,9 @@ export default function WorkspaceIssues() {
     };
   }, []);
 
-  // ジャンル一覧・課題詳細では下タブを隠す
+  // ジャンル一覧・メモ・課題詳細では下タブを隠す
   useEffect(() => {
-    const drill = screen?.kind === "genre" || screen?.kind === "task";
+    const drill = screen?.kind === "genre" || screen?.kind === "memo" || screen?.kind === "task";
     document.documentElement.classList.toggle("moni-issues-drill", Boolean(drill));
     return () => document.documentElement.classList.remove("moni-issues-drill");
   }, [screen?.kind]);
@@ -186,7 +192,10 @@ export default function WorkspaceIssues() {
 
   function toRemembered(next: Screen): RememberedIssueScreen {
     if (next.kind === "step") return { kind: "step", phaseId: next.phaseId };
-    if (next.kind === "genre") return { kind: "genre", phaseId: next.phaseId, genre: next.genre };
+    // メモ画面はジャンル一覧として覚える（再入場でメモを強制しない）
+    if (next.kind === "genre" || next.kind === "memo") {
+      return { kind: "genre", phaseId: next.phaseId, genre: next.genre };
+    }
     return { kind: "task", phaseId: next.phaseId, genre: next.genre, issueId: next.issueId };
   }
 
@@ -287,6 +296,7 @@ export default function WorkspaceIssues() {
         rememberIssueScreen(projectId, toRemembered(next));
         setAddingGenre(false);
         setCreating(false);
+        setMemoExiting(false);
         setError("");
       } else {
         rememberIssueScreen(projectId, toRemembered(screen));
@@ -318,6 +328,33 @@ export default function WorkspaceIssues() {
     screen && screen.kind === "task"
       ? issues.find((issue) => issue.id === screen.issueId) ?? null
       : null;
+  const memoIssue = useMemo((): Issue | null => {
+    if (!screen || (screen.kind !== "memo" && screen.kind !== "genre") || !activeGenre) return null;
+    if (screen.kind !== "memo") return null;
+    const now = new Date().toISOString();
+    const workFiles = getGenreMemoFiles(coachingContext.genreMemos, screen.phaseId, activeGenre).map((file) => ({
+      ...file,
+      required: undefined,
+      completedAt: undefined,
+    }));
+    return {
+      id: `genre-memo:${screen.phaseId ?? "none"}:${activeGenre}`,
+      title: tx("メモ", "Memo"),
+      status: "todo",
+      priority: "no_priority",
+      assigneeIds: [],
+      projectId,
+      phaseId: screen.phaseId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+      labels: [],
+      genre: activeGenre,
+      workspaceText: "",
+      workspaceBoard: null,
+      workFiles,
+      attachments: [],
+    };
+  }, [activeGenre, coachingContext.genreMemos, projectId, screen, tx]);
 
   const stepGenres = useMemo(() => {
     if (!screen) return [] as TaskGenre[];
@@ -340,18 +377,21 @@ export default function WorkspaceIssues() {
     return issuesFor(phaseId, genre).filter((issue) => !isIssueSubmitted(issue)).length;
   }
 
-  function scheduleExit(kind: "genre" | "task", next: Screen) {
+  function scheduleExit(kind: "genre" | "memo" | "task", next: Screen) {
     if (exitTimer.current) clearTimeout(exitTimer.current);
     if (kind === "task") setTaskExiting(true);
+    else if (kind === "memo") setMemoExiting(true);
     else {
       setGenreExiting(true);
       setGenreMenuOpen(false);
       setConfirmDeleteGenre(false);
       setCreating(false);
+      setMemoExiting(false);
     }
     exitTimer.current = setTimeout(() => {
       setScreen(next);
       setTaskExiting(false);
+      setMemoExiting(false);
       setGenreExiting(false);
       exitTimer.current = null;
     }, SLIDE_OUT_MS);
@@ -379,11 +419,15 @@ export default function WorkspaceIssues() {
   }
 
   const showGenrePanel =
-    ((screen.kind === "genre" || screen.kind === "task") && Boolean(activeGenre) && !genreExiting) ||
+    ((screen.kind === "genre" || screen.kind === "memo" || screen.kind === "task") &&
+      Boolean(activeGenre) &&
+      !genreExiting) ||
     genreExiting;
+  const showMemoPanel =
+    (screen.kind === "memo" && Boolean(memoIssue) && Boolean(activeGenre) && !memoExiting) || memoExiting;
   const showTaskPanel =
     (screen.kind === "task" && Boolean(activeIssue) && Boolean(activeGenre) && !taskExiting) || taskExiting;
-  const genreUnderlay = screen.kind === "task" || taskExiting;
+  const genreUnderlay = screen.kind === "task" || screen.kind === "memo" || taskExiting || memoExiting;
 
   const genreMeta = activeGenre ? resolveGenreMeta(activeGenre, customGenres) : null;
   const GenreIcon = genreMeta?.icon;
@@ -535,13 +579,25 @@ export default function WorkspaceIssues() {
               <button
                 type="button"
                 onClick={() => {
-                  if (genreExiting || taskExiting) return;
+                  if (genreExiting || taskExiting || memoExiting) return;
                   scheduleExit("genre", { kind: "step", phaseId: screen.phaseId });
                 }}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
                 aria-label={tx("戻る", "Back")}
               >
                 <ArrowLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (genreExiting || taskExiting || memoExiting) return;
+                  setMemoExiting(false);
+                  setScreen({ kind: "memo", phaseId: screen.phaseId, genre: activeGenre });
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-[#FF9600] shadow-sm transition hover:bg-[#FFF8EE]"
+                aria-label={tx("メモ", "Memo")}
+              >
+                <StickyNote className="h-5 w-5" aria-hidden strokeWidth={2.25} />
               </button>
               <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl text-white ${genreMeta.iconBg}`}>
                 <GenreIcon className="h-4 w-4" />
@@ -737,6 +793,48 @@ export default function WorkspaceIssues() {
               </div>
             </div>
           ) : null}
+        </IssuesSlidePanel>
+      ) : null}
+
+      {showMemoPanel && memoIssue && activeGenre && genreMeta ? (
+        <IssuesSlidePanel
+          key={`memo-${screen.phaseId ?? "none"}-${activeGenre}`}
+          exiting={memoExiting}
+          animateEnter
+          zClass="z-[210]"
+        >
+          <IssueTaskFilesPanel
+            variant="memo"
+            issue={memoIssue}
+            members={project?.members ?? []}
+            stepLabel={stepLabel(screen.phaseId, sortedPhases, tx)}
+            genreLabel={locale === "en" ? genreMeta.en : genreMeta.ja}
+            uid={uid}
+            canEdit={canEdit}
+            onBack={() => {
+              if (memoExiting) return;
+              scheduleExit("memo", {
+                kind: "genre",
+                phaseId: screen.phaseId,
+                genre: activeGenre,
+              });
+            }}
+            onSaveWork={async (patch) => {
+              const nextFiles = (patch.workFiles ?? memoIssue.workFiles).map((file) => ({
+                ...file,
+                required: undefined,
+                completedAt: undefined,
+              }));
+              const nextMemos = upsertGenreMemoFiles(
+                coachingContext.genreMemos,
+                screen.phaseId,
+                activeGenre,
+                nextFiles,
+              );
+              await saveCoachingContext({ genreMemos: nextMemos });
+            }}
+            registerBackHandler={registerBackHandler}
+          />
         </IssuesSlidePanel>
       ) : null}
 
