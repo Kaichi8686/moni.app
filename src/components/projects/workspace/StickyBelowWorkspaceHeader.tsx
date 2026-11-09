@@ -50,7 +50,8 @@ export function StickyBelowWorkspaceHeader({ children, className = "" }: Props) 
       const colRect = (column ?? sentinel.parentElement)?.getBoundingClientRect();
       if (nextStuck && colRect) {
         setFixedStyle({
-          top: headerBottom,
+          // ヘッダーとのわずかな隙間だけ。白い余白バーは付けない
+          top: headerBottom + 8,
           left: colRect.left,
           width: colRect.width,
         });
@@ -92,7 +93,7 @@ export function StickyBelowWorkspaceHeader({ children, className = "" }: Props) 
             : undefined
         }
       >
-        <div className="bg-white/95 py-2 backdrop-blur-sm">{children}</div>
+        {children}
       </div>
     </>
   );
