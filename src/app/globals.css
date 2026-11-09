@@ -999,6 +999,11 @@ html.moni-recruit-drill .app-bottom-nav {
   padding-bottom: var(--bottom-nav-clearance);
 }
 
+/* sticky ヘッダー（プロジェクト名・通知）の下端。ゴール追従の top に使う */
+:root {
+  --project-workspace-header-offset: 3.75rem;
+}
+
 /* 全画面メニューシート */
 .project-mobile-sheet-root {
   position: fixed;
