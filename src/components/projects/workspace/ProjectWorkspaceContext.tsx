@@ -1256,6 +1256,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
     const header = workspaceHeaderRef.current;
     if (!header) return;
     const sync = () => {
+      // transform で退避中でもレイアウト高さを使う
       document.documentElement.style.setProperty(
         "--project-workspace-header-offset",
         `${Math.ceil(header.offsetHeight)}px`,
@@ -1279,7 +1280,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage ? null : (
         <header
           ref={workspaceHeaderRef}
-          className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 sm:px-4"
+          className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:px-4"
         >
           <div className="mx-auto max-w-3xl">
             <div className="flex items-center justify-between gap-2">
