@@ -7,9 +7,11 @@ type Props = {
   target: Date;
   label: string;
   compact?: boolean;
+  /** Soft chip for status-card corners (readable on light cards) */
+  pill?: boolean;
 };
 
-export function LeagueCountdown({ target, label, compact }: Props) {
+export function LeagueCountdown({ target, label, compact, pill }: Props) {
   const [now, setNow] = useState(() => leagueNow());
 
   useEffect(() => {
@@ -22,6 +24,16 @@ export function LeagueCountdown({ target, label, compact }: Props) {
   );
 
   if (compact) {
+    if (pill) {
+      return (
+        <div className="inline-flex max-w-[11.5rem] shrink-0 flex-col items-end gap-0.5 rounded-2xl bg-[#FFF4E5] px-2.5 py-1.5 ring-1 ring-[#FFD59A] sm:max-w-none sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:px-3">
+          <span className="text-[10px] font-bold leading-tight text-[#9A5B1F] sm:text-[11px]">{label}</span>
+          <span className="text-sm font-black tabular-nums tracking-tight text-zinc-900 sm:text-xs">
+            {clock}
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white">
         <span className="opacity-70">{label}</span>

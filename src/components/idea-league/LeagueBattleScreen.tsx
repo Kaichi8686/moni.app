@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
-import { LeagueCountdown } from "@/components/idea-league/LeagueCountdown";
+import { EmptyVoteState } from "@/components/idea-league/EmptyVoteState";
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
-import { LeagueTierBadge } from "@/components/idea-league/LeagueTierBadge";
+import { LeagueStatusCard } from "@/components/idea-league/LeagueStatusCard";
 import { scheduleFor, voteWindow } from "@/lib/idea-league/calendar";
-import { LEAGUE_TIER_META } from "@/lib/idea-league/tiers";
 import type { LeagueBattleState } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -29,7 +28,6 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
   const [err, setErr] = useState("");
   const sched = useMemo(() => scheduleFor(), []);
   const endsAt = phase === "submit" ? sched.submitEnd : voteWindow(battle.week.weekKey).endsAt;
-  const meta = LEAGUE_TIER_META[battle.tier];
 
   async function handleSubmit() {
     if (!title.trim() || !content.trim()) {
@@ -72,32 +70,17 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
       : tx("結果公表まで", "Until results");
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF9600]">{phaseLabel}</p>
-          <div className="mt-1">
-            <LeagueTierBadge tier={battle.tier} size="sm" animated />
-          </div>
-        </div>
-        {phase === "submit" || phase === "vote" ? (
-          <LeagueCountdown compact target={endsAt} label={countdownLabel} />
-        ) : null}
-      </div>
+    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-3 sm:space-y-5">
+      <LeagueStatusCard
+        tier={battle.tier}
+        phaseLabel={phaseLabel}
+        countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
+        countdownLabel={countdownLabel}
+        members={battle.members}
+        promotionCutoff={battle.promotionCutoff}
+      />
 
-      {meta.specialSlots > 0 ? (
-        <div
-          className="rounded-2xl px-3 py-2.5 text-sm font-bold text-white"
-          style={{ background: `linear-gradient(90deg, ${meta.accent}, #0f172a)` }}
-        >
-          {tx(
-            `上位リーグ特典: 特別アイデア応募枠 ×${meta.specialSlots}`,
-            `League perk: special idea slots ×${meta.specialSlots}`,
-          )}
-        </div>
-      ) : null}
-
-      <div className="rounded-3xl bg-white p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
+      <div className="rounded-[28px] bg-white p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">
           {tx("今週の共通お題", "This week's shared prompt")}
         </p>
@@ -105,7 +88,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
         <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white/80 p-1 shadow-sm ring-1 ring-zinc-200/70">
+      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white/90 p-1 shadow-[0_4px_0_rgba(24,24,27,0.04)] ring-1 ring-zinc-200/70">
         {(
           [
             ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
@@ -130,7 +113,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
 
       {tab === "prompt" ? (
         phase === "submit" ? (
-          <div className="space-y-3">
+          <div className="space-y-3 rounded-[28px] bg-white/95 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
             <p className="text-sm font-medium text-zinc-600">
               {tx(
                 "日曜朝11時まで提出できます。締切までは他の人の解答は見えません。",
@@ -171,7 +154,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
             </DuoButton>
           </div>
         ) : (
-          <p className="rounded-2xl bg-white/80 px-4 py-6 text-center text-sm font-semibold text-zinc-500">
+          <p className="rounded-[28px] bg-white/90 px-4 py-8 text-center text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200/70">
             {tx("提出期間は終了しました。投票タブへどうぞ。", "Submit window closed — head to Vote.")}
           </p>
         )
@@ -179,7 +162,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
 
       {tab === "vote" ? (
         phase === "submit" ? (
-          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
+          <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white/90 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
             {tx(
               "投票は日曜朝11時から始まります。それまで他の解答は非公開です。",
               "Voting starts Sunday 11:00. Peer answers stay private until then.",
@@ -194,16 +177,14 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
               )}
             </p>
             {battle.submissions.filter((s) => !s.isMe).length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
-                {tx("まだ投票できる提出がありません", "No peer submissions to vote on yet")}
-              </div>
+              <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
             ) : (
               battle.submissions
                 .filter((s) => !s.isMe)
                 .map((s) => (
                   <article
                     key={s.id}
-                    className={`rounded-3xl bg-white p-4 shadow-[0_6px_0_rgba(24,24,27,0.05)] ring-1 ${
+                    className={`rounded-[28px] bg-white p-4 shadow-[0_6px_0_rgba(24,24,27,0.05)] ring-1 sm:p-5 ${
                       s.votedByMe ? "ring-[#FF9600]" : "ring-zinc-200/80"
                     }`}
                   >
@@ -263,7 +244,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
             />
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
+          <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white/90 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
             {tx(
               "結果は水曜朝11時に公開されます。それまでは先週の結果を表示します。",
               "Results publish Wednesday 11:00. Until then, last week’s board is shown.",

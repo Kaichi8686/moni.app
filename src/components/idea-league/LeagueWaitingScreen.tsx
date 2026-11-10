@@ -1,12 +1,10 @@
 "use client";
 
-import { LeagueCountdown } from "@/components/idea-league/LeagueCountdown";
 import { LeagueIncentivesPanel } from "@/components/idea-league/LeagueIncentivesPanel";
 import { LeaguePromptComposer } from "@/components/idea-league/LeaguePromptComposer";
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
-import { LeagueTierBadge } from "@/components/idea-league/LeagueTierBadge";
+import { LeagueStatusCard } from "@/components/idea-league/LeagueStatusCard";
 import { scheduleFor } from "@/lib/idea-league/calendar";
-import { LEAGUE_TIER_META } from "@/lib/idea-league/tiers";
 import type { LeagueBattleState, LeagueProfileState } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -27,37 +25,21 @@ export function LeagueWaitingScreen({
   onOpenGarden,
   onSavePrompt,
 }: Props) {
-  const { locale, tx } = useI18n();
+  const { tx } = useI18n();
   const sched = scheduleFor();
-  const meta = LEAGUE_TIER_META[profile.tier];
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-4">
-      <div
-        className="overflow-hidden rounded-[28px] p-5 text-white shadow-[0_12px_0_rgba(15,23,42,0.35)]"
-        style={{
-          background: `linear-gradient(145deg, #0f172a 0%, ${meta.accent} 120%)`,
-        }}
-      >
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">
-          {tx("アイデアリーグ", "Idea League")}
-        </p>
-        <div className="mt-3 flex items-center gap-3">
-          <LeagueTierBadge tier={profile.tier} size="lg" showLabel={false} animated />
-          <div>
-            <h1 className="text-2xl font-black tracking-tight">
-              {locale === "en" ? meta.labelEn : meta.labelJa}
-            </h1>
-            <p className="mt-1 text-sm text-white/85">
-              {locale === "en" ? meta.descriptionEn : meta.descriptionJa}
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-4 sm:space-y-5">
+      <LeagueStatusCard
+        tier={profile.tier}
+        countdownTarget={sched.nextBoundary}
+        countdownLabel={tx("次の提出まで", "Until next submit")}
+        members={publishedBattle?.members}
+        promotionCutoff={publishedBattle?.promotionCutoff}
+        idleHint={!publishedBattle}
+      />
 
-      <LeagueCountdown target={sched.nextBoundary} label={tx("次のリーグ提出まで", "Until next submit window")} />
-
-      <div className="rounded-3xl bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
+      <div className="rounded-[28px] bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
         <h2 className="text-sm font-black text-zinc-900">{tx("開催ルール", "How it works")}</h2>
         <ul className="mt-2 space-y-1.5 text-sm font-medium text-zinc-600">
           <li>・{tx("花を開いて得た種からお題を書く", "Write the prompt from flower seeds")}</li>
@@ -84,7 +66,7 @@ export function LeagueWaitingScreen({
           title={tx("先週の結果", "Last week's results")}
         />
       ) : (
-        <section className="rounded-3xl bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
+        <section className="rounded-[28px] bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
           <h2 className="text-sm font-black text-zinc-900">{tx("過去の結果", "Past results")}</h2>
           {profile.history.length === 0 ? (
             <p className="mt-2 text-sm font-medium text-zinc-500">
