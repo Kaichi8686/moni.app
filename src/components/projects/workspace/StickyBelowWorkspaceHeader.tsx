@@ -13,7 +13,8 @@ type Props = {
 export function StickyBelowWorkspaceHeader({ children, className = "" }: Props) {
   return (
     <div
-      className={`sticky z-[90] mb-4 ${className}`.trim()}
+      /* シート類(z-80+)より下。ヘッダー(z-100)より下。ページ本文より上 */
+      className={`sticky z-20 mb-4 ${className}`.trim()}
       style={{ top: "calc(var(--project-workspace-header-offset, 3.75rem) + 8px)" }}
     >
       {children}
