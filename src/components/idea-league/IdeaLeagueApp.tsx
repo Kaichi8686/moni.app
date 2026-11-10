@@ -26,6 +26,8 @@ type Props = {
   embedded?: boolean;
   hideChrome?: boolean;
   onOpenGarden?: () => void;
+  /** When false, pause timers/fetches (keep mounted but hidden). Default true. */
+  active?: boolean;
 };
 
 async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | null> {
@@ -42,10 +44,19 @@ async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | 
   }
 }
 
-export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
+export function IdeaLeagueApp({
+  embedded,
+  hideChrome,
+  onOpenGarden,
+  active = true,
+}: Props) {
   const { tx } = useI18n();
   const txRef = useRef(tx);
   txRef.current = tx;
+
+  const aliveRef = useRef(true);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   const [me, setMe] = useState<MeIdentity | null>(null);
   const [profile, setProfile] = useState<LeagueProfileState | null>(null);
@@ -53,13 +64,24 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   const [publishedBattle, setPublishedBattle] = useState<LeagueBattleState | null>(null);
   const [err, setErr] = useState("");
   const [bootKey, setBootKey] = useState(0);
-  // Re-render on a timer so scheduleFor() can advance phases without blanking the UI.
   const [tick, setTick] = useState(0);
+  const bootedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => window.clearInterval(id);
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
   }, []);
+
+  // Phase tick only while visible — avoids background work after leaving the tab.
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => {
+      if (aliveRef.current) setTick((t) => t + 1);
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [active]);
 
   const sched = scheduleFor();
   void tick;
@@ -67,6 +89,7 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   const reload = useCallback(async (identity: MeIdentity) => {
     const client = supabaseEnabled ? supabase : null;
     const p = await loadLeagueProfile(client, identity.userId);
+    if (!aliveRef.current) return;
     setProfile(p);
     if (!p.tutorialCompleted) {
       setBattle(null);
@@ -77,32 +100,36 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
     const phase = scheduleFor().phase;
     if (phase === "results") {
       await finalizeLeagueIfNeeded(client, identity);
+      if (!aliveRef.current) return;
       const refreshed = await loadLeagueProfile(client, identity.userId);
+      if (!aliveRef.current) return;
       setProfile(refreshed);
     }
 
-    const current = await withTimeout(loadLeagueBattle(client, identity), 12_000);
-    if (!current) return;
+    // Skip heavy battle fetch while the tab is hidden.
+    if (!activeRef.current) return;
+
+    const current = await withTimeout(loadLeagueBattle(client, identity), 8_000);
+    if (!aliveRef.current || !current) return;
     setBattle(current);
 
     const displayKey = current.displayResultsWeekKey;
     if (displayKey && displayKey !== current.week.weekKey) {
       const { loadLocalBattle } = await import("@/lib/idea-league/localStore");
+      if (!aliveRef.current) return;
       setPublishedBattle(loadLocalBattle(identity, { weekKey: displayKey }));
     } else if (phase === "results") {
       setPublishedBattle(current);
-    } else if (displayKey === current.week.weekKey && phase !== "submit") {
-      setPublishedBattle(null);
     } else {
       setPublishedBattle(null);
     }
   }, []);
 
-  // Boot: paint local profile immediately, then upgrade with auth / supabase.
-  // Avoid depending on `tx` (re-runs cancel in-flight loads → infinite skeleton).
+  // Boot once (or on explicit retry). Do not depend on `tx`.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!aliveRef.current) return;
       setErr("");
       const labelYou = () => txRef.current("あなた", "You");
       const guest: MeIdentity = {
@@ -112,21 +139,26 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
       };
 
       try {
-        // Instant first paint — never leave the skeleton waiting on the network.
         const localProfile = await loadLeagueProfile(null, guest.userId);
-        if (cancelled) return;
+        if (cancelled || !aliveRef.current) return;
         setMe(guest);
         setProfile(localProfile);
 
         let identity = guest;
         if (supabase && supabaseEnabled) {
-          const auth = await withTimeout(supabase.auth.getUser(), 5_000);
+          const auth = await withTimeout(supabase.auth.getUser(), 4_000);
+          if (cancelled || !aliveRef.current) return;
           const uid = auth?.data.user?.id;
           if (uid) {
             const profRes = await withTimeout(
-              supabase.from("profiles").select("display_name, username, avatar_url").eq("id", uid).maybeSingle(),
-              5_000,
+              supabase
+                .from("profiles")
+                .select("display_name, username, avatar_url")
+                .eq("id", uid)
+                .maybeSingle(),
+              4_000,
             );
+            if (cancelled || !aliveRef.current) return;
             const row = (profRes?.data ?? {}) as Record<string, unknown>;
             identity = {
               userId: uid,
@@ -135,11 +167,12 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
             };
           }
         }
-        if (cancelled) return;
+        if (cancelled || !aliveRef.current) return;
         setMe(identity);
+        bootedUserIdRef.current = identity.userId;
         await reload(identity);
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || !aliveRef.current) return;
         setMe((prev) => prev ?? guest);
         setProfile((prev) => prev ?? localFallbackProfile(guest.userId));
         setErr(e instanceof Error ? e.message : "failed");
@@ -150,22 +183,43 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
     };
   }, [reload, bootKey]);
 
-  // Soft refresh on the phase timer only (skip tick=0 — boot effect owns first load).
+  // Soft refresh only while active and after first tick.
   useEffect(() => {
-    if (tick === 0 || !me) return;
+    if (!active || tick === 0 || !me) return;
     let cancelled = false;
     (async () => {
       try {
         await reload(me);
       } catch {
-        // Keep last good frame; next tick retries.
+        /* keep frame */
       }
       if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, [tick, me, reload]);
+  }, [tick, me, reload, active]);
+
+  // When returning to the tab, refresh once (not on every me identity change).
+  const wasActiveRef = useRef(active);
+  useEffect(() => {
+    const becameActive = active && !wasActiveRef.current;
+    wasActiveRef.current = active;
+    if (!becameActive || !me) return;
+    if (bootedUserIdRef.current !== me.userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await reload(me);
+      } catch {
+        /* ignore */
+      }
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, me, reload]);
 
   const openGarden =
     onOpenGarden ??
@@ -233,14 +287,19 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
     <LeagueBattleScreen
       battle={{ ...battle, phase }}
       publishedBattle={publishedBattle}
+      countdownActive={active}
       onSubmit={async (input) => {
+        if (!aliveRef.current) return;
         const client = supabaseEnabled ? supabase : null;
         const next = await submitLeagueIdea(client, me, input);
+        if (!aliveRef.current) return;
         setBattle(next);
       }}
       onVote={async (submissionId) => {
+        if (!aliveRef.current) return;
         const client = supabaseEnabled ? supabase : null;
         const next = await castLeagueVote(client, me, submissionId);
+        if (!aliveRef.current) return;
         setBattle(next);
       }}
     />
@@ -254,10 +313,13 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
           : undefined
       }
       publishedBattle={publishedBattle}
+      countdownActive={active}
       onOpenGarden={openGarden}
       onSavePrompt={async (input) => {
+        if (!aliveRef.current) return;
         const client = supabaseEnabled ? supabase : null;
         const next = await saveLeaguePromptFromSeed(client, me, input);
+        if (!aliveRef.current) return;
         setBattle(next);
       }}
     />

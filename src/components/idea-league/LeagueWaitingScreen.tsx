@@ -15,6 +15,7 @@ type Props = {
   publishedBattle?: LeagueBattleState | null;
   onOpenGarden: () => void;
   onSavePrompt: (input: { plantId: string; title: string; body: string }) => Promise<void>;
+  countdownActive?: boolean;
 };
 
 export function LeagueWaitingScreen({
@@ -24,6 +25,7 @@ export function LeagueWaitingScreen({
   publishedBattle,
   onOpenGarden,
   onSavePrompt,
+  countdownActive = true,
 }: Props) {
   const { tx } = useI18n();
   const sched = scheduleFor();
@@ -37,6 +39,7 @@ export function LeagueWaitingScreen({
         members={publishedBattle?.members}
         promotionCutoff={publishedBattle?.promotionCutoff}
         idleHint={!publishedBattle}
+        countdownActive={countdownActive}
       />
 
       <div className="rounded-[28px] bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">

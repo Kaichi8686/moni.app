@@ -45,6 +45,7 @@ function IdeaHubInner() {
   /** URL と独立したローカル状態（切替を確実にする） */
   const [sparkMode, setSparkModeState] = useState<SparkMode>(urlSpark);
   const [gardenKey, setGardenKey] = useState(0);
+  const [leagueVisited, setLeagueVisited] = useState(urlSpark === "league");
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
@@ -52,6 +53,7 @@ function IdeaHubInner() {
 
   useEffect(() => {
     setSparkModeState(urlSpark);
+    if (urlSpark === "league") setLeagueVisited(true);
   }, [urlSpark]);
 
   const replaceParams = useCallback(
@@ -106,7 +108,9 @@ function IdeaHubInner() {
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(false);
       setSparkModeState(mode);
-      if (mode === "grow") setGardenKey((k) => k + 1);
+      // Remount garden only when leaving AI — not when leaving league (avoids freeze).
+      if (mode === "grow" && sparkMode === "ai") setGardenKey((k) => k + 1);
+      if (mode === "league") setLeagueVisited(true);
       replaceParams((params) => {
         params.delete("tab");
         params.delete("view");
@@ -114,7 +118,7 @@ function IdeaHubInner() {
         else params.delete("spark");
       });
     },
-    [openAi, replaceParams],
+    [openAi, replaceParams, sparkMode],
   );
 
   const goHome = useCallback(() => {
@@ -206,8 +210,19 @@ function IdeaHubInner() {
         </div>
       ) : null}
 
-      {view === "mine" && sparkMode === "league" ? (
-        <IdeaLeagueApp embedded hideChrome onOpenGarden={() => setSparkMode("grow")} />
+      {/* Keep league mounted after first visit so leave/enter doesn't tear down in-flight fetches. */}
+      {view === "mine" && leagueVisited ? (
+        <div
+          className={sparkMode === "league" ? undefined : "hidden"}
+          aria-hidden={sparkMode !== "league"}
+        >
+          <IdeaLeagueApp
+            embedded
+            hideChrome
+            active={sparkMode === "league"}
+            onOpenGarden={() => setSparkMode("grow")}
+          />
+        </div>
       ) : null}
 
       {inAiChat ? (

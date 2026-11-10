@@ -14,9 +14,16 @@ type Props = {
   publishedBattle?: LeagueBattleState | null;
   onSubmit: (input: { title: string; content: string; appeal?: string }) => Promise<void>;
   onVote: (submissionId: string) => Promise<void>;
+  countdownActive?: boolean;
 };
 
-export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }: Props) {
+export function LeagueBattleScreen({
+  battle,
+  publishedBattle,
+  onSubmit,
+  onVote,
+  countdownActive = true,
+}: Props) {
   const { locale, tx } = useI18n();
   const phase = battle.phase;
   const defaultTab = phase === "vote" ? "vote" : phase === "results" ? "board" : "prompt";
@@ -78,6 +85,7 @@ export function LeagueBattleScreen({ battle, publishedBattle, onSubmit, onVote }
         countdownLabel={countdownLabel}
         members={battle.members}
         promotionCutoff={battle.promotionCutoff}
+        countdownActive={countdownActive}
       />
 
       <div className="rounded-[28px] bg-white p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">

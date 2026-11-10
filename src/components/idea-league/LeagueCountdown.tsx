@@ -9,15 +9,19 @@ type Props = {
   compact?: boolean;
   /** Soft chip for status-card corners (readable on light cards) */
   pill?: boolean;
+  /** Pause the 1s ticker while the league tab is hidden */
+  active?: boolean;
 };
 
-export function LeagueCountdown({ target, label, compact, pill }: Props) {
+export function LeagueCountdown({ target, label, compact, pill, active = true }: Props) {
   const [now, setNow] = useState(() => leagueNow());
 
   useEffect(() => {
+    if (!active) return;
+    setNow(leagueNow());
     const id = window.setInterval(() => setNow(leagueNow()), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [active]);
 
   const { days, hours, minutes, seconds, label: clock } = formatCountdown(
     Math.max(0, target.getTime() - now.getTime()),

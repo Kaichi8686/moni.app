@@ -20,6 +20,7 @@ type Props = {
   promotionCutoff?: number;
   /** Waiting / no active scores yet */
   idleHint?: boolean;
+  countdownActive?: boolean;
 };
 
 export function LeagueStatusCard({
@@ -30,6 +31,7 @@ export function LeagueStatusCard({
   members = [],
   promotionCutoff = PROMOTION_SLOTS,
   idleHint,
+  countdownActive = true,
 }: Props) {
   const { locale, tx } = useI18n();
   const meta = LEAGUE_TIER_META[tier];
@@ -71,6 +73,7 @@ export function LeagueStatusCard({
           <LeagueCountdown
             compact
             pill
+            active={countdownActive}
             target={countdownTarget}
             label={countdownLabel ?? tx("残り", "Left")}
           />
