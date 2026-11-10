@@ -26,9 +26,9 @@ export function LeagueCountdown({ target, label, compact, pill }: Props) {
   if (compact) {
     if (pill) {
       return (
-        <div className="inline-flex max-w-[11.5rem] shrink-0 flex-col items-end gap-0.5 rounded-2xl bg-[#FFF4E5] px-2.5 py-1.5 ring-1 ring-[#FFD59A] sm:max-w-none sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:px-3">
-          <span className="text-[10px] font-bold leading-tight text-[#9A5B1F] sm:text-[11px]">{label}</span>
-          <span className="text-sm font-black tabular-nums tracking-tight text-zinc-900 sm:text-xs">
+        <div className="inline-flex max-w-[11.5rem] shrink-0 flex-col items-end gap-0.5 rounded-xl border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 sm:max-w-none sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:px-3">
+          <span className="text-[10px] font-medium leading-tight text-zinc-500 sm:text-[11px]">{label}</span>
+          <span className="text-sm font-semibold tabular-nums tracking-tight text-zinc-900 sm:text-xs">
             {clock}
           </span>
         </div>
