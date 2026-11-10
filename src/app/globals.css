@@ -1004,6 +1004,13 @@ html.moni-recruit-drill .app-bottom-nav {
   --project-workspace-header-offset: 3.75rem;
 }
 
+/* ゴールが張り付いたらヘッダーはスッと上へ退避 */
+html.moni-goal-stuck .project-workspace-header {
+  transform: translateY(calc(-100% - 12px));
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 全画面メニューシート */
 .project-mobile-sheet-root {
   position: fixed;
