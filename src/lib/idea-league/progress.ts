@@ -33,8 +33,8 @@ export function computeLeagueProgress(
     null;
   const promotionLineScore = cutoffMember?.voteScore ?? 0;
 
-  const topScore = members.reduce((max, m) => Math.max(max, m.voteScore), 0);
-  const maxScore = Math.max(topScore, promotionLineScore, myScore, 1);
+  const topScore = members.reduce((max, m) => Math.max(max, Number(m.voteScore) || 0), 0);
+  const maxScore = Math.max(topScore, Number(promotionLineScore) || 0, Number(myScore) || 0, 1);
 
   const inPromotionZone = myRank !== null && myRank <= promotionCutoff;
   const pointsToPromotion = inPromotionZone

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { LeagueBattleScreen } from "@/components/idea-league/LeagueBattleScreen";
+import { LeagueErrorBoundary } from "@/components/idea-league/LeagueErrorBoundary";
 import { LeagueTutorialFlow } from "@/components/idea-league/LeagueTutorialFlow";
 import { LeagueWaitingScreen } from "@/components/idea-league/LeagueWaitingScreen";
 import {
@@ -27,13 +28,31 @@ type Props = {
   onOpenGarden?: () => void;
 };
 
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise).catch(() => null),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   const { tx } = useI18n();
+  const txRef = useRef(tx);
+  txRef.current = tx;
+
   const [me, setMe] = useState<MeIdentity | null>(null);
   const [profile, setProfile] = useState<LeagueProfileState | null>(null);
   const [battle, setBattle] = useState<LeagueBattleState | null>(null);
   const [publishedBattle, setPublishedBattle] = useState<LeagueBattleState | null>(null);
   const [err, setErr] = useState("");
+  const [bootKey, setBootKey] = useState(0);
   // Re-render on a timer so scheduleFor() can advance phases without blanking the UI.
   const [tick, setTick] = useState(0);
 
@@ -62,7 +81,8 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
       setProfile(refreshed);
     }
 
-    const current = await loadLeagueBattle(client, identity);
+    const current = await withTimeout(loadLeagueBattle(client, identity), 12_000);
+    if (!current) return;
     setBattle(current);
 
     const displayKey = current.displayResultsWeekKey;
@@ -78,30 +98,39 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
     }
   }, []);
 
-  // Resolve identity + first load. Do not clear existing profile (avoids skeleton flicker).
+  // Boot: paint local profile immediately, then upgrade with auth / supabase.
+  // Avoid depending on `tx` (re-runs cancel in-flight loads → infinite skeleton).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setErr("");
+      const labelYou = () => txRef.current("あなた", "You");
+      const guest: MeIdentity = {
+        userId: "local-guest",
+        displayName: labelYou(),
+        avatarUrl: null,
+      };
+
       try {
-        let identity: MeIdentity = {
-          userId: "local-guest",
-          displayName: tx("あなた", "You"),
-          avatarUrl: null,
-        };
+        // Instant first paint — never leave the skeleton waiting on the network.
+        const localProfile = await loadLeagueProfile(null, guest.userId);
+        if (cancelled) return;
+        setMe(guest);
+        setProfile(localProfile);
+
+        let identity = guest;
         if (supabase && supabaseEnabled) {
-          const { data } = await supabase.auth.getUser();
-          const uid = data.user?.id;
+          const auth = await withTimeout(supabase.auth.getUser(), 5_000);
+          const uid = auth?.data.user?.id;
           if (uid) {
-            const { data: prof } = await supabase
-              .from("profiles")
-              .select("display_name, username, avatar_url")
-              .eq("id", uid)
-              .maybeSingle();
-            const row = (prof ?? {}) as Record<string, unknown>;
+            const profRes = await withTimeout(
+              supabase.from("profiles").select("display_name, username, avatar_url").eq("id", uid).maybeSingle(),
+              5_000,
+            );
+            const row = (profRes?.data ?? {}) as Record<string, unknown>;
             identity = {
               userId: uid,
-              displayName: String(row.display_name || row.username || tx("あなた", "You")),
+              displayName: String(row.display_name || row.username || labelYou()),
               avatarUrl: (row.avatar_url as string | null) ?? null,
             };
           }
@@ -110,13 +139,16 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
         setMe(identity);
         await reload(identity);
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : "failed");
+        if (cancelled) return;
+        setMe((prev) => prev ?? guest);
+        setProfile((prev) => prev ?? localFallbackProfile(guest.userId));
+        setErr(e instanceof Error ? e.message : "failed");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [reload, tx]);
+  }, [reload, bootKey]);
 
   // Soft refresh on the phase timer only (skip tick=0 — boot effect owns first load).
   useEffect(() => {
@@ -163,55 +195,56 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
   );
 
   if (!me || !profile) {
-    if (err) {
-      return shell(<p className="px-4 pt-6 text-center text-sm font-semibold text-rose-600">{err}</p>);
-    }
     return shell(
       <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
         {[0, 1, 2].map((i) => (
           <div key={i} className="h-24 animate-pulse rounded-3xl bg-white/70" />
         ))}
+        {err ? (
+          <div className="rounded-2xl bg-white/95 p-4 text-center ring-1 ring-rose-200">
+            <p className="text-sm font-semibold text-rose-600">{err}</p>
+            <button
+              type="button"
+              className="mt-3 text-sm font-extrabold text-[#FF9600]"
+              onClick={() => setBootKey((k) => k + 1)}
+            >
+              {tx("再読み込み", "Retry")}
+            </button>
+          </div>
+        ) : null}
       </div>,
-    );
-  }
-
-  if (!profile.tutorialCompleted) {
-    return shell(
-      <LeagueTutorialFlow
-        onComplete={async (input) => {
-          const client = supabaseEnabled ? supabase : null;
-          return completeTutorial(client, me, input);
-        }}
-        onFinished={() => {
-          void reload(me);
-        }}
-      />,
     );
   }
 
   const phase = sched.phase;
   const inBattle = phase === "submit" || phase === "vote" || phase === "results";
 
-  if (inBattle && battle) {
-    return shell(
-      <LeagueBattleScreen
-        battle={{ ...battle, phase }}
-        publishedBattle={publishedBattle}
-        onSubmit={async (input) => {
-          const client = supabaseEnabled ? supabase : null;
-          const next = await submitLeagueIdea(client, me, input);
-          setBattle(next);
-        }}
-        onVote={async (submissionId) => {
-          const client = supabaseEnabled ? supabase : null;
-          const next = await castLeagueVote(client, me, submissionId);
-          setBattle(next);
-        }}
-      />,
-    );
-  }
-
-  return shell(
+  const body = !profile.tutorialCompleted ? (
+    <LeagueTutorialFlow
+      onComplete={async (input) => {
+        const client = supabaseEnabled ? supabase : null;
+        return completeTutorial(client, me, input);
+      }}
+      onFinished={() => {
+        void reload(me);
+      }}
+    />
+  ) : inBattle && battle ? (
+    <LeagueBattleScreen
+      battle={{ ...battle, phase }}
+      publishedBattle={publishedBattle}
+      onSubmit={async (input) => {
+        const client = supabaseEnabled ? supabase : null;
+        const next = await submitLeagueIdea(client, me, input);
+        setBattle(next);
+      }}
+      onVote={async (submissionId) => {
+        const client = supabaseEnabled ? supabase : null;
+        const next = await castLeagueVote(client, me, submissionId);
+        setBattle(next);
+      }}
+    />
+  ) : (
     <LeagueWaitingScreen
       profile={profile}
       userId={me.userId}
@@ -227,6 +260,39 @@ export function IdeaLeagueApp({ embedded, hideChrome, onOpenGarden }: Props) {
         const next = await saveLeaguePromptFromSeed(client, me, input);
         setBattle(next);
       }}
-    />,
+    />
   );
+
+  return shell(
+    <LeagueErrorBoundary
+      fallback={(retry, message) => (
+        <div className="mx-auto max-w-lg px-4 pt-8 text-center">
+          <p className="text-sm font-semibold text-rose-600">{message}</p>
+          <button
+            type="button"
+            className="mt-3 text-sm font-extrabold text-[#FF9600]"
+            onClick={() => {
+              retry();
+              setBootKey((k) => k + 1);
+            }}
+          >
+            {tx("再読み込み", "Retry")}
+          </button>
+        </div>
+      )}
+    >
+      {body}
+    </LeagueErrorBoundary>,
+  );
+}
+
+function localFallbackProfile(userId: string): LeagueProfileState {
+  return {
+    userId,
+    tier: "bronze",
+    tutorialCompleted: false,
+    promotions: 0,
+    highlight: false,
+    history: [],
+  };
 }
