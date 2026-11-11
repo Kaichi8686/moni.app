@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { AiReviewCard } from "@/components/idea-league/AiReviewCard";
 import { EmptyVoteState } from "@/components/idea-league/EmptyVoteState";
+import { FriendMatchPanel } from "@/components/idea-league/FriendMatchPanel";
+import { LeagueModeTabs, type LeaguePlayMode } from "@/components/idea-league/LeagueModeTabs";
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
 import { LeagueShell, leagueCardClass } from "@/components/idea-league/LeagueShell";
 import { LeagueStatusCard } from "@/components/idea-league/LeagueStatusCard";
@@ -22,13 +25,13 @@ export function LeagueBattleScreen({
   battle,
   publishedBattle,
   onSubmit,
-  onVote,
   countdownActive = true,
 }: Props) {
-  const { locale, tx } = useI18n();
+  const { tx } = useI18n();
   const phase = battle.phase;
-  const defaultTab = phase === "vote" ? "vote" : phase === "results" ? "board" : "prompt";
-  const [tab, setTab] = useState<"board" | "prompt" | "vote">(defaultTab);
+  const defaultTab = phase === "vote" ? "judge" : phase === "results" ? "board" : "prompt";
+  const [playMode, setPlayMode] = useState<LeaguePlayMode>("league");
+  const [tab, setTab] = useState<"board" | "prompt" | "judge">(defaultTab);
   const [title, setTitle] = useState(battle.mySubmission?.title ?? "");
   const [content, setContent] = useState(battle.mySubmission?.content ?? "");
   const [appeal, setAppeal] = useState(battle.mySubmission?.appeal ?? "");
@@ -53,229 +56,243 @@ export function LeagueBattleScreen({
     }
   }
 
-  async function handleVote(id: string) {
-    setBusy(true);
-    setErr("");
-    try {
-      await onVote(id);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const phaseLabel =
     phase === "submit"
-      ? tx("提出タイム（他の解答は非公開）", "Submit window (peers hidden)")
+      ? tx("提出タイム", "Submit window")
       : phase === "vote"
-        ? tx("投票タイム", "Voting window")
+        ? tx("AI判定タイム", "AI judgment")
         : tx("結果公表", "Results published");
 
   const countdownLabel =
     phase === "submit"
       ? tx("提出締切まで", "Until submit closes")
-      : tx("結果公表まで", "Until results");
+      : phase === "vote"
+        ? tx("判定まで", "Until judgment ends")
+        : tx("結果公表まで", "Until results");
 
-  const peerSubs = battle.submissions.filter((s) => !s.isMe);
+  const myReview = battle.mySubmission?.aiReview ?? null;
 
   return (
     <LeagueShell
       sidebar={
-        <LeagueStatusCard
-          tier={battle.tier}
-          phaseLabel={phaseLabel}
-          countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
-          countdownLabel={countdownLabel}
-          members={battle.members}
-          promotionCutoff={battle.promotionCutoff}
-          countdownActive={countdownActive}
-        />
+        playMode === "league" ? (
+          <LeagueStatusCard
+            tier={battle.tier}
+            phaseLabel={phaseLabel}
+            countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
+            countdownLabel={countdownLabel}
+            members={battle.members}
+            promotionCutoff={battle.promotionCutoff}
+            countdownActive={countdownActive}
+          />
+        ) : (
+          <section className={leagueCardClass}>
+            <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+              {tx("フレンドマッチ", "Friend Match")}
+            </p>
+            <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
+              {tx("カスタムルーム", "Custom room")}
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              {tx(
+                "友達同士の勝ち点バトル用。ルーム作成・招待コード参加の枠組みです。",
+                "Private point battles — create a room or join with a code.",
+              )}
+            </p>
+          </section>
+        )
       }
     >
-      <section className={leagueCardClass}>
-        <p className="text-[11px] font-medium tracking-wide text-zinc-500">
-          {tx("今週の共通お題", "This week's shared prompt")}
-        </p>
-        <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
-          {battle.week.promptTitle}
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
-      </section>
+      <LeagueModeTabs mode={playMode} onChange={setPlayMode} />
 
-      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200/90 bg-white p-1">
-        {(
-          [
-            ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
-            ["vote", tx("投票", "Vote")],
-            ["board", tx("結果", "Results")],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`min-h-10 rounded-xl text-xs font-semibold transition sm:text-sm ${
-              tab === id ? "bg-[#FF9600] text-white" : "text-zinc-500 hover:text-zinc-700"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
-
-      {tab === "prompt" ? (
-        phase === "submit" ? (
-          <div className={`space-y-3 ${leagueCardClass}`}>
-            <p className="text-sm text-zinc-600">
-              {tx(
-                "日曜朝11時まで提出できます。締切までは他の人の解答は見えません。",
-                "Submit until Sunday 11:00. Peer answers stay hidden until then.",
-              )}
+      {playMode === "friend" ? (
+        <FriendMatchPanel />
+      ) : (
+        <>
+          <section className={leagueCardClass}>
+            <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+              {tx("今週の共通お題", "This week's shared prompt")}
             </p>
-            <label className="block">
-              <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value.slice(0, 40))}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={5}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-zinc-600">
-                {tx("ひとことアピール（任意）", "Short pitch (optional)")}
-              </span>
-              <input
-                value={appeal}
-                onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-              />
-            </label>
-            <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={busy} onClick={() => void handleSubmit()}>
-              {battle.mySubmission
-                ? tx("アイデアを更新する", "Update idea")
-                : tx("アイデアを提出する", "Submit idea")}
-            </DuoButton>
-          </div>
-        ) : (
-          <p className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
-            {tx("提出期間は終了しました。投票タブへどうぞ。", "Submit window closed — head to Vote.")}
-          </p>
-        )
-      ) : null}
+            <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+              {battle.week.promptTitle}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
+          </section>
 
-      {tab === "vote" ? (
-        phase === "submit" ? (
-          <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
-            {tx(
-              "投票は日曜朝11時から始まります。それまで他の解答は非公開です。",
-              "Voting starts Sunday 11:00. Peer answers stay private until then.",
-            )}
+          <div className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200/90 bg-white p-1">
+            {(
+              [
+                ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
+                ["judge", tx("判定", "Judge")],
+                ["board", tx("結果", "Results")],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`min-h-10 rounded-xl text-xs font-semibold transition sm:text-sm ${
+                  tab === id ? "bg-[#FF9600] text-white" : "text-zinc-500 hover:text-zinc-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-zinc-600">
-              {tx(
-                "自分以外のアイデアに1票。水曜11時に結果が公開されます。",
-                "One vote for someone else. Results publish Wednesday 11:00.",
-              )}
-            </p>
-            {peerSubs.length === 0 ? (
-              <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {peerSubs.map((s) => (
-                  <article
-                    key={s.id}
-                    className={`${leagueCardClass} ${
-                      s.votedByMe ? "border-[#FF9600]" : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-zinc-500">{s.authorName}</p>
-                        <h3 className="truncate text-base font-bold text-zinc-900">{s.title}</h3>
-                      </div>
-                      <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">
-                        {s.voteCount}
-                      </span>
-                    </div>
-                    <p className="mt-2 line-clamp-4 text-sm leading-relaxed text-zinc-600">{s.content}</p>
-                    {s.appeal ? (
-                      <p className="mt-2 text-xs font-medium text-zinc-500">
-                        {locale === "en" ? "Pitch: " : "アピール: "}
-                        {s.appeal}
-                      </p>
-                    ) : null}
-                    <div className="mt-3">
-                      <DuoButton
-                        type="button"
-                        tone={s.votedByMe ? "peach" : "orange"}
-                        size="md"
-                        fullWidth
-                        disabled={busy || phase !== "vote"}
-                        onClick={() => void handleVote(s.id)}
-                      >
-                        {s.votedByMe
-                          ? tx("投票済み", "Voted")
-                          : tx("このアイデアに投票", "Vote for this idea")}
-                      </DuoButton>
-                    </div>
-                  </article>
-                ))}
+
+          {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
+
+          {tab === "prompt" ? (
+            phase === "submit" ? (
+              <div className={`space-y-3 ${leagueCardClass}`}>
+                <p className="text-sm text-zinc-600">
+                  {tx(
+                    "日曜朝11時まで提出できます。判定フェーズでAIが勝ち点とフィードバックを返します。",
+                    "Submit until Sunday 11:00. In judgment, AI returns points and feedback.",
+                  )}
+                </p>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value.slice(0, 40))}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    rows={5}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-600">
+                    {tx("ひとことアピール（任意）", "Short pitch (optional)")}
+                  </span>
+                  <input
+                    value={appeal}
+                    onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
+                  />
+                </label>
+                <DuoButton
+                  type="button"
+                  tone="orange"
+                  size="lg"
+                  fullWidth
+                  disabled={busy}
+                  onClick={() => void handleSubmit()}
+                >
+                  {battle.mySubmission
+                    ? tx("アイデアを更新する", "Update idea")
+                    : tx("✍️ アイデアを投稿する", "✍️ Submit an idea")}
+                </DuoButton>
               </div>
-            )}
-          </div>
-        )
-      ) : null}
+            ) : battle.mySubmission ? (
+              <div className={leagueCardClass}>
+                <p className="text-[11px] font-medium text-zinc-500">{tx("提出済み", "Submitted")}</p>
+                <h3 className="mt-1 text-base font-bold text-zinc-900">{battle.mySubmission.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.mySubmission.content}</p>
+                <p className="mt-3 text-sm text-zinc-500">
+                  {tx("提出期間は終了しました。判定タブでAI評価を確認できます。", "Submit closed — check AI review in Judge.")}
+                </p>
+              </div>
+            ) : (
+              <div className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
+                {tx(
+                  "提出期間は終了しました。次のバトル週でアイデアを投稿できます。",
+                  "Submit window closed. You can post in the next battle week.",
+                )}
+              </div>
+            )
+          ) : null}
 
-      {tab === "board" ? (
-        phase === "results" ? (
-          <LeagueRankingBoard members={battle.members} tier={battle.tier} promotionCutoff={battle.promotionCutoff} />
-        ) : publishedBattle ? (
-          <div className="space-y-2">
-            <p className="text-xs text-zinc-500">
+          {tab === "judge" ? (
+            phase === "submit" ? (
+              battle.mySubmission ? (
+                <div className={`${leagueCardClass} text-center`}>
+                  <p className="text-sm font-semibold text-zinc-800">
+                    {tx("提出済み — 判定待ち", "Submitted — awaiting judgment")}
+                  </p>
+                  <p className="mt-2 text-sm text-zinc-500">
+                    {tx(
+                      "日曜朝11時からAI審査が始まり、勝ち点とフィードバックが届きます。",
+                      "AI review starts Sunday 11:00 with points and feedback.",
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
+              )
+            ) : !battle.mySubmission ? (
+              <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
+            ) : myReview ? (
+              <div className="space-y-3">
+                <p className="text-sm text-zinc-600">
+                  {tx(
+                    "初期フェーズはユーザー投票ではなく、AI審査（または運営判定）で勝ち点が決まります。",
+                    "Early phase uses AI / ops review for points — not peer votes.",
+                  )}
+                </p>
+                <AiReviewCard submission={battle.mySubmission} review={myReview} />
+              </div>
+            ) : (
+              <div className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
+                {tx("AI審査を準備しています…", "Preparing AI review…")}
+              </div>
+            )
+          ) : null}
+
+          {tab === "board" ? (
+            phase === "results" || phase === "vote" ? (
+              <LeagueRankingBoard
+                members={battle.members}
+                tier={battle.tier}
+                promotionCutoff={battle.promotionCutoff}
+                title={
+                  phase === "vote"
+                    ? tx("暫定順位（AI勝ち点）", "Live board (AI points)")
+                    : undefined
+                }
+              />
+            ) : publishedBattle ? (
+              <div className="space-y-2">
+                <p className="text-xs text-zinc-500">
+                  {tx(
+                    "今週の結果は水曜11時に公開。いまは先週の結果を表示しています。",
+                    "This week’s results publish Wed 11:00. Showing last week for now.",
+                  )}
+                </p>
+                <LeagueRankingBoard
+                  members={publishedBattle.members}
+                  tier={publishedBattle.tier}
+                  promotionCutoff={publishedBattle.promotionCutoff}
+                  title={tx("先週の結果", "Last week's results")}
+                />
+              </div>
+            ) : (
+              <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
+                {tx(
+                  "結果は水曜朝11時に公開されます。",
+                  "Results publish Wednesday 11:00.",
+                )}
+              </div>
+            )
+          ) : null}
+
+          {battle.members.length <= 1 ? (
+            <p className="text-center text-[11px] text-zinc-400">
               {tx(
-                "今週の結果は水曜11時に公開。いまは先週の結果を表示しています。",
-                "This week’s results publish Wed 11:00. Showing last week for now.",
+                "同じリーグに参加している登録ユーザーの順位が表示されます。",
+                "Ranks show registered users in your league group.",
               )}
             </p>
-            <LeagueRankingBoard
-              members={publishedBattle.members}
-              tier={publishedBattle.tier}
-              promotionCutoff={publishedBattle.promotionCutoff}
-              title={tx("先週の結果", "Last week's results")}
-            />
-          </div>
-        ) : (
-          <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
-            {tx(
-              "結果は水曜朝11時に公開されます。それまでは先週の結果を表示します。",
-              "Results publish Wednesday 11:00. Until then, last week’s board is shown.",
-            )}
-          </div>
-        )
-      ) : null}
-
-      {battle.members.length <= 1 ? (
-        <p className="text-center text-[11px] text-zinc-400">
-          {tx(
-            "同じリーグに参加している登録ユーザーの順位が表示されます。",
-            "Ranks show registered users in your league group.",
-          )}
-        </p>
-      ) : null}
+          ) : null}
+        </>
+      )}
     </LeagueShell>
   );
 }

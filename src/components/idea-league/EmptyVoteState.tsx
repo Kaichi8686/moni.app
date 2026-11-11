@@ -14,12 +14,12 @@ export function EmptyVoteState({ onSubmitIdea }: Props) {
   return (
     <div className={`${leagueCardClass} px-5 py-8 text-center sm:px-8 sm:py-10`}>
       <h3 className="text-base font-bold tracking-tight text-zinc-900 sm:text-lg">
-        {tx("まだ誰もアイデアを提出していません", "No ideas submitted yet")}
+        {tx("まだアイデアが提出されていません", "No idea submitted yet")}
       </h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-zinc-500">
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-zinc-500">
         {tx(
-          "あなたが最初のアイデアを出してみませんか？",
-          "Want to be the first to submit an idea?",
+          "最初のアイデアを投稿して、AI審査員からの評価と勝ち点をゲットしましょう！",
+          "Submit your first idea to earn AI review feedback and match points!",
         )}
       </p>
       <div className="mx-auto mt-5 max-w-xs">

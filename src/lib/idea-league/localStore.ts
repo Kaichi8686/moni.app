@@ -1,11 +1,9 @@
+import { reviewIdeaWithAi } from "@/lib/idea-league/aiReview";
 import { scheduleFor, saturdayWeekKey, saturdayWindow, leagueNow } from "@/lib/idea-league/calendar";
 import { promptForWeek, TUTORIAL_PROMPT } from "@/lib/idea-league/prompts";
 import { PROMOTION_SLOTS, nextLeagueTier, parseLeagueTier } from "@/lib/idea-league/tiers";
-
-function isRealUserId(userId: string): boolean {
-  return Boolean(userId) && !userId.startsWith("bot-") && !userId.startsWith("bot");
-}
 import type {
+  LeagueAiReview,
   LeagueBattleState,
   LeagueHistoryEntry,
   LeagueMember,
@@ -15,6 +13,10 @@ import type {
   LeagueTutorialResult,
   LeagueWeek,
 } from "@/lib/idea-league/types";
+
+function isRealUserId(userId: string): boolean {
+  return Boolean(userId) && !userId.startsWith("bot-") && !userId.startsWith("bot");
+}
 
 const STORAGE_KEY = "moni.ideaLeague.v1";
 
@@ -47,7 +49,13 @@ type StoreShape = {
             displayName: string;
             avatarUrl: string | null;
             voteScore: number;
-            submission?: { id: string; title: string; content: string; appeal: string | null };
+            submission?: {
+              id: string;
+              title: string;
+              content: string;
+              appeal: string | null;
+              aiReview?: LeagueAiReview | null;
+            };
           }>;
           votes: Record<string, string>; // voterId -> submissionId
         }
@@ -329,15 +337,23 @@ export function loadLocalBattle(
   week.status =
     phase === "submit" || phase === "vote" ? "active" : phase === "results" ? "ended" : "upcoming";
 
-  // sync vote scores from votes map（実ユーザーのみ）
-  const voteCounts: Record<string, number> = {};
-  for (const [voterId, subId] of Object.entries(group.votes)) {
-    if (!isRealUserId(voterId)) continue;
-    voteCounts[subId] = (voteCounts[subId] ?? 0) + 1;
-  }
+  // Early phase: AI / ops review sets 勝ち点 once judgment window opens.
+  // Peer votes remain stored for a later phase but do not override AI scores yet.
+  const inJudgment = phase === "vote" || phase === "results";
   for (const m of group.members) {
-    if (!isRealUserId(m.userId)) continue;
-    if (m.submission) m.voteScore = voteCounts[m.submission.id] ?? 0;
+    if (!isRealUserId(m.userId) || !m.submission) continue;
+    if (inJudgment) {
+      if (!m.submission.aiReview) {
+        m.submission.aiReview = reviewIdeaWithAi({
+          title: m.submission.title,
+          content: m.submission.content,
+          appeal: m.submission.appeal,
+        });
+      }
+      m.voteScore = m.submission.aiReview.score;
+    } else {
+      m.voteScore = 0;
+    }
   }
 
   writeStore(store);
@@ -362,6 +378,7 @@ export function loadLocalBattle(
         authorAvatarUrl: m.avatarUrl,
         isMe: m.userId === me.userId,
         highlighted: m.userId === me.userId ? profile.highlight : false,
+        aiReview: inJudgment ? s.aiReview ?? null : null,
       };
     })
     .sort((a, b) => b.voteCount - a.voteCount);
@@ -426,28 +443,10 @@ export function submitLocalIdea(
 
 export function castLocalVote(
   me: { userId: string; displayName: string; avatarUrl: string | null },
-  submissionId: string,
+  _submissionId: string,
 ): LeagueBattleState {
-  if (scheduleFor(leagueNow()).phase !== "vote") return loadLocalBattle(me);
-  const store = readStore();
-  const profile = ensureProfile(store, me.userId);
-  const weekKey = saturdayWeekKey(leagueNow());
-  const group = ensureWeekGroup(store, weekKey, profile.tier, me);
-  const target = group.members.find((m) => m.submission?.id === submissionId);
-  if (!target || target.userId === me.userId) return loadLocalBattle(me);
-  group.votes[me.userId] = submissionId;
-
-  // 実ユーザーの投票のみでスコア再計算
-  const voteCounts: Record<string, number> = {};
-  for (const [voterId, subId] of Object.entries(group.votes)) {
-    if (!isRealUserId(voterId)) continue;
-    voteCounts[subId] = (voteCounts[subId] ?? 0) + 1;
-  }
-  for (const m of group.members) {
-    if (!m.submission || !isRealUserId(m.userId)) continue;
-    m.voteScore = voteCounts[m.submission.id] ?? 0;
-  }
-  writeStore(store);
+  // Early phase: AI / ops review owns 勝ち点. Peer voting is retained for a later mode.
+  void _submissionId;
   return loadLocalBattle(me);
 }
 

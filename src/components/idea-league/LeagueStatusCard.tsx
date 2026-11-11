@@ -3,6 +3,7 @@
 import { LeagueCountdown } from "@/components/idea-league/LeagueCountdown";
 import { leagueCardClass } from "@/components/idea-league/LeagueShell";
 import { LeagueTierBadge } from "@/components/idea-league/LeagueTierBadge";
+import { AI_PROMOTION_LINE } from "@/lib/idea-league/aiReview";
 import { computeLeagueProgress, type LeagueZone } from "@/lib/idea-league/progress";
 import {
   LEAGUE_TIER_META,
@@ -37,15 +38,22 @@ export function LeagueStatusCard({
   const meta = LEAGUE_TIER_META[tier];
   const next = nextLeagueTier(tier);
   const nextMeta = next ? LEAGUE_TIER_META[next] : null;
-  const progress = members.length > 0 ? computeLeagueProgress(members, promotionCutoff) : null;
+  const progress =
+    members.length > 0
+      ? computeLeagueProgress(members, promotionCutoff, { preferAiThresholds: true })
+      : null;
   const label = locale === "en" ? meta.labelEn : meta.labelJa;
   const nextLabel = nextMeta ? (locale === "en" ? nextMeta.labelEn : nextMeta.labelJa) : null;
 
-  // Idle demo geometry so empty state still shows clear eFootball-like zones.
-  const promoPct = progress?.promotionMarkerPercent ?? 70;
-  const stayPct = Math.min(promoPct - 8, progress?.stayMarkerPercent ?? 38);
-  const fillPct = progress?.fillPercent ?? 78;
-  const zone: LeagueZone = progress?.zone ?? "promote";
+  const demoPct = progress?.demotionMarkerPercent ?? 22;
+  const stayPct = progress?.stayMarkerPercent ?? 48;
+  const promoPct = progress?.promotionMarkerPercent ?? 72;
+  const fillPct = progress?.fillPercent ?? 18;
+  const zone: LeagueZone = progress?.zone ?? "risk";
+  const myScore = progress?.myScore ?? 0;
+  const pointsToPromotion =
+    progress?.pointsToPromotion ?? Math.max(0, AI_PROMOTION_LINE - myScore);
+  const promoTarget = progress?.promotionLineScore ?? AI_PROMOTION_LINE;
 
   return (
     <section className={`${leagueCardClass} lg:min-h-[24rem]`} aria-label={label}>
@@ -59,7 +67,7 @@ export function LeagueStatusCard({
             pill
             active={countdownActive}
             target={countdownTarget}
-            label={countdownLabel ?? tx("残り", "Left")}
+            label={countdownLabel ?? tx("判定まで", "Until judgment")}
           />
         ) : null}
       </div>
@@ -74,43 +82,57 @@ export function LeagueStatusCard({
         </div>
       </div>
 
-      <div className="mt-6 flex items-end justify-between gap-3 border-t border-zinc-100 pt-5">
-        <div>
-          <p className="text-[11px] font-medium text-zinc-500">
-            {tx("今週のポイント", "This week's points")}
-          </p>
-          <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-zinc-900">
-            {progress ? progress.myScore : 0}
-            <span className="ml-1 text-sm font-medium text-zinc-400">pt</span>
-          </p>
-          {progress?.myRank ? (
-            <p className="mt-1 text-[12px] font-medium text-zinc-500">
-              {tx(`現在 ${progress.myRank} 位 / ${progress.groupSize} 人`, `Rank #${progress.myRank} of ${progress.groupSize}`)}
+      <div className="mt-6 border-t border-zinc-100 pt-5">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium text-zinc-500">
+              {tx("現在の勝ち点", "Current points")}
             </p>
-          ) : null}
+            <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-zinc-900">
+              {myScore}
+              <span className="ml-1 text-sm font-medium text-zinc-400">pt</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[11px] font-medium text-zinc-500">
+              {tx("目標昇格pt", "Promo target")}
+            </p>
+            <p className="mt-1 text-sm font-semibold tabular-nums text-zinc-800">
+              {promoTarget}
+              <span className="ml-0.5 text-xs font-medium text-zinc-400">pt</span>
+            </p>
+            {zone !== "promote" ? (
+              <p className="mt-1 text-[12px] font-medium text-emerald-700">
+                {tx(`昇格まであと ${pointsToPromotion}pt`, `${pointsToPromotion}pt to promote`)}
+              </p>
+            ) : (
+              <p className="mt-1 text-[12px] font-medium text-emerald-700">
+                {tx("昇格ライン突破中", "Above promotion line")}
+              </p>
+            )}
+          </div>
         </div>
-        <ZoneChip
-          zone={zone}
-          rank={progress?.myRank ?? null}
-          pointsToPromotion={progress?.pointsToPromotion}
-          nextLabel={nextLabel}
-          promotionCutoff={promotionCutoff}
-          tx={tx}
-        />
+
+        <div className="mt-3 flex justify-end">
+          <ZoneChip zone={zone} rank={progress?.myRank ?? null} nextLabel={nextLabel} tx={tx} />
+        </div>
       </div>
 
-      {/* Zone track — always spread so 0pt still reads clearly */}
       <div className="mt-5">
-        <div className="mb-2 flex justify-between text-[10px] font-semibold tracking-wide">
-          <span className="text-zinc-400">{tx("下位", "Lower")}</span>
-          <span className="text-zinc-500">{tx("残留", "Stay")}</span>
-          <span className="text-emerald-700">{tx("昇格", "Promo")}</span>
+        <div className="mb-2 flex justify-between gap-1 text-[10px] font-semibold tracking-wide">
+          <span className="text-rose-600">🔴 {tx("降格", "Demo")}</span>
+          <span className="text-zinc-600">🟢 {tx("残留", "Stay")}</span>
+          <span className="text-emerald-700">⭐ {tx("昇格", "Promo")}</span>
         </div>
 
-        <div className="relative h-4 overflow-hidden rounded-full border border-zinc-200/80">
-          <div className="absolute inset-y-0 left-0 bg-[#E4E4E7]" style={{ width: `${stayPct}%` }} />
+        <div className="relative h-4 overflow-hidden rounded-full border border-zinc-200/80 bg-zinc-100">
+          <div className="absolute inset-y-0 left-0 bg-rose-100" style={{ width: `${demoPct}%` }} />
           <div
-            className="absolute inset-y-0 bg-[#F4F4F5]"
+            className="absolute inset-y-0 bg-zinc-100"
+            style={{ left: `${demoPct}%`, width: `${Math.max(stayPct - demoPct, 0)}%` }}
+          />
+          <div
+            className="absolute inset-y-0 bg-emerald-100/90"
             style={{ left: `${stayPct}%`, width: `${Math.max(promoPct - stayPct, 0)}%` }}
           />
           <div
@@ -118,6 +140,7 @@ export function LeagueStatusCard({
             style={{ left: `${promoPct}%`, width: `${Math.max(100 - promoPct, 0)}%` }}
           />
 
+          <Tick percent={demoPct} className="bg-rose-500" />
           <Tick percent={stayPct} className="bg-zinc-500" />
           <Tick percent={promoPct} className="bg-emerald-700" />
 
@@ -131,37 +154,38 @@ export function LeagueStatusCard({
 
         <div className="relative mt-2.5 h-5 text-[10px] font-medium text-zinc-500">
           <span
+            className="absolute -translate-x-1/2 whitespace-nowrap text-rose-600"
+            style={{ left: `${clampLabel(demoPct)}%` }}
+          >
+            {tx("降格ライン", "Demotion")}
+          </span>
+          <span
             className="absolute -translate-x-1/2 whitespace-nowrap"
             style={{ left: `${clampLabel(stayPct)}%` }}
           >
-            {tx("維持ライン", "Stay line")}
+            {tx("残留ライン", "Stay")}
           </span>
           <span
             className="absolute -translate-x-1/2 whitespace-nowrap text-emerald-700"
             style={{ left: `${clampLabel(promoPct)}%` }}
           >
-            {tx("昇格ライン", "Promo line")}
+            {tx("昇格ライン", "Promo")}
           </span>
         </div>
 
         <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">
-          {progress?.rankBased
-            ? tx(
-                "票が分かれるまで、順位でゾーン位置を表示しています。",
-                "Showing zone by rank until votes separate the scores.",
-              )
-            : tx(
-                "票が増えるとマーカーが右へ動きます。",
-                "The marker moves right as you gain votes.",
-              )}
+          {tx(
+            "初期フェーズはAI審査の勝ち点でゾーンが決まります。",
+            "In the early phase, AI review points set your zone.",
+          )}
         </p>
       </div>
 
       {idleHint && !progress ? (
         <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">
           {tx(
-            "バトルが始まると、順位に合わせて位置が動きます。",
-            "Once the battle starts, your marker follows your rank.",
+            "アイデアを提出すると、判定フェーズで勝ち点が入ります。",
+            "Submit an idea — judgment phase awards your points.",
           )}
         </p>
       ) : null}
@@ -176,59 +200,36 @@ function clampLabel(pct: number) {
 function ZoneChip({
   zone,
   rank,
-  pointsToPromotion,
   nextLabel,
-  promotionCutoff,
   tx,
 }: {
   zone: LeagueZone;
   rank: number | null;
-  pointsToPromotion?: number;
   nextLabel: string | null;
-  promotionCutoff: number;
   tx: (ja: string, en: string) => string;
 }) {
   if (zone === "promote") {
     return (
-      <p className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white">
-        {tx("昇格ゾーン内", "Promotion zone")}
+      <p className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+        ⭐ {tx("昇格ゾーン", "Promotion")}
         {rank ? ` · #${rank}` : ""}
+        {nextLabel ? ` → ${nextLabel}` : ""}
       </p>
     );
   }
   if (zone === "risk") {
     return (
-      <div className="text-right">
-        <p className="inline-flex items-center rounded-full bg-zinc-700 px-3 py-1 text-[11px] font-semibold text-white">
-          {tx("下位ゾーン", "Lower zone")}
-          {rank ? ` · #${rank}` : ""}
-        </p>
-        {nextLabel ? (
-          <p className="mt-1.5 text-[11px] text-zinc-500">
-            {tx(
-              `昇格まであと ${pointsToPromotion ?? "—"} pt`,
-              `${pointsToPromotion ?? "—"} pt to promote`,
-            )}
-          </p>
-        ) : null}
-      </div>
+      <p className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-800">
+        🔴 {tx("降格ゾーン", "Demotion")}
+        {rank ? ` · #${rank}` : ""}
+      </p>
     );
   }
   return (
-    <div className="text-right">
-      <p className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-700">
-        {tx("残留ゾーン", "Stay zone")}
-        {rank ? ` · #${rank}` : ""}
-      </p>
-      {nextLabel ? (
-        <p className="mt-1.5 text-[11px] text-zinc-500">
-          {tx(
-            `昇格まであと ${pointsToPromotion ?? "—"} pt · TOP ${promotionCutoff}`,
-            `${pointsToPromotion ?? "—"} pt · TOP ${promotionCutoff}`,
-          )}
-        </p>
-      ) : null}
-    </div>
+    <p className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-700">
+      🟢 {tx("残留ゾーン", "Stay")}
+      {rank ? ` · #${rank}` : ""}
+    </p>
   );
 }
 

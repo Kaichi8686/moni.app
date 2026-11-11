@@ -30,6 +30,15 @@ export type LeagueMember = {
   highlighted: boolean;
 };
 
+/** Early-phase AI / ops judgment (wins over peer votes while bootstrapping). */
+export type LeagueAiReview = {
+  score: number;
+  commentJa: string;
+  commentEn: string;
+  reviewedAt: string;
+  source: "ai" | "ops";
+};
+
 export type LeagueSubmission = {
   id: string;
   userId: string;
@@ -43,6 +52,8 @@ export type LeagueSubmission = {
   authorAvatarUrl: string | null;
   isMe: boolean;
   highlighted: boolean;
+  /** Present once judgment phase has scored this idea */
+  aiReview: LeagueAiReview | null;
 };
 
 export type LeaguePhaseId = "waiting" | "submit" | "vote" | "results";

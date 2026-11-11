@@ -100,11 +100,11 @@ export function LeagueRankingBoard({
                     ) : null}
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    {m.voteScore} {tx("票", "votes")}
+                    {m.voteScore} {tx("pt", "pt")}
                     {inPromo
                       ? ` · ${tx("昇格ゾーン", "Promotion")}`
                       : inRisk
-                        ? ` · ${tx("下位", "Lower")}`
+                        ? ` · ${tx("降格ゾーン", "Demotion")}`
                         : ` · ${tx("残留", "Stay")}`}
                   </p>
                 </div>
@@ -122,7 +122,7 @@ export function LeagueRankingBoard({
               ) : null}
               {nextIsRisk ? (
                 <ZoneDivider
-                  label={tx("維持ライン — ここより下は下位ゾーン", "Stay line — below is lower zone")}
+                  label={tx("残留ライン — ここより下は降格ゾーン", "Stay line — below is demotion")}
                   tone="stay"
                 />
               ) : null}

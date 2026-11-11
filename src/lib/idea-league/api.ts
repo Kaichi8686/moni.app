@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingRelationError } from "@/lib/contest/demo";
+import { reviewIdeaWithAi } from "@/lib/idea-league/aiReview";
 import {
   castLocalVote,
   completeLocalTutorial,
@@ -374,34 +375,61 @@ export async function loadLeagueBattle(
         ? String((myVote as { submission_id: string }).submission_id)
         : null;
 
+    const inJudgment = sched.phase === "vote" || sched.phase === "results";
     const submissions: LeagueSubmission[] = (subs ?? [])
       .map((s) => {
         const row = s as Record<string, unknown>;
         const uid = String(row.user_id);
         const meta = profileMap.get(uid);
+        const title = String(row.title);
+        const content = String(row.content);
+        const appeal = (row.appeal as string | null) ?? null;
+        const aiReview = inJudgment
+          ? reviewIdeaWithAi({ title, content, appeal })
+          : null;
         return {
           id: String(row.id),
           userId: uid,
           membershipId: String(row.membership_id),
-          title: String(row.title),
-          content: String(row.content),
-          appeal: (row.appeal as string | null) ?? null,
-          voteCount: Number(row.vote_count ?? 0),
+          title,
+          content,
+          appeal,
+          voteCount: aiReview ? aiReview.score : Number(row.vote_count ?? 0),
           votedByMe: myVoteSubmissionId === String(row.id),
           authorName: meta?.name ?? "Player",
           authorAvatarUrl: meta?.avatar ?? null,
           isMe: uid === me.userId,
           highlighted: Boolean(meta?.highlight),
+          aiReview,
         };
       })
       .filter((s) => (peersHidden ? s.isMe : true))
       .sort((a, b) => b.voteCount - a.voteCount);
 
+    // Mirror AI 勝ち点 onto memberships for ranking during the bootstrap phase.
+    const scoredMembers = inJudgment
+      ? [...members]
+          .map((m) => {
+            const sub = submissions.find((s) => s.userId === m.userId);
+            return sub?.aiReview ? { ...m, voteScore: sub.aiReview.score } : m;
+          })
+          .sort((a, b) => {
+            if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
+            return a.id.localeCompare(b.id);
+          })
+          .map((m, i) => ({
+            ...m,
+            rank: i + 1,
+            promoted: i + 1 <= PROMOTION_SLOTS,
+            resultStatus: (i + 1 <= PROMOTION_SLOTS ? "promoted" : "stayed") as LeagueMember["resultStatus"],
+          }))
+      : members;
+
     return {
       week,
       tier: profile.tier,
       groupId,
-      members: peersHidden ? members.filter((m) => m.isMe) : members,
+      members: peersHidden ? scoredMembers.filter((m) => m.isMe) : scoredMembers,
       submissions,
       myMembershipId: String(mem.id),
       mySubmission: submissions.find((s) => s.isMe) ?? null,
