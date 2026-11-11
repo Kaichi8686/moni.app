@@ -49,7 +49,7 @@ export function LeaguePromptComposer({
 
   if (seeds.length === 0) {
     return (
-      <section className="rounded-3xl bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
+      <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5">
         <h2 className="text-sm font-black text-zinc-900">
           {tx("リーグのお題を書く", "Write the league prompt")}
         </h2>
@@ -69,7 +69,7 @@ export function LeaguePromptComposer({
   }
 
   return (
-    <section className="rounded-3xl bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
+    <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5">
       <h2 className="text-sm font-black text-zinc-900">
         {tx("リーグのお題を書く", "Write the league prompt")}
       </h2>

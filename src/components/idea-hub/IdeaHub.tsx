@@ -183,7 +183,11 @@ function IdeaHubInner() {
     >
       {(view === "mine" && sparkMode === "league") || inAiChat ? (
         <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
-          <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
+          <div
+            className={`mx-auto px-4 pb-2 pt-1 sm:px-6 lg:px-8 ${
+              view === "mine" && sparkMode === "league" ? "max-w-5xl" : "max-w-lg"
+            }`}
+          >
             {inAiChat ? null : <AppBrandHeader bare />}
             <div className={inAiChat ? undefined : "mt-1"}>{sparkToggle}</div>
           </div>

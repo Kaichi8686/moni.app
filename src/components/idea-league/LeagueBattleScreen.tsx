@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { EmptyVoteState } from "@/components/idea-league/EmptyVoteState";
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
+import { LeagueShell, leagueCardClass } from "@/components/idea-league/LeagueShell";
 import { LeagueStatusCard } from "@/components/idea-league/LeagueStatusCard";
 import { scheduleFor, voteWindow } from "@/lib/idea-league/calendar";
 import type { LeagueBattleState } from "@/lib/idea-league/types";
@@ -76,27 +77,33 @@ export function LeagueBattleScreen({
       ? tx("提出締切まで", "Until submit closes")
       : tx("結果公表まで", "Until results");
 
-  return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-3 sm:space-y-5">
-      <LeagueStatusCard
-        tier={battle.tier}
-        phaseLabel={phaseLabel}
-        countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
-        countdownLabel={countdownLabel}
-        members={battle.members}
-        promotionCutoff={battle.promotionCutoff}
-        countdownActive={countdownActive}
-      />
+  const peerSubs = battle.submissions.filter((s) => !s.isMe);
 
-      <div className="rounded-[28px] bg-white p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+  return (
+    <LeagueShell
+      sidebar={
+        <LeagueStatusCard
+          tier={battle.tier}
+          phaseLabel={phaseLabel}
+          countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
+          countdownLabel={countdownLabel}
+          members={battle.members}
+          promotionCutoff={battle.promotionCutoff}
+          countdownActive={countdownActive}
+        />
+      }
+    >
+      <section className={leagueCardClass}>
+        <p className="text-[11px] font-medium tracking-wide text-zinc-500">
           {tx("今週の共通お題", "This week's shared prompt")}
         </p>
-        <h2 className="mt-1 text-lg font-black tracking-tight text-zinc-900">{battle.week.promptTitle}</h2>
+        <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+          {battle.week.promptTitle}
+        </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white/90 p-1 shadow-[0_4px_0_rgba(24,24,27,0.04)] ring-1 ring-zinc-200/70">
+      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200/90 bg-white p-1">
         {(
           [
             ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
@@ -108,8 +115,8 @@ export function LeagueBattleScreen({
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`min-h-10 rounded-xl text-xs font-extrabold transition sm:text-sm ${
-              tab === id ? "bg-[#FF9600] text-white shadow-[0_3px_0_#D97706]" : "text-zinc-500"
+            className={`min-h-10 rounded-xl text-xs font-semibold transition sm:text-sm ${
+              tab === id ? "bg-[#FF9600] text-white" : "text-zinc-500 hover:text-zinc-700"
             }`}
           >
             {label}
@@ -121,38 +128,38 @@ export function LeagueBattleScreen({
 
       {tab === "prompt" ? (
         phase === "submit" ? (
-          <div className="space-y-3 rounded-[28px] bg-white/95 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80 sm:p-5">
-            <p className="text-sm font-medium text-zinc-600">
+          <div className={`space-y-3 ${leagueCardClass}`}>
+            <p className="text-sm text-zinc-600">
               {tx(
                 "日曜朝11時まで提出できます。締切までは他の人の解答は見えません。",
                 "Submit until Sunday 11:00. Peer answers stay hidden until then.",
               )}
             </p>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-600">{tx("タイトル", "Title")}</span>
+              <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value.slice(0, 40))}
-                className="mt-1 w-full rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#FF9600]"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-600">{tx("アイデア", "Idea")}</span>
+              <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={5}
-                className="mt-1 w-full rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#FF9600]"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-zinc-600">
+              <span className="text-xs font-medium text-zinc-600">
                 {tx("ひとことアピール（任意）", "Short pitch (optional)")}
               </span>
               <input
                 value={appeal}
                 onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
-                className="mt-1 w-full rounded-2xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-[#FF9600]"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
               />
             </label>
             <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={busy} onClick={() => void handleSubmit()}>
@@ -162,7 +169,7 @@ export function LeagueBattleScreen({
             </DuoButton>
           </div>
         ) : (
-          <p className="rounded-[28px] bg-white/90 px-4 py-8 text-center text-sm font-semibold text-zinc-500 ring-1 ring-zinc-200/70">
+          <p className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
             {tx("提出期間は終了しました。投票タブへどうぞ。", "Submit window closed — head to Vote.")}
           </p>
         )
@@ -170,7 +177,7 @@ export function LeagueBattleScreen({
 
       {tab === "vote" ? (
         phase === "submit" ? (
-          <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white/90 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
+          <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
             {tx(
               "投票は日曜朝11時から始まります。それまで他の解答は非公開です。",
               "Voting starts Sunday 11:00. Peer answers stay private until then.",
@@ -178,36 +185,35 @@ export function LeagueBattleScreen({
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm font-medium text-zinc-600">
+            <p className="text-sm text-zinc-600">
               {tx(
                 "自分以外のアイデアに1票。水曜11時に結果が公開されます。",
                 "One vote for someone else. Results publish Wednesday 11:00.",
               )}
             </p>
-            {battle.submissions.filter((s) => !s.isMe).length === 0 ? (
+            {peerSubs.length === 0 ? (
               <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
             ) : (
-              battle.submissions
-                .filter((s) => !s.isMe)
-                .map((s) => (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {peerSubs.map((s) => (
                   <article
                     key={s.id}
-                    className={`rounded-[28px] bg-white p-4 shadow-[0_6px_0_rgba(24,24,27,0.05)] ring-1 sm:p-5 ${
-                      s.votedByMe ? "ring-[#FF9600]" : "ring-zinc-200/80"
+                    className={`${leagueCardClass} ${
+                      s.votedByMe ? "border-[#FF9600]" : ""
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-bold text-zinc-500">{s.authorName}</p>
-                        <h3 className="text-base font-black text-zinc-900">{s.title}</h3>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-zinc-500">{s.authorName}</p>
+                        <h3 className="truncate text-base font-bold text-zinc-900">{s.title}</h3>
                       </div>
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-black tabular-nums text-zinc-700">
+                      <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-zinc-700">
                         {s.voteCount}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{s.content}</p>
+                    <p className="mt-2 line-clamp-4 text-sm leading-relaxed text-zinc-600">{s.content}</p>
                     {s.appeal ? (
-                      <p className="mt-2 text-xs font-semibold text-indigo-700">
+                      <p className="mt-2 text-xs font-medium text-zinc-500">
                         {locale === "en" ? "Pitch: " : "アピール: "}
                         {s.appeal}
                       </p>
@@ -227,7 +233,8 @@ export function LeagueBattleScreen({
                       </DuoButton>
                     </div>
                   </article>
-                ))
+                ))}
+              </div>
             )}
           </div>
         )
@@ -238,7 +245,7 @@ export function LeagueBattleScreen({
           <LeagueRankingBoard members={battle.members} tier={battle.tier} promotionCutoff={battle.promotionCutoff} />
         ) : publishedBattle ? (
           <div className="space-y-2">
-            <p className="text-xs font-bold text-zinc-500">
+            <p className="text-xs text-zinc-500">
               {tx(
                 "今週の結果は水曜11時に公開。いまは先週の結果を表示しています。",
                 "This week’s results publish Wed 11:00. Showing last week for now.",
@@ -252,7 +259,7 @@ export function LeagueBattleScreen({
             />
           </div>
         ) : (
-          <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white/90 px-4 py-10 text-center text-sm font-semibold text-zinc-500">
+          <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
             {tx(
               "結果は水曜朝11時に公開されます。それまでは先週の結果を表示します。",
               "Results publish Wednesday 11:00. Until then, last week’s board is shown.",
@@ -262,13 +269,13 @@ export function LeagueBattleScreen({
       ) : null}
 
       {battle.members.length <= 1 ? (
-        <p className="text-center text-[11px] font-medium text-zinc-400">
+        <p className="text-center text-[11px] text-zinc-400">
           {tx(
             "同じリーグに参加している登録ユーザーの順位が表示されます。",
             "Ranks show registered users in your league group.",
           )}
         </p>
       ) : null}
-    </div>
+    </LeagueShell>
   );
 }

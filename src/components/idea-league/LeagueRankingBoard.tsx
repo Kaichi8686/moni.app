@@ -22,17 +22,17 @@ export function LeagueRankingBoard({
   const { tx } = useI18n();
 
   return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-[0_10px_0_rgba(24,24,27,0.08)] ring-1 ring-zinc-200/80">
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-gradient-to-r from-[#FFF7ED] to-[#EEF2FF] px-4 py-3">
+    <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+          <p className="text-[11px] font-medium tracking-wide text-zinc-500">
             {title ?? tx("今週の順位表", "This week's board")}
           </p>
           <div className="mt-1">
-            <LeagueTierBadge tier={tier} size="sm" />
+            <LeagueTierBadge tier={tier} size="sm" flat />
           </div>
         </div>
-        <div className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-extrabold text-emerald-800">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
           TOP {promotionCutoff} {tx("昇格", "promote")}
         </div>
       </div>
@@ -49,52 +49,52 @@ export function LeagueRankingBoard({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(idx * 0.03, 0.35) }}
                 className={`flex items-center gap-3 px-3 py-2.5 sm:px-4 ${
-                  m.isMe ? "bg-[#FFF4E5]" : inZone ? "bg-emerald-50/70" : "bg-white"
+                  m.isMe ? "bg-orange-50/80" : inZone ? "bg-emerald-50/50" : "bg-white"
                 }`}
               >
                 <span
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                     m.rank === 1
-                      ? "bg-amber-300 text-amber-950"
+                      ? "bg-amber-100 text-amber-900"
                       : m.rank === 2
-                        ? "bg-zinc-200 text-zinc-800"
+                        ? "bg-zinc-100 text-zinc-700"
                         : m.rank === 3
-                          ? "bg-orange-200 text-orange-950"
-                          : "bg-zinc-100 text-zinc-600"
+                          ? "bg-orange-100 text-orange-900"
+                          : "bg-zinc-50 text-zinc-500"
                   }`}
                 >
                   {m.rank}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-extrabold text-zinc-900">
+                  <p className="truncate text-sm font-semibold text-zinc-900">
                     {m.displayName}
                     {m.isMe ? (
-                      <span className="ml-1.5 text-[11px] font-bold text-[#FF9600]">
+                      <span className="ml-1.5 text-[11px] font-medium text-[#FF9600]">
                         {tx("あなた", "You")}
                       </span>
                     ) : null}
                     {m.highlighted ? (
-                      <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                      <span className="ml-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
                         {tx("注目", "Featured")}
                       </span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] font-semibold text-zinc-500">
+                  <p className="text-[11px] text-zinc-500">
                     {m.voteScore} {tx("票", "votes")}
                     {inZone ? ` · ${tx("昇格ゾーン", "Promotion zone")}` : ""}
                   </p>
                 </div>
                 {inZone ? (
-                  <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                  <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                     ↑
                   </span>
                 ) : null}
               </motion.div>
               {nextIsOut ? (
-                <div className="relative flex items-center gap-2 bg-emerald-600 px-4 py-1.5 text-[11px] font-extrabold text-white">
-                  <span className="h-px flex-1 bg-white/40" aria-hidden />
+                <div className="flex items-center gap-2 border-y border-emerald-100 bg-emerald-50/80 px-4 py-1.5 text-[11px] font-semibold text-emerald-800">
+                  <span className="h-px flex-1 bg-emerald-200" aria-hidden />
                   {tx("昇格ライン — ここより上が次リーグへ", "Promotion line — above advances")}
-                  <span className="h-px flex-1 bg-white/40" aria-hidden />
+                  <span className="h-px flex-1 bg-emerald-200" aria-hidden />
                 </div>
               ) : null}
             </li>

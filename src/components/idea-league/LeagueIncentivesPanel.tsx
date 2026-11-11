@@ -14,11 +14,11 @@ export function LeagueIncentivesPanel({ currentTier, promotions }: Props) {
   const currentIdx = LEAGUE_TIERS.indexOf(currentTier);
 
   return (
-    <section className="rounded-3xl bg-white/90 p-4 shadow-[0_8px_0_rgba(24,24,27,0.06)] ring-1 ring-zinc-200/80">
-      <h2 className="text-sm font-black tracking-tight text-zinc-900">
+    <section className="rounded-2xl border border-zinc-200/90 bg-white p-4 sm:p-5">
+      <h2 className="text-sm font-bold tracking-tight text-zinc-900">
         {tx("上位リーグのご褒美", "Rewards for climbing")}
       </h2>
-      <p className="mt-1 text-xs font-medium text-zinc-500">
+      <p className="mt-1 text-xs text-zinc-500">
         {tx(
           "昇格すると王冠・ハイライト・特別応募枠が増えます。",
           "Promotion unlocks crowns, highlights, and special idea slots.",
