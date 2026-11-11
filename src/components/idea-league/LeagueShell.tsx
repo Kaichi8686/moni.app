@@ -21,4 +21,4 @@ export function LeagueShell({
 }
 
 export const leagueCardClass =
-  "rounded-2xl border border-orange-200/70 bg-white/95 p-4 shadow-[0_8px_24px_rgba(255,150,0,0.06)] sm:p-5";
+  "rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5";

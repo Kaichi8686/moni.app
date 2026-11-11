@@ -4,6 +4,11 @@ const TZ = "Asia/Tokyo";
 export const LEAGUE_ROLLOVER_HOUR = 11;
 
 /**
+ * Daily Idea League (Asia/Tokyo):
+ * - New battle every day at 11:00
+ * - Submit window: 24h (day 11:00 → next day 11:00)
+ * - Previous day locks as results when the new day starts
+ *
  * QA:
  * - `moni.ideaLeague.forceDate` = YYYY-MM-DD （正午固定）
  * - または YYYY-MM-DDTHH:mm （JST）
@@ -30,16 +35,14 @@ export function leagueNow(): Date {
 export type LeaguePhase = "waiting" | "submit" | "vote" | "results";
 
 export type LeagueSchedule = {
-  /** そのバトル週の土曜 YYYY-MM-DD */
+  /** Active battle day key YYYY-MM-DD (JST) */
   weekKey: string;
   phase: LeaguePhase;
   submitStart: Date;
   submitEnd: Date;
   voteStart: Date;
   resultsAt: Date;
-  /** 結果公表済みの最新 weekKey（なければ null） */
   publishedWeekKey: string | null;
-  /** 画面に出す「先週の結果」用 weekKey */
   displayResultsWeekKey: string | null;
   nextBoundary: Date;
 };
@@ -48,91 +51,63 @@ function atHour(dateKey: string, hour: number): Date {
   return new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00:00+09:00`);
 }
 
-/** いま属している（または直近の）バトル週の土曜キー */
-export function battleSaturdayKey(date: Date = leagueNow()): string {
+/** Active battle day: rolls at 11:00 JST every day. */
+export function battleDayKey(date: Date = leagueNow()): string {
   const { dateKey, hour } = tokyoParts(date);
-  const weekday = tokyoWeekday(date);
+  if (hour < LEAGUE_ROLLOVER_HOUR) return addDaysToDateKey(dateKey, -1);
+  return dateKey;
+}
 
-  // 土曜 11:00 未満 → まだ前の週の結果期間側
-  if (weekday === 6 && hour < LEAGUE_ROLLOVER_HOUR) {
-    return addDaysToDateKey(dateKey, -7);
-  }
-  // 日曜〜金曜: 直近の土曜へ戻す
-  // 土曜 11:00 以降: 今日
-  const daysFromSaturday = weekday === 6 ? 0 : (weekday + 1) % 7;
-  return addDaysToDateKey(dateKey, -daysFromSaturday);
+/** @deprecated use battleDayKey — kept for older call sites */
+export function battleSaturdayKey(date: Date = leagueNow()): string {
+  return battleDayKey(date);
 }
 
 export function scheduleFor(date: Date = leagueNow()): LeagueSchedule {
-  const weekKey = battleSaturdayKey(date);
+  const weekKey = battleDayKey(date);
   const submitStart = atHour(weekKey, LEAGUE_ROLLOVER_HOUR);
-  const sunKey = addDaysToDateKey(weekKey, 1);
-  const wedKey = addDaysToDateKey(weekKey, 4);
-  const submitEnd = atHour(sunKey, LEAGUE_ROLLOVER_HOUR);
-  const voteStart = submitEnd;
-  const resultsAt = atHour(wedKey, LEAGUE_ROLLOVER_HOUR);
-  const nextSatKey = addDaysToDateKey(weekKey, 7);
-  const nextSubmitStart = atHour(nextSatKey, LEAGUE_ROLLOVER_HOUR);
-
+  const nextKey = addDaysToDateKey(weekKey, 1);
+  const submitEnd = atHour(nextKey, LEAGUE_ROLLOVER_HOUR);
+  const prevKey = addDaysToDateKey(weekKey, -1);
   const t = date.getTime();
-  let phase: LeaguePhase;
-  let nextBoundary: Date;
+
+  // Daily cadence: always in the active submit window for weekKey.
+  let phase: LeaguePhase = "submit";
+  let nextBoundary: Date = submitEnd;
   if (t < submitStart.getTime()) {
     phase = "waiting";
     nextBoundary = submitStart;
-  } else if (t < submitEnd.getTime()) {
-    phase = "submit";
-    nextBoundary = submitEnd;
-  } else if (t < resultsAt.getTime()) {
-    phase = "vote";
-    nextBoundary = resultsAt;
-  } else if (t < nextSubmitStart.getTime()) {
-    phase = "results";
-    nextBoundary = nextSubmitStart;
-  } else {
-    // 理論上 battleSaturdayKey が次週になる
-    phase = "waiting";
-    nextBoundary = nextSubmitStart;
   }
-
-  const prevWeekKey = addDaysToDateKey(weekKey, -7);
-  const publishedWeekKey =
-    t >= resultsAt.getTime() ? weekKey : t >= atHour(addDaysToDateKey(prevWeekKey, 4), LEAGUE_ROLLOVER_HOUR).getTime()
-      ? prevWeekKey
-      : null;
-
-  // 結果公表前は先週の結果を表示
-  const displayResultsWeekKey =
-    phase === "results" || (publishedWeekKey === weekKey) ? weekKey : publishedWeekKey ?? prevWeekKey;
 
   return {
     weekKey,
     phase,
     submitStart,
     submitEnd,
-    voteStart,
-    resultsAt,
-    publishedWeekKey,
-    displayResultsWeekKey,
+    voteStart: submitStart,
+    resultsAt: submitEnd,
+    publishedWeekKey: prevKey,
+    displayResultsWeekKey: prevKey,
     nextBoundary,
   };
 }
 
-/** @deprecated use scheduleFor().phase === "submit" etc. */
+/** @deprecated */
 export function isSaturday(date: Date = leagueNow()): boolean {
   return tokyoWeekday(date) === 6;
 }
 
 export function saturdayWeekKey(date: Date = leagueNow()): string {
-  return battleSaturdayKey(date);
+  return battleDayKey(date);
 }
 
 export function upcomingSaturdayStart(date: Date = leagueNow()): Date {
   const s = scheduleFor(date);
-  if (s.phase === "waiting" && date.getTime() < s.submitStart.getTime()) return s.submitStart;
-  return atHour(addDaysToDateKey(s.weekKey, 7), LEAGUE_ROLLOVER_HOUR);
+  if (s.phase === "waiting") return s.submitStart;
+  return s.submitEnd;
 }
 
+/** 24h window for a battle day key */
 export function saturdayWindow(weekKey: string): { startsAt: Date; endsAt: Date } {
   return {
     startsAt: atHour(weekKey, LEAGUE_ROLLOVER_HOUR),
@@ -140,10 +115,12 @@ export function saturdayWindow(weekKey: string): { startsAt: Date; endsAt: Date 
   };
 }
 
+/** Alias kept for call sites — judgment/results lock at submit end. */
 export function voteWindow(weekKey: string): { startsAt: Date; endsAt: Date } {
+  const end = atHour(addDaysToDateKey(weekKey, 1), LEAGUE_ROLLOVER_HOUR);
   return {
-    startsAt: atHour(addDaysToDateKey(weekKey, 1), LEAGUE_ROLLOVER_HOUR),
-    endsAt: atHour(addDaysToDateKey(weekKey, 4), LEAGUE_ROLLOVER_HOUR),
+    startsAt: end,
+    endsAt: atHour(addDaysToDateKey(weekKey, 2), LEAGUE_ROLLOVER_HOUR),
   };
 }
 

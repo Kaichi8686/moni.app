@@ -97,14 +97,15 @@ export function IdeaLeagueApp({
       return;
     }
 
-    const phase = scheduleFor().phase;
-    if (phase === "results") {
-      await finalizeLeagueIfNeeded(client, identity);
-      if (!aliveRef.current) return;
+    // Daily battles: always try to settle yesterday when today's round is live.
+    await finalizeLeagueIfNeeded(client, identity);
+    if (!aliveRef.current) return;
+    {
       const refreshed = await loadLeagueProfile(client, identity.userId);
       if (!aliveRef.current) return;
       setProfile(refreshed);
     }
+    const phase = scheduleFor().phase;
 
     // Skip heavy battle fetch while the tab is hidden.
     if (!activeRef.current) return;
@@ -229,15 +230,15 @@ export function IdeaLeagueApp({
 
   const shell = (body: ReactNode) => (
     <div
-      className={`relative min-h-[100dvh] overflow-x-hidden bg-[radial-gradient(120%_80%_at_10%_-10%,#FFB347_0%,transparent_55%),radial-gradient(90%_70%_at_100%_0%,#FF7A1A55_0%,transparent_50%),linear-gradient(180deg,#FFF3E4_0%,#FFE0C2_42%,#FFF8F0_100%)] ${
+      className={`relative min-h-[100dvh] bg-[#FAFAF9] ${
         embedded || hideChrome ? "" : "pb-bottom-nav"
       }`}
     >
       {hideChrome ? null : (
-        <header className="sticky top-0 z-30 border-b border-orange-200/70 bg-[#FFF7ED]/92 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/95 backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
             <AppBrandHeader bare />
-            <p className="mt-1 text-center text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#C2410C]">
+            <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-500">
               {tx("アイデアリーグ", "Idea League")}
             </p>
           </div>

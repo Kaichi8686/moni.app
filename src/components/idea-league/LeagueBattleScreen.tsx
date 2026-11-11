@@ -10,7 +10,7 @@ import { LeagueModeTabs, type LeaguePlayMode } from "@/components/idea-league/Le
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
 import { LeagueShell, leagueCardClass } from "@/components/idea-league/LeagueShell";
 import { LeagueStatusCard } from "@/components/idea-league/LeagueStatusCard";
-import { scheduleFor, voteWindow } from "@/lib/idea-league/calendar";
+import { scheduleFor } from "@/lib/idea-league/calendar";
 import type { LeagueBattleState } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -32,7 +32,7 @@ export function LeagueBattleScreen({
 }: Props) {
   const { tx } = useI18n();
   const phase = battle.phase;
-  const defaultTab = phase === "vote" ? "judge" : phase === "results" ? "board" : "prompt";
+  const defaultTab = phase === "results" ? "board" : "prompt";
   const [playMode, setPlayMode] = useState<LeaguePlayMode>("league");
   const [tab, setTab] = useState<"board" | "prompt" | "judge">(defaultTab);
   const [title, setTitle] = useState(battle.mySubmission?.title ?? "");
@@ -41,7 +41,9 @@ export function LeagueBattleScreen({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const sched = useMemo(() => scheduleFor(), []);
-  const endsAt = phase === "submit" ? sched.submitEnd : voteWindow(battle.week.weekKey).endsAt;
+  const endsAt = sched.submitEnd;
+  const myScore = battle.members.find((m) => m.isMe)?.voteScore ?? 0;
+  const myReview = battle.mySubmission?.aiReview ?? null;
 
   async function handleSubmit() {
     if (!title.trim() || !content.trim()) {
@@ -52,6 +54,7 @@ export function LeagueBattleScreen({
     setErr("");
     try {
       await onSubmit({ title: title.trim(), content: content.trim(), appeal: appeal.trim() || undefined });
+      setTab("judge");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed");
     } finally {
@@ -59,31 +62,15 @@ export function LeagueBattleScreen({
     }
   }
 
-  const phaseLabel =
-    phase === "submit"
-      ? tx("提出タイム", "Submit window")
-      : phase === "vote"
-        ? tx("AI判定タイム", "AI judgment")
-        : tx("結果公表", "Results published");
-
-  const countdownLabel =
-    phase === "submit"
-      ? tx("提出締切まで", "Until submit closes")
-      : phase === "vote"
-        ? tx("判定まで", "Until judgment ends")
-        : tx("結果公表まで", "Until results");
-
-  const myReview = battle.mySubmission?.aiReview ?? null;
-
   return (
     <LeagueShell
       sidebar={
         playMode === "league" ? (
           <LeagueStatusCard
             tier={battle.tier}
-            phaseLabel={phaseLabel}
-            countdownTarget={phase === "submit" || phase === "vote" ? endsAt : null}
-            countdownLabel={countdownLabel}
+            phaseLabel={tx("本日のバトル", "Today's battle")}
+            countdownTarget={endsAt}
+            countdownLabel={tx("締切まで", "Until close")}
             members={battle.members}
             promotionCutoff={battle.promotionCutoff}
             countdownActive={countdownActive}
@@ -93,16 +80,9 @@ export function LeagueBattleScreen({
             }}
           />
         ) : (
-          <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-b from-[#FFF4E8] to-white p-4 sm:p-5">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
-              {tx("フレンドマッチ", "Friend Match")}
-            </p>
-            <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
-              {tx("カスタムルーム", "Custom room")}
-            </h1>
-            <p className="mt-2 text-sm text-zinc-500">
-              {tx("作成 → 提出 → AI採点", "Create → submit → AI score")}
-            </p>
+          <section className={leagueCardClass}>
+            <p className="text-[11px] font-medium text-zinc-500">{tx("フレンドマッチ", "Friend Match")}</p>
+            <h1 className="mt-1 text-lg font-bold text-zinc-900">{tx("ルーム", "Room")}</h1>
           </section>
         )
       }
@@ -113,38 +93,34 @@ export function LeagueBattleScreen({
         <FriendMatchPanel me={me} />
       ) : (
         <>
-          {!battle.mySubmission || (battle.members.find((m) => m.isMe)?.voteScore ?? 0) === 0 ? (
-            <HowToEarnPoints
-              onStart={() => setTab(phase === "submit" ? "prompt" : "judge")}
-            />
+          {!battle.mySubmission || myScore === 0 ? (
+            <HowToEarnPoints onStart={() => setTab("prompt")} />
           ) : null}
 
           <section className={leagueCardClass}>
-            <p className="text-[11px] font-semibold tracking-wide text-orange-700">
-              {tx("今週の共通お題", "This week's shared prompt")}
+            <p className="text-[11px] font-medium text-zinc-500">
+              {tx("本日のお題", "Today's prompt")}
             </p>
-            <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+            <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900">
               {battle.week.promptTitle}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
           </section>
 
-          <div className="grid grid-cols-3 gap-1 rounded-2xl border border-orange-200/80 bg-white/95 p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1">
             {(
               [
-                ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
-                ["judge", tx("判定", "Judge")],
-                ["board", tx("結果", "Results")],
+                ["prompt", tx("提出", "Submit")],
+                ["judge", tx("採点", "Score")],
+                ["board", tx("順位", "Board")],
               ] as const
             ).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setTab(id)}
-                className={`min-h-10 rounded-xl text-xs font-semibold transition sm:text-sm ${
-                  tab === id
-                    ? "bg-[#FF9600] text-white shadow-[0_3px_0_#d97706]"
-                    : "text-zinc-500 hover:bg-orange-50 hover:text-zinc-800"
+                className={`min-h-10 rounded-lg text-sm font-semibold transition ${
+                  tab === id ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
                 }`}
               >
                 {label}
@@ -155,137 +131,72 @@ export function LeagueBattleScreen({
           {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
 
           {tab === "prompt" ? (
-            phase === "submit" ? (
-              <div className={`space-y-3 ${leagueCardClass}`}>
-                <p className="text-sm text-zinc-600">
-                  {tx(
-                    "日曜朝11時まで提出できます。判定フェーズでAIが勝ち点とフィードバックを返します。",
-                    "Submit until Sunday 11:00. In judgment, AI returns points and feedback.",
-                  )}
-                </p>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value.slice(0, 40))}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    rows={5}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-600">
-                    {tx("ひとことアピール（任意）", "Short pitch (optional)")}
-                  </span>
-                  <input
-                    value={appeal}
-                    onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
-                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:ring-0"
-                  />
-                </label>
-                <DuoButton
-                  type="button"
-                  tone="orange"
-                  size="lg"
-                  fullWidth
-                  disabled={busy}
-                  onClick={() => void handleSubmit()}
-                >
-                  {battle.mySubmission
-                    ? tx("アイデアを更新する", "Update idea")
-                    : tx("アイデアを投稿する", "Submit an idea")}
-                </DuoButton>
-              </div>
-            ) : battle.mySubmission ? (
-              <div className={leagueCardClass}>
-                <p className="text-[11px] font-medium text-zinc-500">{tx("提出済み", "Submitted")}</p>
-                <h3 className="mt-1 text-base font-bold text-zinc-900">{battle.mySubmission.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.mySubmission.content}</p>
-                <p className="mt-3 text-sm text-zinc-500">
-                  {tx("提出期間は終了しました。判定タブでAI評価を確認できます。", "Submit closed — check AI review in Judge.")}
-                </p>
-              </div>
-            ) : (
-              <div className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
-                {tx(
-                  "提出期間は終了しました。次のバトル週でアイデアを投稿できます。",
-                  "Submit window closed. You can post in the next battle week.",
-                )}
-              </div>
-            )
+            <div className={`space-y-3 ${leagueCardClass}`}>
+              <p className="text-sm text-zinc-500">
+                {tx("次の11時まで提出可。送るとすぐptが付きます。", "Open until next 11:00. Submit for instant pt.")}
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value.slice(0, 40))}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  rows={5}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-zinc-600">
+                  {tx("ひとこと（任意）", "Pitch (optional)")}
+                </span>
+                <input
+                  value={appeal}
+                  onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm outline-none focus:border-zinc-400"
+                />
+              </label>
+              <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={busy} onClick={() => void handleSubmit()}>
+                {battle.mySubmission ? tx("更新して再採点", "Update & re-score") : tx("提出する", "Submit")}
+              </DuoButton>
+            </div>
           ) : null}
 
           {tab === "judge" ? (
             !battle.mySubmission ? (
               <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
             ) : myReview ? (
-              <div className="space-y-3">
-                <p className="text-sm text-zinc-600">
-                  {tx(
-                    "提出したアイデアをAIが採点。この勝ち点で昇格ラインを狙います。",
-                    "AI scored your idea. Use these points to chase the promotion line.",
-                  )}
-                </p>
-                <AiReviewCard submission={battle.mySubmission} review={myReview} />
-              </div>
+              <AiReviewCard submission={battle.mySubmission} review={myReview} />
             ) : (
-              <div className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
-                {tx("AI審査を準備しています…", "Preparing AI review…")}
-              </div>
+              <p className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
+                {tx("採点を準備しています…", "Preparing score…")}
+              </p>
             )
           ) : null}
 
           {tab === "board" ? (
-            phase === "results" || phase === "vote" ? (
+            <div className="space-y-3">
               <LeagueRankingBoard
                 members={battle.members}
                 tier={battle.tier}
                 promotionCutoff={battle.promotionCutoff}
-                title={
-                  phase === "vote"
-                    ? tx("暫定順位（AI勝ち点）", "Live board (AI points)")
-                    : undefined
-                }
+                title={tx("本日の順位", "Today's board")}
               />
-            ) : publishedBattle ? (
-              <div className="space-y-2">
-                <p className="text-xs text-zinc-500">
-                  {tx(
-                    "今週の結果は水曜11時に公開。いまは先週の結果を表示しています。",
-                    "This week’s results publish Wed 11:00. Showing last week for now.",
-                  )}
-                </p>
+              {publishedBattle ? (
                 <LeagueRankingBoard
                   members={publishedBattle.members}
                   tier={publishedBattle.tier}
                   promotionCutoff={publishedBattle.promotionCutoff}
-                  title={tx("先週の結果", "Last week's results")}
+                  title={tx("前回の結果", "Last battle")}
                 />
-              </div>
-            ) : (
-              <div className={`${leagueCardClass} border-dashed text-center text-sm text-zinc-500`}>
-                {tx(
-                  "結果は水曜朝11時に公開されます。",
-                  "Results publish Wednesday 11:00.",
-                )}
-              </div>
-            )
-          ) : null}
-
-          {battle.members.length <= 1 ? (
-            <p className="text-center text-[11px] text-zinc-400">
-              {tx(
-                "同じリーグに参加している登録ユーザーの順位が表示されます。",
-                "Ranks show registered users in your league group.",
-              )}
-            </p>
+              ) : null}
+            </div>
           ) : null}
         </>
       )}

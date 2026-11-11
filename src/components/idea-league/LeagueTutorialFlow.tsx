@@ -63,13 +63,13 @@ export function LeagueTutorialFlow({ onComplete, onFinished }: Props) {
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-zinc-200">
                 {tx(
-                  "本番の土曜バトルの前に、必ず1回だけ練習します。共通の課題にアイデアを出し、模擬ランキングで流れを体験しましょう。",
-                  "Before your first Saturday battle, complete one practice round: submit to a shared prompt and see a mock ranking.",
+                  "本番の前に、必ず1回だけ練習します。お題にアイデアを出し、模擬ランキングで流れを体験しましょう。",
+                  "Before your first battle, complete one practice round: submit to a prompt and see a mock ranking.",
                 )}
               </p>
               <ul className="mt-4 space-y-2 text-sm font-semibold text-zinc-100">
-                <li>・{tx("毎週土曜だけの共通お題バトル", "Shared prompt battles — Saturdays only")}</li>
-                <li>・{tx("グループ内で相互投票", "Peer voting inside your group")}</li>
+                <li>・{tx("毎日11時にお題が更新", "New prompt every day at 11:00")}</li>
+                <li>・{tx("提出ですぐ勝ち点が付く", "Submit to earn points instantly")}</li>
                 <li>・{tx("上位3名が次のリーグへ昇格", "Top 3 promote to the next league")}</li>
               </ul>
             </div>
@@ -134,8 +134,8 @@ export function LeagueTutorialFlow({ onComplete, onFinished }: Props) {
               <p className="mt-2 text-3xl font-black tabular-nums">#{result.mockRank}</p>
               <p className="mt-1 text-sm font-semibold text-emerald-50">
                 {tx(
-                  "練習完了！次の土曜から本番リーグに参加できます。",
-                  "Practice done! You're ready for the next Saturday battle.",
+                  "練習完了！本日のお題から本番リーグに参加できます。",
+                  "Practice done! You can join today's battle now.",
                 )}
               </p>
             </div>

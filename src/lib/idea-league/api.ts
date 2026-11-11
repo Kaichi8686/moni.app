@@ -375,7 +375,8 @@ export async function loadLeagueBattle(
         ? String((myVote as { submission_id: string }).submission_id)
         : null;
 
-    const inJudgment = sched.phase === "vote" || sched.phase === "results";
+    // Daily cadence: score as soon as an idea exists (same as local store).
+    const inJudgment = true;
     const submissions: LeagueSubmission[] = (subs ?? [])
       .map((s) => {
         const row = s as Record<string, unknown>;
@@ -535,13 +536,20 @@ export async function finalizeLeagueIfNeeded(
   client: SupabaseClient | null,
   me: MeIdentity,
 ): Promise<LeagueProfileState> {
-  const sched = scheduleFor(leagueNow());
-  if (sched.phase !== "results") return loadLeagueProfile(client, me.userId);
+  // Daily cadence: settle yesterday via local history; remote path stays best-effort.
   const local = finalizeLocalWeek(me.userId);
   if (!client) return local;
   try {
+    const sched = scheduleFor(leagueNow());
+    const prevKey = sched.displayResultsWeekKey;
+    if (!prevKey || prevKey === sched.weekKey) return local;
+
+    const week = await ensureRemoteWeek(client, prevKey);
+    if (!week) return local;
+
     const battle = await loadLeagueBattle(client, me);
-    if (battle.demo) return local;
+    // Prefer local settle when remote still on today's active battle.
+    if (battle.demo || battle.week.weekKey !== prevKey) return local;
 
     const meMember = battle.members.find((m) => m.isMe);
     if (!meMember) return loadLeagueProfile(client, me.userId);

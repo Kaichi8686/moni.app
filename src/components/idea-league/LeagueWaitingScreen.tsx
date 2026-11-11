@@ -52,16 +52,9 @@ export function LeagueWaitingScreen({
             countdownActive={countdownActive}
           />
         ) : (
-          <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-b from-[#FFF4E8] to-white p-4 sm:p-5">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
-              {tx("フレンドマッチ", "Friend Match")}
-            </p>
-            <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
-              {tx("カスタムルーム", "Custom room")}
-            </h1>
-            <p className="mt-2 text-sm text-zinc-500">
-              {tx("作成 → 提出 → AI採点", "Create → submit → AI score")}
-            </p>
+          <section className={leagueCardClass}>
+            <p className="text-[11px] font-medium text-zinc-500">{tx("フレンドマッチ", "Friend Match")}</p>
+            <h1 className="mt-1 text-lg font-bold text-zinc-900">{tx("ルーム", "Room")}</h1>
           </section>
         )
       }
@@ -72,27 +65,14 @@ export function LeagueWaitingScreen({
         <FriendMatchPanel me={{ userId, displayName }} />
       ) : (
         <>
-          <HowToEarnPoints compact />
+          <HowToEarnPoints />
 
           <div className={leagueCardClass}>
             <h2 className="text-sm font-bold text-zinc-900">{tx("開催ルール", "How it works")}</h2>
             <ul className="mt-2 space-y-1.5 text-sm text-zinc-600">
-              <li>・{tx("花を開いて得た種からお題を書く", "Write the prompt from flower seeds")}</li>
-              <li>・{tx("土曜11時〜日曜11時：提出", "Sat 11–Sun 11: submit")}</li>
-              <li>
-                ・
-                {tx(
-                  "日曜11時〜：AI審査で勝ち点 / 水曜11時：結果公表",
-                  "Sun 11+: AI points / Wed 11: results",
-                )}
-              </li>
-              <li>
-                ・
-                {tx(
-                  "初期フェーズはユーザー投票ではなくAI/運営判定",
-                  "Early phase: AI / ops review, not peer votes",
-                )}
-              </li>
+              <li>・{tx("毎日11時にお題更新（24時間提出）", "New prompt daily at 11:00 (24h submit)")}</li>
+              <li>・{tx("提出するとその場で勝ち点が付く", "Submitting awards points immediately")}</li>
+              <li>・{tx("12ptで昇格ライン / 前日分は結果として確定", "12pt promo line / prior day locks as results")}</li>
             </ul>
           </div>
 

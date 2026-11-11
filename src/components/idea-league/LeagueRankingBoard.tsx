@@ -32,7 +32,7 @@ export function LeagueRankingBoard({
       <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
         <div>
           <p className="text-[11px] font-medium tracking-wide text-zinc-500">
-            {title ?? tx("今週の順位表", "This week's board")}
+            {title ?? tx("順位表", "Standings")}
           </p>
           <div className="mt-1">
             <LeagueTierBadge tier={tier} size="sm" flat />

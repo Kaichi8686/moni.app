@@ -143,28 +143,28 @@ export function FriendMatchPanel({ me }: Props) {
 
     return (
       <div className="space-y-3">
-        <section className="overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-[#FFF4E8] via-white to-[#FFE8D2]">
-          <div className="flex items-start justify-between gap-3 border-b border-orange-100 px-4 py-3 sm:px-5">
+        <section className="rounded-2xl border border-zinc-200 bg-white">
+          <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
+              <p className="text-[11px] font-medium text-zinc-500">
                 {tx("ルーム", "Room")} · R{room.round}
               </p>
               <h2 className="mt-1 truncate text-xl font-bold tracking-tight text-zinc-900">{room.name}</h2>
             </div>
-            <span className="shrink-0 rounded-full bg-[#1C1410] px-3 py-1 text-[11px] font-semibold text-orange-200">
+            <span className="shrink-0 rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-semibold text-zinc-600">
               {statusLabel}
             </span>
           </div>
 
           <div className="px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="rounded-xl border border-orange-200 bg-white px-3 py-2 font-mono text-lg font-bold tracking-[0.22em] text-[#1C1410]">
+              <p className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-lg font-bold tracking-[0.22em] text-zinc-900">
                 {room.code}
               </p>
               <button
                 type="button"
                 onClick={() => void copyCode()}
-                className="min-h-11 rounded-xl bg-[#FF9600] px-4 text-sm font-semibold text-white hover:bg-[#f08900]"
+                className="min-h-11 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
               >
                 {copied ? tx("コピー済", "Copied") : tx("コードをコピー", "Copy code")}
               </button>
@@ -175,7 +175,7 @@ export function FriendMatchPanel({ me }: Props) {
                 <li
                   key={m.userId}
                   className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${
-                    m.userId === me.userId ? "bg-orange-100/80" : "bg-white/80"
+                    m.userId === me.userId ? "bg-zinc-100" : "bg-zinc-50"
                   }`}
                 >
                   <div className="min-w-0">
@@ -183,7 +183,7 @@ export function FriendMatchPanel({ me }: Props) {
                       <span className="mr-2 tabular-nums text-zinc-400">#{idx + 1}</span>
                       {m.displayName}
                       {m.isHost ? (
-                        <span className="ml-1.5 text-[10px] font-semibold text-orange-700">
+                        <span className="ml-1.5 text-[10px] font-semibold text-zinc-500">
                           {tx("ホスト", "Host")}
                         </span>
                       ) : null}
@@ -194,7 +194,7 @@ export function FriendMatchPanel({ me }: Props) {
                         : tx("未提出", "Not submitted")}
                     </p>
                   </div>
-                  <p className="text-base font-bold tabular-nums text-[#1C1410]">
+                  <p className="text-base font-bold tabular-nums text-zinc-900">
                     {m.score}
                     <span className="ml-0.5 text-xs font-medium text-zinc-400">pt</span>
                   </p>
@@ -241,8 +241,8 @@ export function FriendMatchPanel({ me }: Props) {
         ) : null}
 
         {(room.status === "playing" || room.status === "results") && room.promptTitle ? (
-          <section className="rounded-2xl border border-orange-200/80 bg-white p-4 sm:p-5">
-            <p className="text-[11px] font-semibold tracking-wide text-orange-700">
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+            <p className="text-[11px] font-medium text-zinc-500">
               {tx("お題", "Prompt")}
             </p>
             <h3 className="mt-1 text-base font-bold text-zinc-900">{room.promptTitle}</h3>
@@ -262,7 +262,7 @@ export function FriendMatchPanel({ me }: Props) {
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value.slice(0, 40))}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:bg-white"
               />
             </label>
             <label className="block">
@@ -271,7 +271,7 @@ export function FriendMatchPanel({ me }: Props) {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={4}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:bg-white"
               />
             </label>
             <label className="block">
@@ -281,7 +281,7 @@ export function FriendMatchPanel({ me }: Props) {
               <input
                 value={appeal}
                 onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-zinc-400 focus:bg-white"
               />
             </label>
             <DuoButton
@@ -320,15 +320,15 @@ export function FriendMatchPanel({ me }: Props) {
         ) : null}
 
         {meMember?.submission ? (
-          <section className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4 sm:p-5">
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold text-orange-700">
+                <p className="text-[11px] font-medium text-zinc-500">
                   {tx("あなたの採点", "Your score")}
                 </p>
                 <h3 className="mt-1 text-base font-bold text-zinc-900">{meMember.submission.title}</h3>
               </div>
-              <p className="text-3xl font-bold tabular-nums text-[#1C1410]">
+              <p className="text-3xl font-bold tabular-nums text-zinc-900">
                 {meMember.submission.review.score}
                 <span className="ml-1 text-sm font-medium text-zinc-500">pt</span>
               </p>
@@ -360,9 +360,9 @@ export function FriendMatchPanel({ me }: Props) {
 
   return (
     <div className="space-y-3">
-      <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-br from-[#FFF4E8] via-white to-[#FFE8D2] p-4 sm:p-5">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
         <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF9600] text-white">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-white">
             <CrossedSwordsIcon />
           </span>
           <div>
@@ -376,9 +376,9 @@ export function FriendMatchPanel({ me }: Props) {
         </div>
       </section>
 
-      <section className={`${leagueCardClass} !border-orange-100`}>
+      <section className={leagueCardClass}>
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-700">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700">
             <PlusIcon />
           </span>
           <h3 className="text-sm font-bold text-zinc-900">{tx("ルームを作成", "Create room")}</h3>
@@ -387,7 +387,7 @@ export function FriendMatchPanel({ me }: Props) {
           value={roomName}
           onChange={(e) => setRoomName(e.target.value.slice(0, 40))}
           placeholder={tx("ルーム名", "Room name")}
-          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none transition focus:border-orange-400 focus:bg-white"
+          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none transition focus:border-zinc-400 focus:bg-white"
         />
         <div className="mt-3">
           <DuoButton
@@ -405,7 +405,7 @@ export function FriendMatchPanel({ me }: Props) {
 
       <section className={leagueCardClass}>
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#1C1410] text-orange-300">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white">
             <KeyIcon />
           </span>
           <h3 className="text-sm font-bold text-zinc-900">{tx("コードで参加", "Join with code")}</h3>
@@ -416,7 +416,7 @@ export function FriendMatchPanel({ me }: Props) {
             setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))
           }
           placeholder="ABC123"
-          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 font-mono text-sm tracking-[0.2em] outline-none transition focus:border-orange-400 focus:bg-white"
+          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 font-mono text-sm tracking-[0.2em] outline-none transition focus:border-zinc-400 focus:bg-white"
         />
         <div className="mt-3">
           <DuoButton

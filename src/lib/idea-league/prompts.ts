@@ -1,4 +1,4 @@
-/** 毎週土曜の共通お題（weekKey から決定論的に選ぶ） */
+/** 毎日のお題（battle day key から決定論的に選ぶ） */
 const WEEKLY_PROMPTS: { title: string; body: string }[] = [
   {
     title: "朝の「あと5分…」をなくすアイデア",

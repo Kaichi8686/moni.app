@@ -1,4 +1,5 @@
 import { reviewIdeaWithAi } from "@/lib/idea-league/aiReview";
+import { addDaysToDateKey } from "@/lib/idea-garden/calendar";
 import { scheduleFor, saturdayWeekKey, saturdayWindow, leagueNow } from "@/lib/idea-league/calendar";
 import { promptForWeek, TUTORIAL_PROMPT } from "@/lib/idea-league/prompts";
 import { PROMOTION_SLOTS, nextLeagueTier, parseLeagueTier } from "@/lib/idea-league/tiers";
@@ -452,13 +453,13 @@ export function castLocalVote(
   return loadLocalBattle(me);
 }
 
-/** 水曜 11:00 の結果公表時に上位3を昇格 */
+/** Previous battle day locks at today's 11:00 — promote top 3 once. */
 export function finalizeLocalWeek(userId: string): LeagueProfileState {
   const store = readStore();
   const profile = ensureProfile(store, userId);
   const sched = scheduleFor(leagueNow());
-  if (sched.phase !== "results") return loadLocalProfile(userId);
-  const weekKey = sched.weekKey;
+  // Daily cadence: finalize yesterday when today's battle is live.
+  const weekKey = addDaysToDateKey(sched.weekKey, -1);
   const weekBucket = store.weeks[weekKey];
   if (!weekBucket) return loadLocalProfile(userId);
   const groupKey = `${profile.tier}-0`;
@@ -485,7 +486,7 @@ export function finalizeLocalWeek(userId: string): LeagueProfileState {
       rank: me.rank,
       voteScore: me.voteScore,
       resultStatus: promoted ? "promoted" : "stayed",
-      endedAt: sched.resultsAt.toISOString(),
+      endedAt: sched.submitStart.toISOString(),
     });
     weekBucket.week.status = "ended";
   }
