@@ -88,7 +88,7 @@ export function LeagueRankingBoard({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-zinc-900">
                     {m.displayName}
-                    {m.isMe ? (
+                    {m.isMe && !/^(あなた|you)$/i.test(m.displayName.trim()) ? (
                       <span className="ml-1.5 text-[11px] font-medium text-[#FF9600]">
                         {tx("あなた", "You")}
                       </span>

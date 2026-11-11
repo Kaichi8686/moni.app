@@ -41,14 +41,14 @@ export function LeagueStatusCard({
   const label = locale === "en" ? meta.labelEn : meta.labelJa;
   const nextLabel = nextMeta ? (locale === "en" ? nextMeta.labelEn : nextMeta.labelJa) : null;
 
-  const promoPct = progress?.promotionMarkerPercent ?? 72;
-  const stayPct = Math.min(promoPct - 1, progress?.stayMarkerPercent ?? 40);
-  const fillPct = progress?.fillPercent ?? 8;
-  const zone: LeagueZone = progress?.zone ?? "stay";
+  // Idle demo geometry so empty state still shows clear eFootball-like zones.
+  const promoPct = progress?.promotionMarkerPercent ?? 70;
+  const stayPct = Math.min(promoPct - 8, progress?.stayMarkerPercent ?? 38);
+  const fillPct = progress?.fillPercent ?? 78;
+  const zone: LeagueZone = progress?.zone ?? "promote";
 
   return (
-    <section className={`${leagueCardClass} lg:min-h-[22rem]`} aria-label={label}>
-      {/* Top: phase + countdown chip */}
+    <section className={`${leagueCardClass} lg:min-h-[24rem]`} aria-label={label}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-medium tracking-wide text-zinc-500">
           {phaseLabel ?? tx("アイデアリーグ", "Idea League")}
@@ -64,7 +64,6 @@ export function LeagueStatusCard({
         ) : null}
       </div>
 
-      {/* Rank badge + title */}
       <div className="mt-4 flex items-center gap-3.5">
         <LeagueTierBadge tier={tier} size="lg" showLabel={false} flat />
         <div className="min-w-0">
@@ -75,7 +74,6 @@ export function LeagueStatusCard({
         </div>
       </div>
 
-      {/* Points + zone chip */}
       <div className="mt-6 flex items-end justify-between gap-3 border-t border-zinc-100 pt-5">
         <div>
           <p className="text-[11px] font-medium text-zinc-500">
@@ -85,6 +83,11 @@ export function LeagueStatusCard({
             {progress ? progress.myScore : 0}
             <span className="ml-1 text-sm font-medium text-zinc-400">pt</span>
           </p>
+          {progress?.myRank ? (
+            <p className="mt-1 text-[12px] font-medium text-zinc-500">
+              {tx(`現在 ${progress.myRank} 位 / ${progress.groupSize} 人`, `Rank #${progress.myRank} of ${progress.groupSize}`)}
+            </p>
+          ) : null}
         </div>
         <ZoneChip
           zone={zone}
@@ -96,83 +99,78 @@ export function LeagueStatusCard({
         />
       </div>
 
-      {/* eFootball-style zone track + live position */}
+      {/* Zone track — always spread so 0pt still reads clearly */}
       <div className="mt-5">
-        <div className="relative h-3 overflow-hidden rounded-full bg-zinc-100">
-          {/* Zone bands (score axis: left=low, right=high) */}
-          <div
-            className="absolute inset-y-0 left-0 bg-zinc-200/80"
-            style={{ width: `${Math.max(stayPct, 0)}%` }}
-            aria-hidden
-          />
-          <div
-            className="absolute inset-y-0 bg-zinc-100"
-            style={{
-              left: `${Math.max(stayPct, 0)}%`,
-              width: `${Math.max(promoPct - stayPct, 0)}%`,
-            }}
-            aria-hidden
-          />
-          <div
-            className="absolute inset-y-0 right-0 bg-emerald-100"
-            style={{ width: `${Math.max(100 - promoPct, 0)}%` }}
-            aria-hidden
-          />
-
-          {/* Current score fill (subtle) */}
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-zinc-800/90 transition-[width] duration-500 ease-out"
-            style={{ width: `${fillPct}%` }}
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={progress?.maxScore ?? 100}
-            aria-valuenow={progress?.myScore ?? 0}
-          />
-
-          {/* Line ticks */}
-          <Tick percent={stayPct} className="bg-zinc-400" />
-          <Tick percent={promoPct} className="bg-emerald-600" />
-
-          {/* Live position marker */}
-          <div
-            className="absolute top-1/2 z-[2] h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-zinc-900 shadow-sm transition-[left] duration-500 ease-out"
-            style={{ left: `${Math.min(98, Math.max(2, fillPct))}%` }}
-            aria-hidden
-          />
+        <div className="mb-2 flex justify-between text-[10px] font-semibold tracking-wide">
+          <span className="text-zinc-400">{tx("下位", "Lower")}</span>
+          <span className="text-zinc-500">{tx("残留", "Stay")}</span>
+          <span className="text-emerald-700">{tx("昇格", "Promo")}</span>
         </div>
 
-        <div className="relative mt-2 h-4 text-[10px] font-medium text-zinc-500">
+        <div className="relative h-4 overflow-hidden rounded-full border border-zinc-200/80">
+          <div className="absolute inset-y-0 left-0 bg-[#E4E4E7]" style={{ width: `${stayPct}%` }} />
+          <div
+            className="absolute inset-y-0 bg-[#F4F4F5]"
+            style={{ left: `${stayPct}%`, width: `${Math.max(promoPct - stayPct, 0)}%` }}
+          />
+          <div
+            className="absolute inset-y-0 bg-emerald-200/90"
+            style={{ left: `${promoPct}%`, width: `${Math.max(100 - promoPct, 0)}%` }}
+          />
+
+          <Tick percent={stayPct} className="bg-zinc-500" />
+          <Tick percent={promoPct} className="bg-emerald-700" />
+
+          <div
+            className="absolute top-1/2 z-[3] flex -translate-x-1/2 -translate-y-1/2 items-center justify-center transition-[left] duration-500 ease-out"
+            style={{ left: `${Math.min(96, Math.max(4, fillPct))}%` }}
+          >
+            <span className="h-5 w-5 rounded-full border-[2.5px] border-white bg-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.25)]" />
+          </div>
+        </div>
+
+        <div className="relative mt-2.5 h-5 text-[10px] font-medium text-zinc-500">
           <span
             className="absolute -translate-x-1/2 whitespace-nowrap"
-            style={{ left: `${Math.min(92, Math.max(8, stayPct))}%` }}
+            style={{ left: `${clampLabel(stayPct)}%` }}
           >
             {tx("維持ライン", "Stay line")}
           </span>
           <span
             className="absolute -translate-x-1/2 whitespace-nowrap text-emerald-700"
-            style={{ left: `${Math.min(94, Math.max(12, promoPct))}%` }}
+            style={{ left: `${clampLabel(promoPct)}%` }}
           >
             {tx("昇格ライン", "Promo line")}
           </span>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-medium text-zinc-500">
-          <LegendDot className="bg-emerald-200" label={tx("昇格ゾーン", "Promotion")} />
-          <LegendDot className="bg-zinc-100 ring-1 ring-zinc-200" label={tx("残留ゾーン", "Stay")} />
-          <LegendDot className="bg-zinc-200" label={tx("下位", "Lower")} />
-        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">
+          {progress?.rankBased
+            ? tx(
+                "票が分かれるまで、順位でゾーン位置を表示しています。",
+                "Showing zone by rank until votes separate the scores.",
+              )
+            : tx(
+                "票が増えるとマーカーが右へ動きます。",
+                "The marker moves right as you gain votes.",
+              )}
+        </p>
       </div>
 
       {idleHint && !progress ? (
-        <p className="mt-4 text-[12px] leading-relaxed text-zinc-400">
+        <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">
           {tx(
-            "バトルが始まると、票に合わせて位置が動きます。",
-            "Once the battle starts, your marker moves with votes.",
+            "バトルが始まると、順位に合わせて位置が動きます。",
+            "Once the battle starts, your marker follows your rank.",
           )}
         </p>
       ) : null}
     </section>
   );
+}
+
+function clampLabel(pct: number) {
+  return Math.min(88, Math.max(12, pct));
 }
 
 function ZoneChip({
@@ -192,7 +190,7 @@ function ZoneChip({
 }) {
   if (zone === "promote") {
     return (
-      <p className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+      <p className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white">
         {tx("昇格ゾーン内", "Promotion zone")}
         {rank ? ` · #${rank}` : ""}
       </p>
@@ -201,12 +199,12 @@ function ZoneChip({
   if (zone === "risk") {
     return (
       <div className="text-right">
-        <p className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
+        <p className="inline-flex items-center rounded-full bg-zinc-700 px-3 py-1 text-[11px] font-semibold text-white">
           {tx("下位ゾーン", "Lower zone")}
           {rank ? ` · #${rank}` : ""}
         </p>
         {nextLabel ? (
-          <p className="mt-1 text-[11px] text-zinc-400">
+          <p className="mt-1.5 text-[11px] text-zinc-500">
             {tx(
               `昇格まであと ${pointsToPromotion ?? "—"} pt`,
               `${pointsToPromotion ?? "—"} pt to promote`,
@@ -218,12 +216,12 @@ function ZoneChip({
   }
   return (
     <div className="text-right">
-      <p className="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700">
+      <p className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-700">
         {tx("残留ゾーン", "Stay zone")}
         {rank ? ` · #${rank}` : ""}
       </p>
       {nextLabel ? (
-        <p className="mt-1 text-[11px] text-zinc-400">
+        <p className="mt-1.5 text-[11px] text-zinc-500">
           {tx(
             `昇格まであと ${pointsToPromotion ?? "—"} pt · TOP ${promotionCutoff}`,
             `${pointsToPromotion ?? "—"} pt · TOP ${promotionCutoff}`,
@@ -237,18 +235,9 @@ function ZoneChip({
 function Tick({ percent, className }: { percent: number; className: string }) {
   return (
     <div
-      className={`absolute top-0 z-[1] h-full w-0.5 -translate-x-1/2 ${className}`}
+      className={`absolute top-0 z-[2] h-full w-0.5 -translate-x-1/2 ${className}`}
       style={{ left: `${Math.min(98, Math.max(2, percent))}%` }}
       aria-hidden
     />
-  );
-}
-
-function LegendDot({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`h-2 w-2 rounded-sm ${className}`} aria-hidden />
-      {label}
-    </span>
   );
 }
