@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FriendMatchPanel } from "@/components/idea-league/FriendMatchPanel";
+import { HowToEarnPoints } from "@/components/idea-league/HowToEarnPoints";
 import { LeagueIncentivesPanel } from "@/components/idea-league/LeagueIncentivesPanel";
 import { LeagueModeTabs, type LeaguePlayMode } from "@/components/idea-league/LeagueModeTabs";
 import { LeaguePromptComposer } from "@/components/idea-league/LeaguePromptComposer";
@@ -51,15 +52,15 @@ export function LeagueWaitingScreen({
             countdownActive={countdownActive}
           />
         ) : (
-          <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-b from-teal-50 to-white p-4 sm:p-5">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-teal-700/80 uppercase">
+          <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-b from-[#FFF4E8] to-white p-4 sm:p-5">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
               {tx("フレンドマッチ", "Friend Match")}
             </p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
               {tx("カスタムルーム", "Custom room")}
             </h1>
             <p className="mt-2 text-sm text-zinc-500">
-              {tx("招待コードで即対戦", "Join instantly with a code")}
+              {tx("作成 → 提出 → AI採点", "Create → submit → AI score")}
             </p>
           </section>
         )
@@ -71,6 +72,8 @@ export function LeagueWaitingScreen({
         <FriendMatchPanel me={{ userId, displayName }} />
       ) : (
         <>
+          <HowToEarnPoints compact />
+
           <div className={leagueCardClass}>
             <h2 className="text-sm font-bold text-zinc-900">{tx("開催ルール", "How it works")}</h2>
             <ul className="mt-2 space-y-1.5 text-sm text-zinc-600">

@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { leagueCardClass } from "@/components/idea-league/LeagueShell";
 import {
   createFriendRoom,
+  finishFriendRound,
   getActiveFriendRoom,
   joinFriendRoom,
   leaveFriendRoom,
+  rankedFriendMembers,
+  startFriendRound,
+  submitFriendIdea,
   type FriendMatchRoom,
 } from "@/lib/idea-league/friendMatchStore";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -19,23 +23,42 @@ type Props = {
 };
 
 export function FriendMatchPanel({ me }: Props) {
-  const { tx } = useI18n();
+  const { locale, tx } = useI18n();
   const [roomName, setRoomName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [room, setRoom] = useState<FriendMatchRoom | null>(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [appeal, setAppeal] = useState("");
 
   useEffect(() => {
-    setRoom(getActiveFriendRoom(me.userId));
+    const active = getActiveFriendRoom(me.userId);
+    setRoom(active);
+    const mine = active?.members.find((m) => m.userId === me.userId)?.submission;
+    if (mine) {
+      setTitle(mine.title);
+      setContent(mine.content);
+      setAppeal(mine.appeal ?? "");
+    }
   }, [me.userId]);
+
+  const ranked = useMemo(() => (room ? rankedFriendMembers(room) : []), [room]);
+  const meMember = room?.members.find((m) => m.userId === me.userId) ?? null;
+  const canControl =
+    Boolean(room) && (room!.hostUserId === me.userId || room!.members.length === 1);
 
   function mapError(code: string) {
     if (code === "ROOM_NAME_REQUIRED") return tx("ルーム名を入力してください", "Enter a room name");
     if (code === "CODE_INVALID") return tx("招待コードが短すぎます", "Invite code is too short");
     if (code === "ROOM_NOT_FOUND") return tx("ルームが見つかりません", "Room not found");
     if (code === "ROOM_FULL") return tx("ルームが満員です（8人まで）", "Room is full (max 8)");
+    if (code === "HOST_ONLY") return tx("ホストだけが操作できます", "Only the host can do that");
+    if (code === "IDEA_REQUIRED") return tx("タイトルと内容を入力してください", "Enter title and idea");
+    if (code === "NOT_PLAYING") return tx("試合を開始してから提出できます", "Start the match first");
+    if (code === "NOT_IN_ROOM") return tx("ルームに参加していません", "You are not in this room");
     return tx("うまくいきませんでした", "Something went wrong");
   }
 
@@ -50,6 +73,9 @@ export function FriendMatchPanel({ me }: Props) {
       });
       setRoom(next);
       setRoomName("");
+      setTitle("");
+      setContent("");
+      setAppeal("");
     } catch (e) {
       setErr(mapError(e instanceof Error ? e.message : ""));
     } finally {
@@ -90,100 +116,269 @@ export function FriendMatchPanel({ me }: Props) {
     leaveFriendRoom(me.userId);
     setRoom(null);
     setErr("");
+    setTitle("");
+    setContent("");
+    setAppeal("");
+  }
+
+  function run(action: () => FriendMatchRoom) {
+    setBusy(true);
+    setErr("");
+    try {
+      setRoom(action());
+    } catch (e) {
+      setErr(mapError(e instanceof Error ? e.message : ""));
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (room) {
+    const statusLabel =
+      room.status === "lobby"
+        ? tx("待機中", "Lobby")
+        : room.status === "playing"
+          ? tx("試合中", "Playing")
+          : tx("結果", "Results");
+
     return (
-      <div className="space-y-4">
-        <section className="overflow-hidden rounded-2xl border border-teal-200/80 bg-gradient-to-br from-teal-50 via-white to-sky-50">
-          <div className="border-b border-teal-100/80 px-4 py-3 sm:px-5">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-teal-700/80 uppercase">
-              {tx("ルーム", "Room")}
-            </p>
-            <h2 className="mt-1 text-xl font-bold tracking-tight text-zinc-900">{room.name}</h2>
+      <div className="space-y-3">
+        <section className="overflow-hidden rounded-2xl border border-orange-200/80 bg-gradient-to-br from-[#FFF4E8] via-white to-[#FFE8D2]">
+          <div className="flex items-start justify-between gap-3 border-b border-orange-100 px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
+                {tx("ルーム", "Room")} · R{room.round}
+              </p>
+              <h2 className="mt-1 truncate text-xl font-bold tracking-tight text-zinc-900">{room.name}</h2>
+            </div>
+            <span className="shrink-0 rounded-full bg-[#1C1410] px-3 py-1 text-[11px] font-semibold text-orange-200">
+              {statusLabel}
+            </span>
           </div>
 
-          <div className="px-4 py-5 sm:px-5">
-            <p className="text-[11px] font-medium text-zinc-500">{tx("招待コード", "Invite code")}</p>
-            <div className="mt-2 flex items-center gap-2">
-              <p className="rounded-xl border border-teal-200 bg-white px-4 py-3 font-mono text-2xl font-bold tracking-[0.28em] text-teal-900">
+          <div className="px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="rounded-xl border border-orange-200 bg-white px-3 py-2 font-mono text-lg font-bold tracking-[0.22em] text-[#1C1410]">
                 {room.code}
               </p>
               <button
                 type="button"
                 onClick={() => void copyCode()}
-                className="min-h-12 rounded-xl border border-teal-200 bg-teal-600 px-4 text-sm font-semibold text-white transition hover:bg-teal-700"
+                className="min-h-11 rounded-xl bg-[#FF9600] px-4 text-sm font-semibold text-white hover:bg-[#f08900]"
               >
-                {copied ? tx("コピー済", "Copied") : tx("コピー", "Copy")}
+                {copied ? tx("コピー済", "Copied") : tx("コードをコピー", "Copy code")}
               </button>
             </div>
 
-            <ul className="mt-5 space-y-2">
-              {room.members.map((m) => (
+            <ul className="mt-4 space-y-1.5">
+              {ranked.map((m, idx) => (
                 <li
                   key={m.userId}
-                  className="flex items-center justify-between rounded-xl border border-white/80 bg-white/70 px-3 py-2.5"
+                  className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${
+                    m.userId === me.userId ? "bg-orange-100/80" : "bg-white/80"
+                  }`}
                 >
-                  <span className="truncate text-sm font-semibold text-zinc-900">
-                    {m.displayName}
-                    {m.userId === me.userId ? (
-                      <span className="ml-1.5 text-[11px] font-medium text-teal-700">
-                        {tx("あなた", "You")}
-                      </span>
-                    ) : null}
-                  </span>
-                  {m.isHost ? (
-                    <span className="rounded-md bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
-                      {tx("ホスト", "Host")}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-medium text-zinc-400">
-                      {tx("参加者", "Member")}
-                    </span>
-                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-900">
+                      <span className="mr-2 tabular-nums text-zinc-400">#{idx + 1}</span>
+                      {m.displayName}
+                      {m.isHost ? (
+                        <span className="ml-1.5 text-[10px] font-semibold text-orange-700">
+                          {tx("ホスト", "Host")}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      {m.submission
+                        ? tx("提出済み", "Submitted")
+                        : tx("未提出", "Not submitted")}
+                    </p>
+                  </div>
+                  <p className="text-base font-bold tabular-nums text-[#1C1410]">
+                    {m.score}
+                    <span className="ml-0.5 text-xs font-medium text-zinc-400">pt</span>
+                  </p>
                 </li>
               ))}
             </ul>
-
-            <p className="mt-4 text-[12px] text-zinc-500">
-              {tx(
-                `${room.members.length} / 8 人 · コードを共有して招待`,
-                `${room.members.length} / 8 · share the code to invite`,
-              )}
-            </p>
-
-            <button
-              type="button"
-              onClick={handleLeave}
-              className="mt-4 w-full rounded-xl border border-zinc-200 bg-white py-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"
-            >
-              {tx("ルームを退出", "Leave room")}
-            </button>
           </div>
         </section>
+
+        {(room.status === "lobby" || room.status === "results") && canControl ? (
+          <section className={leagueCardClass}>
+            <h3 className="text-sm font-bold text-zinc-900">
+              {room.status === "results"
+                ? tx("次のラウンドへ", "Next round")
+                : tx("試合を始める", "Start match")}
+            </h3>
+            <p className="mt-1 text-[13px] text-zinc-500">
+              {tx(
+                "お題が出て、アイデア提出 → AI採点で勝ち点が入ります。1人でも遊べます。",
+                "A prompt appears — submit ideas, AI scores points. Solo works too.",
+              )}
+            </p>
+            <div className="mt-3">
+              <DuoButton
+                type="button"
+                tone="orange"
+                size="lg"
+                fullWidth
+                disabled={busy}
+                onClick={() => run(() => startFriendRound({ userId: me.userId, roomId: room.id }))}
+              >
+                {room.status === "results"
+                  ? tx("次のお題で再開", "Start next prompt")
+                  : tx("お題を出して開始", "Deal prompt & start")}
+              </DuoButton>
+            </div>
+          </section>
+        ) : null}
+
+        {room.status === "lobby" && !canControl ? (
+          <p className={`${leagueCardClass} text-center text-sm text-zinc-500`}>
+            {tx("ホストの試合開始を待っています…", "Waiting for the host to start…")}
+          </p>
+        ) : null}
+
+        {(room.status === "playing" || room.status === "results") && room.promptTitle ? (
+          <section className="rounded-2xl border border-orange-200/80 bg-white p-4 sm:p-5">
+            <p className="text-[11px] font-semibold tracking-wide text-orange-700">
+              {tx("お題", "Prompt")}
+            </p>
+            <h3 className="mt-1 text-base font-bold text-zinc-900">{room.promptTitle}</h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{room.promptBody}</p>
+          </section>
+        ) : null}
+
+        {room.status === "playing" ? (
+          <section className={`space-y-3 ${leagueCardClass}`}>
+            <h3 className="text-sm font-bold text-zinc-900">
+              {meMember?.submission
+                ? tx("アイデアを更新して再採点", "Update idea & re-score")
+                : tx("アイデアを提出して勝ち点ゲット", "Submit idea for points")}
+            </h3>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-600">{tx("タイトル", "Title")}</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value.slice(0, 40))}
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-600">{tx("アイデア", "Idea")}</span>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-zinc-600">
+                {tx("ひとこと（任意）", "Pitch (optional)")}
+              </span>
+              <input
+                value={appeal}
+                onChange={(e) => setAppeal(e.target.value.slice(0, 140))}
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none focus:border-orange-400 focus:bg-white"
+              />
+            </label>
+            <DuoButton
+              type="button"
+              tone="orange"
+              size="lg"
+              fullWidth
+              disabled={busy}
+              onClick={() =>
+                run(() =>
+                  submitFriendIdea({
+                    userId: me.userId,
+                    roomId: room.id,
+                    title,
+                    content,
+                    appeal,
+                  }),
+                )
+              }
+            >
+              {meMember?.submission
+                ? tx("再提出して採点", "Resubmit & score")
+                : tx("提出してAI採点", "Submit for AI score")}
+            </DuoButton>
+            {canControl ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => run(() => finishFriendRound({ userId: me.userId, roomId: room.id }))}
+                className="w-full rounded-xl border border-zinc-200 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"
+              >
+                {tx("結果を締める", "Close round")}
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {meMember?.submission ? (
+          <section className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4 sm:p-5">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold text-orange-700">
+                  {tx("あなたの採点", "Your score")}
+                </p>
+                <h3 className="mt-1 text-base font-bold text-zinc-900">{meMember.submission.title}</h3>
+              </div>
+              <p className="text-3xl font-bold tabular-nums text-[#1C1410]">
+                {meMember.submission.review.score}
+                <span className="ml-1 text-sm font-medium text-zinc-500">pt</span>
+              </p>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-700">
+              {locale === "en"
+                ? meMember.submission.review.commentEn
+                : meMember.submission.review.commentJa}
+            </p>
+          </section>
+        ) : null}
+
+        {err ? (
+          <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-center text-[13px] font-medium text-rose-700">
+            {err}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={handleLeave}
+          className="w-full rounded-xl border border-zinc-200 bg-white py-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"
+        >
+          {tx("ルームを退出", "Leave room")}
+        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-br from-[#F2FBFA] via-white to-[#EEF6FF] p-4 sm:p-5">
+      <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-br from-[#FFF4E8] via-white to-[#FFE8D2] p-4 sm:p-5">
         <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-teal-600 text-white">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF9600] text-white">
             <CrossedSwordsIcon />
           </span>
           <div>
             <h2 className="text-lg font-bold tracking-tight text-zinc-900">
               {tx("フレンドマッチ", "Friend Match")}
             </h2>
-            <p className="text-[13px] text-zinc-500">{tx("友達と小さなルームで対戦", "Private rooms with friends")}</p>
+            <p className="text-[13px] text-zinc-500">
+              {tx("作ってすぐ提出・AI採点まで遊べる", "Create, submit, and score right away")}
+            </p>
           </div>
         </div>
       </section>
 
-      <section className={`${leagueCardClass} !border-teal-100`}>
+      <section className={`${leagueCardClass} !border-orange-100`}>
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-700">
             <PlusIcon />
           </span>
           <h3 className="text-sm font-bold text-zinc-900">{tx("ルームを作成", "Create room")}</h3>
@@ -192,7 +387,7 @@ export function FriendMatchPanel({ me }: Props) {
           value={roomName}
           onChange={(e) => setRoomName(e.target.value.slice(0, 40))}
           placeholder={tx("ルーム名", "Room name")}
-          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none transition focus:border-teal-400 focus:bg-white"
+          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 text-sm outline-none transition focus:border-orange-400 focus:bg-white"
         />
         <div className="mt-3">
           <DuoButton
@@ -210,21 +405,23 @@ export function FriendMatchPanel({ me }: Props) {
 
       <section className={leagueCardClass}>
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#1C1410] text-orange-300">
             <KeyIcon />
           </span>
           <h3 className="text-sm font-bold text-zinc-900">{tx("コードで参加", "Join with code")}</h3>
         </div>
         <input
           value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+          onChange={(e) =>
+            setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))
+          }
           placeholder="ABC123"
-          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 font-mono text-sm tracking-[0.2em] outline-none transition focus:border-sky-400 focus:bg-white"
+          className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 font-mono text-sm tracking-[0.2em] outline-none transition focus:border-orange-400 focus:bg-white"
         />
         <div className="mt-3">
           <DuoButton
             type="button"
-            tone="sky"
+            tone="orange"
             size="lg"
             fullWidth
             disabled={busy || inviteCode.trim().length < 4}
@@ -269,7 +466,12 @@ function KeyIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <circle cx="8" cy="14" r="3.2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M11 12.5l7.5-7.5M16 5.5l2.5 2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M11 12.5l7.5-7.5M16 5.5l2.5 2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

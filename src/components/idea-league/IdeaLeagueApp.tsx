@@ -229,15 +229,15 @@ export function IdeaLeagueApp({
 
   const shell = (body: ReactNode) => (
     <div
-      className={`relative min-h-[100dvh] bg-gradient-to-b from-[#FFF8EF] via-[#F4F7FF] to-[#E8F7F0] ${
+      className={`relative min-h-[100dvh] overflow-x-hidden bg-[radial-gradient(120%_80%_at_10%_-10%,#FFB347_0%,transparent_55%),radial-gradient(90%_70%_at_100%_0%,#FF7A1A55_0%,transparent_50%),linear-gradient(180deg,#FFF3E4_0%,#FFE0C2_42%,#FFF8F0_100%)] ${
         embedded || hideChrome ? "" : "pb-bottom-nav"
       }`}
     >
       {hideChrome ? null : (
-        <header className="sticky top-0 z-30 border-b border-zinc-100/80 bg-white/90 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-orange-200/70 bg-[#FFF7ED]/92 backdrop-blur">
           <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
             <AppBrandHeader bare />
-            <p className="mt-1 text-center text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#FF9600]">
+            <p className="mt-1 text-center text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#C2410C]">
               {tx("アイデアリーグ", "Idea League")}
             </p>
           </div>

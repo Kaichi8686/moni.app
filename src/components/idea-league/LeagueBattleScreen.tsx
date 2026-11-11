@@ -5,6 +5,7 @@ import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { AiReviewCard } from "@/components/idea-league/AiReviewCard";
 import { EmptyVoteState } from "@/components/idea-league/EmptyVoteState";
 import { FriendMatchPanel } from "@/components/idea-league/FriendMatchPanel";
+import { HowToEarnPoints } from "@/components/idea-league/HowToEarnPoints";
 import { LeagueModeTabs, type LeaguePlayMode } from "@/components/idea-league/LeagueModeTabs";
 import { LeagueRankingBoard } from "@/components/idea-league/LeagueRankingBoard";
 import { LeagueShell, leagueCardClass } from "@/components/idea-league/LeagueShell";
@@ -86,17 +87,21 @@ export function LeagueBattleScreen({
             members={battle.members}
             promotionCutoff={battle.promotionCutoff}
             countdownActive={countdownActive}
+            onEarnPoints={() => {
+              setPlayMode("league");
+              setTab("prompt");
+            }}
           />
         ) : (
-          <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-b from-teal-50 to-white p-4 sm:p-5">
-            <p className="text-[11px] font-semibold tracking-[0.14em] text-teal-700/80 uppercase">
+          <section className="rounded-2xl border border-orange-200/80 bg-gradient-to-b from-[#FFF4E8] to-white p-4 sm:p-5">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-orange-700/80 uppercase">
               {tx("フレンドマッチ", "Friend Match")}
             </p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
               {tx("カスタムルーム", "Custom room")}
             </h1>
             <p className="mt-2 text-sm text-zinc-500">
-              {tx("招待コードで即対戦", "Join instantly with a code")}
+              {tx("作成 → 提出 → AI採点", "Create → submit → AI score")}
             </p>
           </section>
         )
@@ -108,8 +113,14 @@ export function LeagueBattleScreen({
         <FriendMatchPanel me={me} />
       ) : (
         <>
+          {!battle.mySubmission || (battle.members.find((m) => m.isMe)?.voteScore ?? 0) === 0 ? (
+            <HowToEarnPoints
+              onStart={() => setTab(phase === "submit" ? "prompt" : "judge")}
+            />
+          ) : null}
+
           <section className={leagueCardClass}>
-            <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+            <p className="text-[11px] font-semibold tracking-wide text-orange-700">
               {tx("今週の共通お題", "This week's shared prompt")}
             </p>
             <h2 className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
@@ -118,7 +129,7 @@ export function LeagueBattleScreen({
             <p className="mt-2 text-sm leading-relaxed text-zinc-600">{battle.week.promptBody}</p>
           </section>
 
-          <div className="grid grid-cols-3 gap-1 rounded-2xl border border-zinc-200/90 bg-white p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-2xl border border-orange-200/80 bg-white/95 p-1">
             {(
               [
                 ["prompt", phase === "submit" ? tx("提出", "Submit") : tx("お題", "Prompt")],
@@ -131,7 +142,9 @@ export function LeagueBattleScreen({
                 type="button"
                 onClick={() => setTab(id)}
                 className={`min-h-10 rounded-xl text-xs font-semibold transition sm:text-sm ${
-                  tab === id ? "bg-[#FF9600] text-white" : "text-zinc-500 hover:text-zinc-700"
+                  tab === id
+                    ? "bg-[#FF9600] text-white shadow-[0_3px_0_#d97706]"
+                    : "text-zinc-500 hover:bg-orange-50 hover:text-zinc-800"
                 }`}
               >
                 {label}
@@ -210,30 +223,14 @@ export function LeagueBattleScreen({
           ) : null}
 
           {tab === "judge" ? (
-            phase === "submit" ? (
-              battle.mySubmission ? (
-                <div className={`${leagueCardClass} text-center`}>
-                  <p className="text-sm font-semibold text-zinc-800">
-                    {tx("提出済み — 判定待ち", "Submitted — awaiting judgment")}
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    {tx(
-                      "日曜朝11時からAI審査が始まり、勝ち点とフィードバックが届きます。",
-                      "AI review starts Sunday 11:00 with points and feedback.",
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
-              )
-            ) : !battle.mySubmission ? (
+            !battle.mySubmission ? (
               <EmptyVoteState onSubmitIdea={() => setTab("prompt")} />
             ) : myReview ? (
               <div className="space-y-3">
                 <p className="text-sm text-zinc-600">
                   {tx(
-                    "初期フェーズはユーザー投票ではなく、AI審査（または運営判定）で勝ち点が決まります。",
-                    "Early phase uses AI / ops review for points — not peer votes.",
+                    "提出したアイデアをAIが採点。この勝ち点で昇格ラインを狙います。",
+                    "AI scored your idea. Use these points to chase the promotion line.",
                   )}
                 </p>
                 <AiReviewCard submission={battle.mySubmission} review={myReview} />

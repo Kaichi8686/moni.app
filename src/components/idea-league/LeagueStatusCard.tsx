@@ -22,6 +22,7 @@ type Props = {
   promotionCutoff?: number;
   idleHint?: boolean;
   countdownActive?: boolean;
+  onEarnPoints?: () => void;
 };
 
 export function LeagueStatusCard({
@@ -33,6 +34,7 @@ export function LeagueStatusCard({
   promotionCutoff = PROMOTION_SLOTS,
   idleHint,
   countdownActive = true,
+  onEarnPoints,
 }: Props) {
   const { locale, tx } = useI18n();
   const meta = LEAGUE_TIER_META[tier];
@@ -56,9 +58,12 @@ export function LeagueStatusCard({
   const promoTarget = progress?.promotionLineScore ?? AI_PROMOTION_LINE;
 
   return (
-    <section className={`${leagueCardClass} lg:min-h-[24rem]`} aria-label={label}>
+    <section
+      className={`${leagueCardClass} border-orange-200/80 bg-gradient-to-b from-white to-orange-50/40 lg:min-h-[24rem]`}
+      aria-label={label}
+    >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+        <p className="text-[11px] font-semibold tracking-wide text-orange-700/80">
           {phaseLabel ?? tx("アイデアリーグ", "Idea League")}
         </p>
         {countdownTarget ? (
@@ -190,7 +195,30 @@ export function LeagueStatusCard({
         </p>
       </div>
 
-      {idleHint && !progress ? (
+      {myScore === 0 ? (
+        <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/80 px-3 py-3">
+          <p className="text-[12px] font-semibold text-orange-900">
+            {tx("勝ち点はこう稼ぐ", "How you earn points")}
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-orange-800/80">
+            {tx(
+              "お題にアイデアを提出 → AI判定でpt付与 → 12ptで昇格ライン。",
+              "Submit to the prompt → AI awards pt → 12pt hits promotion.",
+            )}
+          </p>
+          {onEarnPoints ? (
+            <button
+              type="button"
+              onClick={onEarnPoints}
+              className="mt-2.5 w-full rounded-xl bg-[#FF9600] py-2.5 text-sm font-semibold text-white hover:bg-[#f08900]"
+            >
+              {tx("アイデアを出してptを稼ぐ", "Submit an idea for pt")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {idleHint && !progress && myScore !== 0 ? (
         <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">
           {tx(
             "アイデアを提出すると、判定フェーズで勝ち点が入ります。",

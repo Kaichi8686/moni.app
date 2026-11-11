@@ -1,9 +1,24 @@
+import { reviewIdeaWithAi } from "@/lib/idea-league/aiReview";
+import { promptForWeek } from "@/lib/idea-league/prompts";
+import { saturdayWeekKey, leagueNow } from "@/lib/idea-league/calendar";
+import type { LeagueAiReview } from "@/lib/idea-league/types";
+
 export type FriendMatchMember = {
   userId: string;
   displayName: string;
   joinedAt: string;
   isHost: boolean;
+  score: number;
+  submission: {
+    title: string;
+    content: string;
+    appeal: string | null;
+    review: LeagueAiReview;
+    submittedAt: string;
+  } | null;
 };
+
+export type FriendMatchStatus = "lobby" | "playing" | "results";
 
 export type FriendMatchRoom = {
   id: string;
@@ -11,19 +26,21 @@ export type FriendMatchRoom = {
   name: string;
   hostUserId: string;
   members: FriendMatchMember[];
+  status: FriendMatchStatus;
+  promptTitle: string;
+  promptBody: string;
+  round: number;
   createdAt: string;
   updatedAt: string;
 };
 
 type StoreShape = {
   rooms: Record<string, FriendMatchRoom>;
-  /** code (upper) → room id */
   byCode: Record<string, string>;
-  /** userId → active room id */
   activeByUser: Record<string, string>;
 };
 
-const STORAGE_KEY = "moni.friendMatch.v1";
+const STORAGE_KEY = "moni.friendMatch.v2";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function emptyStore(): StoreShape {
@@ -34,12 +51,36 @@ function readStore(): StoreShape {
   if (typeof window === "undefined") return emptyStore();
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyStore();
+    if (!raw) {
+      // one-time migrate from v1 lobby-only rooms
+      const legacy = window.localStorage.getItem("moni.friendMatch.v1");
+      if (!legacy) return emptyStore();
+      const parsed = JSON.parse(legacy) as StoreShape;
+      if (!parsed.rooms) return emptyStore();
+      for (const room of Object.values(parsed.rooms)) {
+        normalizeRoom(room);
+      }
+      writeStore(parsed);
+      return parsed;
+    }
     const parsed = JSON.parse(raw) as StoreShape;
     if (!parsed.rooms || !parsed.byCode || !parsed.activeByUser) return emptyStore();
+    for (const room of Object.values(parsed.rooms)) normalizeRoom(room);
     return parsed;
   } catch {
     return emptyStore();
+  }
+}
+
+function normalizeRoom(room: FriendMatchRoom) {
+  room.status ??= "lobby";
+  room.round ??= 1;
+  room.promptTitle ??= "";
+  room.promptBody ??= "";
+  for (const m of room.members) {
+    m.score ??= 0;
+    m.submission ??= null;
+    m.isHost = m.userId === room.hostUserId;
   }
 }
 
@@ -67,11 +108,25 @@ function makeInviteCode(store: StoreShape): string {
   return `M${Date.now().toString(36).slice(-5).toUpperCase()}`;
 }
 
+function pickPrompt(seed: string) {
+  return promptForWeek(seed || saturdayWeekKey(leagueNow()));
+}
+
+function getRoomOrThrow(store: StoreShape, roomId: string): FriendMatchRoom {
+  const room = store.rooms[roomId];
+  if (!room) throw new Error("ROOM_NOT_FOUND");
+  normalizeRoom(room);
+  return room;
+}
+
 export function getActiveFriendRoom(userId: string): FriendMatchRoom | null {
   const store = readStore();
   const roomId = store.activeByUser[userId];
   if (!roomId) return null;
-  return store.rooms[roomId] ?? null;
+  const room = store.rooms[roomId];
+  if (!room) return null;
+  normalizeRoom(room);
+  return room;
 }
 
 export function createFriendRoom(input: {
@@ -86,6 +141,7 @@ export function createFriendRoom(input: {
   const now = new Date().toISOString();
   const code = makeInviteCode(store);
   const id = makeId("fr");
+  const prompt = pickPrompt(`${id}-1`);
   const room: FriendMatchRoom = {
     id,
     code,
@@ -97,8 +153,14 @@ export function createFriendRoom(input: {
         displayName: input.displayName.trim() || "Host",
         joinedAt: now,
         isHost: true,
+        score: 0,
+        submission: null,
       },
     ],
+    status: "lobby",
+    promptTitle: prompt.title,
+    promptBody: prompt.body,
+    round: 1,
     createdAt: now,
     updatedAt: now,
   };
@@ -120,8 +182,7 @@ export function joinFriendRoom(input: {
   const store = readStore();
   const roomId = store.byCode[code];
   if (!roomId) throw new Error("ROOM_NOT_FOUND");
-  const room = store.rooms[roomId];
-  if (!room) throw new Error("ROOM_NOT_FOUND");
+  const room = getRoomOrThrow(store, roomId);
 
   const now = new Date().toISOString();
   const existing = room.members.find((m) => m.userId === input.userId);
@@ -132,6 +193,8 @@ export function joinFriendRoom(input: {
       displayName: input.displayName.trim() || "Guest",
       joinedAt: now,
       isHost: false,
+      score: 0,
+      submission: null,
     });
   } else {
     existing.displayName = input.displayName.trim() || existing.displayName;
@@ -148,6 +211,7 @@ export function leaveFriendRoom(userId: string): void {
   if (!roomId) return;
   const room = store.rooms[roomId];
   if (room) {
+    normalizeRoom(room);
     room.members = room.members.filter((m) => m.userId !== userId);
     room.updatedAt = new Date().toISOString();
     if (room.members.length === 0) {
@@ -163,7 +227,97 @@ export function leaveFriendRoom(userId: string): void {
   writeStore(store);
 }
 
-export function refreshFriendRoom(roomId: string): FriendMatchRoom | null {
+export function startFriendRound(input: { userId: string; roomId: string }): FriendMatchRoom {
   const store = readStore();
-  return store.rooms[roomId] ?? null;
+  const room = getRoomOrThrow(store, input.roomId);
+  const me = room.members.find((m) => m.userId === input.userId);
+  if (!me) throw new Error("NOT_IN_ROOM");
+  if (room.hostUserId !== input.userId && room.members.length > 1) {
+    throw new Error("HOST_ONLY");
+  }
+
+  const prompt = pickPrompt(`${room.id}-${room.round + (room.status === "results" ? 1 : 0)}`);
+  if (room.status === "results") {
+    room.round += 1;
+  }
+  room.promptTitle = prompt.title;
+  room.promptBody = prompt.body;
+  room.status = "playing";
+  for (const m of room.members) {
+    m.submission = null;
+    // Keep cumulative score across rounds
+  }
+  room.updatedAt = new Date().toISOString();
+  writeStore(store);
+  return room;
+}
+
+export function submitFriendIdea(input: {
+  userId: string;
+  roomId: string;
+  title: string;
+  content: string;
+  appeal?: string;
+}): FriendMatchRoom {
+  const title = input.title.trim().slice(0, 40);
+  const content = input.content.trim();
+  const appeal = input.appeal?.trim().slice(0, 140) || null;
+  if (!title || !content) throw new Error("IDEA_REQUIRED");
+
+  const store = readStore();
+  const room = getRoomOrThrow(store, input.roomId);
+  if (room.status === "lobby") {
+    // Solo / first move: auto-start so creating a room is immediately playable
+    room.status = "playing";
+    if (!room.promptTitle) {
+      const prompt = pickPrompt(`${room.id}-${room.round}`);
+      room.promptTitle = prompt.title;
+      room.promptBody = prompt.body;
+    }
+  }
+  if (room.status !== "playing") throw new Error("NOT_PLAYING");
+
+  const me = room.members.find((m) => m.userId === input.userId);
+  if (!me) throw new Error("NOT_IN_ROOM");
+
+  const review = reviewIdeaWithAi({ title, content, appeal });
+  const prev = me.submission?.review.score ?? 0;
+  me.score = Math.max(0, me.score - prev) + review.score;
+  me.submission = {
+    title,
+    content,
+    appeal,
+    review,
+    submittedAt: new Date().toISOString(),
+  };
+  room.updatedAt = new Date().toISOString();
+
+  // When everyone submitted, flip to results
+  if (room.members.every((m) => m.submission)) {
+    room.status = "results";
+  }
+
+  writeStore(store);
+  return room;
+}
+
+export function finishFriendRound(input: { userId: string; roomId: string }): FriendMatchRoom {
+  const store = readStore();
+  const room = getRoomOrThrow(store, input.roomId);
+  const me = room.members.find((m) => m.userId === input.userId);
+  if (!me) throw new Error("NOT_IN_ROOM");
+  if (room.hostUserId !== input.userId && room.members.length > 1) {
+    throw new Error("HOST_ONLY");
+  }
+  room.status = "results";
+  room.updatedAt = new Date().toISOString();
+  writeStore(store);
+  return room;
+}
+
+export function rankedFriendMembers(room: FriendMatchRoom): FriendMatchMember[] {
+  return [...room.members].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.joinedAt.localeCompare(b.joinedAt);
+  });
 }

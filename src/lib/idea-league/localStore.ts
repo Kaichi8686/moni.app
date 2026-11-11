@@ -337,23 +337,18 @@ export function loadLocalBattle(
   week.status =
     phase === "submit" || phase === "vote" ? "active" : phase === "results" ? "ended" : "upcoming";
 
-  // Early phase: AI / ops review sets 勝ち点 once judgment window opens.
-  // Peer votes remain stored for a later phase but do not override AI scores yet.
-  const inJudgment = phase === "vote" || phase === "results";
+  // Early phase: AI / ops review owns 勝ち点 (available as soon as you submit).
+  const showAiReview = phase === "submit" || phase === "vote" || phase === "results";
   for (const m of group.members) {
     if (!isRealUserId(m.userId) || !m.submission) continue;
-    if (inJudgment) {
-      if (!m.submission.aiReview) {
-        m.submission.aiReview = reviewIdeaWithAi({
-          title: m.submission.title,
-          content: m.submission.content,
-          appeal: m.submission.appeal,
-        });
-      }
-      m.voteScore = m.submission.aiReview.score;
-    } else {
-      m.voteScore = 0;
+    if (!m.submission.aiReview) {
+      m.submission.aiReview = reviewIdeaWithAi({
+        title: m.submission.title,
+        content: m.submission.content,
+        appeal: m.submission.appeal,
+      });
     }
+    m.voteScore = m.submission.aiReview.score;
   }
 
   writeStore(store);
@@ -378,7 +373,7 @@ export function loadLocalBattle(
         authorAvatarUrl: m.avatarUrl,
         isMe: m.userId === me.userId,
         highlighted: m.userId === me.userId ? profile.highlight : false,
-        aiReview: inJudgment ? s.aiReview ?? null : null,
+        aiReview: showAiReview && (m.userId === me.userId || !peersHidden) ? s.aiReview ?? null : null,
       };
     })
     .sort((a, b) => b.voteCount - a.voteCount);
@@ -431,12 +426,19 @@ export function submitLocalIdea(
   const weekKey = saturdayWeekKey(leagueNow());
   const group = ensureWeekGroup(store, weekKey, profile.tier, me);
   const mine = group.members.find((m) => m.userId === me.userId)!;
+  const title = input.title.trim().slice(0, 40);
+  const content = input.content.trim();
+  const appeal = input.appeal?.trim().slice(0, 140) || null;
+  // Instant AI 勝ち点 so submitting feels rewarding (official board still settles in judgment).
+  const aiReview = reviewIdeaWithAi({ title, content, appeal });
   mine.submission = {
     id: mine.submission?.id ?? `s-${weekKey}-${me.userId}`,
-    title: input.title.trim().slice(0, 40),
-    content: input.content.trim(),
-    appeal: input.appeal?.trim().slice(0, 140) || null,
+    title,
+    content,
+    appeal,
+    aiReview,
   };
+  mine.voteScore = aiReview.score;
   writeStore(store);
   return loadLocalBattle(me);
 }
