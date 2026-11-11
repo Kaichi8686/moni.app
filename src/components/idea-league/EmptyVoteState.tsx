@@ -24,7 +24,7 @@ export function EmptyVoteState({ onSubmitIdea }: Props) {
       </p>
       <div className="mx-auto mt-5 max-w-xs">
         <DuoButton type="button" tone="orange" size="lg" fullWidth onClick={onSubmitIdea}>
-          {tx("✍️ アイデアを投稿する", "✍️ Submit an idea")}
+          {tx("アイデアを投稿する", "Submit an idea")}
         </DuoButton>
       </div>
     </div>

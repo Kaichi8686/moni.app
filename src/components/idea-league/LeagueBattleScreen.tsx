@@ -16,6 +16,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type Props = {
   battle: LeagueBattleState;
   publishedBattle?: LeagueBattleState | null;
+  me: { userId: string; displayName: string };
   onSubmit: (input: { title: string; content: string; appeal?: string }) => Promise<void>;
   onVote: (submissionId: string) => Promise<void>;
   countdownActive?: boolean;
@@ -24,6 +25,7 @@ type Props = {
 export function LeagueBattleScreen({
   battle,
   publishedBattle,
+  me,
   onSubmit,
   countdownActive = true,
 }: Props) {
@@ -86,18 +88,15 @@ export function LeagueBattleScreen({
             countdownActive={countdownActive}
           />
         ) : (
-          <section className={leagueCardClass}>
-            <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+          <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-b from-teal-50 to-white p-4 sm:p-5">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-teal-700/80 uppercase">
               {tx("フレンドマッチ", "Friend Match")}
             </p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
               {tx("カスタムルーム", "Custom room")}
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-              {tx(
-                "友達同士の勝ち点バトル用。ルーム作成・招待コード参加の枠組みです。",
-                "Private point battles — create a room or join with a code.",
-              )}
+            <p className="mt-2 text-sm text-zinc-500">
+              {tx("招待コードで即対戦", "Join instantly with a code")}
             </p>
           </section>
         )
@@ -106,7 +105,7 @@ export function LeagueBattleScreen({
       <LeagueModeTabs mode={playMode} onChange={setPlayMode} />
 
       {playMode === "friend" ? (
-        <FriendMatchPanel />
+        <FriendMatchPanel me={me} />
       ) : (
         <>
           <section className={leagueCardClass}>
@@ -188,7 +187,7 @@ export function LeagueBattleScreen({
                 >
                   {battle.mySubmission
                     ? tx("アイデアを更新する", "Update idea")
-                    : tx("✍️ アイデアを投稿する", "✍️ Submit an idea")}
+                    : tx("アイデアを投稿する", "Submit an idea")}
                 </DuoButton>
               </div>
             ) : battle.mySubmission ? (

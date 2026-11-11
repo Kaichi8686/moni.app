@@ -15,6 +15,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 type Props = {
   profile: LeagueProfileState;
   userId: string;
+  displayName: string;
   currentPrompt?: { title: string; body: string };
   publishedBattle?: LeagueBattleState | null;
   onOpenGarden: () => void;
@@ -25,6 +26,7 @@ type Props = {
 export function LeagueWaitingScreen({
   profile,
   userId,
+  displayName,
   currentPrompt,
   publishedBattle,
   onOpenGarden,
@@ -49,18 +51,15 @@ export function LeagueWaitingScreen({
             countdownActive={countdownActive}
           />
         ) : (
-          <section className={leagueCardClass}>
-            <p className="text-[11px] font-medium tracking-wide text-zinc-500">
+          <section className="rounded-2xl border border-teal-200/70 bg-gradient-to-b from-teal-50 to-white p-4 sm:p-5">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-teal-700/80 uppercase">
               {tx("フレンドマッチ", "Friend Match")}
             </p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-zinc-900">
               {tx("カスタムルーム", "Custom room")}
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-              {tx(
-                "友達同士の勝ち点バトル用。ルーム作成・招待コード参加の枠組みです。",
-                "Private point battles — create a room or join with a code.",
-              )}
+            <p className="mt-2 text-sm text-zinc-500">
+              {tx("招待コードで即対戦", "Join instantly with a code")}
             </p>
           </section>
         )
@@ -69,7 +68,7 @@ export function LeagueWaitingScreen({
       <LeagueModeTabs mode={playMode} onChange={setPlayMode} />
 
       {playMode === "friend" ? (
-        <FriendMatchPanel />
+        <FriendMatchPanel me={{ userId, displayName }} />
       ) : (
         <>
           <div className={leagueCardClass}>

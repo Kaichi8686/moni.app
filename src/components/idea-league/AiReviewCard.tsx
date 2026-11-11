@@ -22,10 +22,10 @@ export function AiReviewCard({ submission, review }: Props) {
 
   const zoneLabel =
     zone === "promote"
-      ? tx("⭐ 昇格ライン突破", "⭐ Above promotion line")
+      ? tx("昇格ライン突破", "Above promotion line")
       : zone === "stay"
-        ? tx("🟢 残留ラインクリア", "🟢 Above stay line")
-        : tx("🔴 降格ライン付近", "🔴 Near demotion line");
+        ? tx("残留ラインクリア", "Above stay line")
+        : tx("降格ライン付近", "Near demotion line");
 
   const zoneCls =
     zone === "promote"
@@ -67,15 +67,15 @@ export function AiReviewCard({ submission, review }: Props) {
 
       <ul className="grid grid-cols-3 gap-2 text-center text-[10px] font-semibold">
         <li className="rounded-lg border border-rose-100 bg-rose-50/70 px-2 py-2 text-rose-700">
-          🔴 {tx("降格", "Demo")}
+          {tx("降格", "Demo")}
           <span className="mt-0.5 block tabular-nums text-zinc-600">{AI_DEMOTION_LINE}pt</span>
         </li>
         <li className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-zinc-700">
-          🟢 {tx("残留", "Stay")}
+          {tx("残留", "Stay")}
           <span className="mt-0.5 block tabular-nums text-zinc-600">{AI_STAY_LINE}pt</span>
         </li>
         <li className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-2 py-2 text-emerald-800">
-          ⭐ {tx("昇格", "Promo")}
+          {tx("昇格", "Promo")}
           <span className="mt-0.5 block tabular-nums text-zinc-600">{AI_PROMOTION_LINE}pt</span>
         </li>
       </ul>

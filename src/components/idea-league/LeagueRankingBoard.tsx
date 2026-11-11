@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { LeagueTierBadge } from "@/components/idea-league/LeagueTierBadge";
+import { AI_PROMOTION_LINE, AI_STAY_LINE } from "@/lib/idea-league/aiReview";
 import { PROMOTION_SLOTS } from "@/lib/idea-league/tiers";
 import type { LeagueMember, LeagueTier } from "@/lib/idea-league/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -49,8 +50,11 @@ export function LeagueRankingBoard({
 
       <ul className="divide-y divide-zinc-100">
         {members.map((m, idx) => {
-          const inPromo = m.rank <= promotionCutoff;
-          const inRisk = m.rank > stayRank;
+          // Early phase: 勝ち点 thresholds win. 0pt is never promotion.
+          const scored = m.voteScore > 0;
+          const inPromo = scored && (m.voteScore >= AI_PROMOTION_LINE || m.rank <= promotionCutoff);
+          const inRisk =
+            !scored || m.voteScore < AI_STAY_LINE || m.rank > stayRank;
           const nextIsOutOfPromo =
             members[idx + 1] && members[idx + 1]!.rank === promotionCutoff + 1;
           const nextIsRisk = members[idx + 1] && members[idx + 1]!.rank === stayRank + 1;

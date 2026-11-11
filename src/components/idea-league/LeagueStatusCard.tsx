@@ -120,9 +120,18 @@ export function LeagueStatusCard({
 
       <div className="mt-5">
         <div className="mb-2 flex justify-between gap-1 text-[10px] font-semibold tracking-wide">
-          <span className="text-rose-600">🔴 {tx("降格", "Demo")}</span>
-          <span className="text-zinc-600">🟢 {tx("残留", "Stay")}</span>
-          <span className="text-emerald-700">⭐ {tx("昇格", "Promo")}</span>
+          <span className="inline-flex items-center gap-1 text-rose-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden />
+            {tx("降格", "Demo")}
+          </span>
+          <span className="inline-flex items-center gap-1 text-zinc-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" aria-hidden />
+            {tx("残留", "Stay")}
+          </span>
+          <span className="inline-flex items-center gap-1 text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" aria-hidden />
+            {tx("昇格", "Promo")}
+          </span>
         </div>
 
         <div className="relative h-4 overflow-hidden rounded-full border border-zinc-200/80 bg-zinc-100">
@@ -210,8 +219,9 @@ function ZoneChip({
 }) {
   if (zone === "promote") {
     return (
-      <p className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
-        ⭐ {tx("昇格ゾーン", "Promotion")}
+      <p className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" aria-hidden />
+        {tx("昇格ゾーン", "Promotion")}
         {rank ? ` · #${rank}` : ""}
         {nextLabel ? ` → ${nextLabel}` : ""}
       </p>
@@ -219,15 +229,17 @@ function ZoneChip({
   }
   if (zone === "risk") {
     return (
-      <p className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-800">
-        🔴 {tx("降格ゾーン", "Demotion")}
+      <p className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden />
+        {tx("降格ゾーン", "Demotion")}
         {rank ? ` · #${rank}` : ""}
       </p>
     );
   }
   return (
-    <p className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-700">
-      🟢 {tx("残留ゾーン", "Stay")}
+    <p className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" aria-hidden />
+      {tx("残留ゾーン", "Stay")}
       {rank ? ` · #${rank}` : ""}
     </p>
   );

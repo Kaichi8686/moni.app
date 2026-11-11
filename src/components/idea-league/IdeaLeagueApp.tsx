@@ -287,6 +287,7 @@ export function IdeaLeagueApp({
     <LeagueBattleScreen
       battle={{ ...battle, phase }}
       publishedBattle={publishedBattle}
+      me={{ userId: me.userId, displayName: me.displayName }}
       countdownActive={active}
       onSubmit={async (input) => {
         if (!aliveRef.current) return;
@@ -307,6 +308,7 @@ export function IdeaLeagueApp({
     <LeagueWaitingScreen
       profile={profile}
       userId={me.userId}
+      displayName={me.displayName}
       currentPrompt={
         battle
           ? { title: battle.week.promptTitle, body: battle.week.promptBody }

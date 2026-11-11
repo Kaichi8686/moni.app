@@ -44,6 +44,20 @@ function scoreToPercent(score: number, maxScore: number): number {
   return Math.round(Math.min(100, Math.max(0, (score / Math.max(maxScore, 1)) * 100)));
 }
 
+function aiLinePercents(maxScore: number) {
+  return {
+    demotionMarkerPercent: scoreToPercent(AI_DEMOTION_LINE, maxScore),
+    stayMarkerPercent: scoreToPercent(AI_STAY_LINE, maxScore),
+    promotionMarkerPercent: scoreToPercent(AI_PROMOTION_LINE, maxScore),
+  };
+}
+
+function zoneFromAiScore(score: number): LeagueZone {
+  if (score >= AI_PROMOTION_LINE) return "promote";
+  if (score >= AI_STAY_LINE) return "stay";
+  return "risk";
+}
+
 export function computeLeagueProgress(
   members: LeagueMember[],
   promotionCutoff = PROMOTION_SLOTS,
@@ -68,10 +82,11 @@ export function computeLeagueProgress(
 
   const topScore = members.reduce((max, m) => Math.max(max, Number(m.voteScore) || 0), 0);
   const distinctScores = new Set(members.map((m) => Number(m.voteScore) || 0));
-  const rankBased = topScore === 0 || distinctScores.size <= 1;
+  const allZero = topScore === 0;
+  const rankBased = allZero || distinctScores.size <= 1;
 
-  // Prefer fixed AI lines whenever any positive score exists (early-phase 勝ち点).
-  const aiThresholds = Boolean(opts?.preferAiThresholds) || topScore > 0;
+  // Prefer AI 勝ち点 lines in the early phase — never treat 0pt + solo rank as promotion.
+  const aiThresholds = Boolean(opts?.preferAiThresholds) || !allZero || myScore === 0;
 
   let promotionLineScore: number;
   let stayLineScore: number;
@@ -85,32 +100,19 @@ export function computeLeagueProgress(
   let inPromotionZone: boolean;
   let pointsToPromotion: number;
 
-  if (aiThresholds && !rankBased) {
+  if (aiThresholds) {
     promotionLineScore = AI_PROMOTION_LINE;
     stayLineScore = AI_STAY_LINE;
     demotionLineScore = AI_DEMOTION_LINE;
     maxScore = Math.max(AI_SCORE_CAP, topScore, myScore) * 1.05;
+    const lines = aiLinePercents(maxScore);
+    demotionMarkerPercent = lines.demotionMarkerPercent;
+    stayMarkerPercent = lines.stayMarkerPercent;
+    promotionMarkerPercent = lines.promotionMarkerPercent;
     fillPercent = scoreToPercent(myScore, maxScore);
-    promotionMarkerPercent = scoreToPercent(promotionLineScore, maxScore);
-    stayMarkerPercent = scoreToPercent(stayLineScore, maxScore);
-    demotionMarkerPercent = scoreToPercent(demotionLineScore, maxScore);
+    // 0pt must sit left of demotion — never “about to promote” from rank alone.
     inPromotionZone = myScore >= promotionLineScore;
-    zone =
-      myScore >= promotionLineScore ? "promote" : myScore >= stayLineScore ? "stay" : "risk";
-    pointsToPromotion = inPromotionZone ? 0 : Math.max(0, promotionLineScore - myScore);
-  } else if (aiThresholds && rankBased && myScore > 0) {
-    // Solo / tied but already scored by AI — still use fixed lines.
-    promotionLineScore = AI_PROMOTION_LINE;
-    stayLineScore = AI_STAY_LINE;
-    demotionLineScore = AI_DEMOTION_LINE;
-    maxScore = AI_SCORE_CAP * 1.05;
-    fillPercent = scoreToPercent(myScore, maxScore);
-    promotionMarkerPercent = scoreToPercent(promotionLineScore, maxScore);
-    stayMarkerPercent = scoreToPercent(stayLineScore, maxScore);
-    demotionMarkerPercent = scoreToPercent(demotionLineScore, maxScore);
-    inPromotionZone = myScore >= promotionLineScore;
-    zone =
-      myScore >= promotionLineScore ? "promote" : myScore >= stayLineScore ? "stay" : "risk";
+    zone = zoneFromAiScore(myScore);
     pointsToPromotion = inPromotionZone ? 0 : Math.max(0, promotionLineScore - myScore);
   } else if (rankBased) {
     promotionLineScore = Number(cutoffMember?.voteScore) || 0;
@@ -121,7 +123,7 @@ export function computeLeagueProgress(
       demotionMarkerPercent = 22;
       stayMarkerPercent = 48;
       promotionMarkerPercent = 72;
-      fillPercent = 78;
+      fillPercent = myScore > 0 ? 78 : 8;
     } else {
       const promoEdge = Math.max(1, Math.min(promotionCutoff, groupSize));
       const stayEdge = Math.max(promoEdge + 1, Math.min(stayRank, groupSize));
@@ -132,10 +134,11 @@ export function computeLeagueProgress(
         stayMarkerPercent = Math.max(28, promotionMarkerPercent - 22);
         demotionMarkerPercent = Math.max(12, stayMarkerPercent - 18);
       }
-      fillPercent = myRank != null ? rankToPercent(myRank, groupSize) : 50;
+      fillPercent =
+        myScore === 0 ? Math.min(14, demotionMarkerPercent - 4) : myRank != null ? rankToPercent(myRank, groupSize) : 50;
     }
-    inPromotionZone = myRank !== null && myRank <= promotionCutoff;
-    const inRiskZone = myRank !== null && myRank > stayRank;
+    inPromotionZone = myScore > 0 && myRank !== null && myRank <= promotionCutoff;
+    const inRiskZone = myScore === 0 || (myRank !== null && myRank > stayRank);
     zone = inPromotionZone ? "promote" : inRiskZone ? "risk" : "stay";
     pointsToPromotion = inPromotionZone
       ? 0
@@ -155,8 +158,8 @@ export function computeLeagueProgress(
     if (demotionMarkerPercent >= stayMarkerPercent - 8) {
       demotionMarkerPercent = Math.max(10, stayMarkerPercent - 16);
     }
-    inPromotionZone = myRank !== null && myRank <= promotionCutoff;
-    const inRiskZone = myRank !== null && myRank > stayRank;
+    inPromotionZone = myScore > 0 && myRank !== null && myRank <= promotionCutoff;
+    const inRiskZone = myScore === 0 || (myRank !== null && myRank > stayRank);
     zone = inPromotionZone ? "promote" : inRiskZone ? "risk" : "stay";
     pointsToPromotion = inPromotionZone
       ? 0
@@ -180,7 +183,7 @@ export function computeLeagueProgress(
     demotionMarkerPercent,
     groupSize,
     maxScore,
-    rankBased: rankBased && myScore === 0,
+    rankBased: allZero,
     aiThresholds,
   };
 }
