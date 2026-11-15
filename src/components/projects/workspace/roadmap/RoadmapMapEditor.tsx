@@ -397,6 +397,7 @@ export function RoadmapMapEditor() {
         currentIndex={currentMainIndex}
         expandedId={expandedId}
         showTasks={false}
+        emphasizeCurrent={false}
         onToggle={(id) => {
           setExpandedId((current) => (current === id ? null : id));
         }}
