@@ -151,14 +151,14 @@ export default function DiscoverPage() {
 
       <main className="mobile-content-inset mx-auto w-full max-w-none space-y-4 py-4 sm:max-w-lg">
         <Link
-          href="/idea?spark=league"
-          className="block overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-[#EEF0FF] p-4 shadow-sm transition active:scale-[0.99]"
+          href="/idea?spark=office"
+          className="block overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-[#FFF7E8] p-4 shadow-sm transition active:scale-[0.99]"
         >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Idea League</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">Office</p>
           <p className="mt-1 text-sm font-semibold text-zinc-900">
-            花の種からお題を作り、土曜11時〜日曜11時に提出。投票のあと水曜に結果。
+            会社に起きる事件をアイデアで解決。売上で月間リーグを競おう。
           </p>
-          <p className="mt-2 text-sm font-semibold text-emerald-700">リーグへ →</p>
+          <p className="mt-2 text-sm font-semibold text-amber-700">オフィスへ →</p>
         </Link>
 
         {msg ? <p className="text-sm text-violet-700">{msg}</p> : null}

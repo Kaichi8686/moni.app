@@ -1,5 +1,6 @@
-import { IdeaLeagueApp } from "@/components/idea-league/IdeaLeagueApp";
+import { redirect } from "next/navigation";
 
+/** 旧アイデアリーグ入口 → オフィスへ（旧テーブル・コードは保持） */
 export default function LeaguePage() {
-  return <IdeaLeagueApp />;
+  redirect("/idea?spark=office");
 }

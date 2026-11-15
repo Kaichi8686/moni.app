@@ -10,6 +10,7 @@
     "start:local": "PORT=3002 HOSTNAME=127.0.0.1 next start -p 3002",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:office": "tsx --test src/lib/office/*.test.ts",
     "check": "npm run lint && npm run typecheck && npm run build",
     "deploy:prod": "npx vercel --prod --yes",
     "db:messages": "node scripts/apply-conversations-messages.mjs",
@@ -53,6 +54,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

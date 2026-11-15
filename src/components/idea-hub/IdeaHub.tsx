@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { IdeaGardenApp } from "@/components/idea-garden/IdeaGardenApp";
-import { IdeaLeagueApp } from "@/components/idea-league/IdeaLeagueApp";
+import { OfficeApp } from "@/components/office/OfficeApp";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
@@ -15,7 +15,7 @@ import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type HubView = "mine" | "chat" | "board" | "interviews";
-type SparkMode = "grow" | "league" | "ai";
+type SparkMode = "grow" | "office" | "ai";
 
 function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
   if (board) return "board";
@@ -26,8 +26,8 @@ function viewFromTab(tab: IdeaHubTab, board: boolean): HubView {
 
 function parseSparkMode(raw: string | null, tab: IdeaHubTab): SparkMode {
   if (tab === "excavate" || tab === "qna") return "ai";
-  // 旧 contest リンクはリーグへ寄せる
-  if (raw === "league" || raw === "contest") return "league";
+  // 旧 league / contest リンクはオフィスへ寄せる（旧データはDBに保持）
+  if (raw === "office" || raw === "league" || raw === "contest") return "office";
   return "grow";
 }
 
@@ -45,7 +45,7 @@ function IdeaHubInner() {
   /** URL と独立したローカル状態（切替を確実にする） */
   const [sparkMode, setSparkModeState] = useState<SparkMode>(urlSpark);
   const [gardenKey, setGardenKey] = useState(0);
-  const [leagueVisited, setLeagueVisited] = useState(urlSpark === "league");
+  const [officeVisited, setOfficeVisited] = useState(urlSpark === "office");
   const [openHistoryOnChat, setOpenHistoryOnChat] = useState(false);
   const [startFreshOnChat, setStartFreshOnChat] = useState(false);
   const [chatKey, setChatKey] = useState(0);
@@ -53,7 +53,7 @@ function IdeaHubInner() {
 
   useEffect(() => {
     setSparkModeState(urlSpark);
-    if (urlSpark === "league") setLeagueVisited(true);
+    if (urlSpark === "office") setOfficeVisited(true);
   }, [urlSpark]);
 
   const replaceParams = useCallback(
@@ -108,13 +108,13 @@ function IdeaHubInner() {
       setOpenHistoryOnChat(false);
       setStartFreshOnChat(false);
       setSparkModeState(mode);
-      // Remount garden only when leaving AI — not when leaving league (avoids freeze).
+      // Remount garden only when leaving AI — not when leaving office (avoids freeze).
       if (mode === "grow" && sparkMode === "ai") setGardenKey((k) => k + 1);
-      if (mode === "league") setLeagueVisited(true);
+      if (mode === "office") setOfficeVisited(true);
       replaceParams((params) => {
         params.delete("tab");
         params.delete("view");
-        if (mode === "league") params.set("spark", "league");
+        if (mode === "office") params.set("spark", "office");
         else params.delete("spark");
       });
     },
@@ -163,12 +163,12 @@ function IdeaHubInner() {
       </button>
       <button
         type="button"
-        onClick={() => setSparkMode("league")}
+        onClick={() => setSparkMode("office")}
         className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
-          sparkMode === "league" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+          sparkMode === "office" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
         }`}
       >
-        {tx("リーグ", "League")}
+        {tx("オフィス", "Office")}
       </button>
     </div>
   ) : null;
@@ -181,11 +181,11 @@ function IdeaHubInner() {
           : `min-h-[100dvh] ${hideBottomNav ? "" : "pb-bottom-nav"}`
       }`}
     >
-      {(view === "mine" && sparkMode === "league") || inAiChat ? (
+      {(view === "mine" && sparkMode === "office") || inAiChat ? (
         <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div
             className={`mx-auto px-4 pb-2 pt-1 sm:px-6 lg:px-8 ${
-              view === "mine" && sparkMode === "league" ? "max-w-5xl" : "max-w-lg"
+              view === "mine" && sparkMode === "office" ? "max-w-lg" : "max-w-lg"
             }`}
           >
             {inAiChat ? null : <AppBrandHeader bare />}
@@ -214,18 +214,13 @@ function IdeaHubInner() {
         </div>
       ) : null}
 
-      {/* Keep league mounted after first visit so leave/enter doesn't tear down in-flight fetches. */}
-      {view === "mine" && leagueVisited ? (
+      {/* Keep office mounted after first visit so leave/enter doesn't tear down in-flight fetches. */}
+      {view === "mine" && officeVisited ? (
         <div
-          className={sparkMode === "league" ? undefined : "hidden"}
-          aria-hidden={sparkMode !== "league"}
+          className={sparkMode === "office" ? undefined : "hidden"}
+          aria-hidden={sparkMode !== "office"}
         >
-          <IdeaLeagueApp
-            embedded
-            hideChrome
-            active={sparkMode === "league"}
-            onOpenGarden={() => setSparkMode("grow")}
-          />
+          <OfficeApp embedded hideChrome active={sparkMode === "office"} />
         </div>
       ) : null}
 

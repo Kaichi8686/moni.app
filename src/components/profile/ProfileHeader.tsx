@@ -239,9 +239,9 @@ export function ProfileHeader({
               ) : null}
               {leagueTier ? (
                 <Link
-                  href="/league"
+                  href="/idea?spark=office"
                   className="inline-flex items-center rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 transition hover:bg-amber-100"
-                  title={tx("アイデアリーグ", "Idea League")}
+                  title={tx("オフィス", "Office")}
                 >
                   <LeagueTierBadge tier={leagueTier} size="sm" animated={leagueTier !== "bronze"} />
                 </Link>

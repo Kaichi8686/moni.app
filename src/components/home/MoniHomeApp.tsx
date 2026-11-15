@@ -5026,16 +5026,16 @@ export function MoniHomeApp() {
         >
           <div className="flex min-h-0 flex-1 flex-col">
             <Link
-              href="/idea?spark=league"
-              className="mb-3 block shrink-0 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-[#EEF0FF] p-3.5 shadow-sm transition active:scale-[0.99]"
+              href="/idea?spark=office"
+              className="mb-3 block shrink-0 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-[#FFF7E8] p-3.5 shadow-sm transition active:scale-[0.99]"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                Idea League
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                Office
               </p>
               <p className="mt-1 text-sm font-semibold text-zinc-900">
-                土曜11時〜日曜11時に提出 → 投票 → 水曜に結果
+                自分の会社で事件を解決して、売上を伸ばそう
               </p>
-              <p className="mt-1.5 text-sm font-semibold text-emerald-700">リーグを開く →</p>
+              <p className="mt-1.5 text-sm font-semibold text-amber-700">オフィスを開く →</p>
             </Link>
             <div
               className="flex shrink-0 gap-1 border-b border-zinc-100"
