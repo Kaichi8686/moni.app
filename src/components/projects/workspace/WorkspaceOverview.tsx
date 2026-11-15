@@ -31,6 +31,7 @@ export default function WorkspaceOverview() {
     canEdit,
     coachingContext,
     reload: wsReload,
+    uid,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const projectBrief = resolveProjectBrief({
@@ -65,9 +66,11 @@ export default function WorkspaceOverview() {
     () =>
       buildStepListItems(sortedPhases, {
         issues,
+        assigneeUserId: uid,
         nextMoveLabel: tx("次の一手", "Next move"),
+        dueLabelPrefix: tx("期限", "Due"),
       }),
-    [issues, sortedPhases, tx],
+    [issues, sortedPhases, tx, uid],
   );
 
   /** 今やっているステップは最初から開く（現在ステップが変わったら開き直す） */

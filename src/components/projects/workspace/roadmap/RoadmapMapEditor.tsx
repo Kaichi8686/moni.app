@@ -42,6 +42,8 @@ export function RoadmapMapEditor() {
     coachingContext,
     canEdit: workspaceCanEdit,
     reload: workspaceReload,
+    issues,
+    uid,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
@@ -82,9 +84,12 @@ export function RoadmapMapEditor() {
   const { items: stepListItems, currentMainIndex, currentStepId } = useMemo(
     () =>
       buildStepListItems(steps, {
+        issues,
+        assigneeUserId: uid,
         nextMoveLabel: tx("次の一手", "Next move"),
+        dueLabelPrefix: tx("期限", "Due"),
       }),
-    [steps, tx],
+    [issues, steps, tx, uid],
   );
 
   const selectedStep = useMemo(
