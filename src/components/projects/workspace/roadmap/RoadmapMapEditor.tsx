@@ -406,6 +406,10 @@ export function RoadmapMapEditor() {
         onToggle={(id) => {
           setExpandedId((current) => (current === id ? null : id));
         }}
+        onSelectTask={(task) => {
+          if (!task.issueId) return;
+          router.push(`/projects/${projectId}/issues?task=${encodeURIComponent(task.issueId)}`);
+        }}
         renderExpandedActions={(step) =>
           roadmap.canEdit ? (
             <button

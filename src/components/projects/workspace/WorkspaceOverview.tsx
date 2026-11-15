@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PenLine, Plus, Sparkles } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
@@ -21,6 +22,7 @@ import { addDays } from "date-fns";
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
+  const router = useRouter();
   const {
     project,
     projectMeta,
@@ -227,6 +229,10 @@ export default function WorkspaceOverview() {
             currentIndex={currentMainIndex}
             expandedId={expandedId}
             onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+            onSelectTask={(task) => {
+              if (!task.issueId) return;
+              router.push(`/projects/${projectId}/issues?task=${encodeURIComponent(task.issueId)}`);
+            }}
             renderExpandedActions={(step) => {
               if (step.status === "completed") return null;
               if (!roadmap.canEdit || !expandedIsCurrent || step.id !== expandedId) return null;
