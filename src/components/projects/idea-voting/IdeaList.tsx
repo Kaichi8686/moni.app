@@ -16,6 +16,8 @@ type Props = {
   /** チェック選択モード */
   selectMode?: boolean;
   selectedIds?: Set<string>;
+  /** 投票期間中に付け替え可（既投票の候補もタップ可能） */
+  allowChangeVote?: boolean;
   votesRemaining: number;
   currentUid: string | null;
   isOwner: boolean;
@@ -34,6 +36,7 @@ export function IdeaList({
   resultBarMax = 1,
   selectMode = false,
   selectedIds,
+  allowChangeVote = false,
   votesRemaining,
   currentUid,
   isOwner,
@@ -71,11 +74,12 @@ export function IdeaList({
       {display.map((idea) => {
         const alreadyVoted = idea.myVotes > 0;
         const isSelected = Boolean(selectedIds?.has(idea.id));
-        const canToggle =
-          !votingClosed &&
-          !alreadyVoted &&
-          (isSelected ||
-            (votesRemaining > pendingSelectedCount && idea.myVotes < votingSettings.maxVotesPerIdea));
+        const canToggle = allowChangeVote
+          ? !votingClosed
+          : !votingClosed &&
+            !alreadyVoted &&
+            (isSelected ||
+              (votesRemaining > pendingSelectedCount && idea.myVotes < votingSettings.maxVotesPerIdea));
         const canDelete =
           !voteOnly && Boolean(currentUid) && (isOwner || idea.authorId === currentUid);
         return (
@@ -87,7 +91,7 @@ export function IdeaList({
               showResults={showResults}
               resultBarMax={resultBarMax}
               selectMode={selectMode}
-              selected={isSelected || alreadyVoted}
+              selected={isSelected}
               canSelect={canToggle}
               canDelete={canDelete}
               onToggleSelect={onToggleSelect}

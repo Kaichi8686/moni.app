@@ -52,6 +52,8 @@ export default function WorkspaceIdeaVoting() {
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  /** ユーザーがチェックを動かしたら true。サーバー票で上書きしない */
+  const [selectionDirty, setSelectionDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [closing, setClosing] = useState(false);
 
@@ -124,6 +126,7 @@ export default function WorkspaceIdeaVoting() {
 
   useEffect(() => {
     setSelectedIds(new Set());
+    setSelectionDirty(false);
   }, [eventParam]);
 
   useEffect(() => {
@@ -215,15 +218,42 @@ export default function WorkspaceIdeaVoting() {
     return [...ideasWithTally].sort((a, b) => b.votes - a.votes || a.createdAt.localeCompare(b.createdAt))[0];
   }, [closed, ideasWithTally]);
 
-  const pendingSelection = useMemo(
-    () => [...selectedIds].filter((id) => (tallies.mine.get(id) ?? 0) <= 0),
-    [selectedIds, tallies.mine],
-  );
-  const canSubmitVote = !closed && !submitting && pendingSelection.length > 0 && pendingSelection.length <= votesRemaining;
+  const maxSelectable = selected
+    ? isUnlimitedVotes(selected.votesPerPerson)
+      ? Math.max(ideas.length, 1)
+      : selected.votesPerPerson
+    : 1;
+  const singleSelect = maxSelectable <= 1;
+
+  /** いまの票とチェック選択の差分（変更・新規とも） */
+  const voteDiffs = useMemo(() => {
+    const diffs: Array<{ ideaId: string; prev: number; next: number }> = [];
+    const ids = new Set<string>([...ideaIds, ...selectedIds]);
+    for (const ideaId of ids) {
+      const prev = tallies.mine.get(ideaId) ?? 0;
+      const next = selectedIds.has(ideaId) ? 1 : 0;
+      if (prev !== next) diffs.push({ ideaId, prev, next });
+    }
+    return diffs;
+  }, [ideaIds, selectedIds, tallies.mine]);
+
+  const canSubmitVote =
+    !closed && !submitting && selectedIds.size > 0 && selectedIds.size <= maxSelectable && voteDiffs.length > 0;
+
   /** 期限なし投票は作成者だけ手動で締め切れる */
   const canCloseManually = Boolean(
     selected && !closed && !selected.closesAt && uid && selected.createdBy === uid,
   );
+
+  // サーバー票をチェックに反映（ユーザーが触るまでは追従）
+  useEffect(() => {
+    if (closed || selectionDirty) return;
+    const next = new Set<string>();
+    for (const [id, n] of tallies.mine) {
+      if (n > 0 && ideaIds.has(id)) next.add(id);
+    }
+    setSelectedIds(next);
+  }, [closed, selectionDirty, tallies.mine, ideaIds]);
 
   function applyMyVoteLocal(ideaId: string, nextCount: number) {
     if (!uid) return;
@@ -236,16 +266,22 @@ export default function WorkspaceIdeaVoting() {
 
   function handleToggleSelect(ideaId: string) {
     if (!selected || closed) return;
-    if ((tallies.mine.get(ideaId) ?? 0) > 0) return;
+    setSelectionDirty(true);
     setSelectedIds((prev) => {
+      // 1人1票: 押した候補へチェックが移る（ラジオ）
+      if (singleSelect) {
+        return new Set([ideaId]);
+      }
       const next = new Set(prev);
       if (next.has(ideaId)) {
         next.delete(ideaId);
         return next;
       }
-      const pending = [...next].filter((id) => (tallies.mine.get(id) ?? 0) <= 0).length;
-      if (pending >= votesRemaining) return prev;
-      if ((tallies.mine.get(ideaId) ?? 0) >= selected.maxVotesPerIdea) return prev;
+      if (next.size >= maxSelectable) {
+        // 上限いっぱいなら、先に入っている1つを外して付け替え
+        const first = next.values().next().value;
+        if (first) next.delete(first);
+      }
       next.add(ideaId);
       return next;
     });
@@ -255,18 +291,13 @@ export default function WorkspaceIdeaVoting() {
     if (!uid || !selected || !canSubmitVote) return;
     setSubmitting(true);
     setError("");
-    const targets = pendingSelection.slice(0, votesRemaining);
-    const rollback: Array<{ ideaId: string; prev: number }> = [];
+    const rollback = voteDiffs.map((d) => ({ ideaId: d.ideaId, prev: d.prev }));
     try {
-      for (const ideaId of targets) {
-        const prev = tallies.mine.get(ideaId) ?? 0;
-        const nextCount = Math.min(prev + 1, selected.maxVotesPerIdea);
-        if (nextCount <= prev) continue;
-        rollback.push({ ideaId, prev });
-        applyMyVoteLocal(ideaId, nextCount);
-        await setMyVote(projectId, ideaId, uid, nextCount);
+      for (const { ideaId, next } of voteDiffs) {
+        applyMyVoteLocal(ideaId, next);
+        await setMyVote(projectId, ideaId, uid, next);
       }
-      setSelectedIds(new Set());
+      setSelectionDirty(false);
     } catch (e) {
       for (const item of rollback) applyMyVoteLocal(item.ideaId, item.prev);
       setError(e instanceof Error ? e.message : tx("投票に失敗しました", "Couldn’t vote"));
@@ -329,9 +360,15 @@ export default function WorkspaceIdeaVoting() {
   const tipText = closed
     ? null
     : hideUntilClose
-      ? tx("投票中は票数順に並べません。結果は締切後に表示します。", "Options aren’t ranked while voting is open. Results show after close.")
+      ? tx(
+          "右のチェックで選んで投票できます。締切まで票の付け替えもできます。結果は締切後に表示します。",
+          "Check an option to vote. You can change it until close. Results show after close.",
+        )
       : iHaveVoted
-        ? tx("投票結果は締切まで更新されます。", "Results update until the vote closes.")
+        ? tx(
+            "別の候補を押すとチェックが移ります。下のボタンで票を更新できます。",
+            "Tap another option to move the check, then update your vote below.",
+          )
         : tx("右のチェックで選んで、下の「投票する」を押してください。", "Check options on the right, then tap Vote below.");
 
   return (
@@ -403,6 +440,7 @@ export default function WorkspaceIdeaVoting() {
           resultBarMax={resultBarMax}
           selectMode={!closed}
           selectedIds={selectedIds}
+          allowChangeVote
           votesRemaining={votesRemaining}
           currentUid={uid}
           isOwner={false}
@@ -432,10 +470,14 @@ export default function WorkspaceIdeaVoting() {
               className={voteAppleBtn}
             >
               {submitting
-                ? tx("投票中…", "Voting…")
-                : pendingSelection.length > 0
-                  ? tx(`投票する（${pendingSelection.length}）`, `Vote (${pendingSelection.length})`)
-                  : tx("投票する", "Vote")}
+                ? iHaveVoted
+                  ? tx("更新中…", "Updating…")
+                  : tx("投票中…", "Voting…")
+                : iHaveVoted
+                  ? tx("票を変更する", "Change vote")
+                  : selectedIds.size > 1
+                    ? tx(`投票する（${selectedIds.size}）`, `Vote (${selectedIds.size})`)
+                    : tx("投票する", "Vote")}
             </button>
           </div>
         </div>
