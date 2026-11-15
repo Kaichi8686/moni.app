@@ -386,7 +386,8 @@ html.moni-recruit-drill .app-bottom-nav {
 }
 
 /* Floating tab bar: CSS-only bottom:0 + safe-area float. Portaled to body.
-   Do not JS-offset bottom — visualViewport insets on iOS falsely lift it ~100px. */
+   Do not JS-offset bottom — visualViewport insets on iOS falsely lift it ~100px.
+   Keyboard: hide only (opacity/visibility) — never move bottom. */
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;
@@ -397,6 +398,15 @@ html.moni-recruit-drill .app-bottom-nav {
   border: 0;
   padding: var(--bottom-nav-float-inset);
   padding-bottom: max(var(--bottom-nav-float-inset), env(safe-area-inset-bottom, 0px));
+  transition:
+    opacity 160ms ease,
+    visibility 160ms ease;
+}
+
+.app-bottom-nav.is-keyboard-open {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .app-bottom-nav-inner {

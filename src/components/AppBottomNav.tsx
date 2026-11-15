@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
+import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
 import {
@@ -553,6 +554,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const collapseLabel =
     locale === "ja" ? "メッセージ・課題・募集を隠す" : "Hide messages, issues, and recruiting";
 
+  const keyboardOpen = useVirtualKeyboardOpen();
+
   const renderTab = (item: NavItem, className: string, side: "open" | "closed") => {
     const active =
       item.id === "mail"
@@ -593,7 +596,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   return (
     <nav
-      className={`app-bottom-nav ${className ?? ""}`.trim()}
+      className={`app-bottom-nav ${keyboardOpen ? "is-keyboard-open" : ""} ${className ?? ""}`.trim()}
+      aria-hidden={keyboardOpen || undefined}
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>
