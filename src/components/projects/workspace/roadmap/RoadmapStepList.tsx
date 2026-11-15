@@ -40,6 +40,8 @@ type Props = {
   onSelectTask?: (task: RoadmapStepListTask) => void;
   /** false のとき「今やるべき課題」ブロックを出さない（編集画面用） */
   showTasks?: boolean;
+  /** false のとき現在ステップの番号も他と同じ大きさ（編集画面用） */
+  emphasizeCurrent?: boolean;
   empty?: ReactNode;
   className?: string;
 };
@@ -66,6 +68,7 @@ export function RoadmapStepList({
   renderExpandedActions,
   onSelectTask,
   showTasks = true,
+  emphasizeCurrent = true,
   empty,
   className = "",
 }: Props) {
@@ -83,11 +86,12 @@ export function RoadmapStepList({
         const isLast = index === steps.length - 1;
         const tasks = step.tasks ?? [];
         const isCurrent = tone === "current";
+        const largeCurrent = emphasizeCurrent && isCurrent;
         const numberClass =
           tone === "done" || tone === "current"
             ? "bg-[#FF9600] text-white"
             : "bg-zinc-100 text-zinc-500";
-        const numberSize = isCurrent
+        const numberSize = largeCurrent
           ? "h-11 w-11 text-base"
           : "h-7 w-7 text-xs";
 
@@ -104,7 +108,7 @@ export function RoadmapStepList({
               {!isLast ? (
                 <span
                   className={`absolute left-1/2 bottom-[-12px] w-px -translate-x-1/2 bg-zinc-200 ${
-                    isCurrent ? "top-11" : "top-7"
+                    largeCurrent ? "top-11" : "top-7"
                   }`}
                   aria-hidden
                 />
