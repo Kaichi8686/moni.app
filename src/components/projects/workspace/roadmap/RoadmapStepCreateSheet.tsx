@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
-  RoadmapMarkPicker,
+  resolveRoadmapMarkId,
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 
@@ -21,7 +21,7 @@ type Props = {
   }) => Promise<void>;
 };
 
-/** マス追加用の下から出るシート */
+/** ステップ追加用の下から出るシート（絵の選択なし） */
 export function RoadmapStepCreateSheet({
   open,
   busy = false,
@@ -33,7 +33,6 @@ export function RoadmapStepCreateSheet({
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
   const [description, setDescription] = useState("");
-  const [icon, setIcon] = useState<RoadmapMarkId>(initialIcon);
   const [saving, setSaving] = useState(false);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -43,7 +42,6 @@ export function RoadmapStepCreateSheet({
     setTitle("");
     setGoal("");
     setDescription("");
-    setIcon(initialIcon);
   }, [open, initialIcon]);
 
   useEffect(() => {
@@ -80,7 +78,7 @@ export function RoadmapStepCreateSheet({
         title: nextTitle,
         goal: goal.trim(),
         description: description.trim(),
-        icon,
+        icon: resolveRoadmapMarkId(initialIcon),
       });
       onClose();
     } finally {
@@ -113,7 +111,7 @@ export function RoadmapStepCreateSheet({
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
           <h2 id="roadmap-step-create-sheet-title" className="text-sm font-bold text-zinc-900">
-            {tx("マスを作成", "Create step")}
+            {tx("ステップを作成", "Create step")}
           </h2>
           <button
             type="button"
@@ -140,12 +138,6 @@ export function RoadmapStepCreateSheet({
               className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-300 px-3 text-[16px] outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
-          <RoadmapMarkPicker
-            value={icon}
-            onChange={setIcon}
-            disabled={locked}
-            label={tx("マスの絵", "Step icon")}
-          />
           <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-3">
             <label htmlFor="roadmap-create-goal" className="block text-xs font-bold text-orange-900">
               {tx("このステップのゴール", "Goal for this step")}
@@ -194,7 +186,7 @@ export function RoadmapStepCreateSheet({
             onClick={() => void handleSubmit()}
             className="min-h-[44px] flex-1 rounded-2xl bg-orange-500 px-4 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-40"
           >
-            {saving ? tx("追加中…", "Adding…") : tx("マスを追加", "Add step")}
+            {saving ? tx("追加中…", "Adding…") : tx("ステップを追加", "Add step")}
           </button>
         </div>
       </div>

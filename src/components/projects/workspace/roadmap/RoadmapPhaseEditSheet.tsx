@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
-  RoadmapMarkPicker,
-  RoadmapStepMark,
   resolveRoadmapMarkId,
   type RoadmapMarkId,
 } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
@@ -35,32 +33,7 @@ type Props = {
   onDelete?: () => Promise<void>;
 };
 
-/** ヘッダー左に出す小さめの立体マス */
-function EditSheetMasuPreview({ markId, index }: { markId: RoadmapMarkId; index: number }) {
-  return (
-    <span
-      data-roadmap-node
-      className="relative block h-12 w-12 shrink-0 sm:h-14 sm:w-14"
-      aria-hidden
-    >
-      <span className="absolute inset-x-0 bottom-0 top-[4px] rounded-full bg-[#C2410C]" />
-      <span className="absolute inset-x-0 bottom-[4px] top-0 flex items-center justify-center rounded-full bg-[#F97316]">
-        <span
-          className="pointer-events-none absolute inset-[10%] rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle at 50% 28%, rgba(255,255,255,0.42) 0%, transparent 62%)",
-          }}
-        />
-        <span className="relative z-[1] flex scale-[0.72] items-center justify-center sm:scale-[0.78]">
-          <RoadmapStepMark markId={markId} index={index} tone="active" />
-        </span>
-      </span>
-    </span>
-  );
-}
-
-/** 編集画面用：マスの名前・絵・ゴール・詳細を下から出すシート */
+/** 編集画面用：名前・ゴール・詳細を下から出すシート（マスの絵なし） */
 export function RoadmapPhaseEditSheet({
   open,
   phase,
@@ -115,7 +88,6 @@ export function RoadmapPhaseEditSheet({
   if (!visible || !phase) return null;
 
   const locked = busy || saving;
-  const stepIndex = Math.max((phase.stepNumber ?? 1) - 1, 0);
   const displayTitle = headerTitle.trim() || tx("名前未設定", "Untitled");
 
   function commitHeaderTitle() {
@@ -141,28 +113,6 @@ export function RoadmapPhaseEditSheet({
       throw e;
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleIconChange(nextIcon: RoadmapMarkId) {
-    // busy（削除など親の重い処理）中だけ拒否。saving 中でも別アイコンは選べる
-    if (!phase || busy) return;
-    if (nextIcon === iconDraft) return;
-    const previousIcon = iconDraft;
-    setIconDraft(nextIcon);
-    const nextTitle = titleDraft.trim() || phase.title;
-    try {
-      await persistValues(
-        {
-          title: nextTitle,
-          goal: goalDraft.trim(),
-          description: descriptionDraft.trim(),
-          icon: nextIcon,
-        },
-        false,
-      );
-    } catch {
-      setIconDraft(previousIcon);
     }
   }
 
@@ -223,7 +173,6 @@ export function RoadmapPhaseEditSheet({
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-center gap-3 border-b border-zinc-100 px-4 py-3">
-          <EditSheetMasuPreview markId={iconDraft} index={stepIndex} />
           <div className="min-w-0 flex-1">
             {phase.stepNumber != null ? (
               <p className="text-[10px] font-bold tracking-[0.12em] text-zinc-400">STEP {phase.stepNumber}</p>
@@ -263,12 +212,6 @@ export function RoadmapPhaseEditSheet({
               className="mt-1.5 min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-3 text-[16px] font-semibold text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
             />
           </div>
-          <RoadmapMarkPicker
-            value={iconDraft}
-            onChange={(id) => void handleIconChange(id)}
-            disabled={busy}
-            label={tx("マスの絵", "Step icon")}
-          />
           <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
             <label htmlFor="roadmap-edit-goal" className="block text-xs font-bold text-orange-900">
               {tx("ゴール", "Goal")}
@@ -323,7 +266,7 @@ export function RoadmapPhaseEditSheet({
               onClick={() => void handleDelete()}
               className="min-h-[40px] w-full rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
             >
-              {tx("このマスを削除", "Delete this step")}
+              {tx("このステップを削除", "Delete this step")}
             </button>
           ) : null}
         </div>

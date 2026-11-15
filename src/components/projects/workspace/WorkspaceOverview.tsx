@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PenLine, Plus, Sparkles } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
@@ -61,7 +61,7 @@ export default function WorkspaceOverview() {
     return [...source].sort((a, b) => a.order - b.order);
   }, [roadmap.phases, workspacePhases]);
 
-  const { items: stepListItems, currentMainIndex } = useMemo(
+  const { items: stepListItems, currentMainIndex, currentStepId } = useMemo(
     () =>
       buildStepListItems(sortedPhases, {
         issues,
@@ -69,6 +69,12 @@ export default function WorkspaceOverview() {
       }),
     [issues, sortedPhases, tx],
   );
+
+  /** 今やっているステップは最初から開く（現在ステップが変わったら開き直す） */
+  useEffect(() => {
+    if (!currentStepId) return;
+    setExpandedId(currentStepId);
+  }, [currentStepId, projectId]);
 
   const achievePhase = achievePhaseId
     ? sortedPhases.find((phase) => phase.id === achievePhaseId) ?? null
@@ -90,16 +96,12 @@ export default function WorkspaceOverview() {
 
   const expandedIsCurrent = Boolean(
     expandedPhase &&
+      !expandedPhase.sideOf &&
       expandedPhase.status !== "completed" &&
       (expandedPhase.status === "in_progress" ||
-        (!expandedPhase.sideOf &&
-          sortedPhases
-            .filter((p) => !p.sideOf)
-            .findIndex((p) => p.id === expandedPhase.id) === currentMainIndex) ||
-        (expandedPhase.sideOf != null &&
-          sortedPhases
-            .filter((p) => !p.sideOf)
-            .findIndex((p) => p.id === expandedPhase.sideOf) === currentMainIndex)),
+        sortedPhases
+          .filter((p) => !p.sideOf)
+          .findIndex((p) => p.id === expandedPhase.id) === currentMainIndex),
   );
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
