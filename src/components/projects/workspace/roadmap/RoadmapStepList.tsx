@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronRight, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { PhaseStatus } from "@/lib/roadmap/types";
 
@@ -38,6 +38,8 @@ type Props = {
   renderExpandedActions?: (step: RoadmapStepListItem) => ReactNode;
   /** 今やるべき課題タップ時（課題タブへ） */
   onSelectTask?: (task: RoadmapStepListTask) => void;
+  /** false のとき「今やるべき課題」ブロックを出さない（編集画面用） */
+  showTasks?: boolean;
   empty?: ReactNode;
   className?: string;
 };
@@ -63,6 +65,7 @@ export function RoadmapStepList({
   onToggle,
   renderExpandedActions,
   onSelectTask,
+  showTasks = true,
   empty,
   className = "",
 }: Props) {
@@ -86,7 +89,7 @@ export function RoadmapStepList({
             : "bg-zinc-100 text-zinc-500";
         const numberSize = isCurrent
           ? "h-11 w-11 text-base"
-          : "h-9 w-9 text-sm";
+          : "h-7 w-7 text-xs";
 
         return (
           <li key={step.id} className="relative flex gap-3">
@@ -101,7 +104,7 @@ export function RoadmapStepList({
               {!isLast ? (
                 <span
                   className={`absolute left-1/2 bottom-[-12px] w-px -translate-x-1/2 bg-zinc-200 ${
-                    isCurrent ? "top-11" : "top-9"
+                    isCurrent ? "top-11" : "top-7"
                   }`}
                   aria-hidden
                 />
@@ -134,7 +137,12 @@ export function RoadmapStepList({
                     className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500"
                     aria-hidden
                   >
-                    {expanded ? <Minus className="h-4 w-4" strokeWidth={2.25} /> : <Plus className="h-4 w-4" strokeWidth={2.25} />}
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform duration-200 ${
+                        expanded ? "rotate-180" : "rotate-0"
+                      }`}
+                      strokeWidth={2.25}
+                    />
                   </span>
                 </button>
 
@@ -160,69 +168,71 @@ export function RoadmapStepList({
                       </p>
                     </div>
 
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-                        {tx("今やるべき課題", "Tasks to do now")}
-                      </p>
-                      {tasks.length > 0 ? (
-                        <ul className="mt-2 space-y-2">
-                          {tasks.map((task) => {
-                            const clickable = Boolean(task.issueId && onSelectTask);
-                            const body = (
-                              <>
-                                <div className="min-w-0 flex-1 text-left">
-                                  <p className="text-[14px] font-semibold leading-snug text-zinc-900">
-                                    {task.title}
-                                  </p>
-                                  {task.description ? (
-                                    <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
-                                      {task.description}
-                                    </p>
-                                  ) : null}
-                                  {task.dueLabel ? (
-                                    <p className="mt-1 text-[12px] font-medium text-zinc-500">
-                                      {task.dueLabel}
-                                    </p>
-                                  ) : null}
-                                  {task.badge ? (
-                                    <span className="mt-1.5 inline-flex items-center rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[11px] font-semibold text-[#2563EB]">
-                                      {task.badge}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                {clickable ? (
-                                  <ChevronRight
-                                    className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400"
-                                    aria-hidden
-                                  />
-                                ) : null}
-                              </>
-                            );
-                            return (
-                              <li key={task.id}>
-                                {clickable ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => onSelectTask?.(task)}
-                                    className="flex w-full items-start gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-3.5 py-3 text-left shadow-sm transition hover:border-sky-200 hover:bg-sky-100/80 active:scale-[0.99]"
-                                  >
-                                    {body}
-                                  </button>
-                                ) : (
-                                  <div className="flex w-full items-start gap-2 rounded-2xl border border-zinc-100 bg-zinc-50 px-3.5 py-3">
-                                    {body}
-                                  </div>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-[13px] text-zinc-500">
-                          {tx("今やるべき課題はまだありません。", "No tasks to do right now.")}
+                    {showTasks ? (
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                          {tx("今やるべき課題", "Tasks to do now")}
                         </p>
-                      )}
-                    </div>
+                        {tasks.length > 0 ? (
+                          <ul className="mt-2 space-y-2">
+                            {tasks.map((task) => {
+                              const clickable = Boolean(task.issueId && onSelectTask);
+                              const body = (
+                                <>
+                                  <div className="min-w-0 flex-1 text-left">
+                                    <p className="text-[14px] font-semibold leading-snug text-zinc-900">
+                                      {task.title}
+                                    </p>
+                                    {task.description ? (
+                                      <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
+                                        {task.description}
+                                      </p>
+                                    ) : null}
+                                    {task.dueLabel ? (
+                                      <p className="mt-1 text-[12px] font-medium text-zinc-500">
+                                        {task.dueLabel}
+                                      </p>
+                                    ) : null}
+                                    {task.badge ? (
+                                      <span className="mt-1.5 inline-flex items-center rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[11px] font-semibold text-[#2563EB]">
+                                        {task.badge}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {clickable ? (
+                                    <ChevronRight
+                                      className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400"
+                                      aria-hidden
+                                    />
+                                  ) : null}
+                                </>
+                              );
+                              return (
+                                <li key={task.id}>
+                                  {clickable ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onSelectTask?.(task)}
+                                      className="flex w-full items-start gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-3.5 py-3 text-left shadow-sm transition hover:border-sky-200 hover:bg-sky-100/80 active:scale-[0.99]"
+                                    >
+                                      {body}
+                                    </button>
+                                  ) : (
+                                    <div className="flex w-full items-start gap-2 rounded-2xl border border-zinc-100 bg-zinc-50 px-3.5 py-3">
+                                      {body}
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="mt-1 text-[13px] text-zinc-500">
+                            {tx("今やるべき課題はまだありません。", "No tasks to do right now.")}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
 
                     {renderExpandedActions ? (
                       <div className="flex flex-wrap gap-2 pt-1">{renderExpandedActions(step)}</div>

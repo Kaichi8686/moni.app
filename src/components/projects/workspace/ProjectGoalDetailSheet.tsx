@@ -115,13 +115,16 @@ export function ProjectGoalDetailSheet({
         }`}
       >
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-200 sm:hidden" aria-hidden />
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
-          <h2 id="project-goal-sheet-title" className="min-w-0 truncate text-sm font-bold text-zinc-900">
+        <div className="relative flex shrink-0 items-center justify-center border-b border-zinc-100 px-12 py-3">
+          <h2
+            id="project-goal-sheet-title"
+            className="min-w-0 truncate text-center text-sm font-bold text-zinc-900"
+          >
             {title}
           </h2>
           <button
             type="button"
-            className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-2 text-zinc-500 hover:bg-zinc-100"
             onClick={requestClose}
             aria-label={tx("閉じる", "Close")}
           >
@@ -129,9 +132,18 @@ export function ProjectGoalDetailSheet({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-          <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-4">
-            <label htmlFor="project-goal-sheet-goal" className="block text-[11px] font-bold tracking-wide text-orange-800">
+        <div
+          className={`min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-5 text-center ${
+            editable
+              ? "pb-5"
+              : "pb-[max(2rem,calc(env(safe-area-inset-bottom)+1.5rem))]"
+          }`}
+        >
+          <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-5">
+            <label
+              htmlFor="project-goal-sheet-goal"
+              className="block text-[11px] font-bold tracking-wide text-orange-800"
+            >
               {tx("このプロジェクトのゴール", "Project goal")}
             </label>
             {editable ? (
@@ -145,7 +157,7 @@ export function ProjectGoalDetailSheet({
                   "例: 文化祭までに、クラス全員が見られる告知アプリを公開する",
                   "e.g. Ship a notice app the whole class can use by the school festival",
                 )}
-                className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-base font-semibold leading-relaxed text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
+                className="mt-2 w-full resize-none rounded-xl border border-orange-200 bg-white px-3 py-2.5 text-center text-base font-semibold leading-relaxed text-zinc-900 outline-none focus:border-orange-400 disabled:opacity-60"
               />
             ) : (
               <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-relaxed text-zinc-900">
@@ -154,7 +166,7 @@ export function ProjectGoalDetailSheet({
             )}
           </div>
 
-          <div>
+          <div className="px-1 pb-2">
             <label
               htmlFor="project-goal-sheet-motivation"
               className="block text-[11px] font-semibold text-zinc-500"
@@ -175,7 +187,7 @@ export function ProjectGoalDetailSheet({
                   "例: 学校の行事告知がバラバラで、みんな見逃しがちだった",
                   "e.g. Event notices were scattered and people kept missing them",
                 )}
-                className="mt-2 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-zinc-800 outline-none focus:border-orange-400 disabled:opacity-60"
+                className="mt-2 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-center text-sm leading-relaxed text-zinc-800 outline-none focus:border-orange-400 disabled:opacity-60"
               />
             ) : (
               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
@@ -186,7 +198,7 @@ export function ProjectGoalDetailSheet({
         </div>
 
         {editable ? (
-          <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {error ? (
               <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-[12px] text-rose-700" role="alert">
                 {error}
