@@ -10,8 +10,6 @@ import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
-import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
 import { RoadmapAddModeChooser } from "@/components/projects/workspace/roadmap/RoadmapAddModeChooser";
 import {
   RoadmapCreateSpace,
@@ -19,12 +17,11 @@ import {
 } from "@/components/projects/workspace/roadmap/RoadmapCreateSpace";
 import { RoadmapPhaseEditSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseEditSheet";
 import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
-import {
-  RoadmapStepMark,
-  resolveRoadmapMarkId,
-} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import { RoadmapStepList } from "@/components/projects/workspace/roadmap/RoadmapStepList";
+import { resolveRoadmapMarkId } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
+import { buildStepListItems } from "@/lib/roadmap/buildStepListItems";
 import {
   nextSidePlacement,
   ROADMAP_MAX_SIDES_PER_PARENT,
@@ -70,6 +67,7 @@ export function RoadmapMapEditor() {
   const [aiMessages, setAiMessages] = useState<DraftMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
 
@@ -99,13 +97,13 @@ export function RoadmapMapEditor() {
     [steps],
   );
 
-  const currentMainIndex = useMemo(() => {
-    const inProgress = mainSteps.findIndex((step) => step.status === "in_progress");
-    if (inProgress >= 0) return inProgress;
-    const firstOpen = mainSteps.findIndex((step) => step.status !== "completed");
-    return Math.max(0, firstOpen >= 0 ? firstOpen : 0);
-  }, [mainSteps]);
-  const hasInProgressMain = mainSteps.some((step) => step.status === "in_progress");
+  const { items: stepListItems, currentMainIndex } = useMemo(
+    () =>
+      buildStepListItems(steps, {
+        nextMoveLabel: tx("次の一手", "Next move"),
+      }),
+    [steps, tx],
+  );
 
   const selectedStep = useMemo(
     () => (selectedId ? steps.find((step) => step.id === selectedId) ?? null : null),
@@ -122,13 +120,17 @@ export function RoadmapMapEditor() {
 
   useEffect(() => {
     setSelectedId(null);
+    setExpandedId(null);
   }, [projectId]);
 
   const phaseIdFromUrl = searchParams.get("phase");
   useEffect(() => {
     if (!phaseIdFromUrl || steps.length === 0) return;
-    if (steps.some((step) => step.id === phaseIdFromUrl)) setSelectedId(phaseIdFromUrl);
-  }, [phaseIdFromUrl, steps]);
+    if (steps.some((step) => step.id === phaseIdFromUrl)) {
+      setExpandedId(phaseIdFromUrl);
+      if (roadmap.canEdit) setSelectedId(phaseIdFromUrl);
+    }
+  }, [phaseIdFromUrl, steps, roadmap.canEdit]);
 
   /** ?add=1 と sessionStorage で作成空間を維持（離脱して戻っても編集画面に落ちない） */
   const addFromUrl = searchParams.get("add") === "1";
@@ -180,6 +182,7 @@ export function RoadmapMapEditor() {
   function openCreateChooser() {
     if (!roadmap.canEdit || busy) return;
     setSelectedId(null);
+    setExpandedId(null);
     setMode("manual");
     setCreateChooserOpen(true);
   }
@@ -187,6 +190,7 @@ export function RoadmapMapEditor() {
   function openCreateSpace() {
     if (!roadmap.canEdit || busy) return;
     setSelectedId(null);
+    setExpandedId(null);
     setMode("manual");
     setCreateChooserOpen(false);
     setCreateSheetOpen(false);
@@ -425,16 +429,16 @@ export function RoadmapMapEditor() {
             <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl">
               {hasSteps
                 ? tx("ロードマップを編集", "Edit roadmap")
-                : tx("この挑戦の地図を、今から描こう", "Draw the map for this challenge")}
+                : tx("この挑戦の計画を、今から描こう", "Start building this plan")}
             </h1>
           </div>
           <p className="mt-1 text-[13px] text-zinc-500">
             {hasSteps
               ? tx(
-                  "マスをタップして名前・絵・ゴール・詳細を編集できます。",
-                  "Tap a step to edit its name, icon, goal, and details.",
+                  "ステップをタップして詳細を開き、編集できます。",
+                  "Tap a step to expand details and edit.",
                 )
-              : tx("右下のマス作成から最初のステップを追加しよう。", "Add the first step from Create step.")}
+              : tx("右下のステップ作成から最初の一歩を追加しよう。", "Add the first step from Create step.")}
           </p>
         </div>
       </div>
@@ -536,63 +540,35 @@ export function RoadmapMapEditor() {
         </section>
       ) : null}
 
-      <RoadmapPath
-        /** 編集画面はマスも棒もすべてオレンジ（進行状況のグレー分けをしない） */
-        segmentCleared={Array.from({ length: Math.max(mainSteps.length - 1, 0) }, () => true)}
-      >
-        {mainSteps.map((step, orderIndex) => {
-          const stepNumber = orderIndex + 1;
-          const expanded = selectedId === step.id;
-          /** 編集画面では全マスをオレンジで表示（灰色にしない・キラキラなし） */
-          const tone = "active" as const;
-          const sidePhases = bySideOf.get(step.id) ?? [];
-          const isCurrent =
-            step.status === "in_progress" ||
-            (!hasInProgressMain && orderIndex === currentMainIndex && step.status !== "completed");
-          return (
-            <RoadmapPathItem
-              key={step.id}
-              index={orderIndex}
-              sides={sideSlotsForParent(sidePhases).map((side) => {
-                const sideTone = "active" as const;
-                const mainSparkle = isCurrent && step.status !== "completed";
-                return {
-                  key: side.id,
-                  lane: side.lane,
-                  slotIndex: side.slotIndex,
-                  /** 編集画面は横棒も含めすべてオレンジ */
-                  lowerCleared: true,
-                  children: (
-                    <RoadmapPathNode
-                      tone={sideTone}
-                      sparkle={mainSparkle || side.status === "in_progress"}
-                      selected={selectedId === side.id}
-                      onClick={() => {
-                        setSelectedId((current) => (current === side.id ? null : side.id));
-                      }}
-                      aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
-                    >
-                      <RoadmapStepMark markId={side.icon} index={orderIndex} tone={sideTone} />
-                    </RoadmapPathNode>
-                  ),
-                };
-              })}
+      <RoadmapStepList
+        steps={stepListItems}
+        currentIndex={currentMainIndex}
+        expandedId={expandedId}
+        onToggle={(id) => {
+          setExpandedId((current) => (current === id ? null : id));
+        }}
+        renderExpandedActions={(step) =>
+          roadmap.canEdit ? (
+            <button
+              type="button"
+              onClick={() => setSelectedId(step.id)}
+              className="min-h-[44px] w-full rounded-full border border-zinc-200 bg-white text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
             >
-              <RoadmapPathNode
-                tone={tone}
-                sparkle={isCurrent && step.status !== "completed"}
-                selected={expanded}
-                onClick={() => {
-                  setSelectedId((current) => (current === step.id ? null : step.id));
-                }}
-                aria-label={tx(`ステップ ${stepNumber}: ${step.title}`, `Step ${stepNumber}: ${step.title}`)}
-              >
-                <RoadmapStepMark markId={step.icon} index={orderIndex} tone={tone} />
-              </RoadmapPathNode>
-            </RoadmapPathItem>
-          );
-        })}
-      </RoadmapPath>
+              {tx("このステップを編集", "Edit this step")}
+            </button>
+          ) : null
+        }
+        empty={
+          <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-6 py-10 text-center">
+            <p className="text-sm font-semibold text-zinc-800">
+              {tx("まだステップがありません", "No steps yet")}
+            </p>
+            <p className="mt-1 text-[13px] text-zinc-500">
+              {tx("右下から最初のステップを追加できます。", "Add the first step from the button below.")}
+            </p>
+          </div>
+        }
+      />
 
       {error || roadmap.error ? (
         <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error || roadmap.error}</p>
@@ -604,7 +580,7 @@ export function RoadmapMapEditor() {
         onClick={() => router.push(overviewHref)}
         className="min-h-[52px] w-full rounded-full bg-orange-500 text-base font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {tx("この地図を、歩き始める", "Start walking this map")}
+        {tx("この計画で進める", "Continue with this plan")}
       </button>
 
       {showCreateFab ? (
@@ -616,10 +592,10 @@ export function RoadmapMapEditor() {
             onClick={openCreateChooser}
             disabled={busy}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
-            aria-label={tx("マスを作成", "Create step")}
+            aria-label={tx("ステップを作成", "Create step")}
           >
             <Plus className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />
-            {tx("マス作成", "Create step")}
+            {tx("ステップ作成", "Create step")}
           </DuoButton>
         </div>
       ) : null}

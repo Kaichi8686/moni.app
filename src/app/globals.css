@@ -1212,6 +1212,10 @@ html.moni-goal-stuck .project-workspace-header {
   animation: roadmap-phase-detail-expand-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.roadmap-step-accordion-in {
+  animation: roadmap-phase-detail-expand-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* マス出現は軽くフェードのみ（transform は線座標と干渉しやすいので使わない） */
 @keyframes roadmap-path-node-in {
   from {

@@ -1,38 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import {
-  PenLine,
-  Sparkles,
-} from "lucide-react";
+import { PenLine, Plus, Sparkles } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { StickyBelowWorkspaceHeader } from "@/components/projects/workspace/StickyBelowWorkspaceHeader";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { RoadmapPath, RoadmapPathItem } from "@/components/projects/workspace/roadmap/RoadmapPath";
-import { RoadmapPathNode } from "@/components/projects/workspace/roadmap/RoadmapPathNode";
-import { RoadmapPhaseInfoSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseInfoSheet";
+import { RoadmapAchieveConfirmDialog } from "@/components/projects/workspace/roadmap/RoadmapAchieveConfirmDialog";
 import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
-import {
-  RoadmapStepMark,
-  resolveRoadmapMarkId,
-} from "@/components/projects/workspace/roadmap/roadmapPathMarks";
+import { RoadmapStepList } from "@/components/projects/workspace/roadmap/RoadmapStepList";
+import { resolveRoadmapMarkId } from "@/components/projects/workspace/roadmap/roadmapPathMarks";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
-import { splitRoadmapPathLayout, sideSlotsForParent } from "@/lib/roadmap/pathLayout";
+import { buildStepListItems } from "@/lib/roadmap/buildStepListItems";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
-import { isIssueAssignedTo } from "@/lib/workspace/issueAssignees";
-import { isIssueSubmitted, isoToDateInput } from "@/lib/workspace/issueWork";
-import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import { addDays } from "date-fns";
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
-  const router = useRouter();
   const {
     project,
     projectMeta,
@@ -43,7 +31,6 @@ export default function WorkspaceOverview() {
     canEdit,
     coachingContext,
     reload: wsReload,
-    uid,
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const projectBrief = resolveProjectBrief({
@@ -54,7 +41,10 @@ export default function WorkspaceOverview() {
   const problemMotivation = projectBrief.problemMotivation.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [achievePhaseId, setAchievePhaseId] = useState<string | null>(null);
+  const [achieveBusy, setAchieveBusy] = useState(false);
+  const [achieveError, setAchieveError] = useState("");
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const photoUrl = projectMeta?.thumbnail_url?.trim() || "";
@@ -70,64 +60,47 @@ export default function WorkspaceOverview() {
     const source = roadmap.phases.length > 0 ? roadmap.phases : workspacePhases;
     return [...source].sort((a, b) => a.order - b.order);
   }, [roadmap.phases, workspacePhases]);
-  const { main: mainPhases, bySideOf } = useMemo(
-    () => splitRoadmapPathLayout(sortedPhases),
-    [sortedPhases],
+
+  const { items: stepListItems, currentMainIndex } = useMemo(
+    () =>
+      buildStepListItems(sortedPhases, {
+        issues,
+        nextMoveLabel: tx("次の一手", "Next move"),
+      }),
+    [issues, sortedPhases, tx],
   );
-  const selectedPhaseLive = selectedPhaseId
-    ? sortedPhases.find((phase) => phase.id === selectedPhaseId) ?? null
+
+  const achievePhase = achievePhaseId
+    ? sortedPhases.find((phase) => phase.id === achievePhaseId) ?? null
     : null;
-  /** 本線だけを縦に数え、横置きは親行にぶら下げる（最初から全件表示） */
-  const displayPhases = mainPhases;
 
-  const inProgressIndex = mainPhases.findIndex((phase) => phase.status === "in_progress");
-  const firstOpenIndex = mainPhases.findIndex((phase) => phase.status !== "completed");
-  const currentIndex = Math.max(0, inProgressIndex >= 0 ? inProgressIndex : firstOpenIndex);
-  const selectedPhaseIsCurrent = Boolean(
-    selectedPhaseLive &&
-      selectedPhaseLive.status !== "completed" &&
-      (selectedPhaseLive.status === "in_progress" ||
-        mainPhases.findIndex((item) => item.id === selectedPhaseLive.id) === currentIndex ||
-        (selectedPhaseLive.sideOf != null &&
-          mainPhases.findIndex((item) => item.id === selectedPhaseLive.sideOf) === currentIndex)),
-  );
-
-  /**
-   * 今取り組んでいるマスのうち、自分が担当の課題だけ（他メンバーのみ担当は出さない）。
-   * 自分以外も担当に入っていても、自分が含まれていれば表示する。
-   */
-  const selectedPhaseTasks = useMemo(() => {
-    if (!selectedPhaseId || !selectedPhaseIsCurrent || !uid) return [];
-    return sortIssuesByDueDate(
-      issues.filter(
-        (issue) =>
-          issue.phaseId === selectedPhaseId &&
-          issue.status !== "cancelled" &&
-          issue.status !== "done" &&
-          !isIssueSubmitted(issue) &&
-          isIssueAssignedTo(issue, uid),
-      ),
-    )
-      .slice(0, 3)
-      .map((issue) => ({
-        id: issue.id,
-        title: issue.title,
-        dueLabel: issue.dueDate
-          ? tx(`期限 ${isoToDateInput(issue.dueDate)}`, `Due ${isoToDateInput(issue.dueDate)}`)
-          : undefined,
-      }));
-  }, [issues, selectedPhaseId, selectedPhaseIsCurrent, tx, uid]);
-
-  /** 達成確認用：このマスに紐づく未完了課題（担当者問わず） */
-  const selectedPhaseUnfinishedIssueCount = useMemo(() => {
-    if (!selectedPhaseId) return 0;
+  const achieveUnfinishedIssueCount = useMemo(() => {
+    if (!achievePhaseId) return 0;
     return issues.filter(
       (issue) =>
-        issue.phaseId === selectedPhaseId &&
+        issue.phaseId === achievePhaseId &&
         issue.status !== "cancelled" &&
         issue.status !== "done",
     ).length;
-  }, [issues, selectedPhaseId]);
+  }, [achievePhaseId, issues]);
+
+  const expandedPhase = expandedId
+    ? sortedPhases.find((phase) => phase.id === expandedId) ?? null
+    : null;
+
+  const expandedIsCurrent = Boolean(
+    expandedPhase &&
+      expandedPhase.status !== "completed" &&
+      (expandedPhase.status === "in_progress" ||
+        (!expandedPhase.sideOf &&
+          sortedPhases
+            .filter((p) => !p.sideOf)
+            .findIndex((p) => p.id === expandedPhase.id) === currentMainIndex) ||
+        (expandedPhase.sideOf != null &&
+          sortedPhases
+            .filter((p) => !p.sideOf)
+            .findIndex((p) => p.id === expandedPhase.sideOf) === currentMainIndex)),
+  );
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
@@ -217,205 +190,161 @@ export default function WorkspaceOverview() {
       </section>
 
       <div className="mx-auto max-w-3xl space-y-7 pt-7">
-      <ProjectDeletionVoteBanner />
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
-          {canEdit ? (
-            <Link
-              href={roadmapEditHref}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
-            >
-              <PenLine className="h-3.5 w-3.5" aria-hidden />
-              {tx("編集する", "Edit")}
-            </Link>
+        <ProjectDeletionVoteBanner />
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-zinc-950 sm:text-lg">{tx("ロードマップ", "Roadmap")}</h2>
+            {canEdit ? (
+              <Link
+                href={roadmapEditHref}
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+              >
+                <PenLine className="h-3.5 w-3.5" aria-hidden />
+                {tx("編集する", "Edit")}
+              </Link>
+            ) : null}
+          </div>
+          {/* 未入力は写真ボタン風 CTA、入力後は同じ位置にゴールバナー */}
+          <div className="mb-4">
+            <ProjectBriefSection />
+          </div>
+          {project && projectGoal ? (
+            <StickyBelowWorkspaceHeader>
+              <ProjectGoalBanner
+                projectName={project.name}
+                goal={projectGoal}
+                onClick={() => setGoalDetailOpen(true)}
+              />
+            </StickyBelowWorkspaceHeader>
           ) : null}
-        </div>
-        {/* 未入力は写真ボタン風 CTA、入力後は同じ位置にゴールバナー */}
-        <div className="mb-4">
-          <ProjectBriefSection />
-        </div>
-        {project && projectGoal ? (
-          <StickyBelowWorkspaceHeader>
-            <ProjectGoalBanner
-              projectName={project.name}
-              goal={projectGoal}
-              onClick={() => setGoalDetailOpen(true)}
-            />
-          </StickyBelowWorkspaceHeader>
-        ) : null}
-        {sortedPhases.length > 0 ? (
-          <>
-            <RoadmapPath
-              segmentCleared={displayPhases.map((phase) => {
-                const index = mainPhases.findIndex((item) => item.id === phase.id);
-                return phase.status === "completed" || index < currentIndex;
-              })}
-            >
-              {displayPhases.map((phase, visibleIndex) => {
-                const index = mainPhases.findIndex((item) => item.id === phase.id);
-                const complete = phase.status === "completed";
-                const current = phase.status === "in_progress" || (!complete && index === currentIndex);
-                /** 先のマスは灰色（中身は開ける） */
-                const upcoming = !complete && !current && index > currentIndex;
-                const tone = complete ? "done" : upcoming ? "upcoming" : "active";
-                const sidePhases = bySideOf.get(phase.id) ?? [];
-                return (
-                  <RoadmapPathItem
-                    key={phase.id}
-                    index={visibleIndex}
-                    sides={sideSlotsForParent(sidePhases).map((side) => {
-                      const sideComplete = side.status === "completed";
-                      const sideCurrent = side.status === "in_progress";
-                      const sideTone = sideComplete
-                        ? ("done" as const)
-                        : sideCurrent || current
-                          ? ("active" as const)
-                          : upcoming
-                            ? ("upcoming" as const)
-                            : ("active" as const);
-                      return {
-                        key: side.id,
-                        lane: side.lane,
-                        slotIndex: side.slotIndex,
-                        lowerCleared: sideComplete,
-                        children: (
-                          <RoadmapPathNode
-                            tone={sideTone}
-                            sparkle={current || sideCurrent}
-                            selected={selectedPhaseId === side.id}
-                            onClick={() => setSelectedPhaseId(side.id)}
-                            aria-label={tx(`横ステップ: ${side.title}`, `Side step: ${side.title}`)}
-                          >
-                            <RoadmapStepMark markId={side.icon} index={index} tone={sideTone} />
-                          </RoadmapPathNode>
-                        ),
-                      };
-                    })}
-                  >
-                    <RoadmapPathNode
-                      tone={tone}
-                      sparkle={current}
-                      selected={selectedPhaseId === phase.id}
-                      onClick={() => setSelectedPhaseId(phase.id)}
-                      aria-label={tx(`ステップ ${index + 1}: ${phase.title}`, `Step ${index + 1}: ${phase.title}`)}
-                    >
-                      <RoadmapStepMark markId={phase.icon} index={index} tone={tone} />
-                    </RoadmapPathNode>
-                  </RoadmapPathItem>
-                );
-              })}
-            </RoadmapPath>
-          </>
-        ) : (
-          <RoadmapPath>
-            <RoadmapPathItem index={0}>
-              <RoadmapPathNode
-                tone="create"
-                sparkle
+          <RoadmapStepList
+            steps={stepListItems}
+            currentIndex={currentMainIndex}
+            expandedId={expandedId}
+            onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+            renderExpandedActions={(step) => {
+              if (step.status === "completed") return null;
+              if (!roadmap.canEdit || !expandedIsCurrent || step.id !== expandedId) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAchieveError("");
+                    setAchievePhaseId(step.id);
+                  }}
+                  className="min-h-[44px] w-full rounded-full bg-orange-500 text-sm font-bold text-white shadow-sm hover:bg-orange-600"
+                >
+                  {tx("このステップを達成する", "Mark step achieved")}
+                </button>
+              );
+            }}
+            empty={
+              <button
+                type="button"
                 disabled={!canEdit || !roadmap.canEdit || createBusy}
                 onClick={() => {
                   if (!canEdit || !roadmap.canEdit) return;
                   setCreateSheetOpen(true);
                 }}
-                aria-label={tx("ロードマップを作成する", "Create roadmap")}
+                className="flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-6 py-10 text-center transition hover:border-orange-300 hover:bg-orange-50/40 disabled:opacity-50"
               >
-                <RoadmapStepMark index={0} tone="create" />
-              </RoadmapPathNode>
-            </RoadmapPathItem>
-          </RoadmapPath>
-        )}
-      </section>
-
-      {project && projectGoal ? (
-        <ProjectGoalDetailSheet
-          open={goalDetailOpen}
-          onClose={() => setGoalDetailOpen(false)}
-          projectName={project.name}
-          goal={projectGoal}
-          problemMotivation={problemMotivation}
-          canEdit={false}
-        />
-      ) : null}
-
-      <RoadmapStepCreateSheet
-        open={createSheetOpen}
-        busy={createBusy}
-        initialIcon={resolveRoadmapMarkId(undefined, 0)}
-        onClose={() => setCreateSheetOpen(false)}
-        onSubmit={async (values) => {
-          setCreateBusy(true);
-          try {
-            const start = new Date();
-            await roadmap.createPhase({
-              title: values.title,
-              goal: values.goal,
-              description: values.description,
-              icon: values.icon,
-              startDate: start.toISOString(),
-              endDate: addDays(start, 14).toISOString(),
-              status: "in_progress",
-            });
-            await wsReload();
-          } finally {
-            setCreateBusy(false);
-          }
-        }}
-      />
-
-      <RoadmapPhaseInfoSheet
-        open={Boolean(selectedPhaseLive)}
-        phase={
-          selectedPhaseLive
-            ? {
-                id: selectedPhaseLive.id,
-                title: selectedPhaseLive.title,
-                goal: selectedPhaseLive.goal,
-                description: selectedPhaseLive.description,
-                stepNumber: (() => {
-                  const mainAt = mainPhases.findIndex((item) => item.id === selectedPhaseLive.id);
-                  if (mainAt >= 0) return mainAt + 1;
-                  if (selectedPhaseLive.sideOf) {
-                    const parentAt = mainPhases.findIndex((item) => item.id === selectedPhaseLive.sideOf);
-                    if (parentAt >= 0) return parentAt + 1;
-                  }
-                  return 1;
-                })(),
-                alreadyDone: selectedPhaseLive.status === "completed",
-              }
-            : null
-        }
-        onClose={() => setSelectedPhaseId(null)}
-        canEdit={false}
-        canAchieve={Boolean(roadmap.canEdit && selectedPhaseIsCurrent)}
-        onAchieve={async () => {
-          if (!selectedPhaseLive) return;
-          if (!roadmap.canEdit) {
-            throw new Error(tx("編集権限がありません", "You don’t have permission to edit"));
-          }
-          await roadmap.updatePhase(selectedPhaseLive.id, { status: "completed" });
-          // 本線マスを達成したときだけ次の本線へ進める（横置きは親行の進捗を奪わない）
-          if (!selectedPhaseLive.sideOf) {
-            const idx = mainPhases.findIndex((item) => item.id === selectedPhaseLive.id);
-            const next = idx >= 0
-              ? mainPhases.slice(idx + 1).find((item) => item.status !== "completed")
-              : undefined;
-            if (next) {
-              await roadmap.updatePhase(next.id, { status: "in_progress" });
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 text-white shadow-[0_4px_0_#c2410c]">
+                  <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+                </span>
+                <span className="text-sm font-semibold text-zinc-800">
+                  {tx("最初のステップを追加", "Add the first step")}
+                </span>
+                <span className="max-w-xs text-[13px] text-zinc-500">
+                  {tx("ロードマップを縦のステップで組み立てましょう。", "Build your roadmap as a vertical list of steps.")}
+                </span>
+              </button>
             }
-          }
-          await wsReload();
-          setSelectedPhaseId(null);
-        }}
-        showTasks={selectedPhaseIsCurrent && selectedPhaseTasks.length > 0}
-        tasks={selectedPhaseTasks}
-        unfinishedIssueCount={selectedPhaseUnfinishedIssueCount}
-        onSelectTask={(taskId) => {
-          setSelectedPhaseId(null);
-          router.push(`/projects/${projectId}/issues?task=${taskId}`);
-        }}
-      />
+          />
+        </section>
 
+        {project && projectGoal ? (
+          <ProjectGoalDetailSheet
+            open={goalDetailOpen}
+            onClose={() => setGoalDetailOpen(false)}
+            projectName={project.name}
+            goal={projectGoal}
+            problemMotivation={problemMotivation}
+            canEdit={false}
+          />
+        ) : null}
+
+        <RoadmapStepCreateSheet
+          open={createSheetOpen}
+          busy={createBusy}
+          initialIcon={resolveRoadmapMarkId(undefined, 0)}
+          onClose={() => setCreateSheetOpen(false)}
+          onSubmit={async (values) => {
+            setCreateBusy(true);
+            try {
+              const start = new Date();
+              await roadmap.createPhase({
+                title: values.title,
+                goal: values.goal,
+                description: values.description,
+                icon: values.icon,
+                startDate: start.toISOString(),
+                endDate: addDays(start, 14).toISOString(),
+                status: "in_progress",
+              });
+              await wsReload();
+            } finally {
+              setCreateBusy(false);
+            }
+          }}
+        />
+
+        <RoadmapAchieveConfirmDialog
+          open={Boolean(achievePhase)}
+          goal={achievePhase?.goal}
+          stepTitle={achievePhase?.title}
+          unfinishedIssueCount={achieveUnfinishedIssueCount}
+          busy={achieveBusy}
+          error={achieveError}
+          onCancel={() => {
+            if (achieveBusy) return;
+            setAchievePhaseId(null);
+            setAchieveError("");
+          }}
+          onConfirm={async () => {
+            if (!achievePhase) return;
+            if (!roadmap.canEdit) {
+              setAchieveError(tx("編集権限がありません", "You don’t have permission to edit"));
+              return;
+            }
+            setAchieveBusy(true);
+            setAchieveError("");
+            try {
+              await roadmap.updatePhase(achievePhase.id, { status: "completed" });
+              if (!achievePhase.sideOf) {
+                const mainPhases = sortedPhases.filter((p) => !p.sideOf);
+                const idx = mainPhases.findIndex((item) => item.id === achievePhase.id);
+                const next =
+                  idx >= 0
+                    ? mainPhases.slice(idx + 1).find((item) => item.status !== "completed")
+                    : undefined;
+                if (next) {
+                  await roadmap.updatePhase(next.id, { status: "in_progress" });
+                }
+              }
+              await wsReload();
+              setAchievePhaseId(null);
+              setExpandedId(null);
+            } catch (e) {
+              setAchieveError(
+                e instanceof Error
+                  ? e.message
+                  : tx("達成の反映に失敗しました", "Could not mark this step achieved"),
+              );
+            } finally {
+              setAchieveBusy(false);
+            }
+          }}
+        />
       </div>
 
       {/* アイデアタブと同系の Duo 角丸正方形ボタン（左下）→ AI コーチ */}
@@ -430,4 +359,3 @@ export default function WorkspaceOverview() {
     </div>
   );
 }
-
