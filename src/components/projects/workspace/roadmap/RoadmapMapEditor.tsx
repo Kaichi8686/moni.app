@@ -10,11 +10,6 @@ import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { RoadmapAddModeChooser } from "@/components/projects/workspace/roadmap/RoadmapAddModeChooser";
-import {
-  RoadmapCreateSpace,
-  type CreateSpaceDraft,
-} from "@/components/projects/workspace/roadmap/RoadmapCreateSpace";
 import { RoadmapPhaseEditSheet } from "@/components/projects/workspace/roadmap/RoadmapPhaseEditSheet";
 import { RoadmapStepCreateSheet } from "@/components/projects/workspace/roadmap/RoadmapStepCreateSheet";
 import { RoadmapStepList } from "@/components/projects/workspace/roadmap/RoadmapStepList";
@@ -22,12 +17,7 @@ import { resolveRoadmapMarkId } from "@/components/projects/workspace/roadmap/ro
 import { persistProjectMotivationAndGoal } from "@/lib/projects/persistProjectBrief";
 import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { buildStepListItems } from "@/lib/roadmap/buildStepListItems";
-import {
-  nextSidePlacement,
-  ROADMAP_MAX_SIDES_PER_PARENT,
-  splitRoadmapPathLayout,
-  sideSlotsForParent,
-} from "@/lib/roadmap/pathLayout";
+import { splitRoadmapPathLayout } from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -55,12 +45,7 @@ export function RoadmapMapEditor() {
   } = useProjectWorkspace();
   const roadmap = useRoadmapProject(projectId);
   const [mode, setMode] = useState<"manual" | "ai">("manual");
-  const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [createChooserOpen, setCreateChooserOpen] = useState(false);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
-  /** 横追加：位置確定後に内容シートへ渡す下書き */
-  const [pendingSideDraft, setPendingSideDraft] = useState<CreateSpaceDraft | null>(null);
-  const [sideContentSheetOpen, setSideContentSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aiInput, setAiInput] = useState("");
@@ -92,12 +77,9 @@ export function RoadmapMapEditor() {
     [roadmap.phases],
   );
 
-  const { main: mainSteps, bySideOf } = useMemo(
-    () => splitRoadmapPathLayout(steps),
-    [steps],
-  );
+  const { main: mainSteps } = useMemo(() => splitRoadmapPathLayout(steps), [steps]);
 
-  const { items: stepListItems, currentMainIndex } = useMemo(
+  const { items: stepListItems, currentMainIndex, currentStepId } = useMemo(
     () =>
       buildStepListItems(steps, {
         nextMoveLabel: tx("次の一手", "Next move"),
@@ -123,6 +105,12 @@ export function RoadmapMapEditor() {
     setExpandedId(null);
   }, [projectId]);
 
+  /** 今やっているステップは最初から開く */
+  useEffect(() => {
+    if (!currentStepId) return;
+    setExpandedId(currentStepId);
+  }, [currentStepId, projectId]);
+
   const phaseIdFromUrl = searchParams.get("phase");
   useEffect(() => {
     if (!phaseIdFromUrl || steps.length === 0) return;
@@ -132,90 +120,23 @@ export function RoadmapMapEditor() {
     }
   }, [phaseIdFromUrl, steps, roadmap.canEdit]);
 
-  /** ?add=1 と sessionStorage で作成空間を維持（離脱して戻っても編集画面に落ちない） */
   const addFromUrl = searchParams.get("add") === "1";
-  const createSpaceStorageKey = `moni-roadmap-create:${projectId}`;
-
   const roadmapHref = `/projects/${projectId}/roadmap`;
-  const createSpaceHref = `${roadmapHref}?add=1`;
-
-  function persistCreateSpaceOpen(open: boolean) {
-    try {
-      if (open) window.sessionStorage.setItem(createSpaceStorageKey, "1");
-      else window.sessionStorage.removeItem(createSpaceStorageKey);
-    } catch {
-      /* ignore */
-    }
-    router.replace(open ? createSpaceHref : roadmapHref, { scroll: false });
-  }
 
   useEffect(() => {
     if (!roadmap.canEdit || roadmap.loading) return;
-    let stored = false;
-    try {
-      stored = window.sessionStorage.getItem(createSpaceStorageKey) === "1";
-    } catch {
-      stored = false;
-    }
-    // 横追加の途中なら作成空間を復元
-    if (stored) {
-      setCreateSpaceOpen(true);
-      if (!addFromUrl) router.replace(createSpaceHref, { scroll: false });
-      return;
-    }
-    setCreateSpaceOpen(false);
-    // ?add=1 は追加方法の選択を開く（ロードマップ編集画面内）
+    // ?add=1 は作成シートを直接開く（横/下の選択はしない）
     if (addFromUrl) {
-      setCreateChooserOpen(true);
+      setCreateSheetOpen(true);
       router.replace(roadmapHref, { scroll: false });
     }
-  }, [
-    addFromUrl,
-    roadmap.canEdit,
-    roadmap.loading,
-    createSpaceStorageKey,
-    createSpaceHref,
-    roadmapHref,
-    router,
-  ]);
+  }, [addFromUrl, roadmap.canEdit, roadmap.loading, roadmapHref, router]);
 
-  function openCreateChooser() {
+  function openCreateStep() {
     if (!roadmap.canEdit || busy) return;
     setSelectedId(null);
-    setExpandedId(null);
     setMode("manual");
-    setCreateChooserOpen(true);
-  }
-
-  function openCreateSpace() {
-    if (!roadmap.canEdit || busy) return;
-    setSelectedId(null);
-    setExpandedId(null);
-    setMode("manual");
-    setCreateChooserOpen(false);
-    setCreateSheetOpen(false);
-    setPendingSideDraft(null);
-    setSideContentSheetOpen(false);
-    setCreateSpaceOpen(true);
-    persistCreateSpaceOpen(true);
-  }
-
-  function closeCreateSpace() {
-    setCreateSpaceOpen(false);
-    setPendingSideDraft(null);
-    setSideContentSheetOpen(false);
-    persistCreateSpaceOpen(false);
-  }
-
-  function openCreateBelowSheet() {
-    if (!roadmap.canEdit || busy) return;
-    setCreateChooserOpen(false);
     setCreateSheetOpen(true);
-  }
-
-  function pickSidePosition(draft: CreateSpaceDraft) {
-    setPendingSideDraft(draft);
-    setSideContentSheetOpen(true);
   }
 
   async function createStepBelow(values: {
@@ -239,72 +160,6 @@ export function RoadmapMapEditor() {
         status: mainSteps.length === 0 ? "in_progress" : "planned",
       });
       await workspaceReload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createStepBeside(values: {
-    title: string;
-    goal: string;
-    description: string;
-    icon: string;
-  }) {
-    if (!roadmap.canEdit || !pendingSideDraft) {
-      throw new Error(tx("追加できるマスがありません", "Nothing to add"));
-    }
-    const sideOf = pendingSideDraft.sideOf;
-    if (sideOf) {
-      const siblings = bySideOf.get(sideOf) ?? [];
-      if (siblings.length >= ROADMAP_MAX_SIDES_PER_PARENT) {
-        throw new Error(
-          tx(
-            `横マスは各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個までです。`,
-            `Each step can have up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps.`,
-          ),
-        );
-      }
-      const placement = nextSidePlacement(
-        siblings.map((side) => ({
-          sideOf,
-          lane: side.lane,
-          order: side.order,
-        })),
-        sideOf,
-        pendingSideDraft.lane,
-      );
-      if (!placement) {
-        throw new Error(
-          tx(
-            `横マスは各ステップ最大${ROADMAP_MAX_SIDES_PER_PARENT}個までです。`,
-            `Each step can have up to ${ROADMAP_MAX_SIDES_PER_PARENT} side steps.`,
-          ),
-        );
-      }
-    }
-    setBusy(true);
-    setError("");
-    try {
-      const start = new Date();
-      // 親が無い（空マップ）ときは本線の先頭として追加
-      await roadmap.createPhase({
-        title: values.title,
-        goal: values.goal,
-        description: values.description,
-        icon: values.icon,
-        startDate: start.toISOString(),
-        endDate: addDays(start, 14).toISOString(),
-        status: steps.length === 0 ? "in_progress" : "planned",
-        sideOf: sideOf || null,
-        lane: sideOf ? pendingSideDraft.lane : 0,
-      });
-      await workspaceReload();
-      setPendingSideDraft(null);
-      setSideContentSheetOpen(false);
-      closeCreateSpace();
     } catch (e) {
       setError(e instanceof Error ? e.message : tx("ステップを追加できませんでした", "Couldn’t add the step"));
       throw e;
@@ -409,8 +264,7 @@ export function RoadmapMapEditor() {
   }
 
   const hasSteps = steps.length > 0;
-  const showCreateFab =
-    roadmap.canEdit && !createSpaceOpen && !selectedId && mode === "manual";
+  const showCreateFab = roadmap.canEdit && !selectedId && !createSheetOpen && mode === "manual";
 
   return (
     <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-5 px-1 pb-28 pt-1">
@@ -589,7 +443,7 @@ export function RoadmapMapEditor() {
             type="button"
             tone="orange"
             size="md"
-            onClick={openCreateChooser}
+            onClick={openCreateStep}
             disabled={busy}
             className="gap-2 !px-4 !py-3.5 !text-[15px]"
             aria-label={tx("ステップを作成", "Create step")}
@@ -601,7 +455,7 @@ export function RoadmapMapEditor() {
       ) : null}
 
       <RoadmapPhaseEditSheet
-        open={Boolean(selectedId) && Boolean(sheetStep) && roadmap.canEdit && !createSpaceOpen}
+        open={Boolean(selectedId) && Boolean(sheetStep) && roadmap.canEdit}
         phase={
           sheetStep
             ? {
@@ -613,10 +467,6 @@ export function RoadmapMapEditor() {
                 stepNumber: (() => {
                   const mainAt = mainSteps.findIndex((item) => item.id === sheetStep.id);
                   if (mainAt >= 0) return mainAt + 1;
-                  if (sheetStep.sideOf) {
-                    const parentAt = mainSteps.findIndex((item) => item.id === sheetStep.sideOf);
-                    if (parentAt >= 0) return parentAt + 1;
-                  }
                   return steps.findIndex((item) => item.id === sheetStep.id) + 1;
                 })(),
               }
@@ -631,7 +481,6 @@ export function RoadmapMapEditor() {
           }
           setError("");
           try {
-            // busy を立てない：アイコン即保存でシートがロック／閉じるのを防ぐ
             await roadmap.updatePhase(targetId, {
               title: patch.title,
               goal: patch.goal,
@@ -655,59 +504,12 @@ export function RoadmapMapEditor() {
         }
       />
 
-      <RoadmapAddModeChooser
-        open={createChooserOpen && roadmap.canEdit && !createSpaceOpen}
-        onClose={() => setCreateChooserOpen(false)}
-        onChooseBelow={openCreateBelowSheet}
-        onChooseSide={openCreateSpace}
-      />
-
       <RoadmapStepCreateSheet
-        open={createSheetOpen && roadmap.canEdit && !createSpaceOpen}
+        open={createSheetOpen && roadmap.canEdit}
         busy={busy}
         initialIcon={resolveRoadmapMarkId(undefined, mainSteps.length)}
         onClose={() => setCreateSheetOpen(false)}
         onSubmit={createStepBelow}
-      />
-
-      {createSpaceOpen && roadmap.canEdit ? (
-        <RoadmapCreateSpace
-          existingSteps={mainSteps.map((step) => ({
-            id: step.id,
-            title: step.title,
-            icon: step.icon,
-            order: step.order,
-            status: step.status,
-          }))}
-          existingSides={mainSteps.flatMap((step) =>
-            sideSlotsForParent(bySideOf.get(step.id) ?? []).map((side) => ({
-              id: side.id,
-              title: side.title,
-              icon: side.icon,
-              order: side.order,
-              status: side.status,
-              sideOf: step.id,
-              lane: side.lane,
-              slotIndex: side.slotIndex,
-            })),
-          )}
-          busy={busy}
-          onClose={closeCreateSpace}
-          onPickPosition={pickSidePosition}
-        />
-      ) : null}
-
-      <RoadmapStepCreateSheet
-        open={sideContentSheetOpen && Boolean(pendingSideDraft) && roadmap.canEdit}
-        busy={busy}
-        initialIcon={
-          pendingSideDraft?.icon ?? resolveRoadmapMarkId(undefined, steps.length)
-        }
-        onClose={() => {
-          setSideContentSheetOpen(false);
-          setPendingSideDraft(null);
-        }}
-        onSubmit={createStepBeside}
       />
 
       {project && projectGoal ? (
