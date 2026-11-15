@@ -79,24 +79,30 @@ export function RoadmapStepList({
         const tone = stepTone(step, currentIndex);
         const isLast = index === steps.length - 1;
         const tasks = step.tasks ?? [];
+        const isCurrent = tone === "current";
         const numberClass =
           tone === "done" || tone === "current"
-            ? "bg-[#2563EB] text-white"
+            ? "bg-[#FF9600] text-white"
             : "bg-zinc-100 text-zinc-500";
+        const numberSize = isCurrent
+          ? "h-11 w-11 text-base"
+          : "h-9 w-9 text-sm";
 
         return (
           <li key={step.id} className="relative flex gap-3">
             {/* 左：番号＋縦線 */}
-            <div className="relative flex w-9 shrink-0 flex-col items-center">
+            <div className="relative flex w-11 shrink-0 flex-col items-center pt-0.5">
               <span
-                className={`relative z-[1] flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold tabular-nums ${numberClass}`}
+                className={`relative z-[1] flex items-center justify-center rounded-full font-bold tabular-nums ${numberSize} ${numberClass}`}
                 aria-hidden
               >
                 {step.stepNumber}
               </span>
               {!isLast ? (
                 <span
-                  className="absolute left-1/2 top-9 bottom-[-12px] w-px -translate-x-1/2 bg-zinc-200"
+                  className={`absolute left-1/2 bottom-[-12px] w-px -translate-x-1/2 bg-zinc-200 ${
+                    isCurrent ? "top-11" : "top-9"
+                  }`}
                   aria-hidden
                 />
               ) : null}
@@ -115,10 +121,14 @@ export function RoadmapStepList({
                   type="button"
                   onClick={() => onToggle(step.id)}
                   aria-expanded={expanded}
+                  aria-label={tx(
+                    `ステップ ${step.stepNumber}: ${step.title}`,
+                    `Step ${step.stepNumber}: ${step.title}`,
+                  )}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
                 >
                   <span className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-zinc-900">
-                    {tx(`ステップ ${step.stepNumber} – ${step.title}`, `Step ${step.stepNumber} – ${step.title}`)}
+                    {step.title}
                   </span>
                   <span
                     className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-500"
