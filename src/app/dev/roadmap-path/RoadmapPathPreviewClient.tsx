@@ -74,17 +74,12 @@ export function RoadmapPathPreviewClient() {
   const [goalOpen, setGoalOpen] = useState(false);
 
   return (
-    <main className="min-h-screen bg-[#F7F8FA] px-4 py-8">
-      <div className="mx-auto max-w-lg space-y-8">
+    <main className="min-h-screen bg-white px-4 py-8">
+      <div className="mx-auto max-w-lg space-y-6">
         <header>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Your plan</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-950">
-            Launch a Safe Idea-Building Platform for Teens
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-            <span className="font-semibold text-zinc-800">Outcome:</span> Teenagers can explore ideas with clear
-            safety rules, and parents understand what is being built.
-          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">dev preview</p>
+          <h1 className="mt-1 text-xl font-bold text-zinc-950">Roadmap step list</h1>
+          <p className="mt-1 text-sm text-zinc-500">縦リスト＋タップで詳細（ヘッダーは本番どおり変更なし）</p>
         </header>
 
         <ProjectGoalBanner
@@ -100,15 +95,12 @@ export function RoadmapPathPreviewClient() {
           problemMotivation="学校の行事告知がバラバラで、みんな見逃しがちだった"
         />
 
-        <section>
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">縦リスト（タップで詳細）</h2>
-          <RoadmapStepList
-            steps={DEMO_STEPS}
-            currentIndex={0}
-            expandedId={expandedId}
-            onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
-          />
-        </section>
+        <RoadmapStepList
+          steps={DEMO_STEPS}
+          currentIndex={0}
+          expandedId={expandedId}
+          onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+        />
       </div>
     </main>
   );
