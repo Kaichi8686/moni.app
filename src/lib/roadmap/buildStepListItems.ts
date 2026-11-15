@@ -112,6 +112,7 @@ function collectFocusTasksForPhase(
       const dueDay = isoToDateInput(issue.dueDate);
       return {
         id: `issue-${issue.id}`,
+        issueId: issue.id,
         title: issue.title,
         description: plainIssueDescription(issue),
         dueLabel: dueDay ? `${opts.dueLabelPrefix} ${dueDay}` : undefined,
