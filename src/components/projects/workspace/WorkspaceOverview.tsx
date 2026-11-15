@@ -44,7 +44,7 @@ export default function WorkspaceOverview() {
   const problemMotivation = projectBrief.problemMotivation.trim();
   const roadmapEditHref = `/projects/${projectId}/roadmap`;
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [achievePhaseId, setAchievePhaseId] = useState<string | null>(null);
   const [achieveBusy, setAchieveBusy] = useState(false);
   const [achieveError, setAchieveError] = useState("");
@@ -75,11 +75,16 @@ export default function WorkspaceOverview() {
     [issues, sortedPhases, tx, uid],
   );
 
-  /** 今やっているステップは最初から開く（現在ステップが変わったら開き直す） */
+  /** プロジェクト切替時は開き直し */
+  useEffect(() => {
+    setExpandedIds([]);
+  }, [projectId]);
+
+  /** 今やっているステップは最初から開く（他の開いているステップは閉じない） */
   useEffect(() => {
     if (!currentStepId) return;
-    setExpandedId(currentStepId);
-  }, [currentStepId, projectId]);
+    setExpandedIds((prev) => (prev.includes(currentStepId) ? prev : [...prev, currentStepId]));
+  }, [currentStepId]);
 
   const achievePhase = achievePhaseId
     ? sortedPhases.find((phase) => phase.id === achievePhaseId) ?? null
@@ -94,20 +99,6 @@ export default function WorkspaceOverview() {
         issue.status !== "done",
     ).length;
   }, [achievePhaseId, issues]);
-
-  const expandedPhase = expandedId
-    ? sortedPhases.find((phase) => phase.id === expandedId) ?? null
-    : null;
-
-  const expandedIsCurrent = Boolean(
-    expandedPhase &&
-      !expandedPhase.sideOf &&
-      expandedPhase.status !== "completed" &&
-      (expandedPhase.status === "in_progress" ||
-        sortedPhases
-          .filter((p) => !p.sideOf)
-          .findIndex((p) => p.id === expandedPhase.id) === currentMainIndex),
-  );
 
   if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
@@ -227,15 +218,27 @@ export default function WorkspaceOverview() {
           <RoadmapStepList
             steps={stepListItems}
             currentIndex={currentMainIndex}
-            expandedId={expandedId}
-            onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+            expandedIds={expandedIds}
+            onToggle={(id) =>
+              setExpandedIds((prev) =>
+                prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+              )
+            }
             onSelectTask={(task) => {
               if (!task.issueId) return;
               router.push(`/projects/${projectId}/issues?task=${encodeURIComponent(task.issueId)}`);
             }}
             renderExpandedActions={(step) => {
               if (step.status === "completed") return null;
-              if (!roadmap.canEdit || !expandedIsCurrent || step.id !== expandedId) return null;
+              if (!roadmap.canEdit) return null;
+              const phase = sortedPhases.find((item) => item.id === step.id);
+              if (!phase || phase.sideOf) return null;
+              const isCurrent =
+                phase.status === "in_progress" ||
+                sortedPhases
+                  .filter((item) => !item.sideOf)
+                  .findIndex((item) => item.id === phase.id) === currentMainIndex;
+              if (!isCurrent) return null;
               return (
                 <button
                   type="button"
@@ -344,7 +347,7 @@ export default function WorkspaceOverview() {
               }
               await wsReload();
               setAchievePhaseId(null);
-              setExpandedId(null);
+              setExpandedIds((prev) => prev.filter((id) => id !== achievePhase.id));
             } catch (e) {
               setAchieveError(
                 e instanceof Error

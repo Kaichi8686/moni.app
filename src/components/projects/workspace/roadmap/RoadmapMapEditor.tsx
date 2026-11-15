@@ -53,7 +53,7 @@ export function RoadmapMapEditor() {
   const [aiMessages, setAiMessages] = useState<DraftMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [proposed, setProposed] = useState<string[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [goalDetailOpen, setGoalDetailOpen] = useState(false);
 
@@ -106,14 +106,16 @@ export function RoadmapMapEditor() {
 
   useEffect(() => {
     setSelectedId(null);
-    setExpandedId(null);
+    setExpandedIds([]);
   }, [projectId]);
 
   const phaseIdFromUrl = searchParams.get("phase");
   useEffect(() => {
     if (!phaseIdFromUrl || steps.length === 0) return;
     if (steps.some((step) => step.id === phaseIdFromUrl)) {
-      setExpandedId(phaseIdFromUrl);
+      setExpandedIds((prev) =>
+        prev.includes(phaseIdFromUrl) ? prev : [...prev, phaseIdFromUrl],
+      );
       if (roadmap.canEdit) setSelectedId(phaseIdFromUrl);
     }
   }, [phaseIdFromUrl, steps, roadmap.canEdit]);
@@ -395,11 +397,13 @@ export function RoadmapMapEditor() {
       <RoadmapStepList
         steps={stepListItems}
         currentIndex={currentMainIndex}
-        expandedId={expandedId}
+        expandedIds={expandedIds}
         showTasks={false}
         emphasizeCurrent={false}
         onToggle={(id) => {
-          setExpandedId((current) => (current === id ? null : id));
+          setExpandedIds((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+          );
         }}
         renderExpandedActions={(step) =>
           roadmap.canEdit ? (
