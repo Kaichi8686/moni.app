@@ -1,10 +1,12 @@
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+import type { OfficeIndustry } from "@/lib/office/industries";
 import {
   localCreateCompany,
   localCurrentIncident,
   localGetCompany,
   localMarkResultSeen,
   localRanking,
+  localSetIndustry,
   localSubmit,
   localToggleRanking,
 } from "@/lib/office/localStore";
@@ -85,26 +87,38 @@ export async function fetchCompany(): Promise<CompanyPayload> {
   }
 }
 
-export async function createCompany(name: string): Promise<OfficeCompany> {
+export async function createCompany(name: string, industry: OfficeIndustry): Promise<OfficeCompany> {
   try {
     const res = await api<{ company: OfficeCompany }>("/api/office/company", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, industry }),
     });
     return res.company;
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
-    return localCreateCompany(GUEST_ID, name);
+    return localCreateCompany(GUEST_ID, name, industry);
   }
 }
 
-export async function fetchIncident(): Promise<OfficeIncident> {
+export async function setIndustry(industry: OfficeIndustry): Promise<OfficeCompany> {
   try {
-    const res = await api<{ incident: OfficeIncident }>("/api/office/incident/current", {
+    const res = await api<{ company: OfficeCompany }>("/api/office/company", {
       method: "POST",
-      body: "{}",
+      body: JSON.stringify({ industry }),
     });
-    return res.incident;
+    return res.company;
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localSetIndustry(GUEST_ID, industry);
+  }
+}
+
+export async function fetchIncident(): Promise<{ incident: OfficeIncident; created: boolean }> {
+  try {
+    return await api<{ incident: OfficeIncident; created: boolean }>(
+      "/api/office/incident/current",
+      { method: "POST", body: "{}" },
+    );
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
     return localCurrentIncident(GUEST_ID);

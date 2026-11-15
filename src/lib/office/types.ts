@@ -1,13 +1,18 @@
+import type { OfficeIndustry } from "@/lib/office/industries";
+
 export type OfficeLeagueId = "rookie" | "bronze" | "silver" | "gold" | "platinum" | "diamond";
 
 export type IncidentType = "pinch" | "chance" | "people" | "rival";
 export type IncidentStatus = "open" | "solved";
 export type SeasonResult = "promoted" | "demoted" | "stayed";
 
+export type { OfficeIndustry };
+
 export type OfficeCompany = {
   id: string;
   userId: string;
   name: string;
+  industry: OfficeIndustry | null;
   totalRevenue: number;
   level: number;
   rankingEnabled: boolean;

@@ -46,12 +46,43 @@ export const OFFICE_SCORING_SYSTEM_PROMPT = `あなたは学生向けビジネ�
 出力は次のJSONのみ。前後に文章やコードブロックは付けない：
 {"solve":数値,"fun":数値,"feasible":数値,"comment":"..."}`;
 
+export const OFFICE_NAME_MAX = 12;
+
 export const OFFICE_INCIDENT_SYSTEM_PROMPT = `あなたは学生向けビジネスゲーム「moni」のシナリオライターです。
 プレイヤーの小さな会社に起きる「事件」を1件だけ作ってください。
 
-舞台は学生に身近なもの（バイト先、サークル、文化祭の模擬店、小さなカフェ、アパレル、ゲーム会社など）。
-トーンは軽くユーモアあり。正解がなく、ふざけた答えも許される空気のお題にする。
-title は30字以内、description は80字以内。日本語。
+ルール：
+- 事件はその業種の会社で実際に起こりそうな出来事にする
+- description に会社名をちょうど1回入れる（例：「カフェ『〇〇』で〜」）
+- 直近の事件タイトルと似た内容は避ける
+- トーンは軽くユーモアあり。正解がなく、ふざけた答えも許される空気のお題にする
+- title は30字以内、description は80字以内。日本語
 
 出力は次のJSONのみ。前後に文章やコードブロックは付けない：
 {"title":"...","description":"...","type":"pinch|chance|people|rival"}`;
+
+export const INCIDENT_TYPE_UI: Record<
+  "pinch" | "chance" | "people" | "rival",
+  { label: string; chip: string; bar: string }
+> = {
+  pinch: {
+    label: "ピンチ！",
+    chip: "bg-rose-50 text-rose-700 ring-rose-200",
+    bar: "from-rose-50 to-white border-rose-100",
+  },
+  chance: {
+    label: "チャンス！",
+    chip: "bg-amber-50 text-amber-800 ring-amber-200",
+    bar: "from-amber-50 to-white border-amber-100",
+  },
+  people: {
+    label: "社員の悩み",
+    chip: "bg-sky-50 text-sky-800 ring-sky-200",
+    bar: "from-sky-50 to-white border-sky-100",
+  },
+  rival: {
+    label: "ライバル出現",
+    chip: "bg-violet-50 text-violet-800 ring-violet-200",
+    bar: "from-violet-50 to-white border-violet-100",
+  },
+};

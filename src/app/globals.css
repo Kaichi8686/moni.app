@@ -2462,3 +2462,157 @@ html.moni-goal-stuck .project-workspace-header {
     animation: none !important;
   }
 }
+
+/* Office scene — transform / opacity only */
+.office-scene {
+  background: #fff7ed;
+}
+
+.office-arms {
+  transform-origin: center;
+  animation: office-type 0.55s ease-in-out infinite alternate;
+  animation-delay: var(--office-delay, 0s);
+}
+
+.office-head {
+  transform-origin: 0px 66px;
+  animation: office-nod 3.2s ease-in-out infinite;
+  animation-delay: var(--office-delay, 0s);
+}
+
+.office-mug {
+  transform-origin: 18px 98px;
+  animation: office-mug-lift 4.8s ease-in-out infinite;
+  animation-delay: calc(var(--office-delay, 0s) + 0.6s);
+}
+
+.office-steam {
+  animation: office-steam 2.4s ease-in-out infinite;
+  animation-delay: var(--office-delay, 0s);
+}
+
+.office-rec-dot {
+  animation: office-blink 1.2s steps(1) infinite;
+}
+
+@keyframes office-type {
+  from { transform: translateY(0); }
+  to { transform: translateY(2px); }
+}
+
+@keyframes office-nod {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  78% { transform: rotate(-6deg); }
+  86% { transform: rotate(4deg); }
+}
+
+@keyframes office-mug-lift {
+  0%, 55%, 100% { transform: translateY(0); opacity: 1; }
+  65%, 80% { transform: translateY(-6px); opacity: 1; }
+}
+
+@keyframes office-steam {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-3px); }
+}
+
+@keyframes office-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+
+@keyframes office-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+@keyframes office-jump {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  70% { transform: translateY(-2px); }
+}
+
+@keyframes office-panic {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+}
+
+@keyframes office-fade-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  30% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes office-sparkle {
+  0% { opacity: 0; transform: translateY(8px) scale(0.6); }
+  35% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-14px) scale(0.8); }
+}
+
+@keyframes office-rival-in {
+  0% { opacity: 0; transform: translateX(-24px); }
+  35% { opacity: 0.9; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(8px); }
+}
+
+@keyframes office-card-in {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.office-fx--pinch {
+  animation: office-shake 0.55s ease-in-out 2;
+}
+.office-fx--pinch .office-bang {
+  animation: office-fade-pop 1.1s ease-out forwards;
+}
+.office-fx--pinch .office-worker--panic {
+  animation: office-panic 0.45s ease-in-out 3;
+}
+
+.office-fx--chance .office-sparkles {
+  animation: office-sparkle 1.4s ease-out forwards;
+}
+.office-fx--chance .office-bang-gold {
+  animation: office-fade-pop 1.1s ease-out forwards;
+}
+.office-fx--chance .office-worker--jump {
+  animation: office-jump 0.7s ease-out 2;
+}
+
+.office-fx--people .office-think {
+  animation: office-fade-pop 1.4s ease-out forwards;
+}
+
+.office-fx--rival .office-rival-shadow {
+  animation: office-rival-in 1.5s ease-out forwards;
+}
+
+.office-incident-enter {
+  animation: office-card-in 0.45s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .office-arms,
+  .office-head,
+  .office-mug,
+  .office-steam,
+  .office-rec-dot,
+  .office-fx--pinch,
+  .office-fx--pinch .office-bang,
+  .office-fx--pinch .office-worker--panic,
+  .office-fx--chance .office-sparkles,
+  .office-fx--chance .office-bang-gold,
+  .office-fx--chance .office-worker--jump,
+  .office-fx--people .office-think,
+  .office-fx--rival .office-rival-shadow {
+    animation: none !important;
+  }
+  .office-incident-enter {
+    animation: office-card-in 0.25s ease-out both;
+  }
+}

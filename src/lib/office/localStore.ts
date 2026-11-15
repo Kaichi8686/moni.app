@@ -1,4 +1,5 @@
-import { OFFICE_SIMILARITY_THRESHOLD } from "@/lib/office/constants";
+import { OFFICE_NAME_MAX, OFFICE_SIMILARITY_THRESHOLD } from "@/lib/office/constants";
+import { industryLabelJa, parseOfficeIndustry, type OfficeIndustry } from "@/lib/office/industries";
 import { offlineIncident, offlineScores } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
@@ -83,6 +84,14 @@ export function localGetCompany(userId: string): {
       pendingResult: null,
     };
   }
+  if (company.industry === undefined) {
+    company.industry = null;
+    write(store);
+  }
+  if (company.name.length > OFFICE_NAME_MAX) {
+    company.name = company.name.slice(0, OFFICE_NAME_MAX);
+    write(store);
+  }
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (stamina.value !== company.stamina || stamina.updatedAt.toISOString() !== company.staminaUpdatedAt) {
     company.stamina = stamina.value;
@@ -96,16 +105,22 @@ export function localGetCompany(userId: string): {
   return { company, stamina, seasonRevenue: season.revenue, pendingResult };
 }
 
-export function localCreateCompany(userId: string, name: string): OfficeCompany {
+export function localCreateCompany(
+  userId: string,
+  name: string,
+  industry: OfficeIndustry,
+): OfficeCompany {
   const store = read();
-  const trimmed = name.trim().slice(0, 40);
-  if (!trimmed) throw new Error("会社名を入力してね");
+  const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
+  if (trimmed.length < 1) throw new Error("会社名を入力してね");
+  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
   const company: OfficeCompany = {
     id: uid(),
     userId,
     name: trimmed,
+    industry,
     totalRevenue: 0,
     level: 1,
     rankingEnabled: true,
@@ -120,14 +135,39 @@ export function localCreateCompany(userId: string, name: string): OfficeCompany 
   return company;
 }
 
-export async function localCurrentIncident(userId: string): Promise<OfficeIncident> {
+export function localSetIndustry(userId: string, industry: OfficeIndustry): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
+  if (store.company.industry) throw new Error("業種はもう決め済みだよ");
+  store.company.industry = industry;
+  write(store);
+  return store.company;
+}
+
+export async function localCurrentIncident(
+  userId: string,
+): Promise<{ incident: OfficeIncident; created: boolean }> {
   const store = read();
   const company = store.company;
   if (!company || company.userId !== userId) throw new Error("先に会社を作ってね");
+  if (!company.industry) throw new Error("先に業種を選んでね");
+  // migrate old local companies without industry field
+  if (company.industry === undefined) company.industry = null;
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");
-  if (open) return open;
+  if (open) return { incident: open, created: false };
 
-  const gen = offlineIncident();
+  const recentTitles = store.incidents
+    .filter((i) => i.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5)
+    .map((i) => i.title);
+
+  const gen = offlineIncident({
+    companyName: company.name,
+    industryLabel: industryLabelJa(company.industry),
+    recentTitles,
+  });
   const incident: OfficeIncident = {
     id: uid(),
     userId,
@@ -141,7 +181,7 @@ export async function localCurrentIncident(userId: string): Promise<OfficeIncide
   };
   store.incidents.push(incident);
   write(store);
-  return incident;
+  return { incident, created: true };
 }
 
 export async function localSubmit(

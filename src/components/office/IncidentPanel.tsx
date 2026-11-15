@@ -2,30 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
-import { OFFICE_ANSWER_MAX, OFFICE_ANSWER_MIN } from "@/lib/office/constants";
+import {
+  INCIDENT_TYPE_UI,
+  OFFICE_ANSWER_MAX,
+  OFFICE_ANSWER_MIN,
+} from "@/lib/office/constants";
+import { industryMeta } from "@/lib/office/industries";
 import { formatRemainMmSs, msUntil } from "@/lib/office/stamina";
-import type { OfficeIncident } from "@/lib/office/types";
-
-const TYPE_LABEL: Record<OfficeIncident["type"], string> = {
-  pinch: "ピンチ",
-  chance: "チャンス",
-  people: "ひと",
-  rival: "ライバル",
-};
+import type { OfficeCompany, OfficeIncident } from "@/lib/office/types";
 
 type Props = {
   incident: OfficeIncident | null;
+  company: OfficeCompany;
   stamina: number;
   nextRecoverAt: string | null;
   busy: boolean;
+  /** 新規事件のとき true（再訪の open は false） */
+  playEnter?: boolean;
   onSubmit: (answer: string) => void;
 };
 
-export function IncidentPanel({ incident, stamina, nextRecoverAt, busy, onSubmit }: Props) {
+export function IncidentPanel({
+  incident,
+  company,
+  stamina,
+  nextRecoverAt,
+  busy,
+  playEnter = false,
+  onSubmit,
+}: Props) {
   const [answer, setAnswer] = useState("");
   const recovering = stamina <= 0 && Boolean(nextRecoverAt);
   const [now, setNow] = useState(() => Date.now());
   const canSubmit = stamina > 0 && answer.trim().length >= OFFICE_ANSWER_MIN && !busy;
+  const ind = industryMeta(company.industry);
 
   useEffect(() => {
     if (!recovering) return;
@@ -43,17 +53,27 @@ export function IncidentPanel({ incident, stamina, nextRecoverAt, busy, onSubmit
     );
   }
 
+  const ui = INCIDENT_TYPE_UI[incident.type];
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-      <div className="border-b border-amber-100 bg-gradient-to-r from-[#FFF7E8] to-white px-4 py-3">
+    <section
+      className={`overflow-hidden rounded-2xl border border-zinc-200 bg-white ${
+        playEnter ? "office-incident-enter" : ""
+      }`}
+    >
+      <div className={`border-b bg-gradient-to-r px-4 py-3 ${ui.bar}`}>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF9600]">
-            事件 · {TYPE_LABEL[incident.type]}
+          <p className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${ui.chip}`}>
+            {ui.label}
           </p>
-          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
-            規模 ×{incident.size}
+          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-zinc-700 ring-1 ring-zinc-200">
+            大きさ ×{incident.size}
           </span>
         </div>
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
+          <span aria-hidden>{ind?.icon ?? "🏢"}</span>
+          <span className="truncate">{company.name}</span>
+        </p>
         <h3 className="mt-1 text-lg font-black tracking-tight text-zinc-900">{incident.title}</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{incident.description}</p>
       </div>

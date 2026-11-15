@@ -2,19 +2,22 @@
 
 ## 事前準備
 
-1. Supabase に `supabase/apply_office.sql` を適用する（旧 `idea_league_*` は触らない）
-2. 環境変数: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL=claude-haiku-5-5`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
-3. `npm run dev:local` → `http://127.0.0.1:3002/idea?spark=office`
+1. Supabase に `supabase/apply_office.sql` を適用（旧 `idea_league_*` は触らない）
+2. 続けて `supabase/apply_office_industry.sql`（業種カラム・会社名1〜12字）
+3. 環境変数: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL=claude-haiku-5-5`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
+4. `npm run dev:local` → `http://127.0.0.1:3002/idea?spark=office`
 
 未ログイン時はブラウザ localStorage（`moni.office.v1`）で遊べる。
 
 ## 基本フロー
 
-1. 会社名を入力して作成（必須・自動命名なし）
-2. 事件が表示される → 5〜300文字で回答 → 提出
-3. 採点（solve/fun/feasible）・コイン加算・スタミナ -1 を確認
-4. 「次の事件へ」で新しい事件（未解決が1件のまま）
-5. 「順位」タブで今月ランキング・のんびりモード切替
+1. 会社名（1〜12字）＋業種6種から1つ選んで作成
+2. 既存で業種未設定の会社は、次回に業種だけ補完
+3. 新事件時のみオフィス演出 → 事件カードが降りてくる（再訪の open は演出なし）
+4. 5〜300文字で回答 → 提出 → 採点・コイン・スタミナ
+5. 「次の事件へ」で新事件＋演出
+6. 「順位」タブで今月ランキング・のんびりモード切替
+7. `prefers-reduced-motion` ではループアニメと事件FXを抑制
 
 ## スタミナの疑似回復
 

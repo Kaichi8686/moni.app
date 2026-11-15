@@ -1,30 +1,43 @@
 import { clampScore, scoreTotal } from "@/lib/office/scoring";
 import type { IncidentType, OfficeScores } from "@/lib/office/types";
 
-export function offlineIncident(): { title: string; description: string; type: IncidentType } {
-  const pool = [
+export type OfflineIncidentCtx = {
+  companyName: string;
+  industryLabel: string;
+  recentTitles: string[];
+};
+
+export function offlineIncident(
+  ctx?: OfflineIncidentCtx,
+): { title: string; description: string; type: IncidentType } {
+  const name = ctx?.companyName?.trim() || "きみの会社";
+  const industry = ctx?.industryLabel || "会社";
+  const pool: Array<{ title: string; description: string; type: IncidentType }> = [
     {
-      title: "社員のやる気が急降下！",
-      description: "三日坊主ばかりで新商品が完成しない…どうする？",
-      type: "people" as const,
+      title: "やる気が急降下！",
+      description: `${industry}『${name}』で三日坊主ばかり。新企画が進まない…どうする？`,
+      type: "people",
     },
     {
-      title: "文化祭の模擬店が大行列！",
-      description: "売り切れ寸前。チャンスを逃さない作戦を考えて！",
-      type: "chance" as const,
+      title: "突然の大人気！",
+      description: `『${name}』に行列ができた。チャンスを逃さない作戦は？`,
+      type: "chance",
     },
     {
-      title: "ライバル店が隣にオープン",
-      description: "同じメニューで勝負してきた。差別化アイデアは？",
-      type: "rival" as const,
+      title: "ライバルが隣に",
+      description: `『${name}』の向かいに同業が出店。差別化アイデアを考えて！`,
+      type: "rival",
     },
     {
-      title: "バイト先のレジがフリーズ",
-      description: "ランチピークなのに会計できない…どう切り抜ける？",
-      type: "pinch" as const,
+      title: "ピークで大混乱",
+      description: `『${name}』のランチピークで手が足りない。どう切り抜ける？`,
+      type: "pinch",
     },
   ];
-  return pool[Math.floor(Math.random() * pool.length)]!;
+  const recent = new Set(ctx?.recentTitles ?? []);
+  const filtered = pool.filter((p) => !recent.has(p.title));
+  const list = filtered.length > 0 ? filtered : pool;
+  return list[Math.floor(Math.random() * list.length)]!;
 }
 
 export function offlineScores(answer: string): OfficeScores {

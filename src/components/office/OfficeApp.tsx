@@ -15,10 +15,12 @@ import {
   fetchIncident,
   fetchRanking,
   markResultSeen,
+  setIndustry,
   submitAnswer,
   toggleRanking,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
+import type { OfficeIndustry } from "@/lib/office/industries";
 import type { OfficeIncident, OfficeSubmission, RankingRow } from "@/lib/office/types";
 
 type Props = {
@@ -36,6 +38,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [err, setErr] = useState("");
   const [payload, setPayload] = useState<CompanyPayload | null>(null);
   const [incident, setIncident] = useState<OfficeIncident | null>(null);
+  const [playEnter, setPlayEnter] = useState(false);
+  const [sceneFx, setSceneFx] = useState<string | null>(null);
   const [lastSubmit, setLastSubmit] = useState<OfficeSubmission | null>(null);
   const [rankRows, setRankRows] = useState<RankingRow[]>([]);
   const [rankMeta, setRankMeta] = useState<{
@@ -45,19 +49,49 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     rankingEnabled: boolean;
   } | null>(null);
 
+  const triggerFx = useCallback((type: string) => {
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      setSceneFx(null);
+      setPlayEnter(true);
+      return;
+    }
+    setSceneFx(type);
+    window.setTimeout(() => setSceneFx(null), 1600);
+    setPlayEnter(true);
+  }, []);
+
+  const loadIncident = useCallback(
+    async (opts?: { allowFx?: boolean }) => {
+      const { incident: inc, created } = await fetchIncident();
+      setIncident(inc);
+      if (opts?.allowFx && created) {
+        triggerFx(inc.type);
+      } else {
+        setPlayEnter(false);
+        setSceneFx(null);
+      }
+    },
+    [triggerFx],
+  );
+
   const reload = useCallback(async () => {
     setErr("");
     const data = await fetchCompany();
     setPayload(data);
-    if (data.company) {
+    if (data.company?.industry) {
       try {
-        const inc = await fetchIncident();
-        setIncident(inc);
+        // 既存 open の再表示は演出なし
+        await loadIncident({ allowFx: false });
       } catch (e) {
         setErr(e instanceof Error ? e.message : "事件の取得に失敗");
       }
+    } else {
+      setIncident(null);
     }
-  }, []);
+  }, [loadIncident]);
 
   useEffect(() => {
     if (!active) return;
@@ -94,12 +128,18 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     })();
   }, [active, tab, payload?.company?.id, payload?.seasonRevenue]);
 
-  async function onCreate(name: string) {
+  async function onSetup(input: { name: string; industry: OfficeIndustry }) {
     setBusy(true);
     setErr("");
     try {
-      await createCompany(name);
-      await reload();
+      if (payload?.company && !payload.company.industry) {
+        await setIndustry(input.industry);
+      } else {
+        await createCompany(input.name, input.industry);
+      }
+      const data = await fetchCompany();
+      setPayload(data);
+      await loadIncident({ allowFx: true });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "作成失敗");
     } finally {
@@ -120,6 +160,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         pendingResult: payload?.pendingResult ?? null,
       });
       setIncident(null);
+      setPlayEnter(false);
+      setSceneFx(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "提出失敗");
     } finally {
@@ -131,9 +173,9 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     setLastSubmit(null);
     setBusy(true);
     try {
-      const inc = await fetchIncident();
-      setIncident(inc);
-      await reload();
+      await loadIncident({ allowFx: true });
+      const data = await fetchCompany();
+      setPayload(data);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "次の事件の取得に失敗");
     } finally {
@@ -141,14 +183,21 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     }
   }
 
+  const needsSetup = !payload?.company || !payload.company.industry;
+
   const body = boot ? (
     <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
       {[0, 1, 2].map((i) => (
         <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-100" />
       ))}
     </div>
-  ) : !payload?.company ? (
-    <NameSetup busy={busy} error={err} onSubmit={onCreate} />
+  ) : needsSetup ? (
+    <NameSetup
+      busy={busy}
+      error={err}
+      existingName={payload?.company && !payload.company.industry ? payload.company.name : null}
+      onSubmit={onSetup}
+    />
   ) : (
     <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-3">
       <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
@@ -177,10 +226,11 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       {tab === "play" ? (
         <>
           <CompanyCard
-            company={payload.company}
+            company={payload.company!}
             seasonRevenue={payload.seasonRevenue}
             staminaValue={payload.stamina.value}
             nextRecoverAt={payload.stamina.nextRecoverAt}
+            sceneFx={sceneFx}
           />
           {lastSubmit ? (
             <ScoreReveal
@@ -192,9 +242,11 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             <IncidentPanel
               key={incident?.id ?? "empty"}
               incident={incident}
+              company={payload.company!}
               stamina={payload.stamina.value}
               nextRecoverAt={payload.stamina.nextRecoverAt}
               busy={busy}
+              playEnter={playEnter}
               onSubmit={(a) => void onSubmit(a)}
             />
           )}

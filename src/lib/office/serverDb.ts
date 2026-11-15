@@ -2,9 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   OFFICE_ANSWER_MAX,
   OFFICE_ANSWER_MIN,
+  OFFICE_NAME_MAX,
   OFFICE_SIMILARITY_THRESHOLD,
 } from "@/lib/office/constants";
 import { generateIncidentWithClaude, scoreAnswerWithClaude } from "@/lib/office/claude";
+import { industryLabelJa, parseOfficeIndustry, type OfficeIndustry } from "@/lib/office/industries";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -25,6 +27,7 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     id: String(row.id),
     userId: String(row.user_id),
     name: String(row.name),
+    industry: parseOfficeIndustry(row.industry),
     totalRevenue: Number(row.total_revenue ?? 0),
     level: Number(row.level ?? 1),
     rankingEnabled: Boolean(row.ranking_enabled ?? true),
@@ -150,9 +153,15 @@ export async function dbGetCompany(admin: SupabaseClient, userId: string) {
   };
 }
 
-export async function dbCreateCompany(admin: SupabaseClient, userId: string, name: string) {
-  const trimmed = name.trim().slice(0, 40);
-  if (!trimmed) throw new Error("会社名を入力してね");
+export async function dbCreateCompany(
+  admin: SupabaseClient,
+  userId: string,
+  name: string,
+  industry: OfficeIndustry,
+) {
+  const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
+  if (trimmed.length < 1) throw new Error("会社名を入力してね");
+  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
   const { data: existing } = await admin
     .from("office_companies")
     .select("id")
@@ -165,6 +174,7 @@ export async function dbCreateCompany(admin: SupabaseClient, userId: string, nam
     .insert({
       user_id: userId,
       name: trimmed,
+      industry,
       league_id: "rookie",
       stamina: 5,
       stamina_updated_at: new Date().toISOString(),
@@ -177,7 +187,31 @@ export async function dbCreateCompany(admin: SupabaseClient, userId: string, nam
   return company;
 }
 
-export async function dbCurrentIncident(admin: SupabaseClient, userId: string) {
+/** 既存会社の industry が null のときだけ補完（変更不可） */
+export async function dbSetIndustry(admin: SupabaseClient, userId: string, industry: OfficeIndustry) {
+  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
+  const { data: row } = await admin
+    .from("office_companies")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row) throw new Error("会社がないよ");
+  const company = mapCompany(row as Record<string, unknown>);
+  if (company.industry) throw new Error("業種はもう決め済みだよ");
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({ industry })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbCurrentIncident(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<{ incident: OfficeIncident; created: boolean }> {
   const { data: companyRow } = await admin
     .from("office_companies")
     .select("*")
@@ -185,6 +219,7 @@ export async function dbCurrentIncident(admin: SupabaseClient, userId: string) {
     .maybeSingle();
   if (!companyRow) throw new Error("先に会社を作ってね");
   const company = mapCompany(companyRow as Record<string, unknown>);
+  if (!company.industry) throw new Error("先に業種を選んでね");
 
   const { data: open } = await admin
     .from("office_incidents")
@@ -192,9 +227,21 @@ export async function dbCurrentIncident(admin: SupabaseClient, userId: string) {
     .eq("user_id", userId)
     .eq("status", "open")
     .maybeSingle();
-  if (open) return mapIncident(open as Record<string, unknown>);
+  if (open) return { incident: mapIncident(open as Record<string, unknown>), created: false };
 
-  const gen = await generateIncidentWithClaude();
+  const { data: recentRows } = await admin
+    .from("office_incidents")
+    .select("title")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const recentTitles = (recentRows ?? []).map((r) => String((r as { title: string }).title));
+
+  const gen = await generateIncidentWithClaude({
+    companyName: company.name,
+    industryLabel: industryLabelJa(company.industry),
+    recentTitles,
+  });
   if (!gen.ok) throw new Error(gen.message);
 
   const { data, error } = await admin
@@ -211,7 +258,7 @@ export async function dbCurrentIncident(admin: SupabaseClient, userId: string) {
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message ?? "incident create failed");
-  return mapIncident(data as Record<string, unknown>);
+  return { incident: mapIncident(data as Record<string, unknown>), created: true };
 }
 
 export async function dbSubmit(admin: SupabaseClient, userId: string, answer: string) {
