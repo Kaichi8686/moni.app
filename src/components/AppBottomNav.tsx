@@ -166,11 +166,10 @@ const CLOSED_TABS: NavItem[] = [
   },
   {
     id: "search",
-    href: "/?tab=chat",
+    href: "/discover",
     labelKey: "navSearch",
     icon: <Search className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p, tab) =>
-      (p === "/" && tab === "chat") ||
+    match: (p) =>
       p === "/discover" ||
       p.startsWith("/discover/") ||
       p === "/league" ||

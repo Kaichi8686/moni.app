@@ -1408,16 +1408,16 @@ export function ProjectRoadmapPanel({
             質問・相談
           </Link>
           <Link
-            href="/?tab=chat"
+            href="/discover"
             className="min-h-[40px] rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition duration-200 ease-out hover:bg-zinc-50"
           >
             探す
           </Link>
           <Link
-            href="/?tab=mentor&mentor=validation"
+            href="/idea"
             className="min-h-[40px] rounded-2xl border border-orange-200 bg-[#FFF3D6] px-3 py-2 text-xs font-semibold text-orange-950 shadow-sm transition duration-200 ease-out hover:bg-orange-100"
           >
-            おためし検証
+            アイデア・検証
           </Link>
         </div>
       </div>

@@ -99,7 +99,7 @@ export function IdeaInterviewApp({
   const isProject = variant === "project" && Boolean(projectId);
   const isHub = variant === "hub";
   const exitHref = isProject ? `/projects/${projectId}/overview` : isHub ? "/idea" : "/";
-  const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/?tab=mentor&mentor=ai";
+  const deepDiveHref = isProject ? `/projects/${projectId}/coach?mode=ideas` : "/idea";
   const newTitle = tx("新しいチャット", "New chat");
 
   const [ownerKey, setOwnerKey] = useState("guest");

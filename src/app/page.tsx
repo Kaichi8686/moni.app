@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
+import { resolveLegacyHomeRedirect } from "@/lib/navigation/legacyHome";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
 const LandingFallback = () => <main className="min-h-screen bg-zinc-50" aria-busy="true" />;
@@ -14,11 +15,6 @@ const MoniLanding = dynamic(
   { loading: LandingFallback },
 );
 
-const MoniHomeApp = dynamic(
-  () => import("@/components/home/MoniHomeApp").then((m) => m.MoniHomeApp),
-  { ssr: false, loading: LandingFallback },
-);
-
 function safeNextPath(raw: string | null): string | null {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
   return raw;
@@ -26,7 +22,7 @@ function safeNextPath(raw: string | null): string | null {
 
 /**
  * Thin entry: guests stay on the landing page only (auth is an LP overlay).
- * Logged-in users are sent to /projects (or legacy ?tab= home shell).
+ * Logged-in users are always sent to modern routes — never the legacy ?tab= shell.
  */
 export default function HomePage() {
   const router = useRouter();
@@ -84,28 +80,8 @@ export default function HomePage() {
     // 未ログインは LP のみ。タブ系クエリでもアプリへ飛ばさない。
     if (!session) return;
 
-    const tab = params.get("tab");
-    const community = params.get("community");
-    const mentor = params.get("mentor");
-    if (tab === "projects") {
-      router.replace(HOME_PROJECTS_HREF);
-      return;
-    }
-    if (tab === "account") {
-      router.replace("/profile");
-      return;
-    }
-    if (tab === "posts" || community === "qna") {
-      router.replace("/idea?tab=qna&view=board");
-      return;
-    }
-    if (community === "progress") {
-      router.replace(HOME_PROJECTS_HREF);
-      return;
-    }
-    if (!tab && !mentor) {
-      router.replace(afterAuthPath ?? HOME_PROJECTS_HREF);
-    }
+    const dest = resolveLegacyHomeRedirect(params, afterAuthPath ?? HOME_PROJECTS_HREF);
+    if (dest) router.replace(dest);
   }, [router, showLandingPage, clientReady, authReady, session, afterAuthPath]);
 
   if ((!clientReady || !authReady) && !showLandingPage) {
@@ -131,5 +107,6 @@ export default function HomePage() {
     );
   }
 
-  return <MoniHomeApp />;
+  // Logged-in users are redirected above; keep a quiet fallback while replace runs.
+  return <LandingFallback />;
 }

@@ -122,11 +122,15 @@ function ProjectsHomeViewInner() {
       router.push("/profile");
       return;
     }
-    if (key === "chat") {
-      router.push("/?tab=chat");
+    if (key === "chat" || key === "discovery") {
+      router.push("/discover");
       return;
     }
-    router.push(`/?tab=${key}`);
+    if (key === "mentor" || key === "articles") {
+      router.push("/idea");
+      return;
+    }
+    router.push("/projects");
   }
 
   if (resolving) {
