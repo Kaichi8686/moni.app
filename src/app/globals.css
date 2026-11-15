@@ -386,7 +386,7 @@ html.moni-recruit-drill .app-bottom-nav {
 }
 
 /* Floating tab bar: bottom:0 + safe-area float. Portaled to body; JS may
-   temporarily set bottom negative if iOS leaves the layout viewport short. */
+   lift bottom slightly above iOS Safari's browser toolbar only. */
 .app-bottom-nav {
   pointer-events: none;
   position: fixed;
