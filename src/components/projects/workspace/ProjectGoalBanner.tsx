@@ -39,7 +39,7 @@ export function ProjectGoalBanner({
   if (isEmpty && !onClick) return null;
 
   const face = (
-    <span className="flex min-w-0 flex-1 flex-col items-start justify-center text-left">
+    <span className="flex min-w-0 flex-1 flex-col items-center justify-center text-center">
       <span className="block max-w-full truncate text-[12px] font-medium leading-snug text-orange-700/80">
         {eyebrow}
       </span>
@@ -56,7 +56,7 @@ export function ProjectGoalBanner({
   );
 
   const surface = [
-    "w-full rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 sm:px-5",
+    "relative w-full rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 sm:px-5",
     "transition-colors duration-150",
   ].join(" ");
 
@@ -68,14 +68,14 @@ export function ProjectGoalBanner({
         aria-label={openLabel}
         className={[
           surface,
-          "flex items-center gap-2 text-left hover:border-orange-300 hover:bg-orange-100/80 active:bg-orange-100",
+          "flex items-center gap-2 pr-10 hover:border-orange-300 hover:bg-orange-100/80 active:bg-orange-100 sm:pr-11",
           className,
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {face}
-        <ChevronRight className="h-5 w-5 shrink-0 text-orange-400" aria-hidden />
+        <ChevronRight className="absolute right-3 top-1/2 h-5 w-5 shrink-0 -translate-y-1/2 text-orange-400 sm:right-4" aria-hidden />
       </button>
     );
   }
