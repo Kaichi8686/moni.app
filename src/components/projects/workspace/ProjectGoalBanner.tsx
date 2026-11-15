@@ -1,10 +1,11 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   projectName: string;
-  /** 空のときは「ゴールを書く」プレースホルダ（写真ボタン風 CTA） */
+  /** 空のときは「ゴールを書く」プレースホルダ */
   goal?: string;
   emptyHint?: string;
   className?: string;
@@ -12,9 +13,8 @@ type Props = {
 };
 
 /**
- * プロジェクトゴールバナー / 初回の写真ボタン風 CTA。
- * idea-garden の DuoButton と同じ：上面フラット + 下帯シャドウ奥行き / 押すと沈む。
- * 文字は中央寄せ。
+ * プロジェクトゴールの通常ボタン風バナー。
+ * （旧: DuoButton 風の下帯シャドウ／押下沈み込みは使わない）
  */
 export function ProjectGoalBanner({
   projectName,
@@ -39,16 +39,16 @@ export function ProjectGoalBanner({
   if (isEmpty && !onClick) return null;
 
   const face = (
-    <span className="flex w-full flex-col items-center justify-center text-center">
-      <span className="block max-w-full truncate text-[12px] font-semibold leading-snug text-white/90 sm:text-[13px]">
+    <span className="flex min-w-0 flex-1 flex-col items-start justify-center text-left">
+      <span className="block max-w-full truncate text-[12px] font-medium leading-snug text-orange-700/80">
         {eyebrow}
       </span>
       {isEmpty ? (
-        <span className="mt-1 block text-[15px] font-extrabold leading-snug tracking-tight sm:text-base">
+        <span className="mt-1 block text-[15px] font-semibold leading-snug text-orange-950 sm:text-base">
           {placeholder}
         </span>
       ) : (
-        <span className="mt-0.5 line-clamp-2 block max-w-full text-[15px] font-extrabold leading-snug tracking-tight sm:text-base">
+        <span className="mt-0.5 line-clamp-2 block max-w-full text-[15px] font-semibold leading-snug text-orange-950 sm:text-base">
           {goalText}
         </span>
       )}
@@ -56,12 +56,8 @@ export function ProjectGoalBanner({
   );
 
   const surface = [
-    "w-full rounded-[1.15rem] bg-[#FF9600] px-4 text-center text-white sm:rounded-[1.35rem] sm:px-5",
-    isEmpty
-      ? "flex min-h-[7.5rem] items-center justify-center py-5 sm:min-h-[8.5rem] sm:py-6"
-      : "py-3 sm:py-3.5",
-    "shadow-[0_5px_0_#D97706]",
-    "transition-[transform,box-shadow] duration-75 ease-out",
+    "w-full rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 sm:px-5",
+    "transition-colors duration-150",
   ].join(" ");
 
   if (onClick) {
@@ -72,13 +68,14 @@ export function ProjectGoalBanner({
         aria-label={openLabel}
         className={[
           surface,
-          "select-none active:translate-y-[5px] active:shadow-none",
+          "flex items-center gap-2 text-left hover:border-orange-300 hover:bg-orange-100/80 active:bg-orange-100",
           className,
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {face}
+        <ChevronRight className="h-5 w-5 shrink-0 text-orange-400" aria-hidden />
       </button>
     );
   }

@@ -211,7 +211,7 @@ export default function WorkspaceOverview() {
               </Link>
             ) : null}
           </div>
-          {/* 未入力は写真ボタン風 CTA、入力後は同じ位置にゴールバナー */}
+          {/* 未入力はゴール CTA、入力後は同じ位置にゴールバナー */}
           <div className="mb-4">
             <ProjectBriefSection />
           </div>
