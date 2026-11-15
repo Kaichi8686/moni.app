@@ -32,7 +32,8 @@ type Props = {
   steps: RoadmapStepListItem[];
   /** 現在フォーカス中の本線インデックス（0始まり）。active 番号の色分けに使う */
   currentIndex?: number;
-  expandedId: string | null;
+  /** 開いているステップ id（複数可） */
+  expandedIds: readonly string[];
   onToggle: (id: string) => void;
   /** 展開カード内の追加アクション（編集・達成など） */
   renderExpandedActions?: (step: RoadmapStepListItem) => ReactNode;
@@ -63,7 +64,7 @@ function stepTone(
 export function RoadmapStepList({
   steps,
   currentIndex = 0,
-  expandedId,
+  expandedIds,
   onToggle,
   renderExpandedActions,
   onSelectTask,
@@ -81,7 +82,7 @@ export function RoadmapStepList({
   return (
     <ol className={`relative m-0 list-none space-y-3 p-0 ${className}`}>
       {steps.map((step, index) => {
-        const expanded = expandedId === step.id;
+        const expanded = expandedIds.includes(step.id);
         const tone = stepTone(step, currentIndex);
         const isLast = index === steps.length - 1;
         const tasks = step.tasks ?? [];

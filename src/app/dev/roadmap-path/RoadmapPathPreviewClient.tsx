@@ -70,7 +70,7 @@ const DEMO_STEPS: RoadmapStepListItem[] = [
 
 /** 縦リスト＋アコーディオンの見た目確認用 */
 export function RoadmapPathPreviewClient() {
-  const [expandedId, setExpandedId] = useState<string | null>("1");
+  const [expandedIds, setExpandedIds] = useState<string[]>(["1"]);
   const [goalOpen, setGoalOpen] = useState(false);
 
   return (
@@ -98,8 +98,12 @@ export function RoadmapPathPreviewClient() {
         <RoadmapStepList
           steps={DEMO_STEPS}
           currentIndex={0}
-          expandedId={expandedId}
-          onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+          expandedIds={expandedIds}
+          onToggle={(id) =>
+            setExpandedIds((prev) =>
+              prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+            )
+          }
         />
       </div>
     </main>
