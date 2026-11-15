@@ -9,6 +9,8 @@ export type RoadmapStepListTask = {
   id: string;
   title: string;
   description?: string;
+  /** 期限表示（例: 期限 2026-11-20） */
+  dueLabel?: string;
   status: "todo" | "done" | "active";
   badge?: string;
 };
@@ -181,8 +183,13 @@ export function RoadmapStepList({
                                       {task.title}
                                     </p>
                                     {task.description ? (
-                                      <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">
+                                      <p className="mt-1 text-[12px] leading-relaxed text-zinc-600">
                                         {task.description}
+                                      </p>
+                                    ) : null}
+                                    {task.dueLabel ? (
+                                      <p className="mt-1 text-[12px] font-medium text-zinc-500">
+                                        {task.dueLabel}
                                       </p>
                                     ) : null}
                                     {task.badge ? (
