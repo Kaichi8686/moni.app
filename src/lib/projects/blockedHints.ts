@@ -1,5 +1,6 @@
 import type { BlockedReasonCode } from "@/lib/projects/types";
 import { IDEA_QNA_HREF } from "@/lib/navigation/homeProjects";
+import { DISCOVER_HREF, IDEA_HOME_HREF } from "@/lib/navigation/legacyHome";
 
 export const BLOCKED_REASON_OPTIONS: Array<{ code: BlockedReasonCode; label: string }> = [
   { code: "unknown_how", label: "やり方が分からない" },
@@ -19,15 +20,15 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "手順を調べる、またはタスクをもっと小さく分けると進めやすくなります。",
         links: [
           { label: "コミュニティで質問", href: IDEA_QNA_HREF },
-          { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
+          { label: "アイデア・検証", href: IDEA_HOME_HREF },
         ],
       };
     case "need_help":
       return {
         message: "プロジェクト内チャットで、やってほしいことを一文で伝えると動きやすくなります。",
         links: [
-          { label: "仲間・プロジェクトを探す", href: "/?tab=chat" },
-          { label: "アイデアを掘る", href: "/idea" },
+          { label: "仲間・プロジェクトを探す", href: DISCOVER_HREF },
+          { label: "アイデアを掘る", href: IDEA_HOME_HREF },
         ],
       };
     case "missing_info":
@@ -45,7 +46,7 @@ export function blockedRestartHint(code: BlockedReasonCode): {
         message: "下書きでも共有すると、フィードバックをもらいやすくなります。",
         links: [
           { label: "質問・相談する", href: IDEA_QNA_HREF },
-          { label: "検証のヒント", href: "/?tab=mentor&mentor=validation" },
+          { label: "アイデア・検証", href: IDEA_HOME_HREF },
         ],
       };
     default:

@@ -208,7 +208,7 @@ export function ProjectTalentPanel({
             </button>
             {published || recruiting ? (
               <Link
-                href="/?tab=chat&segment=recruit"
+                href="/discover"
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-900"
               >
                 {tx("探すタブの募集で見る", "View on Explore → Recruiting")}
