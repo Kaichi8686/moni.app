@@ -6,7 +6,6 @@ import { ArrowLeft, Map, Plus, Sparkles } from "lucide-react";
 import { addDays } from "date-fns";
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatRichText } from "@/components/ai/AiChatRichText";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
 import { ProjectGoalDetailSheet } from "@/components/projects/workspace/ProjectGoalDetailSheet";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
@@ -81,7 +80,7 @@ export function RoadmapMapEditor() {
 
   const { main: mainSteps } = useMemo(() => splitRoadmapPathLayout(steps), [steps]);
 
-  const { items: stepListItems, currentMainIndex, currentStepId } = useMemo(
+  const { items: stepListItems, currentMainIndex } = useMemo(
     () =>
       buildStepListItems(steps, {
         issues,
@@ -109,12 +108,6 @@ export function RoadmapMapEditor() {
     setSelectedId(null);
     setExpandedId(null);
   }, [projectId]);
-
-  /** 今やっているステップは最初から開く */
-  useEffect(() => {
-    if (!currentStepId) return;
-    setExpandedId(currentStepId);
-  }, [currentStepId, projectId]);
 
   const phaseIdFromUrl = searchParams.get("phase");
   useEffect(() => {
@@ -403,12 +396,9 @@ export function RoadmapMapEditor() {
         steps={stepListItems}
         currentIndex={currentMainIndex}
         expandedId={expandedId}
+        showTasks={false}
         onToggle={(id) => {
           setExpandedId((current) => (current === id ? null : id));
-        }}
-        onSelectTask={(task) => {
-          if (!task.issueId) return;
-          router.push(`/projects/${projectId}/issues?task=${encodeURIComponent(task.issueId)}`);
         }}
         renderExpandedActions={(step) =>
           roadmap.canEdit ? (
@@ -448,18 +438,16 @@ export function RoadmapMapEditor() {
 
       {showCreateFab ? (
         <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 md:right-[max(1.5rem,calc((100vw-48rem)/2+1rem))]">
-          <DuoButton
+          <button
             type="button"
-            tone="orange"
-            size="md"
             onClick={openCreateStep}
             disabled={busy}
-            className="gap-2 !px-4 !py-3.5 !text-[15px]"
             aria-label={tx("ステップを作成", "Create step")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#FF9600] px-4 py-3 text-[15px] font-semibold tracking-tight text-white shadow-[0_1px_3px_rgba(0,0,0,0.14),0_4px_14px_rgba(255,150,0,0.28)] transition hover:bg-[#F08C00] active:scale-[0.97] disabled:opacity-40"
           >
-            <Plus className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />
+            <Plus className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.25} />
             {tx("ステップ作成", "Create step")}
-          </DuoButton>
+          </button>
         </div>
       ) : null}
 
