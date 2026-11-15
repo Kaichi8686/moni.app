@@ -1,4 +1,13 @@
-export type OfficeIndustry = "cafe" | "apparel" | "game" | "festival" | "baito" | "sns";
+export type OfficeIndustry =
+  | "food"
+  | "fashion"
+  | "tech"
+  | "event"
+  | "shop"
+  | "media"
+  | "learn"
+  | "health"
+  | "community";
 
 export type IndustryMeta = {
   id: OfficeIndustry;
@@ -8,18 +17,32 @@ export type IndustryMeta = {
   icon: string;
 };
 
+/** 旧・具体業種 → 新しい「〇〇系」 */
+const LEGACY_INDUSTRY_MAP: Record<string, OfficeIndustry> = {
+  cafe: "food",
+  baito: "food",
+  apparel: "fashion",
+  game: "tech",
+  festival: "event",
+  sns: "media",
+};
+
 export const OFFICE_INDUSTRIES: IndustryMeta[] = [
-  { id: "cafe", labelJa: "カフェ", blurb: "香りと会話が武器の小さな店", icon: "☕" },
-  { id: "apparel", labelJa: "アパレル", blurb: "トレンドをつかむ洋服ブランド", icon: "👕" },
-  { id: "game", labelJa: "ゲーム会社", blurb: "面白さ命のインディーチーム", icon: "🎮" },
-  { id: "festival", labelJa: "文化祭の模擬店", blurb: "一日限りの本気の出店", icon: "🎪" },
-  { id: "baito", labelJa: "バイト先の飲食店", blurb: "ピークタイムを乗り切れ", icon: "🍜" },
-  { id: "sns", labelJa: "動画・SNSチーム", blurb: "バズを狙うクリエイター集団", icon: "📱" },
+  { id: "food", labelJa: "飲食系", blurb: "カフェ・食堂・キッチンなど", icon: "🍽️" },
+  { id: "fashion", labelJa: "ファッション系", blurb: "服・雑貨・ブランドなど", icon: "👗" },
+  { id: "tech", labelJa: "ものづくり・テック系", blurb: "アプリ・ゲーム・ガジェットなど", icon: "🛠️" },
+  { id: "event", labelJa: "イベント系", blurb: "文化祭・ポップアップ・催しなど", icon: "🎉" },
+  { id: "shop", labelJa: "お店・サービス系", blurb: "店舗オペ・接客など", icon: "🏪" },
+  { id: "media", labelJa: "発信・クリエイティブ系", blurb: "動画・SNS・制作など", icon: "🎬" },
+  { id: "learn", labelJa: "学び・スクール系", blurb: "塾・教室・講座など", icon: "📚" },
+  { id: "health", labelJa: "スポーツ・健康系", blurb: "ジム・部活・ウェルネスなど", icon: "🏃" },
+  { id: "community", labelJa: "地域・コミュニティ系", blurb: "町おこし・サークルなど", icon: "🏘️" },
 ];
 
 export function parseOfficeIndustry(raw: unknown): OfficeIndustry | null {
   const s = String(raw ?? "");
-  return OFFICE_INDUSTRIES.some((i) => i.id === s) ? (s as OfficeIndustry) : null;
+  if (OFFICE_INDUSTRIES.some((i) => i.id === s)) return s as OfficeIndustry;
+  return LEGACY_INDUSTRY_MAP[s] ?? null;
 }
 
 export function industryLabelJa(id: OfficeIndustry | null | undefined): string {
@@ -29,5 +52,7 @@ export function industryLabelJa(id: OfficeIndustry | null | undefined): string {
 
 export function industryMeta(id: OfficeIndustry | null | undefined): IndustryMeta | null {
   if (!id) return null;
-  return OFFICE_INDUSTRIES.find((i) => i.id === id) ?? null;
+  const parsed = parseOfficeIndustry(id);
+  if (!parsed) return null;
+  return OFFICE_INDUSTRIES.find((i) => i.id === parsed) ?? null;
 }

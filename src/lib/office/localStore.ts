@@ -87,6 +87,12 @@ export function localGetCompany(userId: string): {
   if (company.industry === undefined) {
     company.industry = null;
     write(store);
+  } else if (company.industry) {
+    const mapped = parseOfficeIndustry(company.industry);
+    if (mapped && mapped !== company.industry) {
+      company.industry = mapped;
+      write(store);
+    }
   }
   if (company.name.length > OFFICE_NAME_MAX) {
     company.name = company.name.slice(0, OFFICE_NAME_MAX);
@@ -113,7 +119,7 @@ export function localCreateCompany(
   const store = read();
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
-  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
+  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
   const company: OfficeCompany = {
@@ -138,8 +144,8 @@ export function localCreateCompany(
 export function localSetIndustry(userId: string, industry: OfficeIndustry): OfficeCompany {
   const store = read();
   if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
-  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
-  if (store.company.industry) throw new Error("業種はもう決め済みだよ");
+  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
+  if (store.company.industry) throw new Error("系統はもう決め済みだよ");
   store.company.industry = industry;
   write(store);
   return store.company;
@@ -151,7 +157,7 @@ export async function localCurrentIncident(
   const store = read();
   const company = store.company;
   if (!company || company.userId !== userId) throw new Error("先に会社を作ってね");
-  if (!company.industry) throw new Error("先に業種を選んでね");
+  if (!company.industry) throw new Error("先に系統を選んでね");
   // migrate old local companies without industry field
   if (company.industry === undefined) company.industry = null;
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");

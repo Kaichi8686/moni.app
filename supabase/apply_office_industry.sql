@@ -1,22 +1,28 @@
--- オフィス：業種カラム追加
+-- オフィス：業種（〇〇系）カラム追加
 -- 冪等
 
 alter table public.office_companies
   add column if not exists industry text;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'office_companies_industry_check'
-  ) then
-    alter table public.office_companies
-      add constraint office_companies_industry_check
-      check (
-        industry is null
-        or industry in ('cafe', 'apparel', 'game', 'festival', 'baito', 'sns')
-      );
-  end if;
-end $$;
+-- 旧具体業種が残っていれば系へマップ（カラム追加直後は空でも可）
+update public.office_companies set industry = 'food' where industry in ('cafe', 'baito');
+update public.office_companies set industry = 'fashion' where industry = 'apparel';
+update public.office_companies set industry = 'tech' where industry = 'game';
+update public.office_companies set industry = 'event' where industry = 'festival';
+update public.office_companies set industry = 'media' where industry = 'sns';
+
+alter table public.office_companies
+  drop constraint if exists office_companies_industry_check;
+
+alter table public.office_companies
+  add constraint office_companies_industry_check
+  check (
+    industry is null
+    or industry in (
+      'food', 'fashion', 'tech', 'event', 'shop',
+      'media', 'learn', 'health', 'community'
+    )
+  );
 
 -- 会社名を 1〜12 文字に合わせる（超過分は切り詰め）
 update public.office_companies

@@ -31,7 +31,7 @@ export async function generateIncidentWithClaude(
       : "（なし）";
 
   const user = `会社名: ${ctx.companyName}
-業種: ${ctx.industryLabel}
+系統: ${ctx.industryLabel}
 直近の事件タイトル（似せないで）:
 ${recent}
 
