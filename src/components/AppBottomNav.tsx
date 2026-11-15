@@ -13,7 +13,9 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
+import { useUnstickFixedBottom } from "@/hooks/useUnstickFixedBottom";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
 import {
@@ -550,6 +552,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const collapseLabel =
     locale === "ja" ? "メッセージ・課題・募集を隠す" : "Hide messages, issues, and recruiting";
 
+  const navRef = useRef<HTMLElement>(null);
+  useUnstickFixedBottom(navRef);
+
   const renderTab = (item: NavItem, className: string, side: "open" | "closed") => {
     const active =
       item.id === "mail"
@@ -590,6 +595,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
 
   return (
     <nav
+      ref={navRef}
       className={`app-bottom-nav ${className ?? ""}`.trim()}
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
@@ -674,9 +680,19 @@ function AppBottomNavInner({ className }: { className?: string }) {
 }
 
 export function AppBottomNav({ className }: { className?: string }) {
-  return (
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
+
+  const content = (
     <Suspense fallback={<nav className={`app-bottom-nav ${className ?? ""}`.trim()} aria-hidden />}>
       <AppBottomNavInner className={className} />
     </Suspense>
   );
+
+  // Portal to body so nested `position:fixed` shells (e.g. messages layout)
+  // cannot trap the tab bar above the true screen bottom on iOS Safari.
+  if (!portalTarget) return null;
+  return createPortal(content, portalTarget);
 }
