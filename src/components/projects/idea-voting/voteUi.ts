@@ -10,3 +10,14 @@ export const voteChip =
   "inline-flex h-6 items-center gap-1 rounded-xl border border-zinc-300 bg-white px-1.5 text-[11px] font-medium text-zinc-600";
 export const voteChipActive =
   "inline-flex h-6 items-center gap-1 rounded-xl border border-zinc-900 bg-zinc-900 px-1.5 text-[11px] font-medium text-white";
+
+/**
+ * Apple 風 CTA（作成 / 投票するで共通サイズ）。
+ * 下帯シャドウなし・カプセル・押下は opacity のみ。
+ */
+export const voteAppleBtn =
+  "inline-flex h-12 w-full items-center justify-center rounded-full bg-[#FF9600] px-4 text-[17px] font-semibold tracking-tight text-white transition-opacity active:opacity-70 disabled:cursor-not-allowed disabled:opacity-45";
+
+/** メッセージ上の投票カード内用（やや小さめ・同じスタイル） */
+export const voteAppleBtnCompact =
+  "mt-1 inline-flex h-10 w-full items-center justify-center rounded-full bg-[#FF9600] px-3 text-[13px] font-semibold tracking-tight text-white transition-opacity active:opacity-70 disabled:opacity-45";

@@ -3,9 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
-import { voteInput } from "@/components/projects/idea-voting/voteUi";
+import { voteAppleBtn, voteInput } from "@/components/projects/idea-voting/voteUi";
 import { createIdea, createVoteEvent, VOTE_LIMIT_MAX } from "@/lib/projects/ideaVoting/ideaVotingApi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
@@ -241,9 +240,11 @@ export default function WorkspaceVoteCreate() {
           <button
             type="button"
             onClick={() => setOptions((prev) => [...prev, ""])}
-            className="inline-flex items-center gap-1 rounded-2xl px-2 py-2 text-[13px] font-semibold text-[#FF9600] hover:bg-orange-50"
+            className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-[13px] font-semibold text-[#FF9600] hover:bg-orange-50"
           >
-            <Plus className="h-4 w-4" />
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#FF9600] text-white">
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.75} aria-hidden />
+            </span>
             {tx("候補を追加", "Add option")}
           </button>
         </section>
@@ -266,16 +267,14 @@ export default function WorkspaceVoteCreate() {
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
         <div className="mx-auto max-w-lg">
-          <DuoButton
+          <button
             type="button"
-            tone="orange"
-            size="lg"
-            fullWidth
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
+            className={voteAppleBtn}
           >
             {busy ? tx("作成中…", "Creating…") : tx("作成", "Create")}
-          </DuoButton>
+          </button>
         </div>
       </div>
     </div>

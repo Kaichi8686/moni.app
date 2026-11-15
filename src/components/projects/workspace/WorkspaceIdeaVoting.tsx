@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { IdeaList } from "@/components/projects/idea-voting/IdeaList";
-import { voteCard, voteChip, voteChipActive } from "@/components/projects/idea-voting/voteUi";
+import { voteAppleBtn, voteCard, voteChip, voteChipActive } from "@/components/projects/idea-voting/voteUi";
 import { supabase } from "@/lib/supabase";
 import {
   fetchEvents,
@@ -426,20 +425,18 @@ export default function WorkspaceIdeaVoting() {
                 {closing ? tx("締め切り中…", "Closing…") : tx("締め切り", "Close vote")}
               </button>
             ) : null}
-            <DuoButton
+            <button
               type="button"
-              tone="orange"
-              size="lg"
-              fullWidth
               disabled={!canSubmitVote || closing}
               onClick={() => void handleSubmitVotes()}
+              className={voteAppleBtn}
             >
               {submitting
                 ? tx("投票中…", "Voting…")
                 : pendingSelection.length > 0
                   ? tx(`投票する（${pendingSelection.length}）`, `Vote (${pendingSelection.length})`)
                   : tx("投票する", "Vote")}
-            </DuoButton>
+            </button>
           </div>
         </div>
       ) : null}
