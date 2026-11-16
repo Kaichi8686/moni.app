@@ -27,7 +27,6 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
 
   const hideBottomNav = Boolean(
     docEditorOpen ||
-      pathname?.match(/^\/projects\/[^/]+\/coach\/?$/) ||
       pathname?.match(/^\/projects\/[^/]+\/roadmap\/?$/) ||
       pathname?.match(/^\/projects\/[^/]+\/ideas(?:\/|$)/) ||
       pathname?.match(/^\/projects\/[^/]+\/activity\/?$/) ||
