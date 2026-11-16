@@ -181,7 +181,7 @@ export function ProfileHeader({
       </div>
 
       <div className="px-4 pb-5 sm:px-5">
-        <div className="relative z-10 -mt-7 flex items-end gap-4">
+        <div className="relative z-10 -mt-8 flex items-end gap-4">
           <div className="relative shrink-0">
             <div className="rounded-xl shadow-md ring-1 ring-black/15">
               <ProfileAvatar
