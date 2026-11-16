@@ -279,9 +279,11 @@ export function removeWorkFile(files: IssueWorkFile[], id: string): IssueWorkFil
   return files.filter((file) => file.id !== id);
 }
 
-/** ピン → 必須 → 更新が新しい順 */
+/** 必須 → ピン → 更新が新しい順（ピンしても必須の下） */
 export function sortWorkFilesByUpdated(files: IssueWorkFile[]): IssueWorkFile[] {
   return [...files].sort((a, b) => {
+    const req = Number(Boolean(b.required)) - Number(Boolean(a.required));
+    if (req !== 0) return req;
     const pinA = a.pinnedAt ? 1 : 0;
     const pinB = b.pinnedAt ? 1 : 0;
     if (pinA !== pinB) return pinB - pinA;
@@ -289,8 +291,6 @@ export function sortWorkFilesByUpdated(files: IssueWorkFile[]): IssueWorkFile[] 
       const byPin = b.pinnedAt.localeCompare(a.pinnedAt);
       if (byPin !== 0) return byPin;
     }
-    const req = Number(Boolean(b.required)) - Number(Boolean(a.required));
-    if (req !== 0) return req;
     return b.updatedAt.localeCompare(a.updatedAt);
   });
 }
