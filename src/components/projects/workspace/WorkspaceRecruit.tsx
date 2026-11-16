@@ -96,6 +96,7 @@ export default function WorkspaceRecruit() {
   const [filter, setFilter] = useState<FilterId>("all");
   const [panel, setPanel] = useState<Panel | null>(null);
   const [panelExiting, setPanelExiting] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [title, setTitle] = useState("");
@@ -130,6 +131,7 @@ export default function WorkspaceRecruit() {
 
   const closePanel = useCallback(() => {
     if (panelExiting) return;
+    setConfirmDiscard(false);
     setPanelExiting(true);
     clearExitTimer();
     exitTimer.current = setTimeout(() => {
@@ -138,6 +140,24 @@ export default function WorkspaceRecruit() {
       exitTimer.current = null;
     }, SLIDE_OUT_MS);
   }, [panelExiting, clearExitTimer]);
+
+  const createDirty = Boolean(
+    title.trim() ||
+      message.trim() ||
+      role.trim() ||
+      compensation.trim() ||
+      weeklyHours.trim() ||
+      workFormat !== "online" ||
+      !postToBoard,
+  );
+
+  const requestCloseCreate = useCallback(() => {
+    if (panel?.kind === "create" && createDirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    closePanel();
+  }, [panel, createDirty, closePanel]);
 
   const openCreate = useCallback(() => {
     if (!canEdit) return;
@@ -235,11 +255,13 @@ export default function WorkspaceRecruit() {
   useEffect(() => {
     if (!panel) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closePanel();
+      if (event.key !== "Escape") return;
+      if (panel.kind === "create") requestCloseCreate();
+      else closePanel();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panel, closePanel]);
+  }, [panel, closePanel, requestCloseCreate]);
 
   async function onCreate() {
     if (!supabase || !uid || !project || !canEdit) return;
@@ -478,11 +500,11 @@ export default function WorkspaceRecruit() {
 
       {showPanel && panel?.kind === "create" ? (
         <RecruitSlidePanel exiting={panelExiting} zClass="z-[220]">
-          <div className="flex flex-col gap-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+          <div className="flex min-h-[100dvh] flex-col gap-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={closePanel}
+                onClick={requestCloseCreate}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100"
                 aria-label={tx("戻る", "Back")}
               >
@@ -604,16 +626,59 @@ export default function WorkspaceRecruit() {
                   "Shown on Explore → Recruiting. Private projects are switched to public.",
                 )}
               </p>
+            </div>
+
+            <div className="fixed inset-x-0 bottom-0 z-[230] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
               <button
                 type="button"
                 disabled={saving || !title.trim()}
                 onClick={() => void onCreate()}
-                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 text-[14px] font-bold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-40"
+                className="mx-auto flex min-h-[48px] w-full max-w-3xl items-center justify-center rounded-full bg-[#FF9600] px-4 text-[15px] font-bold text-white transition active:opacity-90 disabled:opacity-40"
               >
-                {saving ? tx("公開中…", "Publishing…") : tx("この内容で募集を追加する", "Add this recruitment")}
+                {saving ? tx("公開中…", "Publishing…") : tx("募集する", "Recruit")}
               </button>
             </div>
           </div>
+
+          {confirmDiscard ? (
+            <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
+              <div
+                role="dialog"
+                aria-modal
+                aria-labelledby="recruit-discard-title"
+                className="w-full max-w-sm rounded-2xl bg-white px-5 py-6 text-center shadow-xl"
+              >
+                <h3 id="recruit-discard-title" className="text-base font-semibold text-zinc-900">
+                  {tx("入力内容を破棄しますか？", "Discard what you wrote?")}
+                </h3>
+                <p className="mt-2 text-sm text-zinc-500">
+                  {tx(
+                    "戻ると今まで書いた内容は保存されず消えます。よろしいですか？",
+                    "Going back discards unsaved text. Continue?",
+                  )}
+                </p>
+                <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col gap-3">
+                  <button
+                    type="button"
+                    className="rounded-full bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white"
+                    onClick={() => {
+                      resetForm();
+                      closePanel();
+                    }}
+                  >
+                    {tx("破棄して戻る", "Discard and go back")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+                    onClick={() => setConfirmDiscard(false)}
+                  >
+                    {tx("編集を続ける", "Keep editing")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </RecruitSlidePanel>
       ) : null}
 

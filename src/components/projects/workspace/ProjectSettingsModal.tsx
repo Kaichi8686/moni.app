@@ -324,6 +324,11 @@ export function ProjectSettingsModal({
       setErr(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
       return;
     }
+    // 設定画面では選んだ瞬間にプレビューを差し替え（アップロード完了を待たない）
+    clearPreviewObjectUrl();
+    previewObjectUrl.current = URL.createObjectURL(file);
+    setThumbPreview(previewObjectUrl.current);
+    setShowUrlField(false);
     setThumbUploading(true);
     setErr("");
     try {
@@ -341,12 +346,9 @@ export function ProjectSettingsModal({
       const json = (await res.json()) as { publicUrl?: string; error?: string };
       if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
       const publicUrl = json.publicUrl ?? "";
-      clearPreviewObjectUrl();
-      previewObjectUrl.current = URL.createObjectURL(file);
-      setThumbPreview(publicUrl || previewObjectUrl.current);
       setEditThumb(publicUrl);
-      setShowUrlField(false);
-      // メインタブは保存まで旧写真のまま。ここではプレビューのみ
+      if (publicUrl) setThumbPreview(publicUrl);
+      // メインタブは保存まで旧写真のまま
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("写真のアップロードに失敗しました", "Failed to upload photo"));
     } finally {
@@ -373,6 +375,9 @@ export function ProjectSettingsModal({
       setErr(tx("ログイン後に写真をアップロードできます。", "Log in to upload a photo."));
       return;
     }
+    clearBgPreviewObjectUrl();
+    bgPreviewObjectUrl.current = URL.createObjectURL(file);
+    setBgPreview(bgPreviewObjectUrl.current);
     setBgUploading(true);
     setErr("");
     try {
@@ -390,11 +395,9 @@ export function ProjectSettingsModal({
       const json = (await res.json()) as { backgroundUrl?: string; publicUrl?: string; error?: string };
       if (!res.ok) throw new Error(json.error ?? tx("アップロードに失敗しました", "Upload failed"));
       const publicUrl = json.backgroundUrl ?? json.publicUrl ?? "";
-      clearBgPreviewObjectUrl();
-      bgPreviewObjectUrl.current = URL.createObjectURL(file);
-      setBgPreview(publicUrl || bgPreviewObjectUrl.current);
       setEditBg(publicUrl);
-      // メインタブは保存まで旧背景のまま。ここではプレビューのみ
+      if (publicUrl) setBgPreview(publicUrl);
+      // メインタブは保存まで旧背景のまま
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("背景のアップロードに失敗しました", "Failed to upload background"));
     } finally {

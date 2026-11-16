@@ -117,7 +117,7 @@ export default function WorkspaceGeminiHub() {
   const panelMode = mode as GeminiAgentMode;
 
   return (
-    <div className="h-[100dvh] w-full bg-white">
+    <div className="h-[calc(100dvh-var(--bottom-nav-clearance))] w-full bg-white">
       <GeminiAgentPanel
         key={`${projectId}-${mode}-${handoffPrompt ? "handoff" : "plain"}`}
         mode={panelMode}

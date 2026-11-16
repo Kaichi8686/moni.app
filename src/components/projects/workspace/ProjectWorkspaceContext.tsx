@@ -1499,7 +1499,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 : "bg-white"
             } ${
               isCoachChat
-                ? "h-[100dvh]"
+                ? "h-[calc(100dvh-var(--bottom-nav-clearance))]"
                 : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isOverflowPanelPage
                   ? "min-h-[100dvh]"
                   : ""
