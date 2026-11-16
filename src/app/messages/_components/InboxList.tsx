@@ -370,75 +370,78 @@ export function InboxList() {
     <>
       {/*
         flex 高さ連鎖を使わず、固定シェル直下の単一スクロールにする。
-        これなら人数が増えても確実に上下へ動ける。端より先は overscroll で止める。
+        人数が少なく画面を埋めないときも縦スクロールできるよう、
+        中身の高さをスクロール面より常に少し大きくする。
       */}
       <div
         className="absolute inset-0 overflow-y-auto overscroll-y-contain"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
       >
-        <div className="sticky top-0 z-10 border-b border-zinc-100 bg-[#fafaf8] px-4 py-2">
-          <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
-            <Search className="h-4 w-4 shrink-0 text-zinc-400" />
-            <input
-              placeholder={
-                scopedProjectId
-                  ? tx("メンバー・グループを検索", "Search members or group")
-                  : tx("検索", "Search")
-              }
-              className="flex-1 bg-transparent text-sm outline-none"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <div className="box-border flex min-h-[calc(100%+4.5rem)] flex-col">
+          <div className="sticky top-0 z-10 border-b border-zinc-100 bg-[#fafaf8] px-4 py-2">
+            <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
+              <Search className="h-4 w-4 shrink-0 text-zinc-400" />
+              <input
+                placeholder={
+                  scopedProjectId
+                    ? tx("メンバー・グループを検索", "Search members or group")
+                    : tx("検索", "Search")
+                }
+                className="flex-1 bg-transparent text-sm outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
 
-        {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
+          {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
-        <div className="divide-y divide-zinc-50">
-          {!userId ? (
-            <p className="px-4 py-8 text-center text-sm text-zinc-500">
-              <Link href="/" className="font-medium text-violet-600 underline">
-                {tx("ログイン", "Log in")}
-              </Link>
-              {tx("するとメッセージが表示されます", " to see your messages")}
-            </p>
-          ) : loadError ? (
-            <p className="px-4 py-8 text-center text-sm text-red-600">
-              {loadError === "__db__"
-                ? tx(
-                    "メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。",
-                    "Messaging is not set up. Run the SQL in Supabase.",
-                  )
-                : loadError === "__generic__"
-                  ? tx("読み込みに失敗しました", "Failed to load")
-                  : loadError}
-            </p>
-          ) : loading ? (
-            <InboxListSkeleton />
-          ) : (
-            <>
-              {!scopedProjectId ? (
-                <FollowingChatEntry
-                  recentFollowing={followingForEntry}
-                  onOpen={() => setShowFollowingPicker(true)}
-                />
-              ) : null}
-              {filtered.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
-              ) : (
-                filtered.map((conv) => (
-                  <ConversationRow
-                    key={conv.id}
-                    conversation={conv}
-                    projectId={scopedProjectId}
+          <div className="divide-y divide-zinc-50">
+            {!userId ? (
+              <p className="px-4 py-8 text-center text-sm text-zinc-500">
+                <Link href="/" className="font-medium text-violet-600 underline">
+                  {tx("ログイン", "Log in")}
+                </Link>
+                {tx("するとメッセージが表示されます", " to see your messages")}
+              </p>
+            ) : loadError ? (
+              <p className="px-4 py-8 text-center text-sm text-red-600">
+                {loadError === "__db__"
+                  ? tx(
+                      "メッセージ機能のDBが未設定です。Supabaseで SQL を実行してください。",
+                      "Messaging is not set up. Run the SQL in Supabase.",
+                    )
+                  : loadError === "__generic__"
+                    ? tx("読み込みに失敗しました", "Failed to load")
+                    : loadError}
+              </p>
+            ) : loading ? (
+              <InboxListSkeleton />
+            ) : (
+              <>
+                {!scopedProjectId ? (
+                  <FollowingChatEntry
+                    recentFollowing={followingForEntry}
+                    onOpen={() => setShowFollowingPicker(true)}
                   />
-                ))
-              )}
-            </>
-          )}
-        </div>
+                ) : null}
+                {filtered.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-zinc-500">{emptyHint}</p>
+                ) : (
+                  filtered.map((conv) => (
+                    <ConversationRow
+                      key={conv.id}
+                      conversation={conv}
+                      projectId={scopedProjectId}
+                    />
+                  ))
+                )}
+              </>
+            )}
+          </div>
 
-        <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
+          <div className="h-[var(--bottom-nav-clearance)] shrink-0" aria-hidden />
+        </div>
       </div>
 
       {showFollowingPicker && userId ? (
