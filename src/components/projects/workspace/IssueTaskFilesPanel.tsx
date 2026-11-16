@@ -15,7 +15,6 @@ import {
   StickyNote,
   X,
 } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   ProjectGoogleDocsShell,
   type ProjectGoogleDocsShellHandle,
@@ -1108,15 +1107,17 @@ export function IssueTaskFilesPanel({
                   </span>
                 </button>
                 {!isMemo && canEdit && file.required && !submitted ? (
-                  <DuoButton
+                  <button
                     type="button"
-                    tone={file.completedAt ? "lime" : "peach"}
-                    size="md"
                     onClick={() => void toggleFileComplete(file)}
-                    className="!min-h-0 !px-3 !py-2 !text-[12px] !font-bold"
+                    className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-bold shadow-sm transition ${
+                      file.completedAt
+                        ? "border-[#D7E8A8] bg-[#F4FBE3] text-[#3F6212] hover:bg-[#EBF6D0]"
+                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                    }`}
                   >
                     {file.completedAt ? tx("できた", "Done") : tx("できた？", "Done?")}
-                  </DuoButton>
+                  </button>
                 ) : null}
                 {canEdit ? (
                   <button
@@ -1161,20 +1162,21 @@ export function IssueTaskFilesPanel({
                         {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
                       </p>
                     ) : null}
-                    <DuoButton
+                    <button
                       type="button"
-                      tone={submitted ? "lime" : "orange"}
-                      size="lg"
-                      fullWidth
                       disabled={!canSubmit}
                       onClick={() => {
                         if (!requiredFilesReady(files)) return;
                         void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
                       }}
-                      className="!text-[16px]"
+                      className={`inline-flex w-full select-none items-center justify-center rounded-2xl px-6 py-4 text-[16px] font-extrabold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        submitted
+                          ? "border border-[#D7E8A8] bg-[#F4FBE3] text-[#3F6212]"
+                          : "bg-[#FF9600] text-white hover:bg-[#F08900] active:bg-[#E07E00]"
+                      }`}
                     >
                       {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
-                    </DuoButton>
+                    </button>
                   </div>
                 </div>
               ) : error ? (
@@ -1244,7 +1246,7 @@ export function IssueTaskFilesPanel({
                     type="button"
                     disabled={creating}
                     onClick={() => setFabOpen((v) => !v)}
-                    className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
+                    className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 border-[#FF9600] bg-white text-[#FF9600] shadow-sm transition hover:bg-[#FFF8EE] active:bg-[#FFF0DC] disabled:opacity-50"
                     aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
                   >
                     {fabOpen ? <X className="h-8 w-8" aria-hidden strokeWidth={3} /> : <Plus className="h-8 w-8" aria-hidden strokeWidth={3} />}
@@ -1404,16 +1406,14 @@ export function IssueTaskFilesPanel({
                   >
                     {tx("キャンセル", "Cancel")}
                   </button>
-                  <DuoButton
+                  <button
                     type="button"
-                    tone="orange"
-                    size="md"
                     disabled={creating || uploadingDraft}
                     onClick={() => void createNamedFile()}
-                    className="!px-4 !py-2 !text-[14px]"
+                    className="inline-flex items-center justify-center rounded-full bg-[#FF9600] px-4 py-2 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#F08900] active:bg-[#E07E00] disabled:opacity-50"
                   >
                     {creating ? tx("作成中…", "Creating…") : tx("追加", "Add")}
-                  </DuoButton>
+                  </button>
                 </div>
               </div>
             </div>,

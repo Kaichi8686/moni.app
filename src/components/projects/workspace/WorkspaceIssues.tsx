@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
@@ -59,13 +58,12 @@ function stepLabel(
   return `STEP ${index + 1}・${phase.title}`;
 }
 
-/** 課題一覧用 Duo ボタンのレイアウト上書き */
-const LIST_DUO =
-  "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
-
-/** ステップ画面のジャンル行（フラット） */
+/** ステップ画面のジャンル／課題行（フラット） */
 const GENRE_ROW =
   "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
+
+const ISSUE_ROW_DONE =
+  "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-[#D7E8A8] bg-[#F4FBE3] px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-[#3F6212] shadow-sm transition hover:bg-[#EBF6D0] active:bg-[#E2F0C0]";
 
 function shouldResumeIssueCreate(projectId: string, phaseId: string | null, genre: string): boolean {
   const open = readIssueCreateOpen(projectId);
@@ -622,7 +620,7 @@ export default function WorkspaceIssues() {
                     setError("");
                     setCreating(true);
                   }}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-sm transition hover:bg-[#F08900] active:bg-[#E07E00]"
                   aria-label={tx("課題を追加", "Add task")}
                 >
                   <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -697,12 +695,9 @@ export default function WorkspaceIssues() {
               {genreRows.map((issue) => {
                 const submitted = isIssueSubmitted(issue);
                 return (
-                  <DuoButton
+                  <button
                     key={issue.id}
                     type="button"
-                    tone={submitted ? "lime" : "peach"}
-                    size="md"
-                    fullWidth
                     onClick={() => {
                       setTaskExiting(false);
                       setScreen({
@@ -712,13 +707,13 @@ export default function WorkspaceIssues() {
                         issueId: issue.id,
                       });
                     }}
-                    className={LIST_DUO}
+                    className={submitted ? ISSUE_ROW_DONE : GENRE_ROW}
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="line-clamp-2">{issue.title}</span>
                       <span
                         className={`truncate text-[11px] font-semibold ${
-                          submitted ? "text-[#3F6212]/75" : "text-[#9A5B1F]/80"
+                          submitted ? "text-[#3F6212]/75" : "text-zinc-500"
                         }`}
                       >
                         {[
@@ -732,8 +727,11 @@ export default function WorkspaceIssues() {
                           .join(" · ")}
                       </span>
                     </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-                  </DuoButton>
+                    <ArrowRight
+                      className={`h-4 w-4 shrink-0 ${submitted ? "text-[#3F6212]/60" : "text-zinc-400"}`}
+                      aria-hidden
+                    />
+                  </button>
                 );
               })}
             </div>
