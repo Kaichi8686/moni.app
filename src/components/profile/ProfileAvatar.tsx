@@ -36,10 +36,10 @@ export function ProfileAvatar({ displayName, avatarUrl, size = "md", flush = fal
           className="pointer-events-none absolute inset-0 block h-full w-full max-h-none max-w-none"
           style={{
             objectFit: "cover",
-            objectPosition: "center top",
-            // Crop any baked-in letterboxing on uploaded posters.
-            transform: flush ? "scale(1.08)" : undefined,
-            transformOrigin: "center top",
+            objectPosition: "center",
+            // Crop baked-in letterboxing on all sides (incl. bottom).
+            transform: flush ? "scale(1.14)" : undefined,
+            transformOrigin: "center",
           }}
         />
       ) : (
