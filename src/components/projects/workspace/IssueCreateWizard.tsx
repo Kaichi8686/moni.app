@@ -13,7 +13,6 @@ import {
   StickyNote,
   X,
 } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
@@ -500,10 +499,10 @@ export function IssueCreateWizard({
           type="button"
           disabled={saving}
           onClick={requestClose}
-          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-50"
           aria-label={tx("戻る", "Back")}
         >
-          <ArrowLeft className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+          <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-[20px] font-extrabold leading-tight text-zinc-900">
           {step === "details" ? tx("課題を作成", "Create task") : tx("ファイルを用意", "Prepare files")}
@@ -635,15 +634,17 @@ export function IssueCreateWizard({
                         </span>
                       </button>
                     </div>
-                    <DuoButton
+                    <button
                       type="button"
-                      tone={file.required ? "orange" : "peach"}
-                      size="md"
                       onClick={() => toggleRequired(file)}
-                      className="!min-h-0 !px-3 !py-2 !text-[12px] !font-bold"
+                      className={`shrink-0 rounded-full border px-3.5 py-2 text-[12px] font-bold shadow-sm transition ${
+                        file.required
+                          ? "border-[#FF9600] bg-[#FF9600] text-white hover:bg-[#F08900]"
+                          : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      }`}
                     >
                       {tx("必須", "Must")}
-                    </DuoButton>
+                    </button>
                     <button
                       type="button"
                       className="shrink-0 rounded-full p-2 text-[#5f6368] hover:bg-[#f1f3f4]"
@@ -874,23 +875,21 @@ export function IssueCreateWizard({
                   >
                     {tx("キャンセル", "Cancel")}
                   </button>
-                  <DuoButton
+                  <button
                     type="button"
-                    tone="orange"
-                    size="md"
                     disabled={creating || uploadingDraft}
                     onClick={() => {
                       if (renameId) void saveRename();
                       else void createNamedFile();
                     }}
-                    className="!px-4 !py-2 !text-[14px]"
+                    className="inline-flex items-center justify-center rounded-full bg-[#FF9600] px-4 py-2 text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#F08900] active:opacity-70 disabled:opacity-50"
                   >
                     {creating
                       ? tx("保存中…", "Saving…")
                       : renameId
                         ? tx("保存", "Save")
                         : tx("追加", "Add")}
-                  </DuoButton>
+                  </button>
                 </div>
               </div>
             </div>,
@@ -931,7 +930,7 @@ export function IssueCreateWizard({
               type="button"
               disabled={creating}
               onClick={() => setFabOpen((v) => !v)}
-              className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-[4px] border-[#FF9600] bg-white text-[#FF9600] shadow-[0_4px_0_#D97706] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:opacity-50"
+              className="pointer-events-auto inline-flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 border-[#FF9600] bg-white text-[#FF9600] shadow-sm transition hover:bg-[#FFF8EE] active:bg-[#FFF0DC] disabled:opacity-50"
               aria-label={fabOpen ? tx("閉じる", "Close") : tx("新規作成", "New")}
             >
               {fabOpen ? <X className="h-8 w-8" aria-hidden strokeWidth={3} /> : <Plus className="h-8 w-8" aria-hidden strokeWidth={3} />}
@@ -942,20 +941,23 @@ export function IssueCreateWizard({
         <div className="fixed inset-x-0 bottom-0 z-[304] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
           <div className="mx-auto max-w-lg">
             {step === "details" ? (
-              <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={!canGoNext} onClick={goToFiles}>
-                {tx("次へ", "Next")}
-              </DuoButton>
-            ) : (
-              <DuoButton
+              <button
                 type="button"
-                tone="orange"
-                size="lg"
-                fullWidth
+                disabled={!canGoNext}
+                onClick={goToFiles}
+                className="inline-flex w-full select-none items-center justify-center rounded-full bg-[#FF9600] px-4 min-h-[50px] text-[17px] font-semibold tracking-[-0.022em] text-white transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40"
+              >
+                {tx("次へ", "Next")}
+              </button>
+            ) : (
+              <button
+                type="button"
                 disabled={saving || !canGoNext}
                 onClick={() => void finish()}
+                className="inline-flex w-full select-none items-center justify-center rounded-full bg-[#FF9600] px-4 min-h-[50px] text-[17px] font-semibold tracking-[-0.022em] text-white transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40"
               >
                 {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
-              </DuoButton>
+              </button>
             )}
           </div>
         </div>
