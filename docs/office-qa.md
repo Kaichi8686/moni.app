@@ -6,8 +6,9 @@
 2. 続けて `supabase/apply_office_industry.sql`（旧系統カラム・会社名1〜12字）
    - 既存DBで旧 cafe 等がある場合は `apply_office_industry_kei.sql` も実行
 3. 続けて `supabase/apply_office_company_about.sql`（会社の説明 8〜100字）
-4. 環境変数: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL=claude-haiku-5-5`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
-5. `npm run dev:local` → `http://127.0.0.1:3002/idea?spark=office`
+4. 続けて `supabase/apply_office_strategy.sql`（作戦・ターゲット・ストーリー）
+5. 環境変数: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL=claude-haiku-5-5`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`
+6. `npm run dev:local` → `http://127.0.0.1:3002/idea?spark=office`
 
 未ログイン時はブラウザ localStorage（`moni.office.v1`）で遊べる。
 
@@ -15,10 +16,10 @@
 
 1. 会社名（1〜12字）＋会社の説明（自由記述 8〜100字）で作成
 2. 既存で説明未設定の会社は、次回に説明だけ補完（そのとき open 事件は破棄）
-3. 事件は会社の説明に沿って Claude が生成
-4. 新事件時のみオフィス演出 → 事件カードが降りてくる（再訪の open は演出なし）
-5. 5〜300文字で回答 → 提出 → 採点・コイン・スタミナ
-6. 「次の事件へ」で新事件＋演出
+3. 事件＋作戦3＋ターゲット4を Claude が生成（fit はクライアント非公開）
+4. 作戦を選ぶ（1回だけ引き直し可）→ ターゲット最大2（その他可）→ アイデア入力
+5. 提出 → 4項目採点＋結果ストーリー → 倍率つき売上 → スタミナ消費
+6. 結果はタップでスキップ可。「次の事件へ」で新事件
 7. 「順位」タブで今月ランキング・のんびりモード切替
 8. `prefers-reduced-motion` ではループアニメと事件FXを抑制
 

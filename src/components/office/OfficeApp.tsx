@@ -15,12 +15,18 @@ import {
   fetchIncident,
   fetchRanking,
   markResultSeen,
+  rerollStrategies,
   setAbout,
   submitAnswer,
   toggleRanking,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
-import type { OfficeIncident, OfficeSubmission, RankingRow } from "@/lib/office/types";
+import type {
+  OfficeIncident,
+  OfficeSubmission,
+  OfficeSubmitInput,
+  RankingRow,
+} from "@/lib/office/types";
 
 type Props = {
   embedded?: boolean;
@@ -146,11 +152,11 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     }
   }
 
-  async function onSubmit(answer: string) {
+  async function onSubmit(input: OfficeSubmitInput) {
     setBusy(true);
     setErr("");
     try {
-      const res = await submitAnswer(answer);
+      const res = await submitAnswer(input);
       setLastSubmit(res.submission);
       setPayload({
         company: res.company,
@@ -160,7 +166,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       });
       setIncident(null);
       setPlayEnter(false);
-      setSceneFx(null);
+      const tone = res.submission.storyTone;
+      triggerFx(tone === "great" ? "chance" : tone === "bitter" ? "people" : "rival");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "提出失敗");
     } finally {
@@ -249,6 +256,11 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
               busy={busy}
               playEnter={playEnter}
               onSubmit={(a) => void onSubmit(a)}
+              onRerollStrategies={async () => {
+                const next = await rerollStrategies();
+                setIncident(next);
+                return next;
+              }}
             />
           )}
         </div>

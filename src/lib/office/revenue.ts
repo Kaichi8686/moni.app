@@ -1,22 +1,28 @@
 import { OFFICE_SIMILAR_REVENUE_FACTOR } from "@/lib/office/constants";
 import { levelFromRevenue } from "@/lib/office/scoring";
+import { originalBonus, strategyMultiplier } from "@/lib/office/strategy";
+import type { StrategyKind } from "@/lib/office/types";
 
 /**
- * 売上計算を1か所に集約（将来のアイテム補正などをここに足す）
- * 売上 = AI総合点(0〜100) × size × 10（整数）
- * 類似提出時は ×0.3
+ * 売上 = round(score × size × 10 × multiplier × (1 + original_bonus))
+ * 類似提出時は最後に ×0.3
  */
 export function calcRevenue(input: {
   scoreTotal: number;
   size: 1 | 2 | 3;
+  strategyKind: StrategyKind;
+  strategyId: string;
   wasSimilar?: boolean;
-}): number {
+}): { revenue: number; multiplier: number; isOriginal: boolean; originalBonus: number } {
   const score = Math.max(0, Math.min(100, Math.round(input.scoreTotal)));
-  const base = score * input.size * 10;
+  const multiplier = strategyMultiplier(input.strategyKind, score);
+  const bonus = originalBonus(input.strategyId, score);
+  const isOriginal = bonus > 0;
+  let revenue = Math.round(score * input.size * 10 * multiplier * (1 + bonus));
   if (input.wasSimilar) {
-    return Math.floor(base * OFFICE_SIMILAR_REVENUE_FACTOR);
+    revenue = Math.round(revenue * OFFICE_SIMILAR_REVENUE_FACTOR);
   }
-  return Math.floor(base);
+  return { revenue, multiplier, isOriginal, originalBonus: bonus };
 }
 
 export function applyRevenueGrowth(totalRevenue: number, gained: number): {

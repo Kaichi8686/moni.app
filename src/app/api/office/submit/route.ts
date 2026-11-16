@@ -9,8 +9,18 @@ export async function POST(req: NextRequest) {
   const admin = getSupabaseAdmin();
   if (!admin) return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
   try {
-    const body = (await req.json()) as { answer?: string };
-    const result = await dbSubmit(admin, auth.userId, body.answer ?? "");
+    const body = (await req.json()) as {
+      answer?: string;
+      strategy_id?: string;
+      target_ids?: string[];
+      target_other_text?: string | null;
+    };
+    const result = await dbSubmit(admin, auth.userId, {
+      answer: body.answer ?? "",
+      strategyId: body.strategy_id ?? "",
+      targetIds: Array.isArray(body.target_ids) ? body.target_ids : [],
+      targetOtherText: body.target_other_text ?? null,
+    });
     return NextResponse.json({
       submission: result.submission,
       company: result.company,

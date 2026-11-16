@@ -1,19 +1,31 @@
-import { OFFICE_NAME_MAX, OFFICE_SIMILARITY_THRESHOLD } from "@/lib/office/constants";
+import {
+  OFFICE_NAME_MAX,
+  OFFICE_SIMILARITY_THRESHOLD,
+  OFFICE_TARGET_OTHER_MAX,
+} from "@/lib/office/constants";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
-import { parseOfficeIndustry } from "@/lib/office/industries";
-import { isMangledOfflineDescription, offlineIncident, offlineScores } from "@/lib/office/offline";
+import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import {
+  isMangledOfflineDescription,
+  offlineIncident,
+  offlineScores,
+  offlineStrategies,
+} from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
 import { pickIncidentSize } from "@/lib/office/sizePick";
 import { computeStamina, consumeStamina } from "@/lib/office/stamina";
+import { stripTargetFit } from "@/lib/office/strategy";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
 import type {
   OfficeCompany,
   OfficeIncident,
   OfficeSeasonScore,
   OfficeSubmission,
+  OfficeSubmitInput,
   RankingRow,
+  StrategyKind,
 } from "@/lib/office/types";
 
 const STORAGE_KEY = "moni.office.v1";
@@ -171,7 +183,28 @@ export async function localCurrentIncident(
   if (!company.about) throw new Error("先に会社の説明を書いてね");
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");
   if (open && !isMangledOfflineDescription(open.description)) {
-    return { incident: open, created: false };
+    if (!open.strategies?.length || !open.targets?.length) {
+      const fb = offlineIncident({
+        companyName: company.name,
+        companyAbout: company.about,
+        recentTitles: [],
+      });
+      open.strategies = open.strategies?.length === 3 ? open.strategies : fb.strategies;
+      open.targets = open.targets?.length
+        ? open.targets
+        : stripTargetFit(fb.targets);
+      open.strategyRerolls = open.strategyRerolls ?? 0;
+      write(store);
+    }
+    return {
+      incident: {
+        ...open,
+        strategies: open.strategies ?? [],
+        targets: (open.targets ?? []).map((t) => ({ id: t.id, label: t.label })),
+        strategyRerolls: open.strategyRerolls ?? 0,
+      },
+      created: false,
+    };
   }
   if (open) {
     store.incidents = store.incidents.filter((i) => i.id !== open.id);
@@ -187,6 +220,7 @@ export async function localCurrentIncident(
     companyName: company.name,
     companyAbout: company.about,
     recentTitles,
+    industryLabel: industryLabelJa(company.industry),
   });
   const incident: OfficeIncident = {
     id: uid(),
@@ -197,6 +231,9 @@ export async function localCurrentIncident(
     type: gen.type,
     size: pickIncidentSize(),
     status: "open",
+    strategies: gen.strategies,
+    targets: stripTargetFit(gen.targets),
+    strategyRerolls: 0,
     createdAt: new Date().toISOString(),
   };
   store.incidents.push(incident);
@@ -204,9 +241,22 @@ export async function localCurrentIncident(
   return { incident, created: true };
 }
 
+export function localRerollStrategies(userId: string): OfficeIncident {
+  const store = read();
+  const company = store.company;
+  if (!company || company.userId !== userId) throw new Error("先に会社を作ってね");
+  const incident = store.incidents.find((i) => i.userId === userId && i.status === "open");
+  if (!incident) throw new Error("事件がないよ");
+  if ((incident.strategyRerolls ?? 0) >= 1) throw new Error("引き直しは1回までだよ");
+  incident.strategies = offlineStrategies();
+  incident.strategyRerolls = 1;
+  write(store);
+  return incident;
+}
+
 export async function localSubmit(
   userId: string,
-  answer: string,
+  input: OfficeSubmitInput,
 ): Promise<{
   submission: OfficeSubmission;
   company: OfficeCompany;
@@ -219,8 +269,36 @@ export async function localSubmit(
   const incident = store.incidents.find((i) => i.userId === userId && i.status === "open");
   if (!incident) throw new Error("事件がないよ");
 
-  const text = answer.trim();
+  const text = input.answer.trim();
   if (text.length < 5 || text.length > 300) throw new Error("回答は5〜300文字だよ");
+
+  const strategyId = String(input.strategyId ?? "").trim();
+  if (!strategyId) throw new Error("作戦を選んでね");
+  let strategyKind: StrategyKind = "custom";
+  let strategyTitle = "自分の作戦";
+  if (strategyId === "custom") {
+    strategyKind = "custom";
+  } else {
+    const found = incident.strategies.find((s) => s.id === strategyId);
+    if (!found) throw new Error("その作戦は選べないよ");
+    strategyKind = found.kind;
+    strategyTitle = found.title;
+  }
+
+  const targetIds = Array.from(
+    new Set((input.targetIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  ).slice(0, 2);
+  if (targetIds.length < 1) throw new Error("ターゲットを選んでね");
+  const hasOther = targetIds.includes("other");
+  const otherText = String(input.targetOtherText ?? "").trim();
+  if (hasOther && (otherText.length < 1 || otherText.length > OFFICE_TARGET_OTHER_MAX)) {
+    throw new Error(`その他は1〜${OFFICE_TARGET_OTHER_MAX}文字で書いてね`);
+  }
+  const publicIds = new Set(incident.targets.map((t) => t.id));
+  for (const tid of targetIds) {
+    if (tid === "other") continue;
+    if (!publicIds.has(tid)) throw new Error("そのターゲットは選べないよ");
+  }
 
   const consumed = consumeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (!consumed.ok) throw new Error("スタミナが足りないよ");
@@ -228,7 +306,7 @@ export async function localSubmit(
   company.staminaUpdatedAt = consumed.state.updatedAt.toISOString();
   write(store);
 
-  const scores = offlineScores(text);
+  const scores = offlineScores(text, { strategyKind, strategyTitle });
 
   const recent = store.submissions
     .filter((s) => s.userId === userId)
@@ -236,18 +314,20 @@ export async function localSubmit(
     .slice(0, 10)
     .map((s) => s.answer);
   const wasSimilar = isTooSimilar(text, recent, OFFICE_SIMILARITY_THRESHOLD);
-  const revenue = calcRevenue({
+  const rev = calcRevenue({
     scoreTotal: scores.total,
     size: incident.size,
+    strategyKind,
+    strategyId,
     wasSimilar,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, revenue);
+  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   company.totalRevenue = growth.totalRevenue;
   company.level = growth.level;
 
   incident.status = "solved";
   const season = ensureSeason(store, userId, company.leagueId);
-  season.revenue += revenue;
+  season.revenue += rev.revenue;
   season.leagueId = company.leagueId;
 
   const submission: OfficeSubmission = {
@@ -256,12 +336,22 @@ export async function localSubmit(
     companyId: company.id,
     incidentId: incident.id,
     answer: text,
+    strategyId,
+    strategyKind,
+    targetIds,
+    targetOtherText: hasOther ? otherText : null,
     scoreSolve: scores.solve,
     scoreFun: scores.fun,
     scoreFeasible: scores.feasible,
+    scoreFit: scores.fit,
     scoreTotal: scores.total,
     comment: scores.comment,
-    revenue,
+    story: scores.story,
+    storyTone: scores.storyTone,
+    nextHint: scores.nextHint,
+    multiplier: rev.multiplier,
+    isOriginal: rev.isOriginal,
+    revenue: rev.revenue,
     wasSimilar,
     seasonKey: season.seasonKey,
     createdAt: new Date().toISOString(),
