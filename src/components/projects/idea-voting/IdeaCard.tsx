@@ -48,10 +48,10 @@ export function IdeaCard({
   const { tx, locale } = useI18n();
   const isTop = Boolean(rank && rank <= 3 && votingClosed && showResults);
   const voted = idea.myVotes > 0;
-  const checked = selected || voted;
+  const checked = selected;
   const max = Math.max(1, resultBarMax);
   const barPct = showResults ? Math.min(100, Math.round((idea.votes / max) * 100)) : 0;
-  const selectable = selectMode && !votingClosed && (canSelect || voted);
+  const selectable = selectMode && !votingClosed && canSelect;
 
   return (
     <article
