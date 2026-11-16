@@ -295,12 +295,13 @@ export function sortWorkFilesByUpdated(files: IssueWorkFile[]): IssueWorkFile[] 
   });
 }
 
+/** ピンの付け外しだけ。updatedAt は触らない（解除後に元の並びへ戻す） */
 export function setWorkFilePinned(file: IssueWorkFile, pinned: boolean): IssueWorkFile {
-  return {
-    ...file,
-    pinnedAt: pinned ? new Date().toISOString() : undefined,
-    updatedAt: new Date().toISOString(),
-  };
+  if (pinned) {
+    return { ...file, pinnedAt: new Date().toISOString() };
+  }
+  const { pinnedAt: _removed, ...rest } = file;
+  return { ...rest, pinnedAt: undefined };
 }
 
 export function setWorkFileRequired(file: IssueWorkFile, required: boolean): IssueWorkFile {
