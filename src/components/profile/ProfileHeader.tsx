@@ -214,7 +214,7 @@ export function ProfileHeader({
             ) : null}
           </div>
 
-          <div className="min-w-0 flex-1 pt-10">
+          <div className="min-w-0 flex-1 self-end pb-0.5">
             <ProfileStats
               followerCount={profile.followerCount}
               followingCount={profile.followingCount}
@@ -226,7 +226,7 @@ export function ProfileHeader({
           </div>
         </div>
 
-        <div className="mt-5 space-y-2.5">
+        <div className="mt-2 space-y-2.5">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <h1 className="text-[22px] font-bold leading-tight tracking-tight text-zinc-900">
