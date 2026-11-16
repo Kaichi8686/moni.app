@@ -107,11 +107,11 @@ export function RoadmapStepList({
                 {isCurrent ? (
                   <>
                     <span
-                      className="roadmap-current-badge-haze pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.55)_0%,rgba(255,255,255,0.8)_40%,rgba(255,150,0,0.14)_60%,transparent_78%)] blur-[3.5px]"
+                      className="roadmap-current-badge-haze pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.72)_0%,rgba(255,255,255,0.92)_38%,rgba(255,150,0,0.28)_58%,transparent_78%)] blur-[3.5px]"
                       aria-hidden
                     />
                     <span
-                      className="roadmap-current-badge-haze roadmap-current-badge-haze--delay pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.45)_0%,rgba(255,255,255,0.7)_42%,rgba(255,150,0,0.1)_62%,transparent_78%)] blur-[3.5px]"
+                      className="roadmap-current-badge-haze roadmap-current-badge-haze--delay pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.62)_0%,rgba(255,255,255,0.85)_40%,rgba(255,150,0,0.22)_60%,transparent_78%)] blur-[3.5px]"
                       aria-hidden
                     />
                   </>
