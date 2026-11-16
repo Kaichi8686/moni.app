@@ -49,15 +49,15 @@ export async function POST(req: NextRequest) {
     const industry = parseOfficeIndustry(body.industry);
     const existing = await dbGetCompany(admin, auth.userId);
 
-    // 既存会社の業種補完
+    // 既存会社の系統補完
     if (existing.company && !existing.company.industry) {
-      if (!industry) throw new Error("業種を選んでね");
+      if (!industry) throw new Error("系統を選んでね");
       const company = await dbSetIndustry(admin, auth.userId, industry);
       return NextResponse.json({ company });
     }
 
     if (existing.company) throw new Error("すでに会社があるよ");
-    if (!industry) throw new Error("業種を選んでね");
+    if (!industry) throw new Error("系統を選んでね");
     const company = await dbCreateCompany(admin, auth.userId, body.name ?? "", industry);
     return NextResponse.json({ company });
   } catch (e) {

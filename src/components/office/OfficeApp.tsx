@@ -195,7 +195,9 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     <NameSetup
       busy={busy}
       error={err}
-      existingName={payload?.company && !payload.company.industry ? payload.company.name : null}
+      existingName={
+        payload?.company && !payload.company.industry ? payload.company.name : null
+      }
       onSubmit={onSetup}
     />
   ) : (

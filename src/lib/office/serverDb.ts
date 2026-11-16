@@ -161,7 +161,7 @@ export async function dbCreateCompany(
 ) {
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
-  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
+  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
   const { data: existing } = await admin
     .from("office_companies")
     .select("id")
@@ -189,7 +189,7 @@ export async function dbCreateCompany(
 
 /** 既存会社の industry が null のときだけ補完（変更不可） */
 export async function dbSetIndustry(admin: SupabaseClient, userId: string, industry: OfficeIndustry) {
-  if (!parseOfficeIndustry(industry)) throw new Error("業種を選んでね");
+  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
   const { data: row } = await admin
     .from("office_companies")
     .select("*")
@@ -197,7 +197,7 @@ export async function dbSetIndustry(admin: SupabaseClient, userId: string, indus
     .maybeSingle();
   if (!row) throw new Error("会社がないよ");
   const company = mapCompany(row as Record<string, unknown>);
-  if (company.industry) throw new Error("業種はもう決め済みだよ");
+  if (company.industry) throw new Error("系統はもう決め済みだよ");
   const { data, error } = await admin
     .from("office_companies")
     .update({ industry })
@@ -219,7 +219,7 @@ export async function dbCurrentIncident(
     .maybeSingle();
   if (!companyRow) throw new Error("先に会社を作ってね");
   const company = mapCompany(companyRow as Record<string, unknown>);
-  if (!company.industry) throw new Error("先に業種を選んでね");
+  if (!company.industry) throw new Error("先に系統を選んでね");
 
   const { data: open } = await admin
     .from("office_incidents")

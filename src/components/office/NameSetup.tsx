@@ -8,7 +8,7 @@ import { OFFICE_INDUSTRIES, type OfficeIndustry } from "@/lib/office/industries"
 type Props = {
   busy: boolean;
   error?: string;
-  /** 業種補完モード：既存の会社名を固定表示 */
+  /** 系統補完モード：既存の会社名を固定表示 */
   existingName?: string | null;
   onSubmit: (payload: { name: string; industry: OfficeIndustry }) => void;
 };
@@ -29,12 +29,12 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
         Office
       </p>
       <h1 className="mt-2 text-center font-[family-name:var(--font-instrument-serif)] text-3xl tracking-tight text-zinc-900">
-        {patchMode ? "業種を選ぼう" : "会社をつくろう"}
+          {patchMode ? "系統を選ぼう" : "会社をつくろう"}
       </h1>
       <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-zinc-600">
         {patchMode
-          ? `『${existingName}』の業種を決めてね。あとからは変えられないよ。`
-          : "会社名と業種を決めよう。業種はあとから変えられないよ。"}
+          ? `『${existingName}』の系統を決めてね。あとからは変えられないよ。`
+          : "会社名と系統（〇〇系）を決めよう。系統はあとから変えられないよ。"}
       </p>
 
       {!patchMode ? (
@@ -60,8 +60,8 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
         </div>
       )}
 
-      <p className="mt-6 text-xs font-bold text-zinc-600">業種（1つ選ぶ）</p>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <p className="mt-6 text-xs font-bold text-zinc-600">系統（1つ選ぶ）</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {OFFICE_INDUSTRIES.map((item) => {
           const selected = industry === item.id;
           return (
@@ -101,7 +101,7 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
             });
           }}
         >
-          {busy ? "準備中…" : patchMode ? "業種を決める" : "会社を始める"}
+          {busy ? "準備中…" : patchMode ? "系統を決める" : "会社を始める"}
         </DuoButton>
       </div>
     </div>
