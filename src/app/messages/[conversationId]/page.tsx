@@ -7,7 +7,7 @@ type Props = { params: Promise<{ conversationId: string }> };
 export default async function ConversationPage({ params }: Props) {
   const { conversationId } = await params;
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col overflow-hidden">
       <Suspense fallback={<ConversationSkeleton />}>
         <ConversationView conversationId={conversationId} />
       </Suspense>
