@@ -550,9 +550,9 @@ export function IssueTaskFilesPanel({
     }
   }
 
-  async function toggleFileComplete(file: IssueWorkFile) {
-    if (!canEdit || submitted || !file.required) return;
-    const next = markWorkFileComplete(file, !file.completedAt);
+  async function markFileComplete(file: IssueWorkFile) {
+    if (!canEdit || submitted || !file.required || file.completedAt) return;
+    const next = markWorkFileComplete(file, true);
     await persistFiles(upsertWorkFile(files, next));
   }
 
@@ -1003,7 +1003,7 @@ export function IssueTaskFilesPanel({
                 <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[160px] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
                   <button
                     type="button"
-                    className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-zinc-800 hover:bg-zinc-50"
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[14px] font-medium text-zinc-600 hover:bg-zinc-50"
                     onClick={() => {
                       setIssueMenuOpen(false);
                       void onSaveWork({
@@ -1011,6 +1011,7 @@ export function IssueTaskFilesPanel({
                       });
                     }}
                   >
+                    <Pin className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden strokeWidth={2.25} />
                     {issue.pinnedAt
                       ? tx("ピン留めを解除", "Unpin")
                       : tx("この課題をピン留め", "Pin this task")}
@@ -1127,18 +1128,20 @@ export function IssueTaskFilesPanel({
                     </span>
                   </span>
                 </button>
-                {!isMemo && canEdit && file.required && !submitted ? (
-                  <button
-                    type="button"
-                    onClick={() => void toggleFileComplete(file)}
-                    className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-bold shadow-sm transition ${
-                      file.completedAt
-                        ? "border-[#D7E8A8] bg-[#F4FBE3] text-[#3F6212] hover:bg-[#EBF6D0]"
-                        : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
-                    }`}
-                  >
-                    {file.completedAt ? tx("できた", "Done") : tx("できた？", "Done?")}
-                  </button>
+                {!isMemo && file.required && !submitted ? (
+                  file.completedAt ? (
+                    <span className="shrink-0 px-1 text-[12px] font-semibold text-[#3F6212]">
+                      {tx("完了しました", "Completed")}
+                    </span>
+                  ) : canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => void markFileComplete(file)}
+                      className="shrink-0 rounded-full border border-[#D7E8A8] bg-[#F4FBE3] px-3.5 py-2 text-[12px] font-bold text-[#3F6212] shadow-sm transition hover:bg-[#EBF6D0] active:bg-[#E2F0C0]"
+                    >
+                      {tx("完了", "Complete")}
+                    </button>
+                  ) : null
                 ) : null}
                 {canEdit ? (
                   <button
@@ -1156,7 +1159,7 @@ export function IssueTaskFilesPanel({
                     <div className="absolute right-2 top-full z-50 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
                       <button
                         type="button"
-                        className="block w-full px-4 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa]"
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[14px] font-medium text-zinc-600 hover:bg-[#f8f9fa]"
                         onClick={() => {
                           setMenuId(null);
                           void persistFiles(
@@ -1164,6 +1167,7 @@ export function IssueTaskFilesPanel({
                           );
                         }}
                       >
+                        <Pin className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden strokeWidth={2.25} />
                         {file.pinnedAt
                           ? tx("ピン留めを解除", "Unpin")
                           : tx("ピン留め", "Pin")}
@@ -1194,7 +1198,7 @@ export function IssueTaskFilesPanel({
                     {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
                     {!requiredFilesReady(files) && !submitted ? (
                       <p className="text-center text-[12px] font-semibold text-[#9A5B1F]">
-                        {tx("必須ファイルを「できた」にしてから提出できます", "Mark required files as done before submitting")}
+                        {tx("必須ファイルを「完了」にしてから提出できます", "Mark required files as complete before submitting")}
                       </p>
                     ) : null}
                     <button
