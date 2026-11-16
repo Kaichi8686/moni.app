@@ -101,10 +101,20 @@ export function RoadmapStepList({
             {/* 左：番号＋縦線 */}
             <div className="relative flex w-11 shrink-0 flex-col items-center pt-0.5">
               <span
-                className={`relative z-[1] flex items-center justify-center rounded-full font-bold tabular-nums ${numberSize} ${numberClass}`}
+                className={`relative z-[1] flex items-center justify-center ${numberSize}`}
                 aria-hidden
               >
-                {step.stepNumber}
+                {isCurrent ? (
+                  <span
+                    className="pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.5)_0%,rgba(255,255,255,0.75)_42%,rgba(255,150,0,0.12)_62%,transparent_78%)] blur-[3.5px]"
+                    aria-hidden
+                  />
+                ) : null}
+                <span
+                  className={`relative z-[1] flex h-full w-full items-center justify-center rounded-full font-bold tabular-nums ${numberClass}`}
+                >
+                  {step.stepNumber}
+                </span>
               </span>
               {!isLast ? (
                 <span
