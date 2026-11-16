@@ -59,9 +59,13 @@ function stepLabel(
   return `STEP ${index + 1}・${phase.title}`;
 }
 
-/** アイデアタブと同系のリスト用 Duo ボタン */
+/** 課題一覧用 Duo ボタンのレイアウト上書き */
 const LIST_DUO =
   "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
+
+/** ステップ画面のジャンル行（フラット） */
+const GENRE_ROW =
+  "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
 
 function shouldResumeIssueCreate(projectId: string, phaseId: string | null, genre: string): boolean {
   const open = readIssueCreateOpen(projectId);
@@ -453,10 +457,8 @@ export default function WorkspaceIssues() {
             <StickyNote className="h-5 w-5" aria-hidden strokeWidth={2.25} />
           </button>
           {canEdit ? (
-            <DuoButton
+            <button
               type="button"
-              tone="orange"
-              size="md"
               onClick={() => {
                 setError("");
                 if (customGenres.length >= MAX_CUSTOM_TASK_GENRES) {
@@ -470,11 +472,11 @@ export default function WorkspaceIssues() {
                 }
                 setAddingGenre(true);
               }}
-              className="!gap-1 !px-3 !py-2.5 !text-[13px]"
+              className="inline-flex items-center gap-1 rounded-full bg-[#FF9600] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#F08900] active:bg-[#E07E00]"
             >
               <Plus className="h-4 w-4" aria-hidden />
               {tx("ジャンルを追加", "Add genre")}
-            </DuoButton>
+            </button>
           ) : (
             <span className="h-10 w-10 shrink-0" aria-hidden />
           )}
@@ -488,7 +490,7 @@ export default function WorkspaceIssues() {
               if (prevStepId === undefined) return;
               goToNeighbor(prevStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 enabled:active:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("前のステップ", "Previous step")}
           >
             <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -507,7 +509,7 @@ export default function WorkspaceIssues() {
               if (nextStepId === undefined) return;
               goToNeighbor(nextStepId);
             }}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE0A8] text-[#9A5B1F] shadow-[0_4px_0_#F0B85A] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[4px] enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-30"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 enabled:active:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={tx("次のステップ", "Next step")}
           >
             <ChevronRight className="h-5 w-5" aria-hidden strokeWidth={2.5} />
@@ -537,37 +539,34 @@ export default function WorkspaceIssues() {
               const Icon = meta.icon;
               const openCount = openCountFor(stepPhaseId, genre);
               return (
-                <DuoButton
+                <button
                   key={genre}
                   type="button"
-                  tone="peach"
-                  size="md"
-                  fullWidth
                   onClick={() => {
                     setGenreMenuOpen(false);
                     setConfirmDeleteGenre(false);
                     setGenreExiting(false);
                     setScreen({ kind: "genre", phaseId: stepPhaseId, genre });
                   }}
-                  className={LIST_DUO}
+                  className={GENRE_ROW}
                 >
                   <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${meta.iconBg}`}>
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate">{locale === "en" ? meta.en : meta.ja}</span>
-                    <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
+                    <span className="truncate text-[11px] font-semibold text-zinc-500">
                       {locale === "en" ? meta.hintEn : meta.hintJa}
                     </span>
                   </span>
                   {openCount > 0 ? (
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white">
                       {openCount}
                     </span>
                   ) : (
-                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                    <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
                   )}
-                </DuoButton>
+                </button>
               );
             })}
         </div>
