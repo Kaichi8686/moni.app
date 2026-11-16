@@ -155,7 +155,7 @@ export function LeaveProjectDialog({
                 )}
               </p>
               {/* 余白を確保して選択リングが切れないようにする。多いときはこの領域内でスクロール */}
-              <ul className="max-h-[min(18rem,45dvh)] space-y-1.5 overflow-y-auto overscroll-contain px-0.5 py-0.5">
+              <ul className="max-h-[min(18rem,45dvh)] space-y-1.5 overflow-y-auto overscroll-contain px-1 py-1 pb-2">
                 {otherMembers.map((m) => {
                   const active = transferTargetId === m.id;
                   return (
