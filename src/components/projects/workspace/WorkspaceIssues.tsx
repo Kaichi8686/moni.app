@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
@@ -562,7 +562,7 @@ export default function WorkspaceIssues() {
                       {openCount}
                     </span>
                   ) : (
-                    <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden />
+                    <ChevronRight className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden strokeWidth={2.5} />
                   )}
                 </button>
               );
@@ -727,9 +727,10 @@ export default function WorkspaceIssues() {
                           .join(" · ")}
                       </span>
                     </span>
-                    <ArrowRight
-                      className={`h-4 w-4 shrink-0 ${submitted ? "text-[#3F6212]/60" : "text-zinc-400"}`}
+                    <ChevronRight
+                      className={`h-5 w-5 shrink-0 ${submitted ? "text-[#3F6212]/60" : "text-zinc-400"}`}
                       aria-hidden
+                      strokeWidth={2.5}
                     />
                   </button>
                 );
