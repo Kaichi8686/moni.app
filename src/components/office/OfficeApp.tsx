@@ -185,7 +185,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const needsSetup = !payload?.company || !payload.company.about;
 
   const body = boot ? (
-    <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
+    <div className="mx-auto max-w-3xl space-y-3 px-4 pt-6 sm:px-6">
       {[0, 1, 2].map((i) => (
         <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-100" />
       ))}
@@ -200,7 +200,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       onSubmit={onSetup}
     />
   ) : (
-    <div className="mx-auto max-w-lg space-y-4 px-4 pb-28 pt-3">
+    <div className="mx-auto max-w-3xl space-y-4 px-4 pb-28 pt-3 sm:px-6">
       <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
         <button
           type="button"
@@ -225,7 +225,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
 
       {tab === "play" ? (
-        <>
+        <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
           <CompanyCard
             company={payload.company!}
             seasonRevenue={payload.seasonRevenue}
@@ -251,7 +251,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
               onSubmit={(a) => void onSubmit(a)}
             />
           )}
-        </>
+        </div>
       ) : (
         <RankingPanel
           rows={rankRows}
@@ -270,7 +270,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     <>
       {!hideChrome ? (
         <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white">
-          <div className="mx-auto max-w-lg px-4 pb-2 pt-1">
+          <div className="mx-auto max-w-3xl px-4 pb-2 pt-1 sm:px-6">
             <AppBrandHeader bare />
             <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-500">
               オフィス

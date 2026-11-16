@@ -179,21 +179,18 @@ function Worker({
 export function OfficeScene({ level, industry, fx }: Props) {
   const uid = useId().replace(/:/g, "");
   const n = workerCount(level);
-  const xs = n === 2 ? [70, 150] : n === 3 ? [55, 110, 165] : [42, 90, 138, 186];
+  const xs = n === 2 ? [88, 188] : n === 3 ? [70, 150, 230] : [58, 120, 182, 244];
   const delays = ["0s", "0.35s", "0.7s", "1.1s"];
 
   return (
     <div
-      className={`office-scene relative w-full overflow-hidden rounded-2xl ring-1 ring-amber-100 ${
+      className={`office-scene relative h-[168px] min-h-[168px] w-full overflow-hidden rounded-2xl ring-1 ring-amber-100 md:h-full md:min-h-[200px] ${
         fx ? `office-fx--${fx}` : ""
       }`}
-      style={{ height: 168, minHeight: 168 }}
     >
       <svg
-        viewBox="0 0 320 160"
-        width="100%"
-        height="168"
-        className="block w-full"
+        viewBox="0 0 400 160"
+        className="absolute inset-0 h-full w-full"
         role="img"
         aria-label="オフィスの様子"
         preserveAspectRatio="xMidYMid slice"
@@ -207,32 +204,73 @@ export function OfficeScene({ level, industry, fx }: Props) {
             <stop offset="0%" stopColor="#38BDF8" />
             <stop offset="100%" stopColor="#6366F1" />
           </linearGradient>
+          <linearGradient id={`${uid}-shaft`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FDE68A" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#FDE68A" stopOpacity="0" />
+          </linearGradient>
         </defs>
-        <rect width="320" height="160" fill={`url(#${uid}-wall)`} />
-        <rect x="0" y="120" width="320" height="40" fill="#F5F5F4" />
-        {/* window light */}
-        <rect x="18" y="22" width="40" height="32" rx="3" fill="#FEF3C7" stroke="#FDE68A" />
-        <path d="M38 22 v32 M18 38 h40" stroke="#FCD34D" strokeWidth="1.5" opacity="0.7" />
-        <IndustryProps industry={industry} uid={uid} />
+        <rect width="400" height="160" fill={`url(#${uid}-wall)`} />
+        <rect x="0" y="120" width="400" height="40" fill="#F5F5F4" />
+
+        {/* ambient background motion */}
+        <g aria-hidden>
+          <path
+            className="office-light-shaft"
+            d="M18 22 L78 120 L118 120 L58 22 Z"
+            fill={`url(#${uid}-shaft)`}
+          />
+          <rect
+            className="office-window-glow"
+            x="18"
+            y="18"
+            width="44"
+            height="36"
+            rx="3"
+            fill="#FEF3C7"
+            stroke="#FDE68A"
+          />
+          <path d="M40 18 v36 M18 36 h44" stroke="#FCD34D" strokeWidth="1.5" opacity="0.7" />
+          <rect
+            className="office-paper"
+            x="210"
+            y="34"
+            width="16"
+            height="12"
+            rx="1.5"
+            fill="#FFFBEB"
+            stroke="#FDE68A"
+            opacity="0.9"
+          />
+          <circle className="office-mote office-mote--a" cx="96" cy="48" r="1.6" fill="#F59E0B" />
+          <circle className="office-mote office-mote--b" cx="160" cy="30" r="1.3" fill="#FB923C" />
+          <circle className="office-mote office-mote--c" cx="280" cy="42" r="1.8" fill="#FBBF24" />
+          <circle className="office-mote office-mote--d" cx="340" cy="58" r="1.2" fill="#F59E0B" />
+          <circle className="office-mote office-mote--e" cx="120" cy="70" r="1.4" fill="#FDE68A" />
+        </g>
+
+        <g transform="translate(40 0)">
+          <IndustryProps industry={industry} uid={uid} />
+        </g>
+
         <g className="office-rival-shadow" opacity="0">
-          <ellipse cx="20" cy="125" rx="18" ry="6" fill="#00000055" />
-          <path d="M8 125 L20 70 L32 125 Z" fill="#18181B" opacity="0.55" />
+          <ellipse cx="24" cy="125" rx="18" ry="6" fill="#00000055" />
+          <path d="M12 125 L24 70 L36 125 Z" fill="#18181B" opacity="0.55" />
         </g>
         <g className="office-sparkles" opacity="0">
-          <circle cx="40" cy="40" r="3" fill="#FBBF24" />
-          <circle cx="90" cy="28" r="2.5" fill="#FDE68A" />
-          <circle cx="200" cy="36" r="3" fill="#F59E0B" />
-          <circle cx="260" cy="48" r="2" fill="#FBBF24" />
+          <circle cx="50" cy="40" r="3" fill="#FBBF24" />
+          <circle cx="110" cy="28" r="2.5" fill="#FDE68A" />
+          <circle cx="250" cy="36" r="3" fill="#F59E0B" />
+          <circle cx="320" cy="48" r="2" fill="#FBBF24" />
         </g>
         <g className="office-bang" opacity="0">
-          <circle cx="160" cy="36" r="16" fill="#FEE2E2" />
-          <text x="160" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#E11D48">
+          <circle cx="200" cy="36" r="16" fill="#FEE2E2" />
+          <text x="200" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#E11D48">
             ！
           </text>
         </g>
         <g className="office-bang-gold" opacity="0">
-          <circle cx="160" cy="36" r="16" fill="#FEF3C7" />
-          <text x="160" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#D97706">
+          <circle cx="200" cy="36" r="16" fill="#FEF3C7" />
+          <text x="200" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#D97706">
             ！
           </text>
         </g>

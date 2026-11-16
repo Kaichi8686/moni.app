@@ -186,7 +186,7 @@ function IdeaHubInner() {
         <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
           <div
             className={`mx-auto px-4 pb-2 pt-1 sm:px-6 lg:px-8 ${
-              view === "mine" && sparkMode === "office" ? "max-w-lg" : "max-w-lg"
+              view === "mine" && sparkMode === "office" ? "max-w-3xl" : "max-w-lg"
             }`}
           >
             {inAiChat ? null : <AppBrandHeader bare />}
