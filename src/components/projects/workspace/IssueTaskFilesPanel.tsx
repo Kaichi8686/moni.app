@@ -952,11 +952,9 @@ export function IssueTaskFilesPanel({
   }
 
   return (
-    <div
-      className={`relative mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col gap-3 ${
-        isMemo ? "pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]" : "pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
-      }`}
-    >
+    <div className="relative mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col">
+      {/* 上：背景グラデーションが見えるヘッダー／期限 */}
+      <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -1060,8 +1058,16 @@ export function IssueTaskFilesPanel({
           )}
         </p>
       )}
+      </div>
 
-      <div className="-mx-4 flex min-h-[min(52dvh,560px)] flex-1 flex-col bg-white sm:mx-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-[#e8eaed]">
+      {/* 下：ファイル一覧から画面下端まで真っ白（親の pb-4 も打ち消す） */}
+      <div
+        className={`-mx-4 mb-[-1rem] mt-3 flex min-h-[min(52dvh,560px)] flex-1 flex-col bg-white ${
+          isMemo
+            ? "pb-[calc(6.5rem+1rem+env(safe-area-inset-bottom,0px))]"
+            : "pb-[calc(8.5rem+1rem+env(safe-area-inset-bottom,0px))]"
+        }`}
+      >
         <div className="sticky top-0 z-10 border-b border-[#e8eaed] bg-white px-3 pb-2 pt-2 sm:px-4">
           <div className="flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5">
             <FileText className="h-4 w-4 shrink-0 text-[#5f6368]" aria-hidden />
