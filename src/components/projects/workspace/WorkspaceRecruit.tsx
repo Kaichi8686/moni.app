@@ -2,8 +2,7 @@
 
 import { StackSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { ArrowLeft, ChevronRight, Megaphone, Plus } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   closeProjectRecruitment,
@@ -26,8 +25,14 @@ type FilterId = "all" | "open" | "closed";
 type Panel = { kind: "detail"; row: ProjectRecruitment } | { kind: "create" };
 
 const SLIDE_OUT_MS = 220;
-const LIST_DUO =
-  "!justify-start !gap-3 !px-4 !py-3.5 !text-left !text-[14px] !font-bold !leading-snug";
+
+/** 課題タブのジャンル行と同じフラットボタン */
+const RECRUIT_ROW =
+  "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
+
+/** 課題タブの「ジャンルを追加」と同じオレンジの追加ボタン */
+const ADD_RECRUIT_PILL =
+  "inline-flex items-center gap-1 rounded-full bg-[#FF9600] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#F08900] active:bg-[#E07E00]";
 
 function formatWeeklyHours(raw: string): string {
   const trimmed = raw.trim();
@@ -366,6 +371,15 @@ export default function WorkspaceRecruit() {
           </p>
         ) : null}
 
+        {canEdit ? (
+          <div className="flex items-center justify-end">
+            <button type="button" onClick={openCreate} className={ADD_RECRUIT_PILL}>
+              <Plus className="h-4 w-4" aria-hidden />
+              {tx("募集を追加", "Add recruitment")}
+            </button>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80">
           {filters.map((f) => {
             const active = filter === f.id;
@@ -395,21 +409,6 @@ export default function WorkspaceRecruit() {
         ) : null}
 
         <div className="flex flex-col gap-2.5">
-          {canEdit && filter === "all" ? (
-            <DuoButton type="button" tone="orange" size="md" fullWidth onClick={openCreate} className={LIST_DUO}>
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/25 text-white">
-                <Plus className="h-5 w-5" aria-hidden strokeWidth={2.5} />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate">{tx("募集を追加", "Add recruitment")}</span>
-                <span className="truncate text-[11px] font-semibold text-white/80">
-                  {tx("欲しい人材を公開する", "Post an opening")}
-                </span>
-              </span>
-              <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-            </DuoButton>
-          ) : null}
-
           {listLoading ? (
             <StackSkeleton count={4} className="py-2" />
           ) : filteredRows.length === 0 ? (
@@ -428,24 +427,24 @@ export default function WorkspaceRecruit() {
               const sub = metaLine(r);
               const pendingCount = pendingByRecruitment.get(r.id) ?? 0;
               return (
-                <DuoButton
+                <button
                   key={r.id}
                   type="button"
-                  tone={open ? "peach" : "zinc"}
-                  size="md"
-                  fullWidth
                   onClick={() => openDetail(r)}
-                  className={LIST_DUO}
+                  className={`${RECRUIT_ROW} ${open ? "" : "!border-zinc-100 !bg-zinc-50 !text-zinc-500"}`}
                 >
+                  <span
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white ${
+                      open ? "bg-emerald-500" : "bg-zinc-400"
+                    }`}
+                  >
+                    <Megaphone className="h-4 w-4" aria-hidden />
+                  </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className={`line-clamp-2 ${open ? "" : "line-through decoration-zinc-400/70"}`}>
+                    <span className={`truncate ${open ? "" : "line-through decoration-zinc-300"}`}>
                       {r.title}
                     </span>
-                    <span
-                      className={`truncate text-[11px] font-semibold ${
-                        open ? "text-[#9A5B1F]/80" : "text-zinc-500"
-                      }`}
-                    >
+                    <span className="truncate text-[11px] font-semibold text-zinc-500">
                       {[
                         open ? tx("公開中", "Open") : tx("締切済み", "Closed"),
                         pendingCount > 0
@@ -458,13 +457,13 @@ export default function WorkspaceRecruit() {
                     </span>
                   </span>
                   {pendingCount > 0 ? (
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white shadow-[0_2px_0_#C43232]">
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-xs font-extrabold text-white">
                       {pendingCount}
                     </span>
                   ) : (
-                    <ArrowRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                    <ChevronRight className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden strokeWidth={2.5} />
                   )}
-                </DuoButton>
+                </button>
               );
             })
           )}
@@ -599,16 +598,14 @@ export default function WorkspaceRecruit() {
                   "Shown on Explore → Recruiting. Private projects are switched to public.",
                 )}
               </p>
-              <DuoButton
+              <button
                 type="button"
-                tone="orange"
-                size="lg"
-                fullWidth
                 disabled={saving || !title.trim()}
                 onClick={() => void onCreate()}
+                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 text-[14px] font-bold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-40"
               >
                 {saving ? tx("公開中…", "Publishing…") : tx("この内容で募集を追加する", "Add this recruitment")}
-              </DuoButton>
+              </button>
             </div>
           </div>
         </RecruitSlidePanel>
@@ -735,16 +732,14 @@ export default function WorkspaceRecruit() {
               </section>
 
               {detailRow.status === "open" && canEdit ? (
-                <DuoButton
+                <button
                   type="button"
-                  tone="zinc"
-                  size="lg"
-                  fullWidth
                   disabled={closingId === detailRow.id}
                   onClick={() => void onClose(detailRow.id)}
+                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white px-4 text-[14px] font-bold text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-40"
                 >
                   {closingId === detailRow.id ? "…" : tx("この募集を締め切る", "Close this recruitment")}
-                </DuoButton>
+                </button>
               ) : null}
             </div>
           </div>
