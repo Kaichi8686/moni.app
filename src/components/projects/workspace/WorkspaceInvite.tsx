@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Search } from "lucide-react";
+import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
@@ -13,39 +14,6 @@ import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
-
-function FriendAvatar({
-  name,
-  url,
-  size = 40,
-}: {
-  name: string;
-  url?: string | null;
-  size?: number;
-}) {
-  const src = url?.trim() || null;
-  const initial = name.trim().slice(0, 1) || "?";
-  if (src) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt=""
-        className="shrink-0 rounded-full object-cover ring-1 ring-zinc-200"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
-    <div
-      className="flex shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[13px] font-semibold text-zinc-500 ring-1 ring-zinc-200"
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
-      {initial}
-    </div>
-  );
-}
 
 export default function WorkspaceInvite() {
   const { tx } = useI18n();
@@ -184,7 +152,7 @@ export default function WorkspaceInvite() {
       stickyBelowHeader={
         <div className="border-b border-zinc-100 bg-white px-4 pb-3 pt-3">
           {selectedUsers.length > 0 ? (
-            <div className="-mx-1 mb-3 flex gap-3 overflow-x-auto px-1 pb-1 pt-1.5">
+            <div className="-mx-1 mb-3 flex gap-3 overflow-x-auto overflow-y-visible px-1 pb-1 pt-2">
               {selectedUsers.map((u) => (
                 <button
                   key={u.id}
@@ -193,9 +161,15 @@ export default function WorkspaceInvite() {
                   className="flex w-14 shrink-0 flex-col items-center gap-1"
                   aria-label={tx(`${u.displayName}の選択を解除`, `Deselect ${u.displayName}`)}
                 >
-                  <span className="relative">
-                    <FriendAvatar name={u.displayName} url={u.avatarUrl} size={48} />
-                    <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#FF9600] text-white ring-2 ring-white">
+                  <span className="relative block">
+                    <MemberAvatarBubble
+                      userId={u.id}
+                      name={u.displayName}
+                      avatarUrl={u.avatarUrl}
+                      size="sm"
+                      className="!h-12 !w-12 !text-base"
+                    />
+                    <span className="absolute -right-0.5 -top-0.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#FF9600] text-white ring-2 ring-white">
                       <Check className="h-3 w-3" strokeWidth={3} />
                     </span>
                   </span>
@@ -251,7 +225,12 @@ export default function WorkspaceInvite() {
                   onClick={() => toggleUser(u.id)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
                 >
-                  <FriendAvatar name={u.displayName} url={u.avatarUrl} size={44} />
+                  <MemberAvatarBubble
+                    userId={u.id}
+                    name={u.displayName}
+                    avatarUrl={u.avatarUrl}
+                    size="sm"
+                  />
                   <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-900">
                     {u.displayName}
                   </span>

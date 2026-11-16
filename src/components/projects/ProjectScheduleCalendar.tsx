@@ -427,7 +427,13 @@ export function ProjectScheduleCalendar({
         {onBack ? (
           <button
             type="button"
-            onClick={onBack}
+            onClick={() => {
+              if (dayFocus) {
+                expandMonth();
+                return;
+              }
+              onBack();
+            }}
             className="mb-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-800 transition hover:bg-zinc-100 active:scale-95"
             aria-label="戻る"
           >
@@ -559,86 +565,99 @@ export function ProjectScheduleCalendar({
         ))}
       </div>
 
-      {/* 週グリッド（選択時は該当週だけ上に残す／空きスペースでマスを大きく） */}
+      {/* 週グリッド（選択時は該当週が上へスライドし、他週は畳まれる） */}
       <div
-        className={`relative overflow-hidden ${
+        className={`relative overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           dayFocus ? "shrink-0" : fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
         }`}
+        style={dayFocus ? { height: 100 } : undefined}
       >
-        {weeks.map((week, weekIdx) => {
-          const collapsedAway = dayFocus && weekIdx !== selectedWeekIndex;
-          return (
-            <div
-              key={weekIdx}
-              className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform,flex] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                collapsedAway
-                  ? "max-h-0 overflow-hidden opacity-0"
-                  : dayFocus
-                    ? "max-h-[100px] opacity-100"
-                    : fullBleed
-                      ? "min-h-0 flex-1 opacity-100"
-                      : "max-h-[130px] opacity-100"
-              }`}
-              style={collapsedAway && weekIdx < selectedWeekIndex ? { transform: "translateY(-8px)" } : undefined}
-            >
-              {week.map((cell) => {
-                const key = dateKeyLocal(cell);
-                const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
-                const list = eventsByDay.get(key) ?? [];
-                const isToday = key === todayKey;
-                const isSelected = key === selectedKey;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => onPickDay(key)}
-                    className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
-                      dayFocus || !fullBleed ? "min-h-[88px]" : "min-h-[96px]"
-                    }`}
-                  >
-                    <span
-                      className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums ${
-                        isSelected || isToday
-                          ? "bg-[#FF9600] text-white"
-                          : inMonth
-                            ? "text-zinc-900"
-                            : "text-zinc-300"
+        <div
+          className={`w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            dayFocus || !fullBleed ? "" : "flex min-h-0 flex-1 flex-col"
+          }`}
+          style={
+            dayFocus && selectedWeekIndex >= 0
+              ? { transform: `translateY(-${selectedWeekIndex * 100}px)` }
+              : { transform: "translateY(0)" }
+          }
+        >
+          {weeks.map((week, weekIdx) => {
+            const collapsedAway = dayFocus && weekIdx !== selectedWeekIndex;
+            const above = dayFocus && weekIdx < selectedWeekIndex;
+            return (
+              <div
+                key={weekIdx}
+                className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  collapsedAway
+                    ? `max-h-[100px] overflow-hidden opacity-0 ${above ? "-translate-y-3" : "translate-y-3"}`
+                    : dayFocus
+                      ? "max-h-[100px] translate-y-0 opacity-100"
+                      : fullBleed
+                        ? "min-h-0 flex-1 translate-y-0 opacity-100"
+                        : "max-h-[130px] translate-y-0 opacity-100"
+                }`}
+                style={collapsedAway ? { pointerEvents: "none" as const } : undefined}
+              >
+                {week.map((cell) => {
+                  const key = dateKeyLocal(cell);
+                  const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
+                  const list = eventsByDay.get(key) ?? [];
+                  const isToday = key === todayKey;
+                  const isSelected = key === selectedKey;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onPickDay(key)}
+                      className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
+                        dayFocus || !fullBleed ? "min-h-[88px]" : "min-h-[96px]"
                       }`}
                     >
-                      {cell.getDate()}
-                    </span>
-                    <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
-                      {list.slice(0, fullBleed && !dayFocus ? 4 : 3).map((item) =>
-                        item.kind === "schedule" ? (
-                          <span
-                            key={`s-${item.schedule.id}`}
-                            className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
-                              isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
-                            }`}
-                          >
-                            {item.schedule.title}
-                          </span>
-                        ) : (
-                          <span
-                            key={`i-${item.issue.id}`}
-                            className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
-                          >
-                            {item.issue.title}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
+                      <span
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums transition-colors duration-300 ${
+                          isSelected || isToday
+                            ? "bg-[#FF9600] text-white"
+                            : inMonth
+                              ? "text-zinc-900"
+                              : "text-zinc-300"
+                        }`}
+                      >
+                        {cell.getDate()}
+                      </span>
+                      <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
+                        {list.slice(0, fullBleed && !dayFocus ? 4 : 3).map((item) =>
+                          item.kind === "schedule" ? (
+                            <span
+                              key={`s-${item.schedule.id}`}
+                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
+                                isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
+                              }`}
+                            >
+                              {item.schedule.title}
+                            </span>
+                          ) : (
+                            <span
+                              key={`i-${item.issue.id}`}
+                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
+                            >
+                              {item.issue.title}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* 日フォーカス：タイムテーブル */}
+      {/* 日フォーカス：タイムテーブル（下からスライドイン） */}
       {dayFocus && selectedKey ? (
-        <div className="flex min-h-0 flex-1 flex-col border-t border-zinc-100 bg-white">
+        <div className="calendar-day-panel-in flex min-h-0 flex-1 flex-col border-t border-zinc-100 bg-white">
           <div className="flex items-center justify-between px-4 py-2">
             <p className="text-[13px] font-semibold text-zinc-800">
               {parseDateKey(selectedKey).toLocaleDateString("ja-JP", {
