@@ -953,7 +953,7 @@ export function IssueTaskFilesPanel({
 
   return (
     <div
-      className={`relative mx-auto flex w-full max-w-3xl flex-col gap-3 ${
+      className={`relative mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col gap-3 bg-white ${
         isMemo ? "pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]" : "pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
       }`}
     >
@@ -1061,7 +1061,7 @@ export function IssueTaskFilesPanel({
         </p>
       )}
 
-      <div className="-mx-4 flex min-h-[min(52dvh,560px)] flex-col bg-white sm:mx-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-[#e8eaed]">
+      <div className="-mx-4 flex min-h-[min(52dvh,560px)] flex-1 flex-col bg-white sm:mx-0 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-[#e8eaed]">
         <div className="sticky top-0 z-10 border-b border-[#e8eaed] bg-white px-3 pb-2 pt-2 sm:px-4">
           <div className="flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5">
             <FileText className="h-4 w-4 shrink-0 text-[#5f6368]" aria-hidden />
@@ -1183,7 +1183,7 @@ export function IssueTaskFilesPanel({
         ? createPortal(
             <>
               {!isMemo ? (
-                <div className="fixed inset-x-0 bottom-0 z-[220] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+                <div className="fixed inset-x-0 bottom-0 z-[220] border-t border-zinc-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
                   <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
                     {error ? <p className="text-center text-sm text-rose-600">{error}</p> : null}
                     {!requiredFilesReady(files) && !submitted ? (
@@ -1198,9 +1198,9 @@ export function IssueTaskFilesPanel({
                         if (!requiredFilesReady(files)) return;
                         void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
                       }}
-                      className={`inline-flex w-full select-none items-center justify-center rounded-[14px] px-4 min-h-[50px] text-[17px] font-semibold tracking-[-0.022em] transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40 ${
+                      className={`inline-flex min-h-[50px] w-full select-none items-center justify-center rounded-2xl px-4 text-[16px] font-bold transition hover:opacity-95 active:bg-[#E07E00] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:bg-[#FF9600] ${
                         submitted
-                          ? "bg-[#F2F2F7] text-[#3C3C43]/60"
+                          ? "bg-zinc-100 text-zinc-500 hover:opacity-100 active:bg-zinc-100"
                           : "bg-[#FF9600] text-white"
                       }`}
                     >
