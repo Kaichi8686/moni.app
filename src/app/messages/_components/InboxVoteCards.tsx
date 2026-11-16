@@ -21,7 +21,7 @@ const CARD_SHELL =
   "relative flex w-[8rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white";
 
 const CARD_TITLE =
-  "min-h-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
+  "min-h-0 w-full min-w-0 flex-1 truncate text-center text-[13px] font-extrabold leading-snug tracking-tight text-zinc-900";
 
 /** プロジェクトメッセージ: 検索欄と名前一覧のあいだに置く投票カード */
 export function InboxVoteCards({ projectId }: Props) {
@@ -66,8 +66,8 @@ export function InboxVoteCards({ projectId }: Props) {
 
         <article className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
           <div className="h-1.5 w-full bg-[#FF9600]" aria-hidden />
-          <div className="flex min-h-0 flex-1 flex-col items-center px-2 pb-3 pt-2.5">
-            <span className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-[#FFB84D] bg-[#FF9600] text-white">
+          <div className="flex min-h-0 flex-1 flex-col items-stretch px-2 pb-3 pt-2.5">
+            <span className="mx-auto mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-white bg-[#FF9600] text-white">
               <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
             </span>
             <p className={CARD_TITLE}>{tx("投票を作る", "Create vote")}</p>
@@ -84,11 +84,13 @@ export function InboxVoteCards({ projectId }: Props) {
         {events.map((ev) => (
           <article key={ev.id} className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
             <div className="h-1.5 w-full bg-[#FF9600]" aria-hidden />
-            <div className="flex min-h-0 flex-1 flex-col items-center px-2 pb-3 pt-2.5">
-              <span className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white">
+            <div className="flex min-h-0 flex-1 flex-col items-stretch px-2 pb-3 pt-2.5">
+              <span className="mx-auto mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white">
                 <Vote className="h-5 w-5" strokeWidth={2.25} aria-hidden />
               </span>
-              <p className={CARD_TITLE}>{ev.title}</p>
+              <p className={CARD_TITLE} title={ev.title}>
+                {ev.title}
+              </p>
               <button
                 type="button"
                 onClick={() =>
