@@ -58,10 +58,15 @@ function stepLabel(
   return `STEP ${index + 1}・${phase.title}`;
 }
 
-/** ステップ画面のジャンル／課題行（フラット） */
+/** ステップ画面のジャンル行（フラット） */
 const GENRE_ROW =
   "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
 
+/** 未提出課題：提出済みと同型の薄いオレンジ */
+const ISSUE_ROW_OPEN =
+  "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-[#F0D4A8] bg-[#FFF6E8] px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-[#9A5B1F] shadow-sm transition hover:bg-[#FFEFD6] active:bg-[#FFE6C2]";
+
+/** 提出済み課題：薄いライム */
 const ISSUE_ROW_DONE =
   "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-[#D7E8A8] bg-[#F4FBE3] px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-[#3F6212] shadow-sm transition hover:bg-[#EBF6D0] active:bg-[#E2F0C0]";
 
@@ -707,13 +712,13 @@ export default function WorkspaceIssues() {
                         issueId: issue.id,
                       });
                     }}
-                    className={submitted ? ISSUE_ROW_DONE : GENRE_ROW}
+                    className={submitted ? ISSUE_ROW_DONE : ISSUE_ROW_OPEN}
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="line-clamp-2">{issue.title}</span>
                       <span
                         className={`truncate text-[11px] font-semibold ${
-                          submitted ? "text-[#3F6212]/75" : "text-zinc-500"
+                          submitted ? "text-[#3F6212]/75" : "text-[#9A5B1F]/80"
                         }`}
                       >
                         {[
@@ -728,7 +733,7 @@ export default function WorkspaceIssues() {
                       </span>
                     </span>
                     <ChevronRight
-                      className={`h-5 w-5 shrink-0 ${submitted ? "text-[#3F6212]/60" : "text-zinc-400"}`}
+                      className={`h-5 w-5 shrink-0 ${submitted ? "text-[#3F6212]/60" : "text-[#9A5B1F]/55"}`}
                       aria-hidden
                       strokeWidth={2.5}
                     />
