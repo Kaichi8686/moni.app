@@ -28,7 +28,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { a4MinHeightForWidth } from "@/lib/projects/documents";
 
@@ -107,6 +109,9 @@ function ToolBtn({
       title={title}
       aria-label={title}
       disabled={disabled}
+      // タップで contentEditable の選択が消えないようにする
+      onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-2 text-[15px] text-[#3c4043] transition hover:bg-[#f1f3f4] disabled:pointer-events-none disabled:opacity-25 ${
         active ? "bg-[#e8f0fe] text-[#174ea6]" : ""
@@ -184,9 +189,23 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
   const lastTapRef = useRef(0);
+  const suppressEditUntilRef = useRef(0);
+  const pinchRef = useRef<{
+    startDist: number;
+    startZoom: number;
+    startPanX: number;
+    startPanY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
-  const [editMode, setEditMode] = useState(true);
+  /** 最初は閲覧（戻る）モード。ダブルタップで編集 → チェックで閲覧＋ズーム解禁 */
+  const [editMode, setEditMode] = useState(false);
+  const [zoomUnlocked, setZoomUnlocked] = useState(false);
+  const [docZoom, setDocZoom] = useState(1);
+  const [docPan, setDocPan] = useState({ x: 0, y: 0 });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [viewportBox, setViewportBox] = useState({ top: 0, height: 0 });
@@ -357,13 +376,14 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
   useImperativeHandle(ref, () => ({ flushAndSave }), [flushAndSave]);
 
-  /** チェック: 保存して閲覧モードへ（戻るボタン表示） */
+  /** チェック: 保存して閲覧モードへ（ズーム／横スクロール解禁） */
   const handleDone = useCallback(async () => {
     if (leaving) return;
     setLeaving(true);
     try {
       await flushAndSave();
       setEditMode(false);
+      setZoomUnlocked(true);
       setColorOpen(false);
       setHighlightOpen(false);
       setAlignOpen(false);
@@ -375,6 +395,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     } catch {
       // 保存失敗時も閲覧へは進める
       setEditMode(false);
+      setZoomUnlocked(true);
     } finally {
       setLeaving(false);
     }
@@ -398,7 +419,10 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
   const enterEditMode = useCallback(() => {
     if (!autoSave || activeDocId === null) return;
+    if (Date.now() < suppressEditUntilRef.current) return;
     setEditMode(true);
+    setDocZoom(1);
+    setDocPan({ x: 0, y: 0 });
     queueMicrotask(() => {
       const el = editorRef.current;
       if (!el) return;
@@ -406,6 +430,82 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       refreshHistoryState();
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
+
+  const canBrowseZoom = zoomUnlocked && !editMode;
+
+  const applyDocZoom = useCallback((nextZoom: number, nextPan: { x: number; y: number }) => {
+    const z = Math.min(3, Math.max(1, nextZoom));
+    setDocZoom(z);
+    if (z <= 1.01) {
+      setDocPan({ x: 0, y: 0 });
+      return;
+    }
+    setDocPan(nextPan);
+  }, []);
+
+  const onDocPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canBrowseZoom) return;
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pointersRef.current.size === 2) {
+        const pts = [...pointersRef.current.values()];
+        const dx = pts[0]!.x - pts[1]!.x;
+        const dy = pts[0]!.y - pts[1]!.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        pinchRef.current = {
+          startDist: dist,
+          startZoom: docZoom,
+          startPanX: docPan.x,
+          startPanY: docPan.y,
+          originX: (pts[0]!.x + pts[1]!.x) / 2,
+          originY: (pts[0]!.y + pts[1]!.y) / 2,
+        };
+        suppressEditUntilRef.current = Date.now() + 500;
+      }
+    },
+    [canBrowseZoom, docPan.x, docPan.y, docZoom],
+  );
+
+  const onDocPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!canBrowseZoom) return;
+      if (!pointersRef.current.has(event.pointerId)) return;
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const pinch = pinchRef.current;
+      if (!pinch || pointersRef.current.size < 2) return;
+      const pts = [...pointersRef.current.values()];
+      const dx = pts[0]!.x - pts[1]!.x;
+      const dy = pts[0]!.y - pts[1]!.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nextZoom = pinch.startZoom * (dist / pinch.startDist);
+      applyDocZoom(nextZoom, {
+        x: pinch.startPanX,
+        y: pinch.startPanY,
+      });
+      suppressEditUntilRef.current = Date.now() + 500;
+    },
+    [applyDocZoom, canBrowseZoom],
+  );
+
+  const onDocPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size < 2) {
+      if (pinchRef.current) suppressEditUntilRef.current = Date.now() + 400;
+      pinchRef.current = null;
+    }
+  }, []);
+
+  const onDocWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (!canBrowseZoom) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      const next = docZoom * (event.deltaY < 0 ? 1.08 : 0.92);
+      applyDocZoom(next, docPan);
+      suppressEditUntilRef.current = Date.now() + 400;
+    },
+    [applyDocZoom, canBrowseZoom, docPan, docZoom],
+  );
 
   const scheduleFlush = useCallback(() => {
     if (flushDebounceRef.current) clearTimeout(flushDebounceRef.current);
@@ -471,7 +571,10 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
-    setEditMode(Boolean(autoSave));
+    setEditMode(false);
+    setZoomUnlocked(false);
+    setDocZoom(1);
+    setDocPan({ x: 0, y: 0 });
     discardOnLeaveRef.current = false;
     queueMicrotask(() => {
       setSaveHint("保存済み");
@@ -516,11 +619,16 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
   const onEditorDoubleActivate = useCallback(() => {
     if (editMode) return;
+    if (Date.now() < suppressEditUntilRef.current) return;
+    if (docZoom > 1.02) return;
     enterEditMode();
-  }, [editMode, enterEditMode]);
+  }, [docZoom, editMode, enterEditMode]);
 
   const onEditorTouchEnd = useCallback(() => {
     if (editMode) return;
+    if (Date.now() < suppressEditUntilRef.current) return;
+    if (docZoom > 1.02) return;
+    if (pointersRef.current.size > 0) return;
     const now = Date.now();
     if (now - lastTapRef.current < 320) {
       enterEditMode();
@@ -528,7 +636,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       return;
     }
     lastTapRef.current = now;
-  }, [editMode, enterEditMode]);
+  }, [docZoom, editMode, enterEditMode]);
 
   const applyBlockStyle = (v: string) => {
     if (v === "p") exec("formatBlock", "<p>");
@@ -664,7 +772,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 : editing
                   ? saveHint
                   : canEditDoc
-                    ? "ダブルタップで編集"
+                    ? zoomUnlocked
+                      ? "ピンチで拡大 · ダブルタップで編集"
+                      : "ダブルタップで編集"
                     : saveHint}
             </p>
           </div>
@@ -740,11 +850,15 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
         ) : null}
 
         <div
-          className={
-            fullscreen
-              ? "min-h-0 flex-1 overflow-y-auto bg-white"
-              : "min-h-0 flex-1 overflow-y-auto bg-[#F3F4F6] px-3 py-4 sm:px-6 sm:py-6"
-          }
+          className={`min-h-0 flex-1 bg-white ${
+            canBrowseZoom && docZoom > 1.01 ? "overflow-auto" : "overflow-y-auto overflow-x-hidden"
+          } ${fullscreen ? "" : "bg-[#F3F4F6] px-3 py-4 sm:px-6 sm:py-6"}`}
+          style={{ touchAction: canBrowseZoom ? "none" : "pan-y" }}
+          onPointerDown={onDocPointerDown}
+          onPointerMove={onDocPointerMove}
+          onPointerUp={onDocPointerUp}
+          onPointerCancel={onDocPointerUp}
+          onWheel={onDocWheel}
         >
           {activeDocId === null ? (
             <p className="py-12 text-center text-sm text-[#6B7280]">ドキュメントを選択するか、新規作成してください。</p>
@@ -755,7 +869,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   ? "mx-auto flex min-h-full w-full flex-col bg-white"
                   : "mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
               }
-              style={fullscreen ? undefined : { maxWidth: PAGE_MAX_WIDTH }}
+              style={{
+                ...(fullscreen ? undefined : { maxWidth: PAGE_MAX_WIDTH }),
+                transform: canBrowseZoom ? `translate(${docPan.x}px, ${docPan.y}px) scale(${docZoom})` : undefined,
+                transformOrigin: "0 0",
+              }}
             >
               <div
                 ref={editorRef}
@@ -765,6 +883,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 tabIndex={0}
                 contentEditable={editing}
                 suppressContentEditableWarning
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                inputMode="text"
                 onInput={onEditorInput}
                 onBlur={onEditorBlur}
                 onMouseUp={() => {
@@ -868,6 +993,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                         aria-label={`文字色 ${c}`}
                         className="h-7 w-7 rounded-full border border-[#dadce0]"
                         style={{ background: c }}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           exec("foreColor", c);
                           setColorOpen(false);
@@ -911,6 +1037,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                               ? "linear-gradient(to bottom right, transparent calc(50% - 1px), #d93025 calc(50% - 1px), #d93025 calc(50% + 1px), transparent calc(50% + 1px)), #fff"
                               : c,
                         }}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           exec("hiliteColor", c === "transparent" ? "transparent" : c);
                           setHighlightOpen(false);

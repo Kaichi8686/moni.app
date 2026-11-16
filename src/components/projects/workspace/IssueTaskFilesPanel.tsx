@@ -55,6 +55,11 @@ import {
   type IssueWorkFileItem,
   type IssueWorkFileKind,
 } from "@/lib/workspace/issueWorkFiles";
+import {
+  clearIssueWorkOpen,
+  readIssueWorkOpen,
+  writeIssueWorkOpen,
+} from "@/lib/workspace/issueWorkOpenMemory";
 import { createEmptyBoard, type IssueWorkspaceBoard } from "@/lib/workspace/issueWorkspaceBoard";
 import type { Issue, Member } from "@/lib/workspace/types";
 
@@ -208,7 +213,12 @@ export function IssueTaskFilesPanel({
   const [issueMenuOpen, setIssueMenuOpen] = useState(false);
   const [confirmDeleteIssue, setConfirmDeleteIssue] = useState(false);
   const [deletingIssue, setDeletingIssue] = useState(false);
-  const [openFileId, setOpenFileId] = useState<string | null>(null);
+  const [openFileId, setOpenFileId] = useState<string | null>(() => {
+    const remembered = readIssueWorkOpen(issue.projectId, issue.id);
+    if (!remembered) return null;
+    const exists = (issue.workFiles ?? []).some((file) => file.id === remembered.fileId);
+    return exists ? remembered.fileId : null;
+  });
   const [portalReady, setPortalReady] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docContent, setDocContent] = useState("");
@@ -243,6 +253,68 @@ export function IssueTaskFilesPanel({
   useEffect(() => {
     setFiles(sortWorkFilesByUpdated(issue.workFiles ?? []));
   }, [issue.id, issue.workFiles]);
+
+  // 課題を切り替えたとき、覚えていた作業ファイルを復元
+  useEffect(() => {
+    setDocTitle("");
+    setDocContent("");
+    setError("");
+    const remembered = readIssueWorkOpen(issue.projectId, issue.id);
+    if (!remembered) {
+      setOpenFileId(null);
+      return;
+    }
+    const exists = (issue.workFiles ?? []).some((file) => file.id === remembered.fileId);
+    setOpenFileId(exists ? remembered.fileId : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per issue
+  }, [issue.id, issue.projectId]);
+
+  useEffect(() => {
+    if (!openFileId) {
+      clearIssueWorkOpen(issue.projectId, issue.id);
+      return;
+    }
+    writeIssueWorkOpen(issue.projectId, issue.id, openFileId);
+  }, [issue.id, issue.projectId, openFileId]);
+
+  // 開いているファイルが消えたら閉じる
+  useEffect(() => {
+    if (!openFileId) return;
+    if (files.some((file) => file.id === openFileId)) return;
+    setOpenFileId(null);
+  }, [files, openFileId]);
+
+  // 復帰時: ドキュメント本文／キャンバスを読み込む
+  useEffect(() => {
+    if (!openFileId) return;
+    const file = files.find((item) => item.id === openFileId);
+    if (!file) return;
+    if (file.kind === "canvas") {
+      setCanvasDraft(file.canvasBoard ?? createEmptyBoard());
+      return;
+    }
+    if (file.kind !== "doc") return;
+    let cancelled = false;
+    void (async () => {
+      if (!supabase) return;
+      const { data, error: err } = await supabase
+        .from("project_documents")
+        .select("id,title,content,updated_at")
+        .eq("id", file.refId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (err || !data) {
+        setError(err?.message ?? tx("ドキュメントが見つかりません", "Document not found"));
+        return;
+      }
+      setDocTitle(typeof data.title === "string" ? data.title : file.title);
+      setDocContent(typeof data.content === "string" ? data.content : "");
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once when restoring open file
+  }, [openFileId, files, tx]);
 
   useEffect(() => {
     setPortalReady(true);

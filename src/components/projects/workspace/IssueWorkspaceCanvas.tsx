@@ -555,8 +555,8 @@ export function IssueWorkspaceCanvas({
           item.id === drag.id && isNode(item)
             ? {
                 ...item,
-                w: Math.max(100, drag.origW + dx),
-                h: Math.max(80, drag.origH + dy),
+                w: Math.max(72, drag.origW + dx),
+                h: Math.max(56, drag.origH + dy),
               }
             : item,
         ),
@@ -691,11 +691,19 @@ export function IssueWorkspaceCanvas({
             const selected = selectedId === node.id || connectFromId === node.id;
             const selectionStyle = selected
               ? {
-                  outline: `3px solid ${SELECTION_YELLOW}`,
-                  outlineOffset: 2,
-                  boxShadow: `0 0 0 5px ${SELECTION_YELLOW}55, 2px 3px 0 rgba(0,0,0,0.08)`,
+                  boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40, 2px 3px 0 rgba(0,0,0,0.08)`,
                 }
               : { boxShadow: "2px 3px 0 rgba(0,0,0,0.08)" };
+            const resizeHandle = selected && canEdit ? (
+              <button
+                type="button"
+                data-board-ui
+                aria-label={tx("サイズ変更", "Resize")}
+                className="absolute bottom-0 right-0 z-10 h-5 w-5 translate-x-1/2 translate-y-1/2 cursor-se-resize rounded-full border-2 border-white shadow-sm"
+                style={{ backgroundColor: SELECTION_YELLOW }}
+                onPointerDown={(event) => onResizePointerDown(event, node)}
+              />
+            ) : null;
             if (node.kind === "sheet") {
               const colors = SHEET_COLORS[node.color];
               const style = {
@@ -709,7 +717,7 @@ export function IssueWorkspaceCanvas({
                 <div
                   key={node.id}
                   data-board-node
-                  className="absolute flex flex-col overflow-hidden rounded-sm"
+                  className={`absolute flex flex-col rounded-sm ${selected ? "overflow-visible" : "overflow-hidden"}`}
                   style={{
                     left: node.x,
                     top: node.y,
@@ -722,9 +730,8 @@ export function IssueWorkspaceCanvas({
                   }}
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                 >
-                  <div className="h-2 shrink-0 opacity-40" style={{ background: colors.border }} />
                   <div
-                    className={`flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
+                    className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm px-2.5 py-2 leading-relaxed whitespace-pre-wrap ${justify}`}
                     style={{
                       fontSize: style.fontSize,
                       color: style.color,
@@ -739,16 +746,7 @@ export function IssueWorkspaceCanvas({
                       )}
                     </span>
                   </div>
-                  {selected && canEdit ? (
-                    <button
-                      type="button"
-                      data-board-ui
-                      aria-label={tx("サイズ変更", "Resize")}
-                      className="absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-se-resize rounded-sm border-2 border-white"
-                      style={{ backgroundColor: SELECTION_YELLOW }}
-                      onPointerDown={(event) => onResizePointerDown(event, node)}
-                    />
-                  ) : null}
+                  {resizeHandle}
                 </div>
               );
             }
@@ -757,7 +755,7 @@ export function IssueWorkspaceCanvas({
               <div
                 key={node.id}
                 data-board-node
-                className="absolute overflow-hidden rounded-sm bg-white"
+                className={`absolute rounded-sm bg-white ${selected ? "overflow-visible" : "overflow-hidden"}`}
                 style={{
                   left: node.x,
                   top: node.y,
@@ -770,17 +768,13 @@ export function IssueWorkspaceCanvas({
                 onPointerDown={(event) => onNodePointerDown(event, node)}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={(node as BoardImage).url} alt="" className="h-full w-full object-cover" draggable={false} />
-                {selected && canEdit ? (
-                  <button
-                    type="button"
-                    data-board-ui
-                    aria-label={tx("サイズ変更", "Resize")}
-                    className="absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-se-resize rounded-sm border-2 border-white"
-                    style={{ backgroundColor: SELECTION_YELLOW }}
-                    onPointerDown={(event) => onResizePointerDown(event, node)}
-                  />
-                ) : null}
+                <img
+                  src={(node as BoardImage).url}
+                  alt=""
+                  className="h-full w-full rounded-sm object-cover"
+                  draggable={false}
+                />
+                {resizeHandle}
               </div>
             );
           })}
@@ -1112,9 +1106,14 @@ function SheetFullscreenEditor({
         )}
       </div>
 
-      {/* 縦: 紙の下に操作 / 横: 紙の右に操作 → 紙の縦横比は常にキャンバスと同じ */}
+      {/* 縦: 操作を紙の上に / 横: 紙の右に操作 → 紙の縦横比は常にキャンバスと同じ */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col landscape:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2">
+        {canEdit ? (
+          <div className="shrink-0 px-3 pb-1 pt-1 landscape:order-2 landscape:flex landscape:w-[min(42%,20rem)] landscape:items-center landscape:pb-3 landscape:pl-1 landscape:pr-[max(0.75rem,env(safe-area-inset-right))] landscape:pt-2">
+            {stylePanel}
+          </div>
+        ) : null}
+        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2 landscape:order-1">
         <div
           ref={stageRef}
           className="flex h-full w-full min-h-0 min-w-0 items-center justify-center"
@@ -1133,7 +1132,6 @@ function SheetFullscreenEditor({
               boxShadow: "2px 3px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.14)",
             }}
           >
-            <div className="h-2.5 shrink-0 opacity-40" style={{ background: colors.border }} />
             <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 ${justify}`}>
               {canEdit ? (
                 <textarea
@@ -1147,6 +1145,13 @@ function SheetFullscreenEditor({
                   }}
                   placeholder={tx("ここに書く…", "Write here…")}
                   rows={1}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   className="w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
                   style={{
                     fontSize: displayFontSize,
@@ -1171,12 +1176,6 @@ function SheetFullscreenEditor({
           </div>
         </div>
         </div>
-
-        {canEdit ? (
-          <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 landscape:flex landscape:w-[min(42%,20rem)] landscape:items-center landscape:pb-3 landscape:pl-1 landscape:pr-[max(0.75rem,env(safe-area-inset-right))] landscape:pt-2">
-            {stylePanel}
-          </div>
-        ) : null}
       </div>
     </div>
   );
