@@ -302,8 +302,9 @@ export function ProjectSettingsModal({
   }
 
   function handleBackRequest(close: () => void) {
-    if (saving || thumbUploading || bgUploading) return;
-    if (isDirty) {
+    // アップロード中でも戻れる（保存ボタンが disabled の間も反応させる）
+    if (saving) return;
+    if (isDirty || thumbUploading || bgUploading) {
       pendingCloseRef.current = close;
       setConfirmDiscard(true);
       return;

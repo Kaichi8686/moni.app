@@ -293,7 +293,7 @@ export function ExploreFriendProfilePreview({
               type="button"
               disabled={messageLoading}
               onClick={() => void handleMessage()}
-              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#FFE600] px-4 text-[15px] font-bold text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
+              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#FF9600] px-4 text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(255,150,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
               aria-label={tx("メッセージ", "Message")}
             >
               <MessageCircle className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />

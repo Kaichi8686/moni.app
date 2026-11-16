@@ -45,8 +45,9 @@ const EVENT_PILL_CLASS = [
 const HOUR_START = 0;
 const HOUR_END = 23;
 const HOUR_PX = 52;
-/** 日フォーカス時の週ストリップ高さ（日付数字のみ・予定ピル非表示） */
-const DAY_FOCUS_WEEK_PX = 52;
+/** 日フォーカス時の週ストリップ高さ（日付数字が切れないよう余裕を持たせる） */
+const DAY_FOCUS_WEEK_PX = 56;
+const TIMETABLE_TOP_PAD = 14;
 
 function dateKeyLocal(d: Date): string {
   const y = d.getFullYear();
@@ -424,7 +425,7 @@ export function ProjectScheduleCalendar({
     const now = new Date();
     const targetHour =
       selectedKey === dateKeyLocal(now) ? Math.max(0, Math.min(HOUR_END, now.getHours() - 1)) : 8;
-    el.scrollTop = targetHour * HOUR_PX;
+    el.scrollTop = TIMETABLE_TOP_PAD + targetHour * HOUR_PX;
   }, [dayFocus, selectedKey]);
 
   const immersive = Boolean(onBack);
@@ -578,45 +579,60 @@ export function ProjectScheduleCalendar({
         ))}
       </div>
 
-      {/* 週グリッド（選択時は該当週が上へスライドし、他週は畳まれる） */}
+      {/* 週グリッド（選択時は該当週のみ表示して日付が切れないようにする） */}
       <div
-        className={`relative overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-          dayFocus ? "shrink-0" : fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
+        className={`relative ${
+          dayFocus
+            ? "shrink-0 overflow-visible"
+            : `overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
+              }`
         }`}
         style={dayFocus ? { height: DAY_FOCUS_WEEK_PX } : undefined}
       >
-        <div
-          className={`w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-            dayFocus || !fullBleed ? "" : "flex min-h-0 flex-1 flex-col"
-          }`}
-          style={
-            dayFocus && selectedWeekIndex >= 0
-              ? { transform: `translateY(-${selectedWeekIndex * DAY_FOCUS_WEEK_PX}px)` }
-              : { transform: "translateY(0)" }
-          }
-        >
-          {weeks.map((week, weekIdx) => {
-            const collapsedAway = dayFocus && weekIdx !== selectedWeekIndex;
-            const above = dayFocus && weekIdx < selectedWeekIndex;
-            return (
+        {dayFocus && selectedWeekIndex >= 0 ? (
+          <div
+            className="grid h-full grid-cols-7 border-t border-zinc-100 px-2"
+            style={{ height: DAY_FOCUS_WEEK_PX }}
+          >
+            {weeks[selectedWeekIndex]?.map((cell) => {
+              const key = dateKeyLocal(cell);
+              const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
+              const isToday = key === todayKey;
+              const isSelected = key === selectedKey;
+              const showMark = selectedKey ? isSelected : isToday;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onPickDay(key)}
+                  className="flex h-full flex-col items-center justify-center gap-0 px-0.5 py-1.5 text-center transition active:bg-zinc-50"
+                >
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums leading-none transition-colors duration-300 ${
+                      showMark
+                        ? "bg-[#FF9600] text-white"
+                        : inMonth
+                          ? "text-zinc-900"
+                          : "text-zinc-300"
+                    }`}
+                  >
+                    {cell.getDate()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            className={`w-full ${dayFocus || !fullBleed ? "" : "flex min-h-0 flex-1 flex-col"}`}
+          >
+            {weeks.map((week, weekIdx) => (
               <div
                 key={weekIdx}
-                className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  collapsedAway
-                    ? `overflow-hidden opacity-0 ${above ? "-translate-y-3" : "translate-y-3"}`
-                    : dayFocus
-                      ? "translate-y-0 opacity-100"
-                      : fullBleed
-                        ? "min-h-0 flex-1 translate-y-0 opacity-100"
-                        : "max-h-[130px] translate-y-0 opacity-100"
+                className={`grid grid-cols-7 border-t border-zinc-100 px-2 ${
+                  fullBleed ? "min-h-0 flex-1" : "max-h-[130px]"
                 }`}
-                style={
-                  collapsedAway
-                    ? { maxHeight: DAY_FOCUS_WEEK_PX, pointerEvents: "none" as const }
-                    : dayFocus
-                      ? { maxHeight: DAY_FOCUS_WEEK_PX }
-                      : undefined
-                }
               >
                 {week.map((cell) => {
                   const key = dateKeyLocal(cell);
@@ -624,22 +640,19 @@ export function ProjectScheduleCalendar({
                   const list = eventsByDay.get(key) ?? [];
                   const isToday = key === todayKey;
                   const isSelected = key === selectedKey;
+                  const showMark = selectedKey ? isSelected : isToday;
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => onPickDay(key)}
-                      className={`flex h-full flex-col items-center text-center transition active:bg-zinc-50 ${
-                        dayFocus
-                          ? "justify-center gap-0 px-0.5 py-1"
-                          : fullBleed
-                            ? "min-h-[96px] gap-0.5 px-0.5 py-1.5"
-                            : "min-h-[88px] gap-0.5 px-0.5 py-1.5"
+                      className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
+                        fullBleed ? "min-h-[96px]" : "min-h-[88px]"
                       }`}
                     >
                       <span
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums leading-none transition-colors duration-300 ${
-                          isSelected || isToday
+                          showMark
                             ? "bg-[#FF9600] text-white"
                             : inMonth
                               ? "text-zinc-900"
@@ -648,36 +661,34 @@ export function ProjectScheduleCalendar({
                       >
                         {cell.getDate()}
                       </span>
-                      {!dayFocus ? (
-                        <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
-                          {list.slice(0, fullBleed ? 4 : 3).map((item) =>
-                            item.kind === "schedule" ? (
-                              <span
-                                key={`s-${item.schedule.id}`}
-                                className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
-                                  isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
-                                }`}
-                              >
-                                {item.schedule.title}
-                              </span>
-                            ) : (
-                              <span
-                                key={`i-${item.issue.id}`}
-                                className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
-                              >
-                                {item.issue.title}
-                              </span>
-                            ),
-                          )}
-                        </div>
-                      ) : null}
+                      <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
+                        {list.slice(0, fullBleed ? 4 : 3).map((item) =>
+                          item.kind === "schedule" ? (
+                            <span
+                              key={`s-${item.schedule.id}`}
+                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
+                                isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
+                              }`}
+                            >
+                              {item.schedule.title}
+                            </span>
+                          ) : (
+                            <span
+                              key={`i-${item.issue.id}`}
+                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
+                            >
+                              {item.issue.title}
+                            </span>
+                          ),
+                        )}
+                      </div>
                     </button>
                   );
                 })}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 日フォーカス：タイムテーブル（下からスライドイン） */}
@@ -747,20 +758,26 @@ export function ProjectScheduleCalendar({
           ) : null}
 
           <div ref={timetableScrollRef} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <div className="relative" style={{ height: hours.length * HOUR_PX }}>
+            <div
+              className="relative"
+              style={{ height: TIMETABLE_TOP_PAD + hours.length * HOUR_PX + 12 }}
+            >
               {hours.map((h, idx) => (
                 <div
                   key={h}
                   className="absolute left-0 right-0 border-t border-zinc-100"
-                  style={{ top: idx * HOUR_PX, height: HOUR_PX }}
+                  style={{ top: TIMETABLE_TOP_PAD + idx * HOUR_PX, height: HOUR_PX }}
                 >
-                  <span className="absolute -top-2 left-2 w-10 text-right text-[10px] font-medium text-zinc-400">
+                  <span className="absolute left-2 top-1.5 w-10 text-right text-[10px] font-medium leading-none text-zinc-400">
                     {String(h).padStart(2, "0")}:00
                   </span>
                 </div>
               ))}
-              <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-100">
-                <span className="absolute -top-2 left-2 w-10 text-right text-[10px] font-medium text-zinc-400">
+              <div
+                className="absolute left-0 right-0 border-t border-zinc-100"
+                style={{ top: TIMETABLE_TOP_PAD + hours.length * HOUR_PX }}
+              >
+                <span className="absolute left-2 top-1.5 w-10 text-right text-[10px] font-medium leading-none text-zinc-400">
                   24:00
                 </span>
               </div>
@@ -771,7 +788,7 @@ export function ProjectScheduleCalendar({
                   <div
                     key={schedule.id}
                     className={`absolute left-14 right-3 overflow-hidden rounded-lg px-2 py-1 text-white shadow-sm ${hashColor(schedule.id)}`}
-                    style={{ top, height, backgroundColor: undefined }}
+                    style={{ top: TIMETABLE_TOP_PAD + top, height, backgroundColor: undefined }}
                   >
                     <p className="truncate text-[12px] font-bold leading-tight">{schedule.title}</p>
                     <p className="text-[10px] font-medium text-white/90">
@@ -801,7 +818,12 @@ export function ProjectScheduleCalendar({
                 ))}
 
               {selectedDayItems.length === 0 ? (
-                <p className="absolute left-14 right-3 top-6 text-[13px] text-zinc-400">予定はありません</p>
+                <p
+                  className="absolute left-14 right-3 text-[13px] text-zinc-400"
+                  style={{ top: TIMETABLE_TOP_PAD + 18 }}
+                >
+                  予定はありません
+                </p>
               ) : null}
             </div>
           </div>
