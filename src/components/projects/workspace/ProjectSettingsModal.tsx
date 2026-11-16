@@ -54,6 +54,25 @@ export type ProjectSettingsMeta = Pick<
 
 const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif";
 
+const FIELD_CLASS =
+  "mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-[16px] leading-snug text-zinc-900 outline-none ring-[#FF9600] focus:ring-2";
+const FIELD_CLASS_INDIGO =
+  "mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-[16px] leading-snug text-zinc-900 outline-none ring-[#5E6AD2] focus:ring-2";
+const TEXTAREA_CLASS =
+  "mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-[16px] leading-snug text-zinc-900 outline-none ring-[#5E6AD2] focus:ring-2";
+
+/** iOS など 16px 未満フォーカス時の拡大を戻す */
+function resetViewportZoom() {
+  if (typeof document === "undefined") return;
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  const prev = meta.getAttribute("content") || "width=device-width, initial-scale=1";
+  meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1");
+  window.setTimeout(() => {
+    meta.setAttribute("content", prev.includes("width=") ? prev : "width=device-width, initial-scale=1");
+  }, 80);
+}
+
 type Props = {
   open: boolean;
   projectId: string;
@@ -109,6 +128,21 @@ export function ProjectSettingsModal({
   const [editRecruitmentTarget, setEditRecruitmentTarget] = useState("");
   const [editRecruitmentMessage, setEditRecruitmentMessage] = useState("");
   const [editVisibility, setEditVisibility] = useState<ProjectVisibility>("public");
+  const [textFieldFocused, setTextFieldFocused] = useState(false);
+
+  function onFieldFocus() {
+    setTextFieldFocused(true);
+  }
+
+  function onFieldBlur() {
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      const tag = active?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      setTextFieldFocused(false);
+      resetViewportZoom();
+    }, 0);
+  }
 
   function clearPreviewObjectUrl() {
     if (previewObjectUrl.current) {
@@ -312,8 +346,7 @@ export function ProjectSettingsModal({
       setThumbPreview(publicUrl || previewObjectUrl.current);
       setEditThumb(publicUrl);
       setShowUrlField(false);
-      onNotice(tx("プロジェクト写真を更新しました", "Project photo updated"));
-      onSaved();
+      // メインタブは保存まで旧写真のまま。ここではプレビューのみ
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("写真のアップロードに失敗しました", "Failed to upload photo"));
     } finally {
@@ -327,19 +360,6 @@ export function ProjectSettingsModal({
     setThumbPreview(null);
     setEditThumb("");
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (!canEdit || !supabase) return;
-    void supabase
-      .from("projects")
-      .update({ thumbnail_url: null, updated_at: new Date().toISOString() })
-      .eq("id", projectId)
-      .then(({ error }) => {
-        if (error) {
-          setErr(error.message);
-          return;
-        }
-        onNotice(tx("プロジェクト写真を削除しました", "Project photo removed"));
-        onSaved();
-      });
   }
 
   async function onBackgroundSelected(file: File | null) {
@@ -374,8 +394,7 @@ export function ProjectSettingsModal({
       bgPreviewObjectUrl.current = URL.createObjectURL(file);
       setBgPreview(publicUrl || bgPreviewObjectUrl.current);
       setEditBg(publicUrl);
-      onNotice(tx("背景写真を更新しました", "Background photo updated"));
-      onSaved();
+      // メインタブは保存まで旧背景のまま。ここではプレビューのみ
     } catch (e) {
       setErr(e instanceof Error ? e.message : tx("背景のアップロードに失敗しました", "Failed to upload background"));
     } finally {
@@ -389,26 +408,17 @@ export function ProjectSettingsModal({
     setBgPreview(null);
     setEditBg("");
     if (bgInputRef.current) bgInputRef.current.value = "";
-    if (!canEdit || !supabase) return;
-    void (async () => {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session.session?.access_token;
-      if (!token) {
-        setErr(tx("ログインが必要です", "Login required"));
-        return;
-      }
-      const res = await fetch(`/api/upload-project-background?projectId=${encodeURIComponent(projectId)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErr(json.error ?? tx("背景の削除に失敗しました", "Failed to remove background"));
-        return;
-      }
-      onNotice(tx("背景写真を削除しました", "Background photo removed"));
-      onSaved();
-    })();
+  }
+
+  function restoreBaselineImages() {
+    if (!baseline) return;
+    clearPreviewObjectUrl();
+    clearBgPreviewObjectUrl();
+    setEditThumb(baseline.editThumb);
+    setThumbPreview(baseline.editThumb || null);
+    setEditBg(baseline.editBg);
+    setBgPreview(baseline.editBg || null);
+    setShowUrlField(Boolean(baseline.editThumb && !baseline.editThumb.includes("post-images")));
   }
 
   async function save() {
@@ -500,7 +510,7 @@ export function ProjectSettingsModal({
         onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
       />
 
-      {/* Overview-style hero: background + project icon (editable) */}
+      {/* Overview と同じレイアウトの hero（編集時はプレビューのみ・保存で同期） */}
       <section className="border-b border-zinc-200 bg-white">
         <button
           type="button"
@@ -533,26 +543,24 @@ export function ProjectSettingsModal({
           ) : null}
         </button>
 
-        <div className="px-4 pb-4">
-          <div className="relative z-10 -mt-9 flex items-end gap-3">
+        <div className="px-4 pb-5">
+          <div className="relative z-10 -mt-9 flex items-end gap-4">
             <button
               type="button"
               disabled={!canEdit || thumbUploading}
               onClick={() => canEdit && fileInputRef.current?.click()}
-              className="relative h-16 w-16 shrink-0 rounded-lg border-2 border-white bg-zinc-100 shadow-sm sm:h-20 sm:w-20 disabled:cursor-default"
+              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 shadow-md sm:h-20 sm:w-20 disabled:cursor-default"
               aria-label={tx("アイコンを変更", "Change icon")}
             >
-              <span className="absolute inset-0 overflow-hidden rounded-[6px]">
-                {thumbPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-                  <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">📁</div>
-                )}
-              </span>
+              {thumbPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">📁</div>
+              )}
               {canEdit ? (
-                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm ring-2 ring-white">
-                  <Camera className="h-3.5 w-3.5" strokeWidth={2.25} />
+                <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900/90 text-white shadow-sm">
+                  <Camera className="h-3 w-3" strokeWidth={2.25} />
                 </span>
               ) : null}
             </button>
@@ -561,14 +569,24 @@ export function ProjectSettingsModal({
                 {editName.trim() || name}
               </p>
               {canEdit ? (
-                <p className="mt-0.5 text-[11px] text-zinc-500">
-                  {tx("背景・アイコンをタップして変更", "Tap background or icon to edit")}
+                <p className="mt-1 text-[12px] text-zinc-500">
+                  {tx("背景・アイコンをタップして変更（保存で反映）", "Tap to edit · saves on Save")}
                 </p>
               ) : null}
             </div>
           </div>
           {canEdit ? (
             <div className="mt-3 flex flex-wrap gap-2">
+              {(editThumb !== (baseline?.editThumb ?? "") || editBg !== (baseline?.editBg ?? "")) ? (
+                <button
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50"
+                  onClick={restoreBaselineImages}
+                  disabled={busy}
+                >
+                  {tx("写真を元に戻す", "Revert photos")}
+                </button>
+              ) : null}
               {bgPreview ? (
                 <button
                   type="button"
@@ -600,9 +618,11 @@ export function ProjectSettingsModal({
           ) : null}
           {showUrlField && canEdit ? (
             <input
-              className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
+              className={`${FIELD_CLASS} mt-2`}
               placeholder="https://..."
               value={editThumb}
+              onFocus={onFieldFocus}
+              onBlur={onFieldBlur}
               onChange={(e) => {
                 setEditThumb(e.target.value);
                 setThumbPreview(e.target.value.trim() || null);
@@ -621,8 +641,10 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("プロジェクト名", "Project name")}
               <input
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
+                className={FIELD_CLASS}
                 value={editName}
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
                 onChange={(e) => setEditName(e.target.value)}
               />
             </label>
@@ -631,8 +653,10 @@ export function ProjectSettingsModal({
               <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx("公開設定", "Visibility")}
                 <select
-                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
+                  className={FIELD_CLASS}
                   value={editVisibility}
+                  onFocus={onFieldFocus}
+                  onBlur={onFieldBlur}
                   onChange={(e) => setEditVisibility(e.target.value as ProjectVisibility)}
                 >
                   <option value="public">{tx("公開（探すタブに表示）", "Public (shown in Discover)")}</option>
@@ -652,24 +676,30 @@ export function ProjectSettingsModal({
                   "What problem made you think of this project?",
                 )}
                 <textarea
-                  className="mt-1 min-h-[4rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className={`${TEXTAREA_CLASS} min-h-[4rem]`}
                   value={editBrief.problemMotivation}
+                  onFocus={onFieldFocus}
+                  onBlur={onFieldBlur}
                   onChange={(e) => setEditBrief((b) => ({ ...b, problemMotivation: e.target.value }))}
                 />
               </label>
               <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx("このプロジェクトのゴール", "Project goal")}
                 <textarea
-                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className={TEXTAREA_CLASS}
                   value={editBrief.projectGoal}
+                  onFocus={onFieldFocus}
+                  onBlur={onFieldBlur}
                   onChange={(e) => setEditBrief((b) => ({ ...b, projectGoal: e.target.value }))}
                 />
               </label>
               <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx("何をするのか", "What will you do?")}
                 <textarea
-                  className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className={TEXTAREA_CLASS}
                   value={editBrief.whatToDo}
+                  onFocus={onFieldFocus}
+                  onBlur={onFieldBlur}
                   onChange={(e) => setEditBrief((b) => ({ ...b, whatToDo: e.target.value }))}
                 />
               </label>
@@ -677,16 +707,20 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("カテゴリ", "Category")}
               <input
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className={FIELD_CLASS_INDIGO}
                 value={editCategory}
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
                 onChange={(e) => setEditCategory(e.target.value)}
               />
             </label>
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("何系のプロジェクトか", "What kind of project")}
               <select
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className={FIELD_CLASS_INDIGO}
                 value={editBusinessType}
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
                 onChange={(e) => setEditBusinessType(e.target.value as "maker" | "software" | "social")}
               >
                 <option value="software">{tx("ソフトウェア・アプリ", "Software / app")}</option>
@@ -697,16 +731,20 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("欲しい仲間・姿勢", "Who you’re looking for")}
               <textarea
-                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className={TEXTAREA_CLASS}
                 value={editRecruitmentTarget}
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
                 onChange={(e) => setEditRecruitmentTarget(e.target.value)}
               />
             </label>
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("理念・ビジョン", "Mission / vision")}
               <textarea
-                className="mt-1 min-h-[3rem] w-full resize-y rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className={TEXTAREA_CLASS}
                 value={editRecruitmentMessage}
+                onFocus={onFieldFocus}
+                onBlur={onFieldBlur}
                 onChange={(e) => setEditRecruitmentMessage(e.target.value)}
               />
             </label>
@@ -716,8 +754,8 @@ export function ProjectSettingsModal({
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
       </div>
 
-      {canEdit ? (
-        <div className="sticky bottom-0 mt-4 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+      {canEdit && !textFieldFocused ? (
+        <div className="sticky bottom-0 mt-4 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm">
           <button
             type="button"
             className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
@@ -742,27 +780,26 @@ export function ProjectSettingsModal({
             </h3>
             <p className="mt-2 text-sm text-[#5f6368]">
               {tx(
-                "プロジェクトのデータは今のままです。入力中の内容は下書きとして残ります。",
-                "Project data stays as it is. Your edits will be kept as a draft.",
+                "変更した写真や入力内容は破棄され、さっきまでの内容に戻ります。",
+                "Changed photos and edits will be discarded and restored to the previous version.",
               )}
             </p>
             <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col items-stretch gap-3">
               <button
                 type="button"
-                className="rounded-xl bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white hover:bg-[#F08900]"
+                className="rounded-full bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white hover:bg-[#F08900]"
                 onClick={() => {
                   const close = pendingCloseRef.current;
-                  setConfirmDiscard(false);
                   pendingCloseRef.current = null;
-                  // 保存はせず閉じる。下書きは残して次回もさっきの入力のまま
-                  close?.();
+                  // 写真・下書きを破棄してメインタブと揃った状態に戻す
+                  discardAndClose(close ?? (() => onClose()));
                 }}
               >
-                {tx("戻る", "Go back")}
+                {tx("元に戻る", "Revert")}
               </button>
               <button
                 type="button"
-                className="rounded-xl px-4 py-3 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                className="rounded-full px-4 py-3 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
                 onClick={() => {
                   setConfirmDiscard(false);
                   pendingCloseRef.current = null;
