@@ -397,16 +397,14 @@ export default function WorkspaceMembers() {
                     onClick={() => void openProfile(m.id, m.name, m.avatarUrl)}
                   >
                     <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="md" />
-                    <span className="flex min-w-0 flex-1 items-baseline gap-3">
-                      <span className="truncate text-base font-semibold tracking-tight text-zinc-900">
-                        {m.name}
-                        {isSelf ? (
-                          <span className="ml-1 text-[12px] font-normal text-zinc-400">
-                            {tx("（あなた）", "(you)")}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="shrink-0 text-[13px] font-medium text-zinc-400">
+                    <span className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-zinc-900">
+                      {m.name}
+                      {isSelf ? (
+                        <span className="ml-1 text-[12px] font-normal text-zinc-400">
+                          {tx("（あなた）", "(you)")}
+                        </span>
+                      ) : null}
+                      <span className="ml-2 text-[13px] font-normal text-zinc-400">
                         {roleLabel(m.role, tx)}
                       </span>
                     </span>
