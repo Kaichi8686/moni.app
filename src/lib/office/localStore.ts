@@ -1,5 +1,6 @@
 import { OFFICE_NAME_MAX, OFFICE_SIMILARITY_THRESHOLD } from "@/lib/office/constants";
-import { industryLabelJa, parseOfficeIndustry, type OfficeIndustry } from "@/lib/office/industries";
+import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { parseOfficeIndustry } from "@/lib/office/industries";
 import { offlineIncident, offlineScores } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
@@ -84,6 +85,10 @@ export function localGetCompany(userId: string): {
       pendingResult: null,
     };
   }
+  if (company.about === undefined) {
+    company.about = null;
+    write(store);
+  }
   if (company.industry === undefined) {
     company.industry = null;
     write(store);
@@ -93,6 +98,10 @@ export function localGetCompany(userId: string): {
       company.industry = mapped;
       write(store);
     }
+  }
+  if (!company.industry && company.about) {
+    company.industry = guessIndustryFromAbout(company.about);
+    write(store);
   }
   if (company.name.length > OFFICE_NAME_MAX) {
     company.name = company.name.slice(0, OFFICE_NAME_MAX);
@@ -111,22 +120,20 @@ export function localGetCompany(userId: string): {
   return { company, stamina, seasonRevenue: season.revenue, pendingResult };
 }
 
-export function localCreateCompany(
-  userId: string,
-  name: string,
-  industry: OfficeIndustry,
-): OfficeCompany {
+export function localCreateCompany(userId: string, name: string, aboutRaw: string): OfficeCompany {
   const store = read();
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
-  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
+  const about = parseCompanyAbout(aboutRaw);
+  if (!about) throw new Error("会社の説明を書いてね");
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
   const company: OfficeCompany = {
     id: uid(),
     userId,
     name: trimmed,
-    industry,
+    about,
+    industry: guessIndustryFromAbout(about),
     totalRevenue: 0,
     level: 1,
     rankingEnabled: true,
@@ -141,12 +148,15 @@ export function localCreateCompany(
   return company;
 }
 
-export function localSetIndustry(userId: string, industry: OfficeIndustry): OfficeCompany {
+export function localSetAbout(userId: string, aboutRaw: string): OfficeCompany {
   const store = read();
   if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
-  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
-  if (store.company.industry) throw new Error("系統はもう決め済みだよ");
-  store.company.industry = industry;
+  const about = parseCompanyAbout(aboutRaw);
+  if (!about) throw new Error("会社の説明を書いてね");
+  if (store.company.about) throw new Error("説明はもう決め済みだよ");
+  store.company.about = about;
+  store.company.industry = store.company.industry ?? guessIndustryFromAbout(about);
+  store.incidents = store.incidents.filter((i) => !(i.userId === userId && i.status === "open"));
   write(store);
   return store.company;
 }
@@ -157,9 +167,8 @@ export async function localCurrentIncident(
   const store = read();
   const company = store.company;
   if (!company || company.userId !== userId) throw new Error("先に会社を作ってね");
-  if (!company.industry) throw new Error("先に系統を選んでね");
-  // migrate old local companies without industry field
-  if (company.industry === undefined) company.industry = null;
+  if (company.about === undefined) company.about = null;
+  if (!company.about) throw new Error("先に会社の説明を書いてね");
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");
   if (open) return { incident: open, created: false };
 
@@ -171,7 +180,7 @@ export async function localCurrentIncident(
 
   const gen = offlineIncident({
     companyName: company.name,
-    industryLabel: industryLabelJa(company.industry),
+    companyAbout: company.about,
     recentTitles,
   });
   const incident: OfficeIncident = {

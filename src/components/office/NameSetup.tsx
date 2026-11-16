@@ -2,25 +2,29 @@
 
 import { useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
-import { OFFICE_NAME_MAX } from "@/lib/office/constants";
-import { OFFICE_INDUSTRIES, type OfficeIndustry } from "@/lib/office/industries";
+import {
+  OFFICE_ABOUT_MAX,
+  OFFICE_ABOUT_MIN,
+  OFFICE_NAME_MAX,
+} from "@/lib/office/constants";
 
 type Props = {
   busy: boolean;
   error?: string;
-  /** 系統補完モード：既存の会社名を固定表示 */
+  /** 説明補完モード：既存の会社名を固定表示 */
   existingName?: string | null;
-  onSubmit: (payload: { name: string; industry: OfficeIndustry }) => void;
+  onSubmit: (payload: { name: string; about: string }) => void;
 };
 
 export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
   const patchMode = Boolean(existingName);
   const [name, setName] = useState(existingName ?? "");
-  const [industry, setIndustry] = useState<OfficeIndustry | null>(null);
+  const [about, setAbout] = useState("");
 
+  const aboutOk = about.trim().length >= OFFICE_ABOUT_MIN && about.trim().length <= OFFICE_ABOUT_MAX;
   const canSubmit =
     !busy &&
-    industry != null &&
+    aboutOk &&
     (patchMode || (name.trim().length >= 1 && name.trim().length <= OFFICE_NAME_MAX));
 
   return (
@@ -29,12 +33,12 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
         Office
       </p>
       <h1 className="mt-2 text-center font-[family-name:var(--font-instrument-serif)] text-3xl tracking-tight text-zinc-900">
-          {patchMode ? "系統を選ぼう" : "会社をつくろう"}
+        {patchMode ? "会社を説明しよう" : "会社をつくろう"}
       </h1>
       <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-zinc-600">
         {patchMode
-          ? `『${existingName}』の系統を決めてね。あとからは変えられないよ。`
-          : "会社名と系統（〇〇系）を決めよう。系統はあとから変えられないよ。"}
+          ? `『${existingName}』はどんな会社？短く書いてね。あとからは変えられないよ。`
+          : "会社名と、どんな会社かの説明を書こう。説明はあとから変えられないよ。"}
       </p>
 
       {!patchMode ? (
@@ -60,30 +64,25 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
         </div>
       )}
 
-      <p className="mt-6 text-xs font-bold text-zinc-600">系統（1つ選ぶ）</p>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {OFFICE_INDUSTRIES.map((item) => {
-          const selected = industry === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setIndustry(item.id)}
-              className={`rounded-2xl border px-3 py-3 text-left transition ${
-                selected
-                  ? "border-[#FF9600] bg-[#FFF7E8] shadow-[0_2px_0_#F0B85A]"
-                  : "border-zinc-200 bg-white hover:border-zinc-300"
-              }`}
-            >
-              <span className="text-xl" aria-hidden>
-                {item.icon}
-              </span>
-              <p className="mt-1 text-sm font-bold text-zinc-900">{item.labelJa}</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{item.blurb}</p>
-            </button>
-          );
-        })}
-      </div>
+      <label className="mt-6 block">
+        <div className="mb-1 flex items-baseline justify-between gap-2">
+          <span className="text-xs font-bold text-zinc-600">会社の説明</span>
+          <span className="text-[11px] tabular-nums text-zinc-400">
+            {about.length}/{OFFICE_ABOUT_MAX}
+          </span>
+        </div>
+        <textarea
+          value={about}
+          onChange={(e) => setAbout(e.target.value.slice(0, OFFICE_ABOUT_MAX))}
+          rows={4}
+          className="w-full resize-none rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none ring-[#FF9600] focus:ring-2"
+          placeholder="例: 文化祭向けにスマホ注文アプリを作る部活チーム"
+          autoFocus={patchMode}
+        />
+        <p className="mt-1.5 text-[11px] leading-snug text-zinc-500">
+          {OFFICE_ABOUT_MIN}〜{OFFICE_ABOUT_MAX}字。何を・誰に・どう届けるかを書くと事件が合いやすいよ。
+        </p>
+      </label>
 
       {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
       <div className="mt-5">
@@ -94,14 +93,14 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
           fullWidth
           disabled={!canSubmit}
           onClick={() => {
-            if (!industry) return;
+            if (!aboutOk) return;
             onSubmit({
               name: patchMode ? (existingName ?? "").trim() : name.trim(),
-              industry,
+              about: about.trim(),
             });
           }}
         >
-          {busy ? "準備中…" : patchMode ? "系統を決める" : "会社を始める"}
+          {busy ? "準備中…" : patchMode ? "説明を決める" : "会社を始める"}
         </DuoButton>
       </div>
     </div>

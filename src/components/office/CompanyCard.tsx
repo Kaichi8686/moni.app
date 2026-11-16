@@ -25,6 +25,7 @@ export function CompanyCard({
 }: Props) {
   const meta = OFFICE_LEAGUE_META[company.leagueId];
   const ind = industryMeta(company.industry);
+  const aboutLine = company.about?.trim() || null;
   const recovering = Boolean(nextRecoverAt) && staminaValue < OFFICE_MAX_STAMINA;
   const [now, setNow] = useState(() => Date.now());
 
@@ -47,11 +48,14 @@ export function CompanyCard({
           <div className="min-w-0">
             <p className="text-[11px] font-medium text-zinc-500">
               {meta.crown} {meta.labelJa}
-              {ind ? ` · ${ind.icon} ${ind.labelJa}` : ""}
+              {ind ? ` · ${ind.icon}` : ""}
             </p>
             <h2 className="mt-1 truncate text-lg font-bold tracking-tight text-zinc-900">
               {company.name}
             </h2>
+            {aboutLine ? (
+              <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-zinc-500">{aboutLine}</p>
+            ) : null}
           </div>
           <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-center">
             <p className="text-[10px] font-bold text-amber-800/80">Lv</p>

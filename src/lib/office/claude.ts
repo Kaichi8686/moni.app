@@ -31,11 +31,11 @@ export async function generateIncidentWithClaude(
       : "（なし）";
 
   const user = `会社名: ${ctx.companyName}
-系統: ${ctx.industryLabel}
+会社の説明: ${ctx.companyAbout}
 直近の事件タイトル（似せないで）:
 ${recent}
 
-事件を1件、JSONだけで出力してください。`;
+上の「会社の説明」に必ず合った事件を1件、JSONだけで出力してください。説明と無関係な場面は禁止です。`;
 
   const run = async () => {
     const ai = await anthropicTextMessage({
