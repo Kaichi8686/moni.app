@@ -36,6 +36,51 @@ export const DEFAULT_TEXT_COLOR = "#1A1A1A";
 export const DEFAULT_TEXT_ALIGN: TextAlign = "center";
 export const DEFAULT_TEXT_VALIGN: TextVAlign = "middle";
 
+export type BoardShapeKind = "rect" | "circle" | "triangle" | "line";
+
+/** カード内のオーバーレイ（テキストボックス・図形・手書き・写真） */
+export type SheetOverlay =
+  | {
+      id: string;
+      kind: "text";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      text: string;
+      fontSize: number;
+      textColor: string;
+      align: TextAlign;
+    }
+  | {
+      id: string;
+      kind: "shape";
+      shape: BoardShapeKind;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      color: string;
+      fill?: string;
+    }
+  | {
+      id: string;
+      kind: "pen";
+      points: Array<{ x: number; y: number }>;
+      color: string;
+      width: number;
+      opacity?: number;
+    }
+  | {
+      id: string;
+      kind: "image";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      url: string;
+    };
+
 export type BoardSheet = {
   id: string;
   kind: "sheet";
@@ -50,7 +95,11 @@ export type BoardSheet = {
   textColor: string;
   align: TextAlign;
   valign: TextVAlign;
+  overlays?: SheetOverlay[];
 };
+
+/** 写真の切り取り（0–1 正規化） */
+export type BoardImageCrop = { x: number; y: number; w: number; h: number };
 
 export type BoardImage = {
   id: string;
@@ -60,6 +109,45 @@ export type BoardImage = {
   w: number;
   h: number;
   url: string;
+  z: number;
+  crop?: BoardImageCrop;
+};
+
+/** Googleスライド風テキストボックス */
+export type BoardTextBox = {
+  id: string;
+  kind: "text";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  fontSize: number;
+  textColor: string;
+  align: TextAlign;
+  z: number;
+};
+
+export type BoardShape = {
+  id: string;
+  kind: "shape";
+  shape: BoardShapeKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  fill?: string;
+  z: number;
+};
+
+export type BoardPen = {
+  id: string;
+  kind: "pen";
+  points: Array<{ x: number; y: number }>;
+  color: string;
+  width: number;
+  opacity?: number;
   z: number;
 };
 
@@ -72,8 +160,12 @@ export type BoardArrow = {
   z: number;
 };
 
-export type BoardNode = BoardSheet | BoardImage;
-export type BoardItem = BoardNode | BoardArrow;
+/** 位置と大きさを持つ要素（移動・リサイズ対象） */
+export type BoardNode = BoardSheet | BoardImage | BoardTextBox | BoardShape;
+export type BoardItem = BoardNode | BoardArrow | BoardPen;
+
+export const SHAPE_KIND_ORDER: BoardShapeKind[] = ["rect", "circle", "triangle", "line"];
+export const SHAPE_COLORS = ["#1A1A1A", "#DC2626", "#2563EB", "#16A34A", "#F59E0B", "#9333EA"] as const;
 
 export type IssueWorkspaceBoard = {
   v: 1;
@@ -116,6 +208,96 @@ export function defaultSheetTextStyle(): Pick<BoardSheet, "fontSize" | "textColo
   };
 }
 
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
+}
+
+function isShapeKind(value: unknown): value is BoardShapeKind {
+  return value === "rect" || value === "circle" || value === "triangle" || value === "line";
+}
+
+function parseCrop(raw: unknown): BoardImageCrop | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  if (![c.x, c.y, c.w, c.h].every(isFiniteNumber)) return undefined;
+  const x = Math.min(1, Math.max(0, c.x as number));
+  const y = Math.min(1, Math.max(0, c.y as number));
+  const w = Math.min(1 - x, Math.max(0.05, c.w as number));
+  const h = Math.min(1 - y, Math.max(0.05, c.h as number));
+  return { x, y, w, h };
+}
+
+function parseOverlay(raw: unknown): SheetOverlay | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  if (typeof row.id !== "string" || !row.id) return null;
+  if (row.kind === "text") {
+    if (![row.x, row.y, row.w, row.h].every(isFiniteNumber)) return null;
+    return {
+      id: row.id,
+      kind: "text",
+      x: row.x as number,
+      y: row.y as number,
+      w: Math.max(40, row.w as number),
+      h: Math.max(24, row.h as number),
+      text: typeof row.text === "string" ? row.text : "",
+      fontSize:
+        isFiniteNumber(row.fontSize) && (row.fontSize as number) >= 8
+          ? Math.round(row.fontSize as number)
+          : DEFAULT_FONT_SIZE,
+      textColor: isHexColor(row.textColor) ? row.textColor : DEFAULT_TEXT_COLOR,
+      align: isTextAlign(row.align) ? row.align : "left",
+    };
+  }
+  if (row.kind === "shape") {
+    if (![row.x, row.y, row.w, row.h].every(isFiniteNumber) || !isShapeKind(row.shape)) return null;
+    return {
+      id: row.id,
+      kind: "shape",
+      shape: row.shape,
+      x: row.x as number,
+      y: row.y as number,
+      w: row.w as number,
+      h: row.h as number,
+      color: isHexColor(row.color) ? row.color : "#1A1A1A",
+      fill: isHexColor(row.fill) ? row.fill : undefined,
+    };
+  }
+  if (row.kind === "pen") {
+    if (!Array.isArray(row.points) || row.points.length === 0) return null;
+    const points: Array<{ x: number; y: number }> = [];
+    for (const pt of row.points) {
+      if (!pt || typeof pt !== "object") continue;
+      const p = pt as Record<string, unknown>;
+      if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y)) continue;
+      points.push({ x: p.x, y: p.y });
+    }
+    if (points.length === 0) return null;
+    return {
+      id: row.id,
+      kind: "pen",
+      points,
+      color: isHexColor(row.color) ? row.color : "#1A1A1A",
+      width: isFiniteNumber(row.width) ? Math.max(1, row.width as number) : 3,
+      opacity: isFiniteNumber(row.opacity) ? (row.opacity as number) : undefined,
+    };
+  }
+  if (row.kind === "image") {
+    if (![row.x, row.y, row.w, row.h].every(isFiniteNumber)) return null;
+    if (typeof row.url !== "string" || !row.url.trim()) return null;
+    return {
+      id: row.id,
+      kind: "image",
+      x: row.x as number,
+      y: row.y as number,
+      w: Math.max(40, row.w as number),
+      h: Math.max(40, row.h as number),
+      url: row.url.trim(),
+    };
+  }
+  return null;
+}
+
 function parseSheet(raw: Record<string, unknown>): BoardSheet | null {
   if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y) || !isFiniteNumber(raw.w) || !isFiniteNumber(raw.h)) {
     return null;
@@ -126,10 +308,10 @@ function parseSheet(raw: Record<string, unknown>): BoardSheet | null {
     isFiniteNumber(raw.fontSize) && raw.fontSize >= 8 && raw.fontSize <= 72
       ? Math.round(raw.fontSize)
       : DEFAULT_FONT_SIZE;
-  const textColor =
-    typeof raw.textColor === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw.textColor)
-      ? raw.textColor
-      : DEFAULT_TEXT_COLOR;
+  const textColor = isHexColor(raw.textColor) ? raw.textColor : DEFAULT_TEXT_COLOR;
+  const overlays = Array.isArray(raw.overlays)
+    ? raw.overlays.map(parseOverlay).filter((o): o is SheetOverlay => Boolean(o))
+    : undefined;
   return {
     id: raw.id,
     kind: "sheet",
@@ -144,6 +326,7 @@ function parseSheet(raw: Record<string, unknown>): BoardSheet | null {
     textColor,
     align: isTextAlign(raw.align) ? raw.align : DEFAULT_TEXT_ALIGN,
     valign: isTextVAlign(raw.valign) ? raw.valign : DEFAULT_TEXT_VALIGN,
+    overlays: overlays && overlays.length > 0 ? overlays : undefined,
   };
 }
 
@@ -153,6 +336,7 @@ function parseImage(raw: Record<string, unknown>): BoardImage | null {
   }
   if (typeof raw.id !== "string" || !raw.id) return null;
   if (typeof raw.url !== "string" || !raw.url.trim()) return null;
+  const crop = parseCrop(raw.crop);
   return {
     id: raw.id,
     kind: "image",
@@ -161,6 +345,72 @@ function parseImage(raw: Record<string, unknown>): BoardImage | null {
     w: Math.max(80, raw.w),
     h: Math.max(60, raw.h),
     url: raw.url.trim(),
+    z: isFiniteNumber(raw.z) ? raw.z : 1,
+    crop,
+  };
+}
+
+function parseTextBox(raw: Record<string, unknown>): BoardTextBox | null {
+  if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y) || !isFiniteNumber(raw.w) || !isFiniteNumber(raw.h)) {
+    return null;
+  }
+  if (typeof raw.id !== "string" || !raw.id) return null;
+  return {
+    id: raw.id,
+    kind: "text",
+    x: raw.x,
+    y: raw.y,
+    w: Math.max(40, raw.w),
+    h: Math.max(28, raw.h),
+    text: typeof raw.text === "string" ? raw.text : "",
+    fontSize:
+      isFiniteNumber(raw.fontSize) && raw.fontSize >= 8 && raw.fontSize <= 96
+        ? Math.round(raw.fontSize)
+        : 18,
+    textColor: isHexColor(raw.textColor) ? raw.textColor : DEFAULT_TEXT_COLOR,
+    align: isTextAlign(raw.align) ? raw.align : "left",
+    z: isFiniteNumber(raw.z) ? raw.z : 1,
+  };
+}
+
+function parseShape(raw: Record<string, unknown>): BoardShape | null {
+  if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y) || !isFiniteNumber(raw.w) || !isFiniteNumber(raw.h)) {
+    return null;
+  }
+  if (typeof raw.id !== "string" || !raw.id) return null;
+  if (!isShapeKind(raw.shape)) return null;
+  return {
+    id: raw.id,
+    kind: "shape",
+    shape: raw.shape,
+    x: raw.x,
+    y: raw.y,
+    w: raw.w,
+    h: raw.h,
+    color: isHexColor(raw.color) ? raw.color : "#1A1A1A",
+    fill: isHexColor(raw.fill) ? raw.fill : undefined,
+    z: isFiniteNumber(raw.z) ? raw.z : 1,
+  };
+}
+
+function parsePen(raw: Record<string, unknown>): BoardPen | null {
+  if (typeof raw.id !== "string" || !raw.id) return null;
+  if (!Array.isArray(raw.points) || raw.points.length === 0) return null;
+  const points: Array<{ x: number; y: number }> = [];
+  for (const pt of raw.points) {
+    if (!pt || typeof pt !== "object") continue;
+    const p = pt as Record<string, unknown>;
+    if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y)) continue;
+    points.push({ x: p.x, y: p.y });
+  }
+  if (points.length === 0) return null;
+  return {
+    id: raw.id,
+    kind: "pen",
+    points,
+    color: isHexColor(raw.color) ? raw.color : "#1A1A1A",
+    width: isFiniteNumber(raw.width) ? Math.max(1, raw.width) : 3,
+    opacity: isFiniteNumber(raw.opacity) ? raw.opacity : undefined,
     z: isFiniteNumber(raw.z) ? raw.z : 1,
   };
 }
@@ -178,6 +428,40 @@ function parseArrow(raw: Record<string, unknown>): BoardArrow | null {
     color: typeof raw.color === "string" && raw.color ? raw.color : "#52525B",
     z: isFiniteNumber(raw.z) ? raw.z : 0,
   };
+}
+
+export function isBoardNode(item: BoardItem): item is BoardNode {
+  return item.kind === "sheet" || item.kind === "image" || item.kind === "text" || item.kind === "shape";
+}
+
+export function penBounds(pen: BoardPen): { x: number; y: number; w: number; h: number } {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const pt of pen.points) {
+    minX = Math.min(minX, pt.x);
+    minY = Math.min(minY, pt.y);
+    maxX = Math.max(maxX, pt.x);
+    maxY = Math.max(maxY, pt.y);
+  }
+  const pad = pen.width;
+  return { x: minX - pad, y: minY - pad, w: Math.max(1, maxX - minX + pad * 2), h: Math.max(1, maxY - minY + pad * 2) };
+}
+
+export function penToPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0]!.x} ${points[0]!.y} L ${points[0]!.x + 0.1} ${points[0]!.y}`;
+  if (points.length === 2) return `M ${points[0]!.x} ${points[0]!.y} L ${points[1]!.x} ${points[1]!.y}`;
+  let d = `M ${points[0]!.x} ${points[0]!.y}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const mx = (points[i]!.x + points[i + 1]!.x) / 2;
+    const my = (points[i]!.y + points[i + 1]!.y) / 2;
+    d += ` Q ${points[i]!.x} ${points[i]!.y} ${mx} ${my}`;
+  }
+  const last = points[points.length - 1]!;
+  d += ` L ${last.x} ${last.y}`;
+  return d;
 }
 
 export function parseWorkspaceBoard(raw: unknown): IssueWorkspaceBoard | null {
@@ -199,12 +483,27 @@ export function parseWorkspaceBoard(raw: unknown): IssueWorkspaceBoard | null {
       if (image) items.push(image);
       continue;
     }
+    if (kind === "text") {
+      const text = parseTextBox(row);
+      if (text) items.push(text);
+      continue;
+    }
+    if (kind === "shape") {
+      const shape = parseShape(row);
+      if (shape) items.push(shape);
+      continue;
+    }
+    if (kind === "pen") {
+      const pen = parsePen(row);
+      if (pen) items.push(pen);
+      continue;
+    }
     if (kind === "arrow") {
       const arrow = parseArrow(row);
       if (arrow) items.push(arrow);
     }
   }
-  const nodeIds = new Set(items.filter((item): item is BoardNode => item.kind !== "arrow").map((item) => item.id));
+  const nodeIds = new Set(items.filter(isBoardNode).map((item) => item.id));
   const cleaned = items.filter((item) => {
     if (item.kind !== "arrow") return true;
     return nodeIds.has(item.fromId) && nodeIds.has(item.toId);
@@ -259,7 +558,7 @@ export function ensureImagesOnBoard(board: IssueWorkspaceBoard, urls: string[]):
   const missing = urls.filter((url) => typeof url === "string" && url.trim() && !existing.has(url.trim()));
   if (missing.length === 0) return board;
   const maxZ = board.items.reduce((acc, item) => Math.max(acc, item.z), 0);
-  const nodes = board.items.filter((item): item is BoardNode => item.kind !== "arrow");
+  const nodes = board.items.filter(isBoardNode);
   const offset = nodes.length;
   const added: BoardImage[] = missing.map((url, index) => {
     const col = (offset + index) % 3;
