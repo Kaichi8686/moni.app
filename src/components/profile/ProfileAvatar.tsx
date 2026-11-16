@@ -6,6 +6,8 @@ type Props = {
   size?: "md" | "lg" | "xl";
   /** Edge-to-edge photo with no inner border/frame (profile header). */
   flush?: boolean;
+  /** Override corner radius (e.g. match header clip). */
+  radiusClassName?: string;
   /** Kept for API compatibility; unused when no photo (tone-on-tone zinc). */
   accentColor?: string;
 };
@@ -16,40 +18,55 @@ const SIZES = {
   xl: { box: "h-[72px] w-[72px] text-2xl", radius: "rounded-xl" },
 } as const;
 
-export function ProfileAvatar({ displayName, avatarUrl, size = "md", flush = false }: Props) {
+export function ProfileAvatar({
+  displayName,
+  avatarUrl,
+  size = "md",
+  flush = false,
+  radiusClassName,
+}: Props) {
   const { box, radius } = SIZES[size];
   const initial = (displayName.trim().charAt(0) || "?").toUpperCase();
   const photo = avatarUrl?.trim() || null;
+  const corners = radiusClassName ?? radius;
 
   return (
     <div
-      className={`relative ${box} ${radius} shrink-0 overflow-hidden bg-zinc-100 ${
-        flush ? "" : "border border-zinc-200 shadow-[0_1px_0_rgba(24,24,27,0.04)]"
+      className={`relative ${box} ${corners} shrink-0 overflow-hidden ${
+        flush
+          ? "bg-zinc-900"
+          : "border border-zinc-200 bg-zinc-100 shadow-[0_1px_0_rgba(24,24,27,0.04)]"
       }`}
+      style={
+        flush && photo
+          ? {
+              backgroundImage: `url(${JSON.stringify(photo)})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+            }
+          : undefined
+      }
+      role={flush && photo ? "img" : undefined}
+      aria-label={flush && photo ? displayName : undefined}
     >
-      {photo ? (
+      {photo && !flush ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={photo}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute inset-0 block h-full w-full max-h-none max-w-none"
-          style={{
-            objectFit: "cover",
-            objectPosition: "center",
-            // Crop baked-in letterboxing on all sides (incl. bottom).
-            transform: flush ? "scale(1.14)" : undefined,
-            transformOrigin: "center",
-          }}
+          className="pointer-events-none absolute inset-0 block h-full w-full max-h-none max-w-none object-cover object-center"
         />
-      ) : (
+      ) : null}
+      {!photo ? (
         <div
           className="flex h-full w-full items-center justify-center font-bold tracking-tight text-white"
           style={{ background: "linear-gradient(145deg, #52525b 0%, #27272a 55%, #18181b 100%)" }}
         >
           {initial}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

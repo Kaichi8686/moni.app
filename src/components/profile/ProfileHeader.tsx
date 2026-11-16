@@ -183,12 +183,13 @@ export function ProfileHeader({
       <div className="px-4 pb-5 sm:px-5">
         <div className="relative z-10 -mt-9 flex items-end gap-4">
           <div className="relative shrink-0">
-            <div className="overflow-hidden rounded-[14px] shadow-md ring-1 ring-black/10">
+            <div className="rounded-[14px] shadow-md ring-1 ring-black/15">
               <ProfileAvatar
                 displayName={profile.displayName}
                 avatarUrl={avatarPreview ?? profile.avatarUrl}
                 size="xl"
                 flush
+                radiusClassName="rounded-[14px]"
               />
             </div>
             {isOwnProfile ? (
