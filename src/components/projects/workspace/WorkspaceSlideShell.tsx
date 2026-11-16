@@ -10,6 +10,11 @@ type Props = {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  /**
+   * 戻る／Escape 時に呼ばれる。渡されたらすぐには閉じず、
+   * 親が `close` を呼んだときだけアニメーション付きで閉じる。
+   */
+  onBackRequest?: (close: () => void) => void;
   /** 右上に置く追加アクション（予定追加など） */
   trailing?: ReactNode;
   /** ヘッダー下の固定領域（検索バーなど） */
@@ -31,6 +36,7 @@ export function WorkspaceSlideShell({
   title,
   children,
   onClose,
+  onBackRequest,
   trailing,
   stickyBelowHeader,
   hideHeader = false,
@@ -46,6 +52,8 @@ export function WorkspaceSlideShell({
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const onBackRequestRef = useRef(onBackRequest);
+  onBackRequestRef.current = onBackRequest;
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setEntered(true));
@@ -67,13 +75,22 @@ export function WorkspaceSlideShell({
     }, SLIDE_OUT_MS);
   }
 
+  function handleBack() {
+    const intercept = onBackRequestRef.current;
+    if (intercept) {
+      intercept(requestClose);
+      return;
+    }
+    requestClose();
+  }
+
   useEffect(() => {
     onBindClose?.(requestClose);
   }, [onBindClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") requestClose();
+      if (e.key === "Escape") handleBack();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -95,7 +112,7 @@ export function WorkspaceSlideShell({
           <div className="flex items-center gap-2 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <button
               type="button"
-              onClick={requestClose}
+              onClick={handleBack}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-800 transition hover:bg-zinc-100 active:scale-95"
               aria-label={tx("戻る", "Back")}
             >

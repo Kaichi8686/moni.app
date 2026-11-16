@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
@@ -13,8 +13,33 @@ import {
   resolveProjectBrief,
   type ProjectBrief,
 } from "@/lib/projects/projectBrief";
+import {
+  clearProjectSettingsDraft,
+  readProjectSettingsDraft,
+  writeProjectSettingsDraft,
+} from "@/lib/workspace/projectSettingsDraft";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
+
+type SettingsBaseline = {
+  editName: string;
+  editThumb: string;
+  editBg: string;
+  editBrief: ProjectBrief;
+  editCategory: string;
+  editBusinessType: "maker" | "software" | "social";
+  editRecruitmentTarget: string;
+  editRecruitmentMessage: string;
+  editVisibility: ProjectVisibility;
+};
+
+function briefsEqual(a: ProjectBrief, b: ProjectBrief): boolean {
+  return (
+    a.problemMotivation === b.problemMotivation &&
+    a.projectGoal === b.projectGoal &&
+    a.whatToDo === b.whatToDo
+  );
+}
 
 export type ProjectSettingsMeta = Pick<
   ProjectRow,
@@ -63,10 +88,15 @@ export function ProjectSettingsModal({
   const bgInputRef = useRef<HTMLInputElement>(null);
   const previewObjectUrl = useRef<string | null>(null);
   const bgPreviewObjectUrl = useRef<string | null>(null);
+  const closedRef = useRef(false);
+  const pendingCloseRef = useRef<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
   const [thumbUploading, setThumbUploading] = useState(false);
   const [bgUploading, setBgUploading] = useState(false);
   const [err, setErr] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [baseline, setBaseline] = useState<SettingsBaseline | null>(null);
   const [editName, setEditName] = useState("");
   const [editThumb, setEditThumb] = useState("");
   const [editBg, setEditBg] = useState("");
@@ -94,32 +124,105 @@ export function ProjectSettingsModal({
     }
   }
 
+  function serverBaseline(): SettingsBaseline {
+    const thumb = meta?.thumbnail_url?.trim() ?? "";
+    const bg = meta?.background_url?.trim() ?? "";
+    return {
+      editName: name,
+      editThumb: thumb,
+      editBg: bg,
+      editBrief: resolveProjectBrief({ coachingContext, description }),
+      editCategory: meta?.category ?? "",
+      editBusinessType:
+        meta?.business_type === "maker" || meta?.business_type === "social"
+          ? meta.business_type
+          : "software",
+      editRecruitmentTarget: meta?.recruitment_target ?? "",
+      editRecruitmentMessage: meta?.recruitment_message ?? "",
+      editVisibility: meta?.visibility === "private" ? "private" : "public",
+    };
+  }
+
   useEffect(() => {
     if (!open) {
       clearPreviewObjectUrl();
       clearBgPreviewObjectUrl();
       setThumbPreview(null);
       setBgPreview(null);
+      setHydrated(false);
+      setConfirmDiscard(false);
+      pendingCloseRef.current = null;
+      closedRef.current = false;
       return;
     }
+    closedRef.current = false;
     setErr("");
-    setEditName(name);
-    setEditBrief(resolveProjectBrief({ coachingContext, description }));
-    const thumb = meta?.thumbnail_url?.trim() ?? "";
-    const bg = meta?.background_url?.trim() ?? "";
-    setEditThumb(thumb);
-    setThumbPreview(thumb || null);
-    setEditBg(bg);
-    setBgPreview(bg || null);
-    setShowUrlField(Boolean(thumb && !thumb.includes("post-images")));
-    setEditCategory(meta?.category ?? "");
-    setEditBusinessType(
-      meta?.business_type === "maker" || meta?.business_type === "social" ? meta.business_type : "software",
-    );
-    setEditRecruitmentTarget(meta?.recruitment_target ?? "");
-    setEditRecruitmentMessage(meta?.recruitment_message ?? "");
-    setEditVisibility(meta?.visibility === "private" ? "private" : "public");
-  }, [open, name, description, coachingContext, meta]);
+    setConfirmDiscard(false);
+    const fromServer = serverBaseline();
+    setBaseline(fromServer);
+    const draft = readProjectSettingsDraft(projectId);
+    if (draft) {
+      setEditName(draft.editName);
+      setEditBrief(draft.editBrief);
+      setEditThumb(draft.editThumb);
+      setThumbPreview(draft.editThumb.trim() || null);
+      setEditBg(draft.editBg);
+      setBgPreview(draft.editBg.trim() || null);
+      setShowUrlField(draft.showUrlField);
+      setEditCategory(draft.editCategory);
+      setEditBusinessType(draft.editBusinessType);
+      setEditRecruitmentTarget(draft.editRecruitmentTarget);
+      setEditRecruitmentMessage(draft.editRecruitmentMessage);
+      setEditVisibility(draft.editVisibility);
+    } else {
+      setEditName(fromServer.editName);
+      setEditBrief(fromServer.editBrief);
+      setEditThumb(fromServer.editThumb);
+      setThumbPreview(fromServer.editThumb || null);
+      setEditBg(fromServer.editBg);
+      setBgPreview(fromServer.editBg || null);
+      setShowUrlField(Boolean(fromServer.editThumb && !fromServer.editThumb.includes("post-images")));
+      setEditCategory(fromServer.editCategory);
+      setEditBusinessType(fromServer.editBusinessType);
+      setEditRecruitmentTarget(fromServer.editRecruitmentTarget);
+      setEditRecruitmentMessage(fromServer.editRecruitmentMessage);
+      setEditVisibility(fromServer.editVisibility);
+    }
+    setHydrated(true);
+    // 開いた瞬間だけ初期化／下書き復元。編集中に props 更新で上書きしない
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional open-only hydrate
+  }, [open, projectId]);
+
+  useEffect(() => {
+    if (!open || !hydrated || closedRef.current || !canEdit) return;
+    writeProjectSettingsDraft(projectId, {
+      editName,
+      editThumb,
+      editBg,
+      showUrlField,
+      editBrief,
+      editCategory,
+      editBusinessType,
+      editRecruitmentTarget,
+      editRecruitmentMessage,
+      editVisibility,
+    });
+  }, [
+    open,
+    hydrated,
+    canEdit,
+    projectId,
+    editName,
+    editThumb,
+    editBg,
+    showUrlField,
+    editBrief,
+    editCategory,
+    editBusinessType,
+    editRecruitmentTarget,
+    editRecruitmentMessage,
+    editVisibility,
+  ]);
 
   useEffect(
     () => () => {
@@ -128,6 +231,51 @@ export function ProjectSettingsModal({
     },
     [],
   );
+
+  const isDirty = useMemo(() => {
+    if (!baseline || !canEdit) return false;
+    return (
+      editName !== baseline.editName ||
+      editThumb !== baseline.editThumb ||
+      editBg !== baseline.editBg ||
+      !briefsEqual(editBrief, baseline.editBrief) ||
+      editCategory !== baseline.editCategory ||
+      editBusinessType !== baseline.editBusinessType ||
+      editRecruitmentTarget !== baseline.editRecruitmentTarget ||
+      editRecruitmentMessage !== baseline.editRecruitmentMessage ||
+      editVisibility !== baseline.editVisibility
+    );
+  }, [
+    baseline,
+    canEdit,
+    editName,
+    editThumb,
+    editBg,
+    editBrief,
+    editCategory,
+    editBusinessType,
+    editRecruitmentTarget,
+    editRecruitmentMessage,
+    editVisibility,
+  ]);
+
+  function discardAndClose(close: () => void) {
+    closedRef.current = true;
+    clearProjectSettingsDraft(projectId);
+    setConfirmDiscard(false);
+    pendingCloseRef.current = null;
+    close();
+  }
+
+  function handleBackRequest(close: () => void) {
+    if (saving || thumbUploading || bgUploading) return;
+    if (isDirty) {
+      pendingCloseRef.current = close;
+      setConfirmDiscard(true);
+      return;
+    }
+    discardAndClose(close);
+  }
 
   if (!open) return null;
 
@@ -318,6 +466,8 @@ export function ProjectSettingsModal({
         setErr(error.message);
         return;
       }
+      closedRef.current = true;
+      clearProjectSettingsDraft(projectId);
       onSaved();
       onNotice(tx("プロジェクト設定を保存しました", "Project settings saved"));
       onClose();
@@ -328,12 +478,11 @@ export function ProjectSettingsModal({
 
   const busy = saving || thumbUploading || bgUploading;
 
-  if (!open) return null;
-
   return (
     <WorkspaceSlideShell
       title={tx("プロジェクト設定", "Project settings")}
       onClose={onClose}
+      onBackRequest={handleBackRequest}
       contentClassName="px-0 pt-0"
     >
       <input
@@ -577,6 +726,52 @@ export function ProjectSettingsModal({
           >
             {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
           </button>
+        </div>
+      ) : null}
+
+      {confirmDiscard ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal
+            aria-labelledby="project-settings-discard-title"
+            className="w-full max-w-sm rounded-2xl bg-white px-5 py-6 text-center shadow-xl"
+          >
+            <h3 id="project-settings-discard-title" className="text-base font-semibold text-[#202124]">
+              {tx("保存せずに戻りますか？", "Go back without saving?")}
+            </h3>
+            <p className="mt-2 text-sm text-[#5f6368]">
+              {tx(
+                "プロジェクトのデータは今のままです。入力中の内容は下書きとして残ります。",
+                "Project data stays as it is. Your edits will be kept as a draft.",
+              )}
+            </p>
+            <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col items-stretch gap-3">
+              <button
+                type="button"
+                className="rounded-xl bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white hover:bg-[#F08900]"
+                onClick={() => {
+                  const close = pendingCloseRef.current;
+                  setConfirmDiscard(false);
+                  pendingCloseRef.current = null;
+                  // 保存はせず閉じる。下書きは残して次回もさっきの入力のまま
+                  close?.();
+                }}
+              >
+                {tx("戻る", "Go back")}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl px-4 py-3 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                onClick={() => {
+                  setConfirmDiscard(false);
+                  pendingCloseRef.current = null;
+                }}
+              >
+                {tx("編集を続ける", "Keep editing")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </WorkspaceSlideShell>
