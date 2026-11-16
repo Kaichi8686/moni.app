@@ -26,13 +26,9 @@ type Panel = { kind: "detail"; row: ProjectRecruitment } | { kind: "create" };
 
 const SLIDE_OUT_MS = 220;
 
-/** 課題タブのジャンル行と同じフラットボタン */
+/** 課題タブのジャンル行と同じフラットボタン（募集行・追加行で共通） */
 const RECRUIT_ROW =
   "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
-
-/** 課題タブの「ジャンルを追加」と同じオレンジの追加ボタン */
-const ADD_RECRUIT_PILL =
-  "inline-flex items-center gap-1 rounded-full bg-[#FF9600] px-3 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-[#F08900] active:bg-[#E07E00]";
 
 function formatWeeklyHours(raw: string): string {
   const trimmed = raw.trim();
@@ -371,15 +367,6 @@ export default function WorkspaceRecruit() {
           </p>
         ) : null}
 
-        {canEdit ? (
-          <div className="flex items-center justify-end">
-            <button type="button" onClick={openCreate} className={ADD_RECRUIT_PILL}>
-              <Plus className="h-4 w-4" aria-hidden />
-              {tx("募集を追加", "Add recruitment")}
-            </button>
-          </div>
-        ) : null}
-
         <div className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80">
           {filters.map((f) => {
             const active = filter === f.id;
@@ -409,6 +396,21 @@ export default function WorkspaceRecruit() {
         ) : null}
 
         <div className="flex flex-col gap-2.5">
+          {canEdit && filter === "all" ? (
+            <button type="button" onClick={openCreate} className={RECRUIT_ROW}>
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FF9600] text-white">
+                <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate">{tx("募集を追加", "Add recruitment")}</span>
+                <span className="truncate text-[11px] font-semibold text-zinc-500">
+                  {tx("欲しい人材を公開する", "Post an opening")}
+                </span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden strokeWidth={2.5} />
+            </button>
+          ) : null}
+
           {listLoading ? (
             <StackSkeleton count={4} className="py-2" />
           ) : filteredRows.length === 0 ? (
