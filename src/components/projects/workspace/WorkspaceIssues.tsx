@@ -47,6 +47,19 @@ function phaseKeyOf(issue: Issue): PhaseKey {
   return issue.phaseId ?? null;
 }
 
+/** 薄い見出し用（例: ステップ2） */
+function stepCaption(
+  phaseId: PhaseKey,
+  phases: Phase[],
+  tx: (ja: string, en: string) => string,
+): string {
+  if (!phaseId) return tx("ステップ", "STEP");
+  const index = phases.findIndex((phase) => phase.id === phaseId);
+  if (index < 0) return tx("ステップ", "STEP");
+  return tx(`ステップ${index + 1}`, `STEP ${index + 1}`);
+}
+
+/** 濃い見出し／パンくず用（ステップ名のみ） */
 function stepLabel(
   phaseId: PhaseKey,
   phases: Phase[],
@@ -56,7 +69,7 @@ function stepLabel(
   const index = phases.findIndex((phase) => phase.id === phaseId);
   const phase = index >= 0 ? phases[index] : undefined;
   if (!phase) return tx("不明なステップ", "Unknown step");
-  return `STEP ${index + 1}・${phase.title}`;
+  return phase.title;
 }
 
 /** ステップ画面のジャンル行（フラット） */
@@ -504,8 +517,12 @@ export default function WorkspaceIssues() {
             <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2.5} />
           </button>
           <div className="min-w-0 flex-1 text-center">
-            <p className="text-[11px] font-bold tracking-[0.12em] text-zinc-400">{tx("ステップ", "STEP")}</p>
-            <h1 className="truncate text-lg font-bold text-zinc-950">{stepLabel(stepPhaseId, sortedPhases, tx)}</h1>
+            <p className="text-[11px] font-bold tracking-[0.12em] text-zinc-400">
+              {stepCaption(stepPhaseId, sortedPhases, tx)}
+            </p>
+            <h1 className="truncate text-lg font-bold text-zinc-950">
+              {stepLabel(stepPhaseId, sortedPhases, tx)}
+            </h1>
             <p className="text-xs text-zinc-500">
               {tx(`未提出 ${phaseOpen}件`, `${phaseOpen} not submitted`)}
             </p>
