@@ -14,6 +14,10 @@ type Props = {
   trailing?: ReactNode;
   /** ヘッダー下の固定領域（検索バーなど） */
   stickyBelowHeader?: ReactNode;
+  /** タイトル行ヘッダーを出さない（カレンダー等で自前ツールバーを使う） */
+  hideHeader?: boolean;
+  /** hideHeader 時に戻るアニメーション付きクローズを子へ渡す */
+  onBindClose?: (close: () => void) => void;
   className?: string;
   contentClassName?: string;
 };
@@ -27,6 +31,8 @@ export function WorkspaceSlideShell({
   onClose,
   trailing,
   stickyBelowHeader,
+  hideHeader = false,
+  onBindClose,
   className = "",
   contentClassName = "",
 }: Props) {
@@ -35,6 +41,8 @@ export function WorkspaceSlideShell({
   const [exiting, setExiting] = useState(false);
   const closingRef = useRef(false);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setEntered(true));
@@ -52,9 +60,13 @@ export function WorkspaceSlideShell({
     closingRef.current = true;
     setExiting(true);
     exitTimer.current = setTimeout(() => {
-      onClose();
+      onCloseRef.current();
     }, SLIDE_OUT_MS);
   }
+
+  useEffect(() => {
+    onBindClose?.(requestClose);
+  }, [onBindClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -75,25 +87,27 @@ export function WorkspaceSlideShell({
     <div
       className={`fixed inset-0 z-[200] flex w-full max-w-[100vw] flex-col overflow-hidden overscroll-none bg-white ${motionClass} ${className}`}
     >
-      <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white/95 backdrop-blur-sm">
-        <div
-          className="flex items-center gap-2 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]"
-        >
-          <button
-            type="button"
-            onClick={requestClose}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-800 transition hover:bg-zinc-100 active:scale-95"
-            aria-label={tx("戻る", "Back")}
-          >
-            <ArrowLeft className="h-5 w-5" strokeWidth={2.25} />
-          </button>
-          <h1 className="min-w-0 flex-1 truncate text-[17px] font-bold tracking-tight text-zinc-950">
-            {title}
-          </h1>
-          {trailing ? <div className="shrink-0">{trailing}</div> : null}
-        </div>
-        {stickyBelowHeader}
-      </header>
+      {!hideHeader ? (
+        <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-800 transition hover:bg-zinc-100 active:scale-95"
+              aria-label={tx("戻る", "Back")}
+            >
+              <ArrowLeft className="h-5 w-5" strokeWidth={2.25} />
+            </button>
+            <h1 className="min-w-0 flex-1 truncate text-[17px] font-bold tracking-tight text-zinc-950">
+              {title}
+            </h1>
+            {trailing ? <div className="shrink-0">{trailing}</div> : null}
+          </div>
+          {stickyBelowHeader}
+        </header>
+      ) : stickyBelowHeader ? (
+        <div className="sticky top-0 z-30 shrink-0">{stickyBelowHeader}</div>
+      ) : null}
       <div
         className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(1rem,env(safe-area-inset-bottom))] ${contentClassName}`}
       >

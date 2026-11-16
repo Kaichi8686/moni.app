@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
@@ -37,7 +37,10 @@ export default function WorkspaceSchedule() {
   const [editIssue, setEditIssue] = useState<Issue | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addEntered, setAddEntered] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const closeCalendarRef = useRef<(() => void) | null>(null);
+  const bindClose = useCallback((close: () => void) => {
+    closeCalendarRef.current = close;
+  }, []);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -109,32 +112,9 @@ export default function WorkspaceSchedule() {
       <WorkspaceSlideShell
         title={tx("カレンダー", "Calendar")}
         onClose={() => router.push(`/projects/${projectId}/overview`)}
+        hideHeader
+        onBindClose={bindClose}
         contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-0 !pb-0"
-        trailing={
-          <div className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100/90 p-0.5 ring-1 ring-zinc-200/80">
-            <button
-              type="button"
-              onClick={() => setSearchOpen((v) => !v)}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition ${
-                searchOpen ? "bg-white text-[#FF9600] shadow-sm" : "text-zinc-700 hover:bg-white/80"
-              }`}
-              aria-label={tx("予定を検索", "Search events")}
-              aria-pressed={searchOpen}
-            >
-              <Search className="h-[18px] w-[18px]" strokeWidth={2} />
-            </button>
-            {canEdit ? (
-              <button
-                type="button"
-                onClick={() => openAdd()}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-700 transition hover:bg-white/80"
-                aria-label={tx("予定を追加", "Add event")}
-              >
-                <Plus className="h-5 w-5" strokeWidth={2} />
-              </button>
-            ) : null}
-          </div>
-        }
       >
         <ProjectScheduleCalendar
           schedules={schedules}
@@ -152,8 +132,7 @@ export default function WorkspaceSchedule() {
           fullBleed
           hideAddForm
           onRequestAdd={(prefill) => openAdd(prefill)}
-          searchOpen={searchOpen}
-          onSearchOpenChange={setSearchOpen}
+          onBack={() => closeCalendarRef.current?.()}
         />
       </WorkspaceSlideShell>
 
