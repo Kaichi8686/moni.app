@@ -556,6 +556,12 @@ export function IssueTaskFilesPanel({
     await persistFiles(upsertWorkFile(files, next));
   }
 
+  async function undoFileComplete(file: IssueWorkFile) {
+    if (!canEdit || submitted || !file.required || !file.completedAt) return;
+    const next = markWorkFileComplete(file, false);
+    await persistFiles(upsertWorkFile(files, next));
+  }
+
   async function deleteFile(file: IssueWorkFile) {
     if (!canEdit) return;
     setMenuId(null);
@@ -1172,6 +1178,18 @@ export function IssueTaskFilesPanel({
                           ? tx("ピン留めを解除", "Unpin")
                           : tx("ピン留め", "Pin")}
                       </button>
+                      {!isMemo && file.required && file.completedAt && !submitted ? (
+                        <button
+                          type="button"
+                          className="block w-full px-4 py-2.5 text-left text-[14px] font-normal text-zinc-600 hover:bg-[#f8f9fa]"
+                          onClick={() => {
+                            setMenuId(null);
+                            void undoFileComplete(file);
+                          }}
+                        >
+                          {tx("完了を戻す", "Undo complete")}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="block w-full px-4 py-2.5 text-left text-[14px] text-[#d93025] hover:bg-[#fce8e6]"
