@@ -1249,6 +1249,41 @@ html.moni-goal-stuck .project-workspace-header {
   animation: roadmap-phase-detail-expand-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* 今やっているステップ番号：丸からモヤが広がって消え、繰り返す */
+@keyframes roadmap-current-badge-haze {
+  0% {
+    transform: translate(-50%, -50%) scale(0.52);
+    opacity: 0.9;
+  }
+  72% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0.18;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.22);
+    opacity: 0;
+  }
+}
+
+.roadmap-current-badge-haze {
+  animation: roadmap-current-badge-haze 2.4s cubic-bezier(0.22, 0.72, 0.28, 1) infinite;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+.roadmap-current-badge-haze--delay {
+  animation-delay: 1.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roadmap-current-badge-haze,
+  .roadmap-current-badge-haze--delay {
+    animation: none;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.55;
+  }
+}
+
 /* マス出現は軽くフェードのみ（transform は線座標と干渉しやすいので使わない） */
 @keyframes roadmap-path-node-in {
   from {
