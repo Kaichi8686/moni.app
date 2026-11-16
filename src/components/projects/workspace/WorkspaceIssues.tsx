@@ -83,15 +83,12 @@ function IssuesSlidePanel({
   exiting,
   animateEnter = true,
   zClass = "z-[200]",
-  /** 課題詳細など、下端の隙間に水色グラデが出ないよう白背景にする */
-  solidBg = false,
 }: {
   children: ReactNode;
   exiting?: boolean;
   /** false のとき下層パネルとして静止表示（課題の下のジャンルなど） */
   animateEnter?: boolean;
   zClass?: string;
-  solidBg?: boolean;
 }) {
   // マウント時の値だけ使う（課題の下層になったあと再スライドしない）
   const [shouldAnimateEnter] = useState(animateEnter);
@@ -112,9 +109,7 @@ function IssuesSlidePanel({
 
   return (
     <div
-      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${
-        solidBg ? "bg-white" : "bg-gradient-to-br from-white to-[#E3F2FD]"
-      } ${motionClass}`}
+      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-br from-white to-[#E3F2FD] px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
     >
       <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
     </div>
@@ -829,7 +824,6 @@ export default function WorkspaceIssues() {
           exiting={memoExiting}
           animateEnter
           zClass="z-[210]"
-          solidBg
         >
           <IssueTaskFilesPanel
             variant="memo"
@@ -867,7 +861,6 @@ export default function WorkspaceIssues() {
           exiting={taskExiting}
           animateEnter
           zClass="z-[210]"
-          solidBg
         >
           <IssueTaskFilesPanel
             issue={activeIssue}
