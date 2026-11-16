@@ -85,7 +85,7 @@ export default function WorkspaceSchedule() {
       startsAt: form.startsAt,
       endsAt: form.endsAt,
       attendees: form.attendees,
-      kind: form.kind,
+      kind: "event",
     });
     setAddOpen(false);
   }
@@ -164,38 +164,10 @@ export default function WorkspaceSchedule() {
               </button>
             </div>
             <form className="space-y-3" onSubmit={(e) => void handleSubmit(e)}>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm((p) => ({ ...p, kind: "event" }))}
-                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition ${
-                    form.kind === "event"
-                      ? "border-[#FF9600] bg-orange-50 text-[#C2410C]"
-                      : "border-zinc-200 bg-white text-zinc-600"
-                  }`}
-                >
-                  {tx("通常の予定", "Event")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm((p) => ({ ...p, kind: "busy" }))}
-                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition ${
-                    form.kind === "busy"
-                      ? "border-zinc-500 bg-zinc-100 text-zinc-800"
-                      : "border-zinc-200 bg-white text-zinc-600"
-                  }`}
-                >
-                  {tx("忙しい日", "Busy day")}
-                </button>
-              </div>
               <input
                 required
                 className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-[15px] outline-none focus:border-[#FF9600] focus:bg-white focus:ring-2 focus:ring-[#FF9600]/20"
-                placeholder={
-                  form.kind === "busy"
-                    ? tx("タイトル（例：試験・出張）", "Title (e.g. exam)")
-                    : tx("タイトル（例：キックオフ）", "Title (e.g. kickoff)")
-                }
+                placeholder={tx("タイトル（例：キックオフ）", "Title (e.g. kickoff)")}
                 value={form.title}
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
               />
@@ -220,14 +192,12 @@ export default function WorkspaceSchedule() {
                   />
                 </label>
               </div>
-              {form.kind === "event" ? (
-                <input
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
-                  placeholder={tx("参加者（カンマ区切り・任意）", "Attendees (optional)")}
-                  value={form.attendees}
-                  onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
-                />
-              ) : null}
+              <input
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                placeholder={tx("参加者（カンマ区切り・任意）", "Attendees (optional)")}
+                value={form.attendees}
+                onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
+              />
               <textarea
                 className="min-h-[72px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
                 placeholder={tx("メモ・場所など（任意）", "Notes / place (optional)")}
@@ -238,13 +208,9 @@ export default function WorkspaceSchedule() {
               <button
                 type="submit"
                 disabled={scheduleSaving || !form.title.trim() || !form.startsAt}
-                className="w-full rounded-2xl bg-[#FF9600] py-3.5 text-[15px] font-extrabold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
+                className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
               >
-                {scheduleSaving
-                  ? tx("追加中…", "Adding…")
-                  : form.kind === "busy"
-                    ? tx("忙しい日を追加", "Add busy day")
-                    : tx("予定を追加", "Add event")}
+                {scheduleSaving ? tx("追加中…", "Adding…") : tx("予定を追加", "Add event")}
               </button>
             </form>
           </div>

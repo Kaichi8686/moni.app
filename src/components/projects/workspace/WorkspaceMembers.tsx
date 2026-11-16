@@ -299,7 +299,10 @@ export default function WorkspaceMembers() {
     <>
       <WorkspaceSlideShell
         title={tx("メンバー", "Members")}
-        onClose={() => closeWorkspacePanel(router, projectId)}
+        onClose={() => {
+          setPreview(null);
+          closeWorkspacePanel(router, projectId);
+        }}
         contentClassName="px-4 pt-3"
       >
         {actionErr ? (
@@ -404,9 +407,9 @@ export default function WorkspaceMembers() {
                           {tx("（あなた）", "(you)")}
                         </span>
                       ) : null}
-                      <span className="ml-2 text-[12px] font-normal text-zinc-400">
-                        {roleLabel(m.role, tx)}
-                      </span>
+                    </span>
+                    <span className="w-[4.5rem] shrink-0 text-right text-[12px] font-normal leading-none text-zinc-400">
+                      {roleLabel(m.role, tx)}
                     </span>
                   </button>
                 </li>
@@ -430,6 +433,8 @@ export default function WorkspaceMembers() {
               projectsLoading={peerProjectsLoading}
               isFollowing={isFollowing}
               isPending={isPending}
+              elevated
+              messageProjectId={projectId}
               onClose={() => setPreview(null)}
               onToggleFollow={() => {
                 void onToggleFollow();

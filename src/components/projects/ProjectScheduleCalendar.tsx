@@ -42,9 +42,11 @@ const EVENT_PILL_CLASS = [
   "bg-teal-400",
 ] as const;
 
-const HOUR_START = 6;
+const HOUR_START = 0;
 const HOUR_END = 23;
 const HOUR_PX = 52;
+/** 日フォーカス時の週ストリップ高さ（日付数字のみ・予定ピル非表示） */
+const DAY_FOCUS_WEEK_PX = 52;
 
 function dateKeyLocal(d: Date): string {
   const y = d.getFullYear();
@@ -170,6 +172,7 @@ export function ProjectScheduleCalendar({
   const [searchInternal, setSearchInternal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const timetableScrollRef = useRef<HTMLDivElement | null>(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -414,6 +417,16 @@ export function ProjectScheduleCalendar({
     return list;
   }, []);
 
+  useEffect(() => {
+    if (!dayFocus || !selectedKey) return;
+    const el = timetableScrollRef.current;
+    if (!el) return;
+    const now = new Date();
+    const targetHour =
+      selectedKey === dateKeyLocal(now) ? Math.max(0, Math.min(HOUR_END, now.getHours() - 1)) : 8;
+    el.scrollTop = targetHour * HOUR_PX;
+  }, [dayFocus, selectedKey]);
+
   const immersive = Boolean(onBack);
 
   return (
@@ -570,7 +583,7 @@ export function ProjectScheduleCalendar({
         className={`relative overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           dayFocus ? "shrink-0" : fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
         }`}
-        style={dayFocus ? { height: 100 } : undefined}
+        style={dayFocus ? { height: DAY_FOCUS_WEEK_PX } : undefined}
       >
         <div
           className={`w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
@@ -578,7 +591,7 @@ export function ProjectScheduleCalendar({
           }`}
           style={
             dayFocus && selectedWeekIndex >= 0
-              ? { transform: `translateY(-${selectedWeekIndex * 100}px)` }
+              ? { transform: `translateY(-${selectedWeekIndex * DAY_FOCUS_WEEK_PX}px)` }
               : { transform: "translateY(0)" }
           }
         >
@@ -590,14 +603,20 @@ export function ProjectScheduleCalendar({
                 key={weekIdx}
                 className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   collapsedAway
-                    ? `max-h-[100px] overflow-hidden opacity-0 ${above ? "-translate-y-3" : "translate-y-3"}`
+                    ? `overflow-hidden opacity-0 ${above ? "-translate-y-3" : "translate-y-3"}`
                     : dayFocus
-                      ? "max-h-[100px] translate-y-0 opacity-100"
+                      ? "translate-y-0 opacity-100"
                       : fullBleed
                         ? "min-h-0 flex-1 translate-y-0 opacity-100"
                         : "max-h-[130px] translate-y-0 opacity-100"
                 }`}
-                style={collapsedAway ? { pointerEvents: "none" as const } : undefined}
+                style={
+                  collapsedAway
+                    ? { maxHeight: DAY_FOCUS_WEEK_PX, pointerEvents: "none" as const }
+                    : dayFocus
+                      ? { maxHeight: DAY_FOCUS_WEEK_PX }
+                      : undefined
+                }
               >
                 {week.map((cell) => {
                   const key = dateKeyLocal(cell);
@@ -610,12 +629,16 @@ export function ProjectScheduleCalendar({
                       key={key}
                       type="button"
                       onClick={() => onPickDay(key)}
-                      className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
-                        dayFocus || !fullBleed ? "min-h-[88px]" : "min-h-[96px]"
+                      className={`flex h-full flex-col items-center text-center transition active:bg-zinc-50 ${
+                        dayFocus
+                          ? "justify-center gap-0 px-0.5 py-1"
+                          : fullBleed
+                            ? "min-h-[96px] gap-0.5 px-0.5 py-1.5"
+                            : "min-h-[88px] gap-0.5 px-0.5 py-1.5"
                       }`}
                     >
                       <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums transition-colors duration-300 ${
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums leading-none transition-colors duration-300 ${
                           isSelected || isToday
                             ? "bg-[#FF9600] text-white"
                             : inMonth
@@ -625,27 +648,29 @@ export function ProjectScheduleCalendar({
                       >
                         {cell.getDate()}
                       </span>
-                      <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
-                        {list.slice(0, fullBleed && !dayFocus ? 4 : 3).map((item) =>
-                          item.kind === "schedule" ? (
-                            <span
-                              key={`s-${item.schedule.id}`}
-                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
-                                isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
-                              }`}
-                            >
-                              {item.schedule.title}
-                            </span>
-                          ) : (
-                            <span
-                              key={`i-${item.issue.id}`}
-                              className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
-                            >
-                              {item.issue.title}
-                            </span>
-                          ),
-                        )}
-                      </div>
+                      {!dayFocus ? (
+                        <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
+                          {list.slice(0, fullBleed ? 4 : 3).map((item) =>
+                            item.kind === "schedule" ? (
+                              <span
+                                key={`s-${item.schedule.id}`}
+                                className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${
+                                  isBusySchedule(item.schedule) ? BUSY_BAR_CLASS : hashColor(item.schedule.id)
+                                }`}
+                              >
+                                {item.schedule.title}
+                              </span>
+                            ) : (
+                              <span
+                                key={`i-${item.issue.id}`}
+                                className={`truncate rounded-full px-1 py-[1px] text-left text-[8px] font-semibold leading-tight text-white ${ISSUE_BAR_CLASS}`}
+                              >
+                                {item.issue.title}
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -666,31 +691,13 @@ export function ProjectScheduleCalendar({
                 weekday: "short",
               })}
             </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={goToday}
-                className="rounded-lg px-2.5 py-1 text-[12px] font-semibold text-zinc-700 ring-1 ring-zinc-200"
-              >
-                今日
-              </button>
-              {canEdit && onRequestAdd ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const base = parseDateKey(selectedKey);
-                    const pad = (n: number) => String(n).padStart(2, "0");
-                    onRequestAdd({
-                      startsAt: `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T10:00`,
-                      endsAt: `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T11:00`,
-                    });
-                  }}
-                  className="rounded-lg px-2.5 py-1 text-[12px] font-semibold text-[#FF9600] ring-1 ring-orange-200"
-                >
-                  追加
-                </button>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              onClick={goToday}
+              className="rounded-full px-3 py-1 text-[12px] font-semibold text-zinc-700 ring-1 ring-zinc-200"
+            >
+              今日
+            </button>
           </div>
 
           {allDayItems.length > 0 ? (
@@ -739,7 +746,7 @@ export function ProjectScheduleCalendar({
             </div>
           ) : null}
 
-          <div className="relative min-h-0 flex-1 overflow-y-auto">
+          <div ref={timetableScrollRef} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <div className="relative" style={{ height: hours.length * HOUR_PX }}>
               {hours.map((h, idx) => (
                 <div
@@ -752,7 +759,11 @@ export function ProjectScheduleCalendar({
                   </span>
                 </div>
               ))}
-              <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-100" />
+              <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-100">
+                <span className="absolute -top-2 left-2 w-10 text-right text-[10px] font-medium text-zinc-400">
+                  24:00
+                </span>
+              </div>
 
               {timedEvents
                 .filter((e) => !e.allDay)

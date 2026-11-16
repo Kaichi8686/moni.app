@@ -48,6 +48,10 @@ type Props = {
   isPending: boolean;
   onClose: () => void;
   onToggleFollow: () => void;
+  /** メンバー画面など z-[200] シェルの上に出す */
+  elevated?: boolean;
+  /** メッセージ戻り先をプロジェクト側にする（メンバー経由のみ） */
+  messageProjectId?: string | null;
 };
 
 function formatFollowerCount(n: number, locale: "ja" | "en"): string {
@@ -96,6 +100,8 @@ export function ExploreFriendProfilePreview({
   isPending,
   onClose,
   onToggleFollow,
+  elevated = false,
+  messageProjectId = null,
 }: Props) {
   const { tx, locale } = useI18n();
   const router = useRouter();
@@ -158,7 +164,9 @@ export function ExploreFriendProfilePreview({
     setMessageError("");
     setMessageLoading(true);
     try {
-      const result = await navigateToDirectMessage(supabase, router, member.id);
+      const result = await navigateToDirectMessage(supabase, router, member.id, {
+        projectId: messageProjectId,
+      });
       if (result.ok) {
         onClose();
         return;
@@ -188,7 +196,9 @@ export function ExploreFriendProfilePreview({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-zinc-950 text-white"
+      className={`fixed inset-0 flex flex-col overflow-hidden bg-zinc-950 text-white ${
+        elevated ? "z-[300]" : "z-[100]"
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="peer-profile-title"
