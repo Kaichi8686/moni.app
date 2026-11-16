@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
-import { Avatar } from "@/components/ui/Avatar";
+import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { StackSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { toggleFollowRelation } from "@/lib/profile/followActions";
@@ -15,6 +15,7 @@ import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 import { supabase } from "@/lib/supabase";
 import type { Member } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
 
 function roleLabel(role: Member["role"], tx: (ja: string, en: string) => string): string {
   if (role === "owner") return tx("オーナー", "Owner");
@@ -298,7 +299,7 @@ export default function WorkspaceMembers() {
     <>
       <WorkspaceSlideShell
         title={tx("メンバー", "Members")}
-        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        onClose={() => closeWorkspacePanel(router, projectId)}
         contentClassName="px-4 pt-3"
       >
         {actionErr ? (
@@ -337,13 +338,20 @@ export default function WorkspaceMembers() {
                   <li key={r.id} className="border-b border-zinc-100 py-3 last:border-b-0">
                     <button
                       type="button"
-                      className="flex w-full items-center gap-3 text-left"
+                      className="flex w-full items-center gap-3.5 text-left"
                       onClick={() => void openProfile(r.requester_id, name, profile?.avatarUrl)}
                     >
-                      <Avatar name={name} url={profile?.avatarUrl ?? null} />
+                      <MemberAvatarBubble
+                        userId={r.requester_id}
+                        name={name}
+                        avatarUrl={profile?.avatarUrl}
+                        size="md"
+                      />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-semibold text-zinc-900">{name}</span>
-                        <span className="mt-0.5 block text-[12px] text-zinc-500">
+                        <span className="block truncate text-base font-semibold tracking-tight text-zinc-900">
+                          {name}
+                        </span>
+                        <span className="mt-0.5 block text-[13px] text-zinc-500">
                           {r.message || tx("参加したいです", "I’d like to join")}
                         </span>
                       </span>
@@ -381,25 +389,26 @@ export default function WorkspaceMembers() {
           <ul>
             {project.members.map((m) => {
               const isSelf = Boolean(uid && m.id === uid);
-              const avatarUrl = resolveMemberAvatarUrl(m.id, m.avatarUrl);
               return (
                 <li key={m.id}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
+                    className="flex w-full items-center gap-3.5 py-3.5 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
                     onClick={() => void openProfile(m.id, m.name, m.avatarUrl)}
                   >
-                    <Avatar name={m.name} url={avatarUrl} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold text-zinc-900">
+                    <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="md" />
+                    <span className="flex min-w-0 flex-1 items-baseline gap-3">
+                      <span className="truncate text-base font-semibold tracking-tight text-zinc-900">
                         {m.name}
                         {isSelf ? (
-                          <span className="ml-1 text-[11px] font-normal text-zinc-400">
+                          <span className="ml-1 text-[12px] font-normal text-zinc-400">
                             {tx("（あなた）", "(you)")}
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block text-[12px] text-zinc-500">{roleLabel(m.role, tx)}</span>
+                      <span className="shrink-0 text-[13px] font-medium text-zinc-400">
+                        {roleLabel(m.role, tx)}
+                      </span>
                     </span>
                   </button>
                 </li>

@@ -12,6 +12,7 @@ import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import type { Issue } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
+import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
 
 export default function WorkspaceSchedule() {
   const { tx } = useI18n();
@@ -99,7 +100,7 @@ export default function WorkspaceSchedule() {
     return (
       <WorkspaceSlideShell
         title={tx("カレンダー", "Calendar")}
-        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        onClose={() => closeWorkspacePanel(router, projectId)}
         contentClassName="px-4 pt-8"
       >
         <p className="text-center text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>
@@ -111,7 +112,7 @@ export default function WorkspaceSchedule() {
     <>
       <WorkspaceSlideShell
         title={tx("カレンダー", "Calendar")}
-        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        onClose={() => closeWorkspacePanel(router, projectId)}
         hideHeader
         onBindClose={bindClose}
         contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-0 !pb-0"

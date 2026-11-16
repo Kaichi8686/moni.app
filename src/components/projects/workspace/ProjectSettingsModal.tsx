@@ -41,7 +41,6 @@ type Props = {
   meta: ProjectSettingsMeta | null;
   onClose: () => void;
   onSaved: () => void;
-  onDelete: () => Promise<void>;
   onNotice: (message: string) => void;
 };
 
@@ -57,7 +56,6 @@ export function ProjectSettingsModal({
   meta,
   onClose,
   onSaved,
-  onDelete,
   onNotice,
 }: Props) {
   const { tx } = useI18n();
@@ -81,8 +79,6 @@ export function ProjectSettingsModal({
   const [editRecruitmentTarget, setEditRecruitmentTarget] = useState("");
   const [editRecruitmentMessage, setEditRecruitmentMessage] = useState("");
   const [editVisibility, setEditVisibility] = useState<ProjectVisibility>("public");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   function clearPreviewObjectUrl() {
     if (previewObjectUrl.current) {
@@ -104,11 +100,9 @@ export function ProjectSettingsModal({
       clearBgPreviewObjectUrl();
       setThumbPreview(null);
       setBgPreview(null);
-      setConfirmDelete(false);
       return;
     }
     setErr("");
-    setConfirmDelete(false);
     setEditName(name);
     setEditBrief(resolveProjectBrief({ coachingContext, description }));
     const thumb = meta?.thumbnail_url?.trim() ?? "";
@@ -332,21 +326,7 @@ export function ProjectSettingsModal({
     }
   }
 
-  const busy = saving || thumbUploading || bgUploading || deleting;
-
-  async function handleDelete() {
-    if (!isOwner) return;
-    setDeleting(true);
-    setErr("");
-    try {
-      await onDelete();
-      onClose();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : tx("削除に失敗しました", "Failed to delete"));
-    } finally {
-      setDeleting(false);
-    }
-  }
+  const busy = saving || thumbUploading || bgUploading;
 
   if (!open) return null;
 
@@ -410,18 +390,20 @@ export function ProjectSettingsModal({
               type="button"
               disabled={!canEdit || thumbUploading}
               onClick={() => canEdit && fileInputRef.current?.click()}
-              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 border-white bg-zinc-100 shadow-sm sm:h-20 sm:w-20 disabled:cursor-default"
+              className="relative h-16 w-16 shrink-0 rounded-lg border-2 border-white bg-zinc-100 shadow-sm sm:h-20 sm:w-20 disabled:cursor-default"
               aria-label={tx("アイコンを変更", "Change icon")}
             >
-              {thumbPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
-                <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">📁</div>
-              )}
+              <span className="absolute inset-0 overflow-hidden rounded-[6px]">
+                {thumbPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                  <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">📁</div>
+                )}
+              </span>
               {canEdit ? (
-                <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/50 py-0.5">
-                  <Camera className="h-3 w-3 text-white" />
+                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm ring-2 ring-white">
+                  <Camera className="h-3.5 w-3.5" strokeWidth={2.25} />
                 </span>
               ) : null}
             </button>
@@ -581,38 +563,6 @@ export function ProjectSettingsModal({
             </label>
           </div>
         )}
-
-        {isOwner ? (
-          <section className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3">
-            <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
-              {tx(
-                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上メニューから「プロジェクト削除…」で提案を開始できます。脱退はメニューの「プロジェクトを脱退」から行えます。",
-                "Deleting a project needs 2/3 member approval, then the owner confirms. Start with “Delete project…” in the menu. To leave, use “Leave project” in the menu.",
-              )}
-            </p>
-            {confirmDelete ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-xl bg-rose-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => void handleDelete()}
-                >
-                  {deleting ? tx("削除中…", "Deleting…") : tx("削除する", "Delete")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-700"
-                  disabled={busy}
-                  onClick={() => setConfirmDelete(false)}
-                >
-                  {tx("キャンセル", "Cancel")}
-                </button>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
 
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
       </div>
