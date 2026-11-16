@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { ExploreFriendProfilePreview } from "@/components/explore/ExploreFriendProfilePreview";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
 import { Avatar } from "@/components/ui/Avatar";
 import { StackSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
+import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
+import { toggleFollowRelation } from "@/lib/profile/followActions";
+import { hasPendingFollowRequest, isFollowingUser } from "@/lib/profile/profileData";
 import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 import { supabase } from "@/lib/supabase";
 import type { Member } from "@/lib/workspace/types";
@@ -26,6 +31,24 @@ type JoinRequestRow = {
 
 type RequesterProfile = { name: string; avatarUrl: string | null };
 
+type PreviewMember = {
+  id: string;
+  name: string;
+  goal: string;
+  strength: string;
+  avatarUrl?: string;
+  skills: string[];
+  interestFields: string[];
+  traits: string[];
+};
+
+type PeerProject = {
+  id: string;
+  name: string;
+  description: string;
+  visibility: string;
+};
+
 export default function WorkspaceMembers() {
   const { tx } = useI18n();
   const router = useRouter();
@@ -38,6 +61,16 @@ export default function WorkspaceMembers() {
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
   const [moderatorRolesLoaded, setModeratorRolesLoaded] = useState(false);
   const [isModerator, setIsModerator] = useState(false);
+  const [preview, setPreview] = useState<PreviewMember | null>(null);
+  const [peerProjects, setPeerProjects] = useState<PeerProject[]>([]);
+  const [peerProjectsLoading, setPeerProjectsLoading] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +133,7 @@ export default function WorkspaceMembers() {
         for (const p of profs ?? []) {
           map[p.id as string] = {
             name: ((p.display_name as string | null)?.trim() || "ユーザー") as string,
-            avatarUrl: (p.avatar_url as string | null) ?? null,
+            avatarUrl: resolveMemberAvatarUrl(p.id as string, p.avatar_url as string | null),
           };
         }
         setRequesterProfiles(map);
@@ -161,8 +194,99 @@ export default function WorkspaceMembers() {
     }
   }
 
-  function openProfile(userId: string) {
-    router.push(`/profile/${userId}`);
+  async function openProfile(userId: string, displayName: string, avatarUrl?: string | null) {
+    const resolved = resolveMemberAvatarUrl(userId, avatarUrl) ?? undefined;
+    setPreview({
+      id: userId,
+      name: displayName,
+      goal: "",
+      strength: "",
+      avatarUrl: resolved,
+      skills: [],
+      interestFields: [],
+      traits: [],
+    });
+    setPeerProjects([]);
+    setPeerProjectsLoading(true);
+    setIsFollowing(false);
+    setIsPending(false);
+
+    if (!supabase || !uid) {
+      setPeerProjectsLoading(false);
+      return;
+    }
+
+    try {
+      const [following, pending, memberships, profile] = await Promise.all([
+        isFollowingUser(supabase, uid, userId),
+        hasPendingFollowRequest(supabase, uid, userId),
+        supabase
+          .from("project_members")
+          .select("project_id, projects(id, name, description, visibility)")
+          .eq("user_id", userId)
+          .limit(12),
+        supabase
+          .from("profiles")
+          .select("display_name, username, bio, avatar_url")
+          .eq("id", userId)
+          .maybeSingle(),
+      ]);
+      setIsFollowing(following);
+      setIsPending(pending);
+
+      const projects: PeerProject[] = [];
+      for (const row of memberships.data ?? []) {
+        const p = row.projects as
+          | { id?: string; name?: string; description?: string | null; visibility?: string }
+          | { id?: string; name?: string; description?: string | null; visibility?: string }[]
+          | null;
+        const proj = Array.isArray(p) ? p[0] : p;
+        if (!proj?.id) continue;
+        projects.push({
+          id: proj.id,
+          name: proj.name ?? "",
+          description: proj.description ?? "",
+          visibility: proj.visibility ?? "public",
+        });
+      }
+      setPeerProjects(projects);
+
+      if (profile.data) {
+        const p = profile.data;
+        setPreview((prev) =>
+          prev
+            ? {
+                ...prev,
+                name:
+                  ((p.display_name as string) || (p.username as string) || prev.name).trim() ||
+                  prev.name,
+                goal: ((p.bio as string) || "").trim(),
+                avatarUrl:
+                  resolveMemberAvatarUrl(userId, (p.avatar_url as string) || avatarUrl) ??
+                  prev.avatarUrl,
+              }
+            : prev,
+        );
+      }
+    } finally {
+      setPeerProjectsLoading(false);
+    }
+  }
+
+  async function onToggleFollow() {
+    if (!supabase || !uid || !preview?.id || preview.id === uid) return;
+    const res = await toggleFollowRelation(supabase, uid, preview.id);
+    if (!res.ok) return;
+    if (res.state === "following") {
+      setIsFollowing(true);
+      setIsPending(false);
+    } else if (res.state === "pending") {
+      setIsFollowing(false);
+      setIsPending(true);
+    } else {
+      setIsFollowing(false);
+      setIsPending(false);
+    }
   }
 
   if (loading) return <WorkspacePageSkeleton />;
@@ -171,124 +295,142 @@ export default function WorkspaceMembers() {
   const showJoinRequests = canReview && (requestsLoading || joinRequests.length > 0);
 
   return (
-    <WorkspaceSlideShell
-      title={tx("メンバー", "Members")}
-      onClose={() => router.push(`/projects/${projectId}/overview`)}
-      contentClassName="px-4 pt-3"
-    >
-      {actionErr ? (
-        <p className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">
-          {actionErr}
-        </p>
-      ) : null}
-      {actionOk ? (
-        <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">
-          {actionOk}
-        </p>
-      ) : null}
+    <>
+      <WorkspaceSlideShell
+        title={tx("メンバー", "Members")}
+        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        contentClassName="px-4 pt-3"
+      >
+        {actionErr ? (
+          <p className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">
+            {actionErr}
+          </p>
+        ) : null}
+        {actionOk ? (
+          <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">
+            {actionOk}
+          </p>
+        ) : null}
 
-      {showJoinRequests ? (
-        <section className="mb-5">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-[13px] font-bold tracking-wide text-zinc-500">
-              {tx("参加申請", "Join requests")}
-              {joinRequests.length > 0 ? (
-                <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-[11px] font-extrabold text-white">
-                  {joinRequests.length}
-                </span>
+        {showJoinRequests ? (
+          <section className="mb-5">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-[13px] font-bold tracking-wide text-zinc-500">
+                {tx("参加申請", "Join requests")}
+                {joinRequests.length > 0 ? (
+                  <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF4B4B] px-1.5 text-[11px] font-extrabold text-white">
+                    {joinRequests.length}
+                  </span>
+                ) : null}
+              </h2>
+            </div>
+            <ul>
+              {requestsLoading ? (
+                <li className="list-none py-2">
+                  <StackSkeleton count={2} />
+                </li>
               ) : null}
-            </h2>
-          </div>
-          <ul className="space-y-2">
-            {requestsLoading ? (
-              <li className="list-none">
-                <StackSkeleton count={2} />
-              </li>
-            ) : null}
-            {joinRequests.map((r) => {
-              const profile = requesterProfiles[r.requester_id];
-              const name = profile?.name ?? r.requester_id.slice(0, 8);
+              {joinRequests.map((r) => {
+                const profile = requesterProfiles[r.requester_id];
+                const name = profile?.name ?? r.requester_id.slice(0, 8);
+                return (
+                  <li key={r.id} className="border-b border-zinc-100 py-3 last:border-b-0">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 text-left"
+                      onClick={() => void openProfile(r.requester_id, name, profile?.avatarUrl)}
+                    >
+                      <Avatar name={name} url={profile?.avatarUrl ?? null} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[14px] font-semibold text-zinc-900">{name}</span>
+                        <span className="mt-0.5 block text-[12px] text-zinc-500">
+                          {r.message || tx("参加したいです", "I’d like to join")}
+                        </span>
+                      </span>
+                    </button>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewBusyId === r.id}
+                        onClick={() => void reviewJoinRequest(r.id, "accept")}
+                        className="flex-1 rounded-full bg-[#FF9600] py-2 text-[12px] font-semibold text-white disabled:opacity-60"
+                      >
+                        {tx("承認", "Accept")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewBusyId === r.id}
+                        onClick={() => void reviewJoinRequest(r.id, "reject")}
+                        className="flex-1 rounded-full border border-zinc-200 bg-white py-2 text-[12px] font-semibold text-zinc-700 disabled:opacity-60"
+                      >
+                        {tx("拒否", "Reject")}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        <section>
+          <h2 className="mb-1 text-[13px] font-bold tracking-wide text-zinc-500">
+            {tx("メンバー", "Members")}
+            <span className="ml-2 font-semibold text-zinc-400">{project.members.length}</span>
+          </h2>
+          <ul>
+            {project.members.map((m) => {
+              const isSelf = Boolean(uid && m.id === uid);
+              const avatarUrl = resolveMemberAvatarUrl(m.id, m.avatarUrl);
               return (
-                <li
-                  key={r.id}
-                  className="rounded-2xl border border-zinc-200 bg-white px-3 py-3 shadow-sm"
-                >
+                <li key={m.id}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-3 text-left"
-                    onClick={() => openProfile(r.requester_id)}
+                    className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
+                    onClick={() => void openProfile(m.id, m.name, m.avatarUrl)}
                   >
-                    <Avatar name={name} url={profile?.avatarUrl ?? null} />
+                    <Avatar name={m.name} url={avatarUrl} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold text-zinc-900">{name}</span>
-                      <span className="mt-0.5 block text-[12px] text-zinc-500">
-                        {r.message || tx("参加したいです", "I’d like to join")}
+                      <span className="block truncate text-[15px] font-semibold text-zinc-900">
+                        {m.name}
+                        {isSelf ? (
+                          <span className="ml-1 text-[11px] font-normal text-zinc-400">
+                            {tx("（あなた）", "(you)")}
+                          </span>
+                        ) : null}
                       </span>
+                      <span className="mt-0.5 block text-[12px] text-zinc-500">{roleLabel(m.role, tx)}</span>
                     </span>
                   </button>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={reviewBusyId === r.id}
-                      onClick={() => void reviewJoinRequest(r.id, "accept")}
-                      className="flex-1 rounded-xl bg-[#FF9600] py-2 text-[12px] font-bold text-white shadow-[0_2px_0_#E08600] disabled:opacity-60"
-                    >
-                      {tx("承認", "Accept")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewBusyId === r.id}
-                      onClick={() => void reviewJoinRequest(r.id, "reject")}
-                      className="flex-1 rounded-xl border border-zinc-200 bg-white py-2 text-[12px] font-bold text-zinc-700 disabled:opacity-60"
-                    >
-                      {tx("拒否", "Reject")}
-                    </button>
-                  </div>
                 </li>
               );
             })}
+            {project.members.length === 0 ? (
+              <li className="py-6 text-center text-sm text-zinc-500">
+                {tx("メンバー情報を取得できませんでした。", "Couldn’t load members.")}
+              </li>
+            ) : null}
           </ul>
         </section>
-      ) : null}
+      </WorkspaceSlideShell>
 
-      <section>
-        <h2 className="mb-2 text-[13px] font-bold tracking-wide text-zinc-500">
-          {tx("メンバー", "Members")}
-          <span className="ml-2 font-semibold text-zinc-400">{project.members.length}</span>
-        </h2>
-        <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-          {project.members.map((m) => {
-            const isSelf = Boolean(uid && m.id === uid);
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
-                  onClick={() => openProfile(m.id)}
-                >
-                  <Avatar name={m.name} url={m.avatarUrl} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-semibold text-zinc-900">
-                      {m.name}
-                      {isSelf ? (
-                        <span className="ml-1 text-[11px] font-normal text-zinc-400">
-                          {tx("（あなた）", "(you)")}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-0.5 block text-[12px] text-zinc-500">{roleLabel(m.role, tx)}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-          {project.members.length === 0 ? (
-            <li className="px-4 py-6 text-center text-sm text-zinc-500">
-              {tx("メンバー情報を取得できませんでした。", "Couldn’t load members.")}
-            </li>
-          ) : null}
-        </ul>
-      </section>
-    </WorkspaceSlideShell>
+      {portalReady && preview
+        ? createPortal(
+            <ExploreFriendProfilePreview
+              key={preview.id}
+              member={preview}
+              projects={peerProjects}
+              projectsLoading={peerProjectsLoading}
+              isFollowing={isFollowing}
+              isPending={isPending}
+              onClose={() => setPreview(null)}
+              onToggleFollow={() => {
+                void onToggleFollow();
+              }}
+            />,
+            document.body,
+          )
+        : null}
+    </>
   );
 }

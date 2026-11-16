@@ -5,13 +5,46 @@ import { useRouter } from "next/navigation";
 import { Check, Search } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
-import { Avatar } from "@/components/ui/Avatar";
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
+import { resolveMemberAvatarUrl } from "@/lib/memberAvatar";
 import { loadFollowingListRecent } from "@/lib/profile/followActions";
 import type { FollowListUser } from "@/lib/profile/types";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+
+function FriendAvatar({
+  name,
+  url,
+  size = 40,
+}: {
+  name: string;
+  url?: string | null;
+  size?: number;
+}) {
+  const src = url?.trim() || null;
+  const initial = name.trim().slice(0, 1) || "?";
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        className="shrink-0 rounded-full object-cover ring-1 ring-zinc-200"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[13px] font-semibold text-zinc-500 ring-1 ring-zinc-200"
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      {initial}
+    </div>
+  );
+}
 
 export default function WorkspaceInvite() {
   const { tx } = useI18n();
@@ -39,7 +72,14 @@ export default function WorkspaceInvite() {
     setFriendsLoading(true);
     try {
       const list = await loadFollowingListRecent(supabase, uid, 200);
-      setFriends(list.filter((u) => !memberIds.has(u.id)));
+      setFriends(
+        list
+          .filter((u) => !memberIds.has(u.id))
+          .map((u) => ({
+            ...u,
+            avatarUrl: resolveMemberAvatarUrl(u.id, u.avatarUrl),
+          })),
+      );
     } finally {
       setFriendsLoading(false);
     }
@@ -127,9 +167,9 @@ export default function WorkspaceInvite() {
       title={tx("メンバーを招待", "Invite members")}
       onClose={() => router.push(`/projects/${projectId}/overview`)}
       stickyBelowHeader={
-        <div className="border-b border-zinc-100 bg-white px-4 pb-3">
+        <div className="border-b border-zinc-100 bg-white px-4 pb-3 pt-3">
           {selectedUsers.length > 0 ? (
-            <div className="-mx-1 mb-3 flex gap-3 overflow-x-auto px-1 pb-1">
+            <div className="-mx-1 mb-3 flex gap-3 overflow-x-auto px-1 pb-1 pt-1.5">
               {selectedUsers.map((u) => (
                 <button
                   key={u.id}
@@ -139,7 +179,7 @@ export default function WorkspaceInvite() {
                   aria-label={tx(`${u.displayName}の選択を解除`, `Deselect ${u.displayName}`)}
                 >
                   <span className="relative">
-                    <Avatar name={u.displayName} url={u.avatarUrl} size="md" />
+                    <FriendAvatar name={u.displayName} url={u.avatarUrl} size={48} />
                     <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#FF9600] text-white ring-2 ring-white">
                       <Check className="h-3 w-3" strokeWidth={3} />
                     </span>
@@ -186,7 +226,7 @@ export default function WorkspaceInvite() {
             : tx("招待できる友達がいません。", "No friends available to invite.")}
         </p>
       ) : (
-        <ul className="divide-y divide-zinc-100">
+        <ul>
           {filtered.map((u) => {
             const checked = selectedIds.includes(u.id);
             return (
@@ -196,7 +236,7 @@ export default function WorkspaceInvite() {
                   onClick={() => toggleUser(u.id)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
                 >
-                  <Avatar name={u.displayName} url={u.avatarUrl} />
+                  <FriendAvatar name={u.displayName} url={u.avatarUrl} size={44} />
                   <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-zinc-900">
                     {u.displayName}
                   </span>
@@ -217,12 +257,12 @@ export default function WorkspaceInvite() {
         </ul>
       )}
 
-      <div className="sticky bottom-0 border-t border-zinc-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
+      <div className="sticky bottom-0 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm">
         <button
           type="button"
           disabled={sending || selectedIds.length === 0}
           onClick={() => void sendInvites()}
-          className="w-full rounded-2xl bg-[#FF9600] py-3 text-[15px] font-extrabold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
+          className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-40"
         >
           {sending
             ? tx("招待中…", "Inviting…")

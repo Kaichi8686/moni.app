@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus } from "lucide-react";
+import { Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import type { ProjectRow, ProjectVisibility } from "@/lib/projects/types";
@@ -354,12 +354,135 @@ export function ProjectSettingsModal({
     <WorkspaceSlideShell
       title={tx("プロジェクト設定", "Project settings")}
       onClose={onClose}
-      contentClassName="px-4 pt-4"
+      contentClassName="px-0 pt-0"
     >
-      <p className="mb-4 text-[13px] text-zinc-500">
-        {tx("名前・詳細・募集内容などを編集できます。", "Edit the name, details, recruiting info, and more.")}
-      </p>
+      <input
+        ref={bgInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="hidden"
+        onChange={(e) => void onBackgroundSelected(e.target.files?.[0] ?? null)}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="hidden"
+        onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
+      />
 
+      {/* Overview-style hero: background + project icon (editable) */}
+      <section className="border-b border-zinc-200 bg-white">
+        <button
+          type="button"
+          disabled={!canEdit || bgUploading}
+          onClick={() => canEdit && bgInputRef.current?.click()}
+          className="relative block h-44 w-full overflow-hidden bg-zinc-100 sm:h-52 disabled:cursor-default"
+          aria-label={tx("背景を変更", "Change background")}
+        >
+          {bgPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+            <img src={bgPreview} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background: "linear-gradient(145deg, #fed7aa 0%, #fdba74 42%, #fb923c 100%)",
+              }}
+              aria-hidden
+            />
+          )}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/25 to-transparent"
+            aria-hidden
+          />
+          {canEdit ? (
+            <span className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white">
+              <Camera className="h-3.5 w-3.5" />
+              {bgUploading ? tx("アップロード中…", "Uploading…") : tx("背景を編集", "Edit background")}
+            </span>
+          ) : null}
+        </button>
+
+        <div className="px-4 pb-4">
+          <div className="relative z-10 -mt-9 flex items-end gap-3">
+            <button
+              type="button"
+              disabled={!canEdit || thumbUploading}
+              onClick={() => canEdit && fileInputRef.current?.click()}
+              className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 border-white bg-zinc-100 shadow-sm sm:h-20 sm:w-20 disabled:cursor-default"
+              aria-label={tx("アイコンを変更", "Change icon")}
+            >
+              {thumbPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
+                <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-orange-100 text-3xl">📁</div>
+              )}
+              {canEdit ? (
+                <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/50 py-0.5">
+                  <Camera className="h-3 w-3 text-white" />
+                </span>
+              ) : null}
+            </button>
+            <div className="min-w-0 flex-1 pb-0.5 pt-10">
+              <p className="truncate text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">
+                {editName.trim() || name}
+              </p>
+              {canEdit ? (
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  {tx("背景・アイコンをタップして変更", "Tap background or icon to edit")}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {canEdit ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {bgPreview ? (
+                <button
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-medium text-zinc-500 hover:text-rose-600"
+                  onClick={removeBackground}
+                  disabled={bgUploading}
+                >
+                  {tx("背景を削除", "Remove background")}
+                </button>
+              ) : null}
+              {thumbPreview ? (
+                <button
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-medium text-zinc-500 hover:text-rose-600"
+                  onClick={removePhoto}
+                  disabled={thumbUploading}
+                >
+                  {tx("アイコンを削除", "Remove icon")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-800"
+                onClick={() => setShowUrlField((v) => !v)}
+              >
+                {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("アイコンをURLで指定", "Icon via URL")}
+              </button>
+            </div>
+          ) : null}
+          {showUrlField && canEdit ? (
+            <input
+              className="mt-2 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
+              placeholder="https://..."
+              value={editThumb}
+              onChange={(e) => {
+                setEditThumb(e.target.value);
+                setThumbPreview(e.target.value.trim() || null);
+                clearPreviewObjectUrl();
+              }}
+            />
+          ) : null}
+        </div>
+      </section>
+
+      <div className="px-4 pt-4">
         {!canEdit ? (
           <p className="text-sm text-amber-800">{tx("このプロジェクトの設定を変更する権限がありません。", "You don’t have permission to change this project’s settings.")}</p>
         ) : (
@@ -367,7 +490,7 @@ export function ProjectSettingsModal({
             <label className="block text-[12px] font-medium text-[#6B7280]">
               {tx("プロジェクト名", "Project name")}
               <input
-                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
               />
@@ -377,7 +500,7 @@ export function ProjectSettingsModal({
               <label className="block text-[12px] font-medium text-[#6B7280]">
                 {tx("公開設定", "Visibility")}
                 <select
-                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
+                  className="mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none ring-[#FF9600] focus:ring-2"
                   value={editVisibility}
                   onChange={(e) => setEditVisibility(e.target.value as ProjectVisibility)}
                 >
@@ -389,118 +512,6 @@ export function ProjectSettingsModal({
                 </span>
               </label>
             ) : null}
-
-            <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("背景写真", "Background photo")}</span>
-              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
-                {tx("プロジェクト概要の上に横長で表示されます（正方形写真とは別）。", "Shown wide at the top of the overview (separate from the square photo).")}
-              </p>
-              <input
-                ref={bgInputRef}
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                onChange={(e) => void onBackgroundSelected(e.target.files?.[0] ?? null)}
-              />
-              <div className="mt-2 overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#F7F8F8]">
-                {bgPreview ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- user upload preview */}
-                    <img src={bgPreview} alt="" className="aspect-[2/1] w-full object-cover" />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white"
-                      onClick={removeBackground}
-                      disabled={bgUploading}
-                    >
-                      {tx("削除", "Remove")}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex aspect-[2/1] flex-col items-center justify-center gap-1 text-[#6B7280]">
-                    <ImagePlus className="h-8 w-8 opacity-50" />
-                    <span className="text-[12px]">{tx("まだ背景がありません", "No background yet")}</span>
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
-                onClick={() => bgInputRef.current?.click()}
-                disabled={bgUploading}
-              >
-                <ImagePlus className="h-3.5 w-3.5" />
-                {bgUploading ? tx("アップロード中…", "Uploading…") : tx("背景を選ぶ", "Choose background")}
-              </button>
-            </div>
-
-            <div>
-              <span className="block text-[12px] font-medium text-[#6B7280]">{tx("プロジェクト写真", "Project photo")}</span>
-              <p className="mt-1 text-[11px] font-normal leading-relaxed text-[#9CA3AF]">
-                {tx("概要の正方形写真と、探すタブのカードに使われます。", "Used for the square photo on the overview and Discover cards.")}
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                onChange={(e) => void onPhotoSelected(e.target.files?.[0] ?? null)}
-              />
-              <div className="mt-2 flex items-start gap-3">
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F7F8F8]">
-                  {thumbPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- user upload preview
-                    <img src={thumbPreview} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-[#6B7280]">
-                      <ImagePlus className="h-6 w-6 opacity-50" />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F8F8] disabled:opacity-50"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={thumbUploading}
-                    >
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      {thumbUploading ? tx("アップロード中…", "Uploading…") : tx("写真を選ぶ", "Choose photo")}
-                    </button>
-                    {thumbPreview ? (
-                      <button
-                        type="button"
-                        className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-rose-600"
-                        onClick={removePhoto}
-                        disabled={thumbUploading}
-                      >
-                        {tx("削除", "Remove")}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="rounded-lg px-2 py-2 text-[12px] text-[#6B7280] hover:text-[#1A1A1A]"
-                      onClick={() => setShowUrlField((v) => !v)}
-                    >
-                      {showUrlField ? tx("URL入力を閉じる", "Hide URL field") : tx("URLで指定", "Use a URL")}
-                    </button>
-                  </div>
-                  {showUrlField ? (
-                    <input
-                      className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none ring-[#5E6AD2] focus:ring-2"
-                      placeholder="https://..."
-                      value={editThumb}
-                      onChange={(e) => {
-                        setEditThumb(e.target.value);
-                        setThumbPreview(e.target.value.trim() || null);
-                        clearPreviewObjectUrl();
-                      }}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </div>
 
             <div className="space-y-2 rounded-lg border border-[#E5E7EB] bg-[#F7F8F8] p-3">
               <p className="text-[12px] font-semibold text-[#374151]">{tx("プロジェクトの詳細", "Project details")}</p>
@@ -604,19 +615,20 @@ export function ProjectSettingsModal({
         ) : null}
 
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
+      </div>
 
-        {canEdit ? (
-          <div className="sticky bottom-0 mt-6 border-t border-zinc-100 bg-white/95 py-3 backdrop-blur-sm">
-            <button
-              type="button"
-              className="w-full rounded-2xl bg-[#FF9600] py-3 text-[15px] font-extrabold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
-            </button>
-          </div>
-        ) : null}
+      {canEdit ? (
+        <div className="sticky bottom-0 mt-4 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          <button
+            type="button"
+            className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
+          </button>
+        </div>
+      ) : null}
     </WorkspaceSlideShell>
   );
 }
