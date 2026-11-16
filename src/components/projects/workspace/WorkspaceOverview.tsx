@@ -139,7 +139,7 @@ export default function WorkspaceOverview() {
           <div className="relative z-10 mx-auto max-w-3xl">
             <div className="-mt-9 flex items-end gap-4">
               <div className="relative shrink-0">
-                <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
+                <div className="h-16 w-16 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 shadow-md sm:h-20 sm:w-20">
                   {photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- user-owned Supabase image
                     <img src={photoUrl} alt="" className="h-full w-full object-cover" />
@@ -174,9 +174,9 @@ export default function WorkspaceOverview() {
                   )
                 : tx("ロードマップ未設定", "Roadmap not set")}
             </p>
-            <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100">
+            <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100 shadow-sm">
               <div
-                className="h-full rounded-full bg-orange-400 transition-[width] duration-500"
+                className="h-full rounded-full bg-orange-400 shadow-sm transition-[width] duration-500"
                 style={{ width: `${progress}%` }}
                 role="progressbar"
                 aria-valuemin={0}
@@ -247,7 +247,7 @@ export default function WorkspaceOverview() {
                     setAchieveError("");
                     setAchievePhaseId(step.id);
                   }}
-                  className="min-h-[44px] w-full rounded-full bg-orange-500 text-sm font-bold text-white shadow-sm hover:bg-orange-600"
+                  className="min-h-[44px] w-full rounded-full bg-orange-500 text-sm font-bold text-white shadow-md hover:bg-orange-600"
                 >
                   {tx("このステップを達成する", "Mark step achieved")}
                 </button>

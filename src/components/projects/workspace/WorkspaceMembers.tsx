@@ -345,10 +345,10 @@ export default function WorkspaceMembers() {
                         userId={r.requester_id}
                         name={name}
                         avatarUrl={profile?.avatarUrl}
-                        size="md"
+                        size="sm"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-base font-semibold tracking-tight text-zinc-900">
+                        <span className="block truncate text-[15px] font-semibold tracking-tight text-zinc-900">
                           {name}
                         </span>
                         <span className="mt-0.5 block text-[13px] text-zinc-500">
@@ -393,18 +393,18 @@ export default function WorkspaceMembers() {
                 <li key={m.id}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-3.5 py-3.5 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
+                    className="flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-zinc-50 active:bg-zinc-100"
                     onClick={() => void openProfile(m.id, m.name, m.avatarUrl)}
                   >
-                    <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="md" />
-                    <span className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-zinc-900">
+                    <MemberAvatarBubble userId={m.id} name={m.name} avatarUrl={m.avatarUrl} size="sm" />
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-zinc-900">
                       {m.name}
                       {isSelf ? (
-                        <span className="ml-1 text-[12px] font-normal text-zinc-400">
+                        <span className="ml-1 text-[11px] font-normal text-zinc-400">
                           {tx("（あなた）", "(you)")}
                         </span>
                       ) : null}
-                      <span className="ml-2 text-[13px] font-normal text-zinc-400">
+                      <span className="ml-2 text-[12px] font-normal text-zinc-400">
                         {roleLabel(m.role, tx)}
                       </span>
                     </span>
