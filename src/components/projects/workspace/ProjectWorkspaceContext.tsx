@@ -1284,7 +1284,13 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   return (
     <WorkspaceCtx.Provider value={value}>
       <div
-        className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""}`}
+        className={`min-h-[100dvh] text-[#1A1A1A] ${
+          isIssuesPage
+            ? "bg-gradient-to-br from-white to-[#E3F2FD]"
+            : isImmersivePage
+              ? "bg-white"
+              : "bg-[#FAFAFA]"
+        }`}
       >
         {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage ? null : (
         <header
@@ -1489,7 +1495,11 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           }
         >
           <main
-            className={`project-workspace-main min-w-0 bg-white ${
+            className={`project-workspace-main min-w-0 ${
+              isIssuesPage
+                ? "bg-gradient-to-br from-white to-[#E3F2FD]"
+                : "bg-white"
+            } ${
               isCoachChat
                 ? "h-[100dvh]"
                 : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage
