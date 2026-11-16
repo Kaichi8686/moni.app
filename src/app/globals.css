@@ -2535,27 +2535,35 @@ html.moni-goal-stuck .project-workspace-header {
   }
 }
 
-/* Office scene — transform / opacity only */
+/* Office scene — transform / opacity only (SVG <g> safe) */
 .office-scene {
   background: #fff7ed;
 }
 
+.office-worker {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+
 .office-arms {
+  transform-box: fill-box;
   transform-origin: center;
-  animation: office-type 0.55s ease-in-out infinite alternate;
+  animation: office-type 0.7s ease-in-out infinite alternate;
   animation-delay: var(--office-delay, 0s);
 }
 
 .office-head {
-  transform-origin: 0px 66px;
-  animation: office-nod 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: office-nod 2.8s ease-in-out infinite;
   animation-delay: var(--office-delay, 0s);
 }
 
 .office-mug {
-  transform-origin: 18px 98px;
-  animation: office-mug-lift 4.8s ease-in-out infinite;
-  animation-delay: calc(var(--office-delay, 0s) + 0.6s);
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: office-mug-lift 4.2s ease-in-out infinite;
+  animation-delay: calc(var(--office-delay, 0s) + 0.4s);
 }
 
 .office-steam {
@@ -2569,18 +2577,18 @@ html.moni-goal-stuck .project-workspace-header {
 
 @keyframes office-type {
   from { transform: translateY(0); }
-  to { transform: translateY(2px); }
+  to { transform: translateY(3px); }
 }
 
 @keyframes office-nod {
-  0%, 70%, 100% { transform: rotate(0deg); }
-  78% { transform: rotate(-6deg); }
-  86% { transform: rotate(4deg); }
+  0%, 62%, 100% { transform: rotate(0deg); }
+  72% { transform: rotate(-8deg); }
+  82% { transform: rotate(5deg); }
 }
 
 @keyframes office-mug-lift {
-  0%, 55%, 100% { transform: translateY(0); opacity: 1; }
-  65%, 80% { transform: translateY(-6px); opacity: 1; }
+  0%, 50%, 100% { transform: translateY(0); opacity: 1; }
+  60%, 78% { transform: translateY(-8px); opacity: 1; }
 }
 
 @keyframes office-steam {

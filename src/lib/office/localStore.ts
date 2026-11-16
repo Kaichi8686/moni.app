@@ -1,7 +1,7 @@
 import { OFFICE_NAME_MAX, OFFICE_SIMILARITY_THRESHOLD } from "@/lib/office/constants";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { parseOfficeIndustry } from "@/lib/office/industries";
-import { offlineIncident, offlineScores } from "@/lib/office/offline";
+import { isMangledOfflineDescription, offlineIncident, offlineScores } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -170,7 +170,12 @@ export async function localCurrentIncident(
   if (company.about === undefined) company.about = null;
   if (!company.about) throw new Error("先に会社の説明を書いてね");
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");
-  if (open) return { incident: open, created: false };
+  if (open && !isMangledOfflineDescription(open.description)) {
+    return { incident: open, created: false };
+  }
+  if (open) {
+    store.incidents = store.incidents.filter((i) => i.id !== open.id);
+  }
 
   const recentTitles = store.incidents
     .filter((i) => i.userId === userId)
