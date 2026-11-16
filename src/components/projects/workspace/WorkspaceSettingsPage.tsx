@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { ProjectSettingsModal } from "@/components/projects/workspace/ProjectSettingsModal";
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
+import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
 
 export default function WorkspaceSettingsPage() {
   const router = useRouter();
@@ -17,7 +18,6 @@ export default function WorkspaceSettingsPage() {
     isOwner,
     loading,
     reload,
-    deleteProject,
   } = useProjectWorkspace();
 
   if (loading) return <WorkspacePageSkeleton />;
@@ -33,9 +33,8 @@ export default function WorkspaceSettingsPage() {
       description={project?.description}
       coachingContext={coachingContext}
       meta={projectMeta}
-      onClose={() => router.push(`/projects/${projectId}/overview`)}
+      onClose={() => closeWorkspacePanel(router, projectId)}
       onSaved={() => void reload()}
-      onDelete={deleteProject}
       onNotice={() => undefined}
     />
   );

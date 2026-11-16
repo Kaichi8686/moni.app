@@ -6,6 +6,7 @@ import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWork
 import { TeamActivityFeed } from "@/components/projects/workspace/TeamActivityFeed";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
+import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
 
 export default function WorkspaceActivity() {
   const { tx } = useI18n();
@@ -18,7 +19,7 @@ export default function WorkspaceActivity() {
     <div className="relative min-h-[100dvh] w-full bg-white">
       <button
         type="button"
-        onClick={() => router.push(`/projects/${projectId}/overview`)}
+        onClick={() => closeWorkspacePanel(router, projectId)}
         className="fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition hover:bg-zinc-50 active:scale-95"
         aria-label={tx("戻る", "Back")}
       >

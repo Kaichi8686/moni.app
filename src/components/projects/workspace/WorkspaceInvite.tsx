@@ -12,6 +12,7 @@ import type { FollowListUser } from "@/lib/profile/types";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { closeWorkspacePanel } from "@/lib/workspace/closeWorkspacePanel";
 
 function FriendAvatar({
   name,
@@ -152,7 +153,7 @@ export default function WorkspaceInvite() {
     return (
       <WorkspaceSlideShell
         title={tx("メンバーを招待", "Invite members")}
-        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        onClose={() => closeWorkspacePanel(router, projectId)}
         contentClassName="px-4 pt-8"
       >
         <p className="text-center text-sm text-zinc-500">
@@ -165,7 +166,21 @@ export default function WorkspaceInvite() {
   return (
     <WorkspaceSlideShell
       title={tx("メンバーを招待", "Invite members")}
-      onClose={() => router.push(`/projects/${projectId}/overview`)}
+      onClose={() => closeWorkspacePanel(router, projectId)}
+      footer={
+        <button
+          type="button"
+          disabled={sending || selectedIds.length === 0}
+          onClick={() => void sendInvites()}
+          className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-40"
+        >
+          {sending
+            ? tx("招待中…", "Inviting…")
+            : selectedIds.length > 0
+              ? tx(`${selectedIds.length}人を招待`, `Invite ${selectedIds.length}`)
+              : tx("招待する", "Invite")}
+        </button>
+      }
       stickyBelowHeader={
         <div className="border-b border-zinc-100 bg-white px-4 pb-3 pt-3">
           {selectedUsers.length > 0 ? (
@@ -256,21 +271,6 @@ export default function WorkspaceInvite() {
           })}
         </ul>
       )}
-
-      <div className="sticky bottom-0 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm">
-        <button
-          type="button"
-          disabled={sending || selectedIds.length === 0}
-          onClick={() => void sendInvites()}
-          className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-40"
-        >
-          {sending
-            ? tx("招待中…", "Inviting…")
-            : selectedIds.length > 0
-              ? tx(`${selectedIds.length}人を招待`, `Invite ${selectedIds.length}`)
-              : tx("招待する", "Invite")}
-        </button>
-      </div>
     </WorkspaceSlideShell>
   );
 }

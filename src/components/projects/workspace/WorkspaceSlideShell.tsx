@@ -18,6 +18,8 @@ type Props = {
   hideHeader?: boolean;
   /** hideHeader 時に戻るアニメーション付きクローズを子へ渡す */
   onBindClose?: (close: () => void) => void;
+  /** スクロール外に固定するフッター（招待ボタンなど） */
+  footer?: ReactNode;
   className?: string;
   contentClassName?: string;
 };
@@ -33,6 +35,7 @@ export function WorkspaceSlideShell({
   stickyBelowHeader,
   hideHeader = false,
   onBindClose,
+  footer,
   className = "",
   contentClassName = "",
 }: Props) {
@@ -109,10 +112,17 @@ export function WorkspaceSlideShell({
         <div className="sticky top-0 z-30 shrink-0">{stickyBelowHeader}</div>
       ) : null}
       <div
-        className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(1rem,env(safe-area-inset-bottom))] ${contentClassName}`}
+        className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain ${
+          footer ? "pb-2" : "pb-[max(1rem,env(safe-area-inset-bottom))]"
+        } ${contentClassName}`}
       >
         {children}
       </div>
+      {footer ? (
+        <div className="shrink-0 border-t border-zinc-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          {footer}
+        </div>
+      ) : null}
     </div>
   );
 }
