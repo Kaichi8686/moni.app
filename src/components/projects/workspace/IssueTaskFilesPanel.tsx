@@ -1207,10 +1207,10 @@ export function IssueTaskFilesPanel({
                         if (!requiredFilesReady(files)) return;
                         void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
                       }}
-                      className={`inline-flex w-full select-none items-center justify-center rounded-2xl px-6 py-4 text-[16px] font-extrabold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`inline-flex w-full select-none items-center justify-center rounded-[14px] px-4 min-h-[50px] text-[17px] font-semibold tracking-[-0.022em] transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40 ${
                         submitted
-                          ? "border border-[#D7E8A8] bg-[#F4FBE3] text-[#3F6212]"
-                          : "bg-[#FF9600] text-white hover:bg-[#F08900] active:bg-[#E07E00]"
+                          ? "bg-[#F2F2F7] text-[#3C3C43]/60"
+                          : "bg-[#FF9600] text-white"
                       }`}
                     >
                       {submitted ? tx("提出済み", "Submitted") : tx("提出する", "Submit")}
