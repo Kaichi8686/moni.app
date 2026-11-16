@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import WorkspaceSchedule from "@/components/projects/workspace/WorkspaceSchedule";
 
 export const metadata: Metadata = {
-  title: "予定 | moni",
+  title: "カレンダー | moni",
 };
 
 export default function SchedulePage() {

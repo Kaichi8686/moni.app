@@ -31,8 +31,8 @@ import { leaveProject as leaveProjectApi } from "@/lib/projects/leaveProject";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { clearLastProjectIfMatches, rememberLastProject } from "@/lib/workspace/lastProject";
 import { notifyProjectMembers } from "@/lib/projects/workspaceNotifications";
-import { ProjectInviteComposeModal } from "@/components/projects/ProjectInviteComposeModal";
 import { ProjectWorkspaceNoticeBell } from "@/components/projects/workspace/ProjectWorkspaceNoticeBell";
+import { LeaveProjectDialog } from "@/components/projects/workspace/LeaveProjectDialog";
 import type { Issue, IssueStatus, IssueWorkflow, Member, Phase, Priority, Project } from "@/lib/workspace/types";
 import { applyIssueDueDatesForProject } from "@/lib/workspace/applyIssueDueDates";
 import { dueIsoForNewIssueInPhase, hasMeaningfulTargetDate } from "@/lib/workspace/issueDueSchedule";
@@ -65,7 +65,7 @@ import {
   type PhaseRowDb,
   type ProfileLite,
 } from "@/lib/workspace/mapRows";
-import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
+import type { ProjectSettingsMeta } from "@/components/projects/workspace/ProjectSettingsModal";
 import { ProjectWorkspaceSwitcher } from "@/components/projects/workspace/ProjectWorkspaceSwitcher";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
@@ -232,9 +232,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [headerNotice, setHeaderNotice] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [inviteComposeOpen, setInviteComposeOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceHeaderRef = useRef<HTMLElement | null>(null);
   const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
@@ -1252,8 +1251,19 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const isIssuesPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/issues(?:\/|$)/));
   /** 活動（オーバーフローメニュー）はヘッダー・タブなし（戻るは画面側） */
   const isActivityPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/activity\/?$/));
+  const isMembersPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/members\/?$/));
+  const isSchedulePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/schedule\/?$/));
+  const isSettingsPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/settings\/?$/));
+  const isInvitePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/invite\/?$/));
+  const isOverflowPanelPage =
+    isActivityPage || isMembersPage || isSchedulePage || isSettingsPage || isInvitePage;
   const isImmersivePage =
-    isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage || isIssuesPage || isActivityPage;
+    isCoachChat ||
+    isRecruitPage ||
+    isRoadmapEditPage ||
+    isVotePage ||
+    isIssuesPage ||
+    isOverflowPanelPage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1292,7 +1302,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
               : "bg-[#FAFAFA]"
         }`}
       >
-        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage ? null : (
+        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isOverflowPanelPage ? null : (
         <header
           ref={workspaceHeaderRef}
           className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:px-4"
@@ -1360,7 +1370,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       router.push(`/projects/${projectId}/schedule`);
                     }}>
                       <Calendar className="h-4 w-4 text-[#6B7280]" aria-hidden />
-                      {tx("予定", "Schedule")}
+                      {tx("カレンダー", "Calendar")}
                     </button>
                     <button
                       type="button"
@@ -1388,7 +1398,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                         className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
                         onClick={() => {
                           setActionMenuOpen(false);
-                          setInviteComposeOpen(true);
+                          router.push(`/projects/${projectId}/invite`);
                         }}
                       >
                         <UserPlus className="h-4 w-4 text-[#6B7280]" aria-hidden />
@@ -1426,7 +1436,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                       className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]"
                       onClick={() => {
                         setActionMenuOpen(false);
-                        setSettingsOpen(true);
+                        router.push(`/projects/${projectId}/settings`);
                       }}
                     >
                       <Settings className="h-4 w-4 text-[#6B7280]" aria-hidden />
@@ -1435,30 +1445,18 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                     {project ? (
                       <>
                         <div className="my-1 border-t border-[#F1F3F5]" aria-hidden />
-                        {!isOwner ? (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={leavingProject}
-                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  tx(
-                                    "このプロジェクトから脱退しますか？メンバーではなくなり、アクセスできなくなります。",
-                                    "Leave this project? You’ll no longer be a member and will lose access.",
-                                  ),
-                                )
-                              ) {
-                                return;
-                              }
-                              void confirmLeaveProject();
-                            }}
-                          >
-                            <LogOut className="h-4 w-4" aria-hidden />
-                            {leavingProject ? tx("脱退中…", "Leaving…") : tx("プロジェクトを脱退", "Leave project")}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-semibold text-rose-700 transition hover:bg-rose-50"
+                          onClick={() => {
+                            setActionMenuOpen(false);
+                            setLeaveDialogOpen(true);
+                          }}
+                        >
+                          <LogOut className="h-4 w-4" aria-hidden />
+                          {tx("プロジェクトを脱退", "Leave project")}
+                        </button>
                         <button
                           type="button"
                           role="menuitem"
@@ -1489,7 +1487,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage
+            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isOverflowPanelPage
               ? "min-h-[100dvh]"
               : "min-h-[calc(100dvh-3.75rem)]"
           }
@@ -1502,7 +1500,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             } ${
               isCoachChat
                 ? "h-[100dvh]"
-                : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage
+                : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isOverflowPanelPage
                   ? "min-h-[100dvh]"
                   : ""
             }`}
@@ -1511,7 +1509,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
               className={
                 isCoachChat
                   ? "h-full"
-                  : isActivityPage
+                  : isOverflowPanelPage
                     ? "min-h-[100dvh] w-full"
                     : isVoteCreatePage
                       ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
@@ -1524,37 +1522,24 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                             : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >
-              {error && !isCoachChat && !isActivityPage ? (
+              {error && !isCoachChat && !isOverflowPanelPage ? (
                 <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {error}
                 </div>
               ) : null}
-              {loading && !error && !isCoachChat && !isActivityPage ? <WorkspacePageSkeleton /> : null}
-              {!loading || isCoachChat || isActivityPage || error ? children : null}
+              {loading && !error && !isCoachChat && !isOverflowPanelPage ? <WorkspacePageSkeleton /> : null}
+              {!loading || isCoachChat || isOverflowPanelPage || error ? children : null}
             </div>
           </main>
         </div>
-        <ProjectSettingsModal
-          open={settingsOpen}
+
+        <LeaveProjectDialog
+          open={leaveDialogOpen}
           projectId={projectId}
-          userId={uid}
-          canEdit={canEdit}
           isOwner={isOwner}
-          name={project?.name ?? ""}
-          description={project?.description}
-          coachingContext={coachingContext}
-          meta={projectMeta}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => void reload()}
-          onDelete={deleteProject}
-          onLeft={() => {
-            clearLastProjectIfMatches(projectId);
-            router.push(HOME_PROJECTS_HREF);
-          }}
-          onNotice={(message) => {
-            setHeaderNotice(message);
-            window.setTimeout(() => setHeaderNotice(""), 3200);
-          }}
+          members={project?.members ?? []}
+          currentUserId={uid}
+          onClose={() => setLeaveDialogOpen(false)}
         />
 
         <ProjectDeleteVotePanel
@@ -1571,21 +1556,6 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             await confirmDeleteProject();
           }}
         />
-
-        {inviteComposeOpen && uid && project ? (
-          <ProjectInviteComposeModal
-            open={inviteComposeOpen}
-            projectId={projectId}
-            projectName={project.name}
-            projectVisibility={projectMeta?.visibility ?? "public"}
-            currentUserId={uid}
-            onClose={() => setInviteComposeOpen(false)}
-            toast={(message) => {
-              setHeaderNotice(message);
-              window.setTimeout(() => setHeaderNotice(""), 3200);
-            }}
-          />
-        ) : null}
       </div>
     </WorkspaceCtx.Provider>
   );

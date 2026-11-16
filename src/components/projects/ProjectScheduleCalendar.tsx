@@ -31,12 +31,12 @@ const BUSY_BAR_CLASS = "bg-zinc-500/90";
 
 const WEEKDAYS_JA = ["日", "月", "火", "水", "木", "金", "土"] as const;
 const EVENT_BAR_CLASS = [
+  "bg-[#FF9600]/90",
+  "bg-sky-400/90",
   "bg-rose-400/90",
   "bg-amber-400/90",
-  "bg-emerald-400/90",
-  "bg-sky-400/90",
-  "bg-violet-400/90",
-  "bg-orange-400/90",
+  "bg-[#5E6AD2]/90",
+  "bg-teal-400/90",
 ] as const;
 
 function dateKeyLocal(d: Date): string {
@@ -121,6 +121,12 @@ type Props = {
   onDelete?: (scheduleId: string) => Promise<void>;
   saving?: boolean;
   canEdit?: boolean;
+  /** 枠なしで画面いっぱいに */
+  fullBleed?: boolean;
+  /** 埋め込みフォームを隠す（親が下からシートを出す） */
+  hideAddForm?: boolean;
+  /** 日付タップ時に追加シートを親へ依頼 */
+  onRequestAdd?: (prefill: { startsAt: string; endsAt: string }) => void;
 };
 
 export function ProjectScheduleCalendar({
@@ -131,6 +137,9 @@ export function ProjectScheduleCalendar({
   onDelete,
   saving,
   canEdit = true,
+  fullBleed = false,
+  hideAddForm = false,
+  onRequestAdd,
 }: Props) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string | null>(() => dateKeyLocal(new Date()));
@@ -213,19 +222,25 @@ export function ProjectScheduleCalendar({
     setSelectedKey(dateKeyLocal(n));
   }, []);
 
-  const onPickDay = useCallback((key: string | null) => {
-    if (!key) return;
-    setSelectedKey(key);
-    const base = parseDateKey(key);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const localStart = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T10:00`;
-    const localEnd = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T11:00`;
-    setForm((f) => ({
-      ...f,
-      startsAt: localStart,
-      endsAt: localEnd,
-    }));
-  }, []);
+  const onPickDay = useCallback(
+    (key: string | null) => {
+      if (!key) return;
+      setSelectedKey(key);
+      const base = parseDateKey(key);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const localStart = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T10:00`;
+      const localEnd = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T11:00`;
+      setForm((f) => ({
+        ...f,
+        startsAt: localStart,
+        endsAt: localEnd,
+      }));
+      if (hideAddForm && canEdit && onRequestAdd) {
+        // 日付選択のみ。追加は右上ボタン／長押し相当は親に任せる
+      }
+    },
+    [canEdit, hideAddForm, onRequestAdd],
+  );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -251,9 +266,15 @@ export function ProjectScheduleCalendar({
   const todayKey = dateKeyLocal(new Date());
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-b from-white to-zinc-50/80 shadow-sm">
-      {/* TimeTree風：ヘッダー */}
-      <div className="flex items-center justify-between border-b border-zinc-100 bg-white/90 px-3 py-3 sm:px-4">
+    <div
+      className={
+        fullBleed
+          ? "bg-white"
+          : "overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm"
+      }
+    >
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between border-b border-zinc-100 bg-white px-3 py-3 sm:px-4">
         <button
           type="button"
           onClick={goPrevMonth}
@@ -264,7 +285,7 @@ export function ProjectScheduleCalendar({
         </button>
         <div className="flex flex-col items-center gap-1">
           <span className="text-lg font-bold tracking-tight text-zinc-900">{titleMonth}</span>
-          <button type="button" onClick={goToday} className="text-[11px] font-semibold text-emerald-600 hover:underline">
+          <button type="button" onClick={goToday} className="text-[11px] font-semibold text-[#FF9600] hover:underline">
             今日
           </button>
         </div>
@@ -279,9 +300,9 @@ export function ProjectScheduleCalendar({
       </div>
 
       {(schedules.length > 0 || calendarIssues.length > 0) && (
-        <div className="flex flex-wrap gap-3 border-b border-zinc-100 bg-white/80 px-3 py-2 text-[10px] text-zinc-500 sm:px-4">
+        <div className="flex flex-wrap gap-3 border-b border-zinc-100 bg-white px-3 py-2 text-[10px] text-zinc-500 sm:px-4">
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded bg-emerald-400/90" aria-hidden />
+            <span className="h-2 w-4 rounded bg-[#FF9600]/90" aria-hidden />
             予定
           </span>
           <span className="flex items-center gap-1.5">
@@ -296,7 +317,7 @@ export function ProjectScheduleCalendar({
       )}
 
       {/* 曜日 */}
-      <div className="grid grid-cols-7 border-b border-zinc-100 bg-zinc-50/90 px-1 py-2">
+      <div className="grid grid-cols-7 border-b border-zinc-100 bg-zinc-50 px-1 py-2">
         {WEEKDAYS_JA.map((w, i) => (
           <div
             key={w}
@@ -311,7 +332,7 @@ export function ProjectScheduleCalendar({
       <div className="grid grid-cols-7 gap-px bg-zinc-100 p-px">
         {monthCells.map((cell, idx) => {
           if (!cell) {
-            return <div key={`empty-${idx}`} className="min-h-[72px] bg-zinc-50/50 sm:min-h-[88px]" />;
+            return <div key={`empty-${idx}`} className="min-h-[78px] bg-zinc-50/50 sm:min-h-[96px]" />;
           }
           const key = dateKeyLocal(cell);
           const list = eventsByDay.get(key) ?? [];
@@ -323,13 +344,13 @@ export function ProjectScheduleCalendar({
               key={key}
               type="button"
               onClick={() => onPickDay(key)}
-              className={`flex min-h-[72px] flex-col items-stretch border border-transparent p-1 text-left transition hover:bg-emerald-50/80 sm:min-h-[88px] ${
+              className={`flex min-h-[78px] flex-col items-stretch border border-transparent p-1 text-left transition hover:bg-orange-50/70 sm:min-h-[96px] ${
                 isBusyDay ? "bg-zinc-100/90" : "bg-white"
-              } ${isSelected ? "ring-2 ring-emerald-400 ring-offset-1" : ""} ${isToday && !isBusyDay ? "bg-emerald-50/40" : ""}`}
+              } ${isSelected ? "ring-2 ring-[#FF9600] ring-offset-1" : ""} ${isToday && !isBusyDay ? "bg-orange-50/50" : ""}`}
             >
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold sm:h-7 sm:w-7 sm:text-xs ${
-                  isToday ? "bg-emerald-500 text-white" : "text-zinc-800"
+                  isToday ? "bg-[#FF9600] text-white" : "text-zinc-800"
                 }`}
               >
                 {cell.getDate()}
@@ -450,7 +471,7 @@ export function ProjectScheduleCalendar({
         </div>
       ) : null}
 
-      {canEdit ? (
+      {canEdit && !hideAddForm ? (
       <form className="border-t border-zinc-200 bg-white px-3 py-4 sm:px-4" onSubmit={(e) => void handleSubmit(e)}>
         <p className="mb-3 text-sm font-bold text-zinc-900">予定を追加</p>
         <div className="mb-3 grid grid-cols-2 gap-2">
@@ -459,7 +480,7 @@ export function ProjectScheduleCalendar({
             onClick={() => setForm((p) => ({ ...p, kind: "event" }))}
             className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
               form.kind === "event"
-                ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                ? "border-[#FF9600] bg-orange-50 text-[#C2410C]"
                 : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
@@ -485,7 +506,7 @@ export function ProjectScheduleCalendar({
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             required
-            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none ring-emerald-500/20 transition focus:border-emerald-400 focus:ring-2 sm:col-span-2"
+            className="rounded-xl border border-zinc-200 bg-zinc-50/50 px-3 py-2.5 text-sm outline-none transition focus:border-[#FF9600] focus:ring-2 focus:ring-[#FF9600]/20 sm:col-span-2"
             placeholder={form.kind === "busy" ? "タイトル（例：試験・出張）" : "タイトル（例：キックオフ）"}
             value={form.title}
             onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
@@ -495,7 +516,7 @@ export function ProjectScheduleCalendar({
             <input
               required
               type="datetime-local"
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF9600]"
               value={form.startsAt}
               onChange={(e) => setForm((p) => ({ ...p, startsAt: e.target.value }))}
             />
@@ -504,21 +525,21 @@ export function ProjectScheduleCalendar({
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-400">終了（任意）</label>
             <input
               type="datetime-local"
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF9600]"
               value={form.endsAt}
               onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
             />
           </div>
           {form.kind === "event" ? (
             <input
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 sm:col-span-2"
+              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF9600] sm:col-span-2"
               placeholder="参加者（カンマ区切り・任意）"
               value={form.attendees}
               onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
             />
           ) : null}
           <textarea
-            className="min-h-[72px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400 sm:col-span-2"
+            className="min-h-[72px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF9600] sm:col-span-2"
             placeholder="メモ・場所など（任意）"
             rows={2}
             value={form.description}
@@ -528,7 +549,7 @@ export function ProjectScheduleCalendar({
         <button
           type="submit"
           disabled={saving || !form.title.trim() || !form.startsAt}
-          className="mt-4 w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-sm font-bold text-white shadow-md shadow-emerald-500/25 transition hover:brightness-105 disabled:opacity-50"
+          className="mt-4 w-full rounded-2xl bg-[#FF9600] py-3 text-sm font-bold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
         >
           {saving ? "追加中…" : form.kind === "busy" ? "忙しい日を追加" : "予定を追加"}
         </button>

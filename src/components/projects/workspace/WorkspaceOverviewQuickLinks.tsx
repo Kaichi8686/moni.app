@@ -18,7 +18,7 @@ const LINKS = [
   { id: "coach", label: "AI", labelEn: "AI", desc: "相談・アイデア出し", descEn: "Ask or brainstorm", icon: Sparkles, featured: true },
   { id: "roadmap", label: "ロードマップ", labelEn: "Roadmap", desc: "フェーズと完成日", descEn: "Phases and due date", icon: GanttChartSquare },
   { id: "issues", label: "課題", labelEn: "Issues", desc: "タスク一覧・カンバン", descEn: "List and board", icon: CircleDot },
-  { id: "schedule", label: "予定", labelEn: "Schedule", desc: "カレンダー", descEn: "Calendar", icon: Calendar },
+  { id: "schedule", label: "カレンダー", labelEn: "Calendar", desc: "予定と期限", descEn: "Events and due dates", icon: Calendar },
   { id: "whiteboard", label: "ホワイトボード", labelEn: "Whiteboard", desc: "無限キャンバスで描く", descEn: "Infinite canvas", icon: PenSquare },
   { id: "ideas", label: "投票", labelEn: "Vote", desc: "テーマごとに選択肢へ投票する", descEn: "Vote on options", icon: Lightbulb },
   { id: "chat", label: "メール", labelEn: "Mail", desc: "プロジェクトのグループライン", descEn: "Project group line", icon: MessageSquare },
