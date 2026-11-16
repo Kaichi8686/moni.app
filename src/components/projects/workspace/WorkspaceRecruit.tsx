@@ -20,7 +20,6 @@ import {
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { supabase } from "@/lib/supabase";
 
-type WorkFormat = "online" | "in_person" | "other";
 type FilterId = "all" | "open" | "closed";
 type Panel = { kind: "detail"; row: ProjectRecruitment } | { kind: "create" };
 
@@ -41,12 +40,6 @@ function formatWeeklyHours(raw: string): string {
   return `週${trimmed}時間`;
 }
 
-function workFormatLabel(format: WorkFormat, tx: (ja: string, en: string) => string): string {
-  if (format === "online") return tx("オンライン", "Online");
-  if (format === "in_person") return tx("対面", "In person");
-  return tx("その他", "Other");
-}
-
 function metaLine(row: ProjectRecruitment): string {
   return [row.skillName, row.duration, row.compensation].filter(Boolean).join(" · ");
 }
@@ -55,10 +48,13 @@ function RecruitSlidePanel({
   children,
   exiting,
   zClass = "z-[200]",
+  footer,
 }: {
   children: ReactNode;
   exiting?: boolean;
   zClass?: string;
+  /** transform の外に置き、スクロールしても画面下に貼り付ける */
+  footer?: ReactNode;
 }) {
   const [entered, setEntered] = useState(false);
   useEffect(() => {
@@ -73,10 +69,15 @@ function RecruitSlidePanel({
       : "translate-x-full";
 
   return (
-    <div
-      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
-    >
-      <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
+    <div className={`fixed inset-0 ${zClass} flex w-full max-w-[100vw] flex-col overflow-hidden bg-white ${motionClass}`}>
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
+      </div>
+      {footer ? (
+        <div className="shrink-0 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-3xl">{footer}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -104,7 +105,6 @@ export default function WorkspaceRecruit() {
   const [role, setRole] = useState("");
   const [compensation, setCompensation] = useState("");
   const [weeklyHours, setWeeklyHours] = useState("");
-  const [workFormat, setWorkFormat] = useState<WorkFormat>("online");
   const [postToBoard, setPostToBoard] = useState(true);
 
   const showNotice = useCallback((text: string) => {
@@ -118,7 +118,6 @@ export default function WorkspaceRecruit() {
     setRole("");
     setCompensation("");
     setWeeklyHours("");
-    setWorkFormat("online");
     setPostToBoard(true);
   }, []);
 
@@ -147,7 +146,6 @@ export default function WorkspaceRecruit() {
       role.trim() ||
       compensation.trim() ||
       weeklyHours.trim() ||
-      workFormat !== "online" ||
       !postToBoard,
   );
 
@@ -273,8 +271,6 @@ export default function WorkspaceRecruit() {
     try {
       const roleText = role.trim();
       const hoursText = formatWeeklyHours(weeklyHours);
-      const formatText = workFormatLabel(workFormat, tx);
-      const duration = [hoursText, formatText].filter(Boolean).join(" · ");
       await createProjectRecruitment(supabase, {
         projectId,
         userId: uid,
@@ -282,7 +278,7 @@ export default function WorkspaceRecruit() {
         title,
         message,
         skillName: roleText || title.trim(),
-        duration: duration || undefined,
+        duration: hoursText || undefined,
         compensation: compensation.trim() || undefined,
         postToSkillBoard: postToBoard,
         makeProjectPublic: projectMeta?.visibility !== "public",
@@ -368,12 +364,6 @@ export default function WorkspaceRecruit() {
       </div>
     );
   }
-
-  const formatOptions: Array<{ id: WorkFormat; label: string }> = [
-    { id: "online", label: tx("オンライン", "Online") },
-    { id: "in_person", label: tx("対面", "In person") },
-    { id: "other", label: tx("その他", "Other") },
-  ];
 
   const filters: Array<{ id: FilterId; label: string; count: number }> = [
     { id: "all", label: tx("すべて", "All"), count: rows.length },
@@ -499,8 +489,21 @@ export default function WorkspaceRecruit() {
       </div>
 
       {showPanel && panel?.kind === "create" ? (
-        <RecruitSlidePanel exiting={panelExiting} zClass="z-[220]">
-          <div className="flex min-h-[100dvh] flex-col gap-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+        <RecruitSlidePanel
+          exiting={panelExiting}
+          zClass="z-[220]"
+          footer={
+            <button
+              type="button"
+              disabled={saving || !title.trim()}
+              onClick={() => void onCreate()}
+              className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-[#FF9600] px-4 text-[15px] font-bold text-white transition active:opacity-90 disabled:opacity-40"
+            >
+              {saving ? tx("公開中…", "Publishing…") : tx("募集する", "Recruit")}
+            </button>
+          }
+        >
+          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -581,31 +584,6 @@ export default function WorkspaceRecruit() {
                 </label>
               </div>
 
-              <fieldset className="space-y-2">
-                <legend className="text-[11px] font-semibold text-zinc-500">{tx("形式", "Format")}</legend>
-                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={tx("形式", "Format")}>
-                  {formatOptions.map((opt) => {
-                    const active = workFormat === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        className={`min-h-[44px] rounded-xl border text-sm font-semibold transition ${
-                          active
-                            ? "border-zinc-900 bg-zinc-900 text-white"
-                            : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                        onClick={() => setWorkFormat(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
               <label className="flex items-start gap-2 rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 text-[13px] text-zinc-700">
                 <input
                   type="checkbox"
@@ -627,59 +605,48 @@ export default function WorkspaceRecruit() {
                 )}
               </p>
             </div>
+          </div>
+        </RecruitSlidePanel>
+      ) : null}
 
-            <div className="fixed inset-x-0 bottom-0 z-[230] border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+      {confirmDiscard ? (
+        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal
+            aria-labelledby="recruit-discard-title"
+            className="w-full max-w-sm rounded-2xl bg-white px-5 py-6 text-center shadow-xl"
+          >
+            <h3 id="recruit-discard-title" className="text-base font-semibold text-zinc-900">
+              {tx("入力内容を破棄しますか？", "Discard what you wrote?")}
+            </h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              {tx(
+                "戻ると今まで書いた内容は保存されず消えます。よろしいですか？",
+                "Going back discards unsaved text. Continue?",
+              )}
+            </p>
+            <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col gap-3">
               <button
                 type="button"
-                disabled={saving || !title.trim()}
-                onClick={() => void onCreate()}
-                className="mx-auto flex min-h-[48px] w-full max-w-3xl items-center justify-center rounded-full bg-[#FF9600] px-4 text-[15px] font-bold text-white transition active:opacity-90 disabled:opacity-40"
+                className="rounded-full bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white"
+                onClick={() => {
+                  resetForm();
+                  closePanel();
+                }}
               >
-                {saving ? tx("公開中…", "Publishing…") : tx("募集する", "Recruit")}
+                {tx("破棄して戻る", "Discard and go back")}
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                {tx("編集を続ける", "Keep editing")}
               </button>
             </div>
           </div>
-
-          {confirmDiscard ? (
-            <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
-              <div
-                role="dialog"
-                aria-modal
-                aria-labelledby="recruit-discard-title"
-                className="w-full max-w-sm rounded-2xl bg-white px-5 py-6 text-center shadow-xl"
-              >
-                <h3 id="recruit-discard-title" className="text-base font-semibold text-zinc-900">
-                  {tx("入力内容を破棄しますか？", "Discard what you wrote?")}
-                </h3>
-                <p className="mt-2 text-sm text-zinc-500">
-                  {tx(
-                    "戻ると今まで書いた内容は保存されず消えます。よろしいですか？",
-                    "Going back discards unsaved text. Continue?",
-                  )}
-                </p>
-                <div className="mx-auto mt-6 flex w-full max-w-[220px] flex-col gap-3">
-                  <button
-                    type="button"
-                    className="rounded-full bg-[#FF9600] px-4 py-3 text-sm font-semibold text-white"
-                    onClick={() => {
-                      resetForm();
-                      closePanel();
-                    }}
-                  >
-                    {tx("破棄して戻る", "Discard and go back")}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
-                    onClick={() => setConfirmDiscard(false)}
-                  >
-                    {tx("編集を続ける", "Keep editing")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </RecruitSlidePanel>
+        </div>
       ) : null}
 
       {showPanel && detailRow ? (
@@ -715,7 +682,7 @@ export default function WorkspaceRecruit() {
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold text-zinc-500">
-                    {tx("週の参加時間・形式", "Hours / format")}
+                    {tx("週の参加時間", "Hours / week")}
                   </dt>
                   <dd className="mt-0.5 text-zinc-900">{detailRow.duration || "—"}</dd>
                 </div>
