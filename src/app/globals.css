@@ -2575,6 +2575,45 @@ html.moni-goal-stuck .project-workspace-header {
   animation: office-blink 1.2s steps(1) infinite;
 }
 
+.office-window-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: office-window-pulse 3.6s ease-in-out infinite;
+}
+
+.office-light-shaft {
+  transform-box: fill-box;
+  transform-origin: left top;
+  animation: office-shaft-breathe 4.8s ease-in-out infinite;
+}
+
+.office-paper {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: office-paper-float 5.5s ease-in-out infinite;
+}
+
+.office-mote {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+}
+.office-mote--a {
+  animation: office-mote-drift 7s linear infinite;
+}
+.office-mote--b {
+  animation: office-mote-drift 8.5s linear infinite 1.2s;
+}
+.office-mote--c {
+  animation: office-mote-drift 6.4s linear infinite 0.6s;
+}
+.office-mote--d {
+  animation: office-mote-drift 9s linear infinite 2.1s;
+}
+.office-mote--e {
+  animation: office-mote-drift 7.8s linear infinite 3.4s;
+}
+
 @keyframes office-type {
   from { transform: translateY(0); }
   to { transform: translateY(3px); }
@@ -2599,6 +2638,28 @@ html.moni-goal-stuck .project-workspace-header {
 @keyframes office-blink {
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0.15; }
+}
+
+@keyframes office-window-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+@keyframes office-shaft-breathe {
+  0%, 100% { opacity: 0.35; transform: scaleY(1); }
+  50% { opacity: 0.7; transform: scaleY(1.04); }
+}
+
+@keyframes office-paper-float {
+  0%, 100% { transform: translate(0, 0) rotate(-3deg); }
+  50% { transform: translate(8px, -12px) rotate(7deg); }
+}
+
+@keyframes office-mote-drift {
+  0% { opacity: 0; transform: translate(0, 10px); }
+  12% { opacity: 0.55; }
+  70% { opacity: 0.35; }
+  100% { opacity: 0; transform: translate(18px, -46px); }
 }
 
 @keyframes office-shake {
@@ -2682,6 +2743,10 @@ html.moni-goal-stuck .project-workspace-header {
   .office-mug,
   .office-steam,
   .office-rec-dot,
+  .office-window-glow,
+  .office-light-shaft,
+  .office-paper,
+  .office-mote,
   .office-fx--pinch,
   .office-fx--pinch .office-bang,
   .office-fx--pinch .office-worker--panic,

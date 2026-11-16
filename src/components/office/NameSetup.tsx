@@ -28,7 +28,7 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
     (patchMode || (name.trim().length >= 1 && name.trim().length <= OFFICE_NAME_MAX));
 
   return (
-    <div className="mx-auto max-w-lg px-4 pb-28 pt-8">
+    <div className="mx-auto max-w-xl px-4 pb-28 pt-8 sm:px-6">
       <p className="text-center text-[11px] font-bold uppercase tracking-[0.16em] text-[#FF9600]">
         Office
       </p>

@@ -39,66 +39,73 @@ export function CompanyCard({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.02)]">
-      <div className="bg-[#FFF7ED] p-2 sm:p-2.5">
-        <OfficeScene level={company.level} industry={company.industry} fx={sceneFx} />
-      </div>
-
-      <div className="p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium text-zinc-500">
-              {meta.crown} {meta.labelJa}
-              {ind ? ` · ${ind.icon}` : ""}
-            </p>
-            <h2 className="mt-1 truncate text-lg font-bold tracking-tight text-zinc-900">
-              {company.name}
-            </h2>
-            {aboutLine ? (
-              <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-zinc-500">{aboutLine}</p>
-            ) : null}
-          </div>
-          <div className="rounded-xl bg-amber-50 px-2.5 py-1.5 text-center">
-            <p className="text-[10px] font-bold text-amber-800/80">Lv</p>
-            <p className="text-lg font-black tabular-nums text-amber-900">{company.level}</p>
-          </div>
+      <div className="md:grid md:grid-cols-[minmax(0,1.45fr)_minmax(240px,0.9fr)] md:items-stretch">
+        <div className="bg-[#FFF7ED] p-2 sm:p-2.5 md:h-full md:min-h-[200px]">
+          <OfficeScene level={company.level} industry={company.industry} fx={sceneFx} />
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-4">
-          <div>
-            <p className="text-[11px] text-zinc-500">累計売上</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-zinc-900">
-              {company.totalRevenue.toLocaleString("ja-JP")}
-              <span className="ml-1 text-xs font-medium text-zinc-400">コイン</span>
-            </p>
+        <div className="flex flex-col p-3.5 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-zinc-500">
+                {meta.crown} {meta.labelJa}
+                {ind ? ` · ${ind.icon}` : ""}
+              </p>
+              <h2 className="mt-0.5 truncate text-lg font-bold tracking-tight text-zinc-900">
+                {company.name}
+              </h2>
+              {aboutLine ? (
+                <p
+                  className="mt-0.5 truncate text-[11px] leading-tight text-zinc-400"
+                  title={aboutLine}
+                >
+                  {aboutLine}
+                </p>
+              ) : null}
+            </div>
+            <div className="shrink-0 rounded-xl bg-amber-50 px-2 py-1 text-center">
+              <p className="text-[10px] font-bold text-amber-800/80">Lv</p>
+              <p className="text-base font-black tabular-nums text-amber-900">{company.level}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[11px] text-zinc-500">今月の売上</p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-zinc-900">
-              {seasonRevenue.toLocaleString("ja-JP")}
-              <span className="ml-1 text-xs font-medium text-zinc-400">コイン</span>
-            </p>
-          </div>
-        </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-zinc-50 px-3 py-3">
-          <div>
-            <p className="text-[11px] text-zinc-500">スタミナ</p>
-            <p className="mt-1 flex items-center gap-2">
-              <span className="text-lg font-bold tracking-[0.2em] text-[#FF9600] leading-none">
-                {formatStaminaDots(staminaValue)}
-              </span>
-              <span className="text-sm font-bold tabular-nums text-zinc-700">
-                {staminaValue}/{OFFICE_MAX_STAMINA}
-              </span>
-            </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-100 pt-3">
+            <div>
+              <p className="text-[10px] text-zinc-500">累計売上</p>
+              <p className="mt-0.5 text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
+                {company.totalRevenue.toLocaleString("ja-JP")}
+                <span className="ml-0.5 text-[10px] font-medium text-zinc-400">コイン</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500">今月の売上</p>
+              <p className="mt-0.5 text-base font-bold tabular-nums text-zinc-900 sm:text-lg">
+                {seasonRevenue.toLocaleString("ja-JP")}
+                <span className="ml-0.5 text-[10px] font-medium text-zinc-400">コイン</span>
+              </p>
+            </div>
           </div>
-          {remain != null ? (
-            <p className="text-[12px] font-semibold tabular-nums text-zinc-600">
-              次の回復まで {formatRemainMmSs(remain)}
-            </p>
-          ) : (
-            <p className="text-[12px] font-medium text-zinc-400">満タン</p>
-          )}
+
+          <div className="mt-auto flex items-center justify-between gap-2 rounded-xl bg-zinc-50 px-2.5 py-2.5 mt-3">
+            <div>
+              <p className="text-[10px] text-zinc-500">スタミナ</p>
+              <p className="mt-0.5 flex items-center gap-1.5">
+                <span className="text-base font-bold tracking-[0.18em] text-[#FF9600] leading-none">
+                  {formatStaminaDots(staminaValue)}
+                </span>
+                <span className="text-xs font-bold tabular-nums text-zinc-700">
+                  {staminaValue}/{OFFICE_MAX_STAMINA}
+                </span>
+              </p>
+            </div>
+            {remain != null ? (
+              <p className="text-[11px] font-semibold tabular-nums text-zinc-600">
+                次まで {formatRemainMmSs(remain)}
+              </p>
+            ) : (
+              <p className="text-[11px] font-medium text-zinc-400">満タン</p>
+            )}
+          </div>
         </div>
       </div>
     </section>
