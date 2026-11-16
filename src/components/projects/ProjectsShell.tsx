@@ -30,7 +30,11 @@ export function ProjectsShell({ children }: { children: React.ReactNode }) {
       pathname?.match(/^\/projects\/[^/]+\/coach\/?$/) ||
       pathname?.match(/^\/projects\/[^/]+\/roadmap\/?$/) ||
       pathname?.match(/^\/projects\/[^/]+\/ideas(?:\/|$)/) ||
-      pathname?.match(/^\/projects\/[^/]+\/activity\/?$/),
+      pathname?.match(/^\/projects\/[^/]+\/activity\/?$/) ||
+      pathname?.match(/^\/projects\/[^/]+\/members\/?$/) ||
+      pathname?.match(/^\/projects\/[^/]+\/schedule\/?$/) ||
+      pathname?.match(/^\/projects\/[^/]+\/settings\/?$/) ||
+      pathname?.match(/^\/projects\/[^/]+\/invite\/?$/),
   );
   return (
     <>

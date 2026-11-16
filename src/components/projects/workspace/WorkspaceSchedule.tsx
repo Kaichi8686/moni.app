@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { Plus, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
+import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
 import { ProjectScheduleCalendar } from "@/components/projects/ProjectScheduleCalendar";
 import { IssueDetailSheet } from "@/components/issues/IssueDetailSheet";
 import { IssueModal } from "@/components/issues/IssueModal";
@@ -12,8 +15,10 @@ import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function WorkspaceSchedule() {
   const { tx } = useI18n();
+  const router = useRouter();
   const {
     project,
+    projectId,
     issues,
     phases,
     schedules,
@@ -30,6 +35,55 @@ export default function WorkspaceSchedule() {
   } = useProjectWorkspace();
   const [detailIssue, setDetailIssue] = useState<Issue | null>(null);
   const [editIssue, setEditIssue] = useState<Issue | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addEntered, setAddEntered] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    startsAt: "",
+    endsAt: "",
+    attendees: "",
+    kind: "event" as "event" | "busy",
+  });
+
+  useEffect(() => {
+    if (!addOpen) {
+      setAddEntered(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setAddEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, [addOpen]);
+
+  function openAdd(prefill?: { startsAt?: string; endsAt?: string }) {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fallbackStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T10:00`;
+    const fallbackEnd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T11:00`;
+    setForm({
+      title: "",
+      description: "",
+      startsAt: prefill?.startsAt || fallbackStart,
+      endsAt: prefill?.endsAt || fallbackEnd,
+      attendees: "",
+      kind: "event",
+    });
+    setAddOpen(true);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!form.title.trim() || !form.startsAt) return;
+    await createSchedule({
+      title: form.title.trim(),
+      description: form.description.trim(),
+      startsAt: form.startsAt,
+      endsAt: form.endsAt,
+      attendees: form.attendees,
+      kind: form.kind,
+    });
+    setAddOpen(false);
+  }
 
   const sortedIssues = sortIssuesByDueDate(issues);
   const detailIssueLive = detailIssue ? issues.find((i) => i.id === detailIssue.id) ?? detailIssue : null;
@@ -37,30 +91,170 @@ export default function WorkspaceSchedule() {
   const detailPhase = detailIssueLive?.phaseId ? phases.find((p) => p.id === detailIssueLive.phaseId) : undefined;
 
   if (loading) return <WorkspacePageSkeleton />;
-  if (!project) return <p className="text-sm text-[#6B7280]">{tx("プロジェクトがありません。", "No project found.")}</p>;
+  if (!project) {
+    return (
+      <WorkspaceSlideShell
+        title={tx("カレンダー", "Calendar")}
+        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        contentClassName="px-4 pt-8"
+      >
+        <p className="text-center text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>
+      </WorkspaceSlideShell>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <header>
-        <h1 className="text-lg font-semibold text-[#1A1A1A]">{tx("予定", "Schedule")}</h1>
-        <p className="mt-1 text-[13px] text-[#6B7280]">
-          {tx("ミーティングやイベント、課題の期限をカレンダーで確認できます。", "Meetings, events, and issue due dates on a calendar.")}
-        </p>
-      </header>
-      <ProjectScheduleCalendar
-        schedules={schedules}
-        issues={sortedIssues
-          .filter((i) => i.dueDate)
-          .map((i) => ({ id: i.id, title: i.title, dueDate: i.dueDate!, status: i.status }))}
-        onIssueClick={(id) => {
-          const issue = issues.find((x) => x.id === id);
-          if (issue) setDetailIssue(issue);
-        }}
-        onSave={createSchedule}
-        onDelete={deleteSchedule}
-        saving={scheduleSaving}
-        canEdit={canEdit}
-      />
+    <>
+      <WorkspaceSlideShell
+        title={tx("カレンダー", "Calendar")}
+        onClose={() => router.push(`/projects/${projectId}/overview`)}
+        contentClassName="px-0"
+        trailing={
+          canEdit ? (
+            <button
+              type="button"
+              onClick={() => openAdd()}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-[0_3px_0_#E08600] transition active:translate-y-[2px] active:shadow-none"
+              aria-label={tx("予定を追加", "Add event")}
+            >
+              <Plus className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+          ) : null
+        }
+      >
+        <ProjectScheduleCalendar
+          schedules={schedules}
+          issues={sortedIssues
+            .filter((i) => i.dueDate)
+            .map((i) => ({ id: i.id, title: i.title, dueDate: i.dueDate!, status: i.status }))}
+          onIssueClick={(id) => {
+            const issue = issues.find((x) => x.id === id);
+            if (issue) setDetailIssue(issue);
+          }}
+          onSave={createSchedule}
+          onDelete={deleteSchedule}
+          saving={scheduleSaving}
+          canEdit={canEdit}
+          fullBleed
+          hideAddForm
+          onRequestAdd={(prefill) => openAdd(prefill)}
+        />
+      </WorkspaceSlideShell>
+
+      {addOpen ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/40"
+          onClick={() => setAddOpen(false)}
+        >
+          <div
+            className={`w-full max-w-lg rounded-t-3xl bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              addEntered ? "translate-y-0" : "translate-y-full"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={tx("予定を追加", "Add event")}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-200" aria-hidden />
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-[16px] font-bold text-zinc-950">{tx("予定を追加", "Add event")}</h2>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100"
+                onClick={() => setAddOpen(false)}
+                aria-label={tx("閉じる", "Close")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form className="space-y-3" onSubmit={(e) => void handleSubmit(e)}>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, kind: "event" }))}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition ${
+                    form.kind === "event"
+                      ? "border-[#FF9600] bg-orange-50 text-[#C2410C]"
+                      : "border-zinc-200 bg-white text-zinc-600"
+                  }`}
+                >
+                  {tx("通常の予定", "Event")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, kind: "busy" }))}
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition ${
+                    form.kind === "busy"
+                      ? "border-zinc-500 bg-zinc-100 text-zinc-800"
+                      : "border-zinc-200 bg-white text-zinc-600"
+                  }`}
+                >
+                  {tx("忙しい日", "Busy day")}
+                </button>
+              </div>
+              <input
+                required
+                className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-[15px] outline-none focus:border-[#FF9600] focus:bg-white focus:ring-2 focus:ring-[#FF9600]/20"
+                placeholder={
+                  form.kind === "busy"
+                    ? tx("タイトル（例：試験・出張）", "Title (e.g. exam)")
+                    : tx("タイトル（例：キックオフ）", "Title (e.g. kickoff)")
+                }
+                value={form.title}
+                onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-[11px] font-semibold text-zinc-500">
+                  {tx("開始", "Starts")}
+                  <input
+                    required
+                    type="datetime-local"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                    value={form.startsAt}
+                    onChange={(e) => setForm((p) => ({ ...p, startsAt: e.target.value }))}
+                  />
+                </label>
+                <label className="block text-[11px] font-semibold text-zinc-500">
+                  {tx("終了（任意）", "Ends (optional)")}
+                  <input
+                    type="datetime-local"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                    value={form.endsAt}
+                    onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
+                  />
+                </label>
+              </div>
+              {form.kind === "event" ? (
+                <input
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                  placeholder={tx("参加者（カンマ区切り・任意）", "Attendees (optional)")}
+                  value={form.attendees}
+                  onChange={(e) => setForm((p) => ({ ...p, attendees: e.target.value }))}
+                />
+              ) : null}
+              <textarea
+                className="min-h-[72px] w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                placeholder={tx("メモ・場所など（任意）", "Notes / place (optional)")}
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              />
+              <button
+                type="submit"
+                disabled={scheduleSaving || !form.title.trim() || !form.startsAt}
+                className="w-full rounded-2xl bg-[#FF9600] py-3.5 text-[15px] font-extrabold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
+              >
+                {scheduleSaving
+                  ? tx("追加中…", "Adding…")
+                  : form.kind === "busy"
+                    ? tx("忙しい日を追加", "Add busy day")
+                    : tx("予定を追加", "Add event")}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       <IssueDetailSheet
         issue={detailIssueLive}
         open={Boolean(detailIssueLive)}
@@ -108,6 +302,6 @@ export default function WorkspaceSchedule() {
           });
         }}
       />
-    </div>
+    </>
   );
 }

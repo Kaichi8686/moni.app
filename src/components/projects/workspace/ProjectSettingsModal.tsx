@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, LogOut, X } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { leaveProject, leaveProjectErrorMessage, type LeaveProjectErrorCode } from "@/lib/projects/leaveProject";
 import { validateProjectImageFile } from "@/lib/projects/uploadProjectImage";
 import type { ProjectRow, ProjectVisibility } from "@/lib/projects/types";
 import { parseCoachingContext } from "@/lib/projects/coachingContext";
@@ -15,6 +14,7 @@ import {
   type ProjectBrief,
 } from "@/lib/projects/projectBrief";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { WorkspaceSlideShell } from "@/components/projects/workspace/WorkspaceSlideShell";
 
 export type ProjectSettingsMeta = Pick<
   ProjectRow,
@@ -42,8 +42,6 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   onDelete: () => Promise<void>;
-  /** メンバー（非オーナー）が脱退したあと。呼び出し側でリダイレクトなど */
-  onLeft?: () => void;
   onNotice: (message: string) => void;
 };
 
@@ -60,7 +58,6 @@ export function ProjectSettingsModal({
   onClose,
   onSaved,
   onDelete,
-  onLeft,
   onNotice,
 }: Props) {
   const { tx } = useI18n();
@@ -86,8 +83,6 @@ export function ProjectSettingsModal({
   const [editVisibility, setEditVisibility] = useState<ProjectVisibility>("public");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmLeave, setConfirmLeave] = useState(false);
-  const [leaving, setLeaving] = useState(false);
 
   function clearPreviewObjectUrl() {
     if (previewObjectUrl.current) {
@@ -110,12 +105,10 @@ export function ProjectSettingsModal({
       setThumbPreview(null);
       setBgPreview(null);
       setConfirmDelete(false);
-      setConfirmLeave(false);
       return;
     }
     setErr("");
     setConfirmDelete(false);
-    setConfirmLeave(false);
     setEditName(name);
     setEditBrief(resolveProjectBrief({ coachingContext, description }));
     const thumb = meta?.thumbnail_url?.trim() ?? "";
@@ -339,7 +332,7 @@ export function ProjectSettingsModal({
     }
   }
 
-  const busy = saving || thumbUploading || bgUploading || deleting || leaving;
+  const busy = saving || thumbUploading || bgUploading || deleting;
 
   async function handleDelete() {
     if (!isOwner) return;
@@ -355,64 +348,17 @@ export function ProjectSettingsModal({
     }
   }
 
-  function leaveErrText(code: LeaveProjectErrorCode, fallback: string): string {
-    const ja = leaveProjectErrorMessage(code, fallback);
-    const enMap: Partial<Record<LeaveProjectErrorCode, string>> = {
-      not_authenticated: "Login required.",
-      project_not_found: "Project not found.",
-      owner_must_transfer_first: "Owners must transfer ownership before leaving.",
-      not_a_member: "You’re not a member of this project.",
-      supabase_unavailable: "Supabase is not configured.",
-      unknown: fallback || "Failed to leave the project.",
-    };
-    return tx(ja, enMap[code] ?? (fallback || "Failed to leave the project."));
-  }
-
-  async function handleLeave() {
-    if (isOwner || !userId) return;
-    setLeaving(true);
-    setErr("");
-    try {
-      const result = await leaveProject(projectId);
-      if (!result.ok) {
-        setErr(leaveErrText(result.code, result.error));
-        return;
-      }
-      onClose();
-      onLeft?.();
-    } finally {
-      setLeaving(false);
-    }
-  }
+  if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40 p-4 sm:items-center"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
+    <WorkspaceSlideShell
+      title={tx("プロジェクト設定", "Project settings")}
+      onClose={onClose}
+      contentClassName="px-4 pt-4"
     >
-      <div
-        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="project-settings-title"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-2">
-          <div>
-            <h2 id="project-settings-title" className="text-base font-bold text-[#1A1A1A]">
-              {tx("プロジェクト設定", "Project settings")}
-            </h2>
-            <p className="mt-1 text-[12px] text-[#6B7280]">
-              {tx("名前・詳細・募集内容などを編集できます。", "Edit the name, details, recruiting info, and more.")}
-            </p>
-          </div>
-          <button type="button" className="rounded-md p-1 text-gray-500 hover:bg-gray-100" onClick={onClose} aria-label={tx("閉じる", "Close")}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <p className="mb-4 text-[13px] text-zinc-500">
+        {tx("名前・詳細・募集内容などを編集できます。", "Edit the name, details, recruiting info, and more.")}
+      </p>
 
         {!canEdit ? (
           <p className="text-sm text-amber-800">{tx("このプロジェクトの設定を変更する権限がありません。", "You don’t have permission to change this project’s settings.")}</p>
@@ -625,84 +571,52 @@ export function ProjectSettingsModal({
           </div>
         )}
 
-        {!isOwner && userId ? (
-          <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
-            <p className="text-[12px] font-semibold text-rose-900">{tx("プロジェクトから脱退", "Leave project")}</p>
+        {isOwner ? (
+          <section className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3">
+            <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
               {tx(
-                "脱退するとメンバーではなくなり、このプロジェクトにアクセスできなくなります。",
-                "Leaving removes you from the project and you’ll lose access.",
+                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上メニューから「プロジェクト削除…」で提案を開始できます。脱退はメニューの「プロジェクトを脱退」から行えます。",
+                "Deleting a project needs 2/3 member approval, then the owner confirms. Start with “Delete project…” in the menu. To leave, use “Leave project” in the menu.",
               )}
             </p>
-            {!confirmLeave ? (
-              <button
-                type="button"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-[12px] font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50"
-                disabled={busy}
-                onClick={() => setConfirmLeave(true)}
-              >
-                <LogOut className="h-3.5 w-3.5" aria-hidden />
-                {tx("脱退する…", "Leave…")}
-              </button>
-            ) : (
+            {confirmDelete ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                  className="rounded-xl bg-rose-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
                   disabled={busy}
-                  onClick={() => void handleLeave()}
+                  onClick={() => void handleDelete()}
                 >
-                  <LogOut className="h-3.5 w-3.5" aria-hidden />
-                  {leaving ? tx("脱退中…", "Leaving…") : tx("本当に脱退する", "Confirm leave")}
+                  {deleting ? tx("削除中…", "Deleting…") : tx("削除する", "Delete")}
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#374151]"
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] font-semibold text-zinc-700"
                   disabled={busy}
-                  onClick={() => setConfirmLeave(false)}
+                  onClick={() => setConfirmDelete(false)}
                 >
                   {tx("キャンセル", "Cancel")}
                 </button>
               </div>
-            )}
-          </section>
-        ) : null}
-
-        {isOwner ? (
-          <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50/50 px-4 py-3">
-            <p className="text-[12px] font-semibold text-rose-900">{tx("危険な操作", "Danger zone")}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-rose-800/90">
-              {tx(
-                "プロジェクト削除は、メンバーの2/3賛成後にオーナーが最終確定する流れです。右上メニューから「プロジェクト削除…」で提案を開始すると、賛成・反対は概要のプロジェクト詳細とロードマップの間に表示されます。脱退したい場合は「メンバー」タブから権限を引き継いでください。",
-                "Deleting a project needs 2/3 member approval, then the owner confirms. Start with “Delete project…” in the top-right menu; approve/oppose then appear between project details and the roadmap on Overview. To leave as owner, transfer ownership from the Members tab first.",
-              )}
-            </p>
+            ) : null}
           </section>
         ) : null}
 
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
 
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#1A1A1A] hover:bg-[#F7F8F8]"
-            onClick={onClose}
-            disabled={busy}
-          >
-            {tx("閉じる", "Close")}
-          </button>
-          {canEdit ? (
+        {canEdit ? (
+          <div className="sticky bottom-0 mt-6 border-t border-zinc-100 bg-white/95 py-3 backdrop-blur-sm">
             <button
               type="button"
-              className="rounded-lg bg-[#5E6AD2] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="w-full rounded-2xl bg-[#FF9600] py-3 text-[15px] font-extrabold text-white shadow-[0_4px_0_#E08600] transition active:translate-y-[3px] active:shadow-none disabled:opacity-50"
               disabled={busy}
               onClick={() => void save()}
             >
               {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
             </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
+          </div>
+        ) : null}
+    </WorkspaceSlideShell>
   );
 }
