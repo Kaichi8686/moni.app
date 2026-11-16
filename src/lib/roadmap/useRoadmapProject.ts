@@ -11,6 +11,7 @@ import {
   type PhaseTaskRowDb,
 } from "@/lib/roadmap/mapRows";
 import type { PhaseStatus, PhaseTask, RoadmapBusinessType, RoadmapPhase, RoadmapProjectMeta } from "@/lib/roadmap/types";
+import { logRoadmapPhaseAchievedActivity } from "@/lib/projects/projectActivity";
 import { notifyProjectMembers } from "@/lib/projects/workspaceNotifications";
 
 function isMissingTable(err: { message?: string } | null): boolean {
@@ -169,6 +170,13 @@ export function useRoadmapProject(projectId: string) {
       const prevPhase = phases.find((phase) => phase.id === phaseId);
       if (patch.status === "completed" && prevPhase && prevPhase.status !== "completed") {
         const title = (patch.title !== undefined ? patch.title.trim() : prevPhase.title) || "ロードマップ";
+        if (uid) {
+          void logRoadmapPhaseAchievedActivity(supabase, {
+            projectId,
+            userId: uid,
+            phaseTitle: title,
+          });
+        }
         void notifyProjectMembers(supabase, {
           projectId,
           type: "roadmap_achieved",

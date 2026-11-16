@@ -17,6 +17,50 @@ export async function logProjectActivity(
   }
 }
 
+export async function resolveActivityDisplayName(
+  client: SupabaseClient,
+  userId: string,
+): Promise<string> {
+  const { data } = await client.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+  const name = (data?.display_name as string | null | undefined)?.trim();
+  return name || "ユーザー";
+}
+
+/** メンバー参加（招待承諾・申請承認など） */
+export async function logMemberJoinedActivity(
+  client: SupabaseClient,
+  input: {
+    projectId: string;
+    /** RLS: auth.uid() と一致させる（承認者または本人） */
+    actorUserId: string;
+    memberUserId: string;
+    memberName?: string;
+  },
+) {
+  const name =
+    input.memberName?.trim() || (await resolveActivityDisplayName(client, input.memberUserId));
+  await logProjectActivity(client, {
+    projectId: input.projectId,
+    userId: input.actorUserId,
+    kind: "member",
+    body: `${name}さんが参加しました`,
+  });
+}
+
+/** ロードマップ（フェーズ）達成 */
+export async function logRoadmapPhaseAchievedActivity(
+  client: SupabaseClient,
+  input: { projectId: string; userId: string; phaseTitle: string },
+) {
+  const title = input.phaseTitle.trim() || "ロードマップ";
+  await logProjectActivity(client, {
+    projectId: input.projectId,
+    userId: input.userId,
+    kind: "phase",
+    body: `ロードマップ「${title}」を達成しました`,
+  });
+}
+
 export type ProjectActivityEvent = {
   id: string;
   userId: string | null;

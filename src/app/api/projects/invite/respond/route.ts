@@ -88,6 +88,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: mErr.message || "参加に失敗しました" }, { status: 500 });
     }
 
+    try {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("display_name")
+        .eq("id", auth.userId)
+        .maybeSingle();
+      const memberName =
+        ((profile?.display_name as string | null | undefined)?.trim() || "ユーザー") as string;
+      await admin.from("project_activity_events").insert({
+        project_id: projectId,
+        user_id: auth.userId,
+        kind: "member",
+        body: `${memberName}さんが参加しました`.slice(0, 500),
+      });
+    } catch (e) {
+      console.warn("[invite/respond] activity log skipped", e);
+    }
+
     // プロジェクト全員グループラインへ参加させる
     try {
       const { data: existingConv } = await admin
