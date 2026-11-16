@@ -953,7 +953,7 @@ export function IssueTaskFilesPanel({
 
   return (
     <div
-      className={`relative mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col gap-3 bg-white ${
+      className={`relative mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col gap-3 ${
         isMemo ? "pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))]" : "pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
       }`}
     >
