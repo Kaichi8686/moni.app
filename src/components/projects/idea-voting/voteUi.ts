@@ -18,6 +18,6 @@ export const voteChipActive =
 export const voteAppleBtn =
   "inline-flex h-12 w-full items-center justify-center rounded-full bg-[#FF9600] px-4 text-[17px] font-semibold tracking-tight text-white transition-opacity active:opacity-70 disabled:cursor-not-allowed disabled:opacity-45";
 
-/** メッセージ上の投票カード内用（やや小さめ・同じスタイル） */
+/** メッセージ上の投票カード内用（やや小さめ・作成/投票で幅を揃える） */
 export const voteAppleBtnCompact =
-  "mt-1 inline-flex h-10 w-full items-center justify-center rounded-full bg-[#FF9600] px-3 text-[13px] font-semibold tracking-tight text-white transition-opacity active:opacity-70 disabled:opacity-45";
+  "mt-1 inline-flex h-10 w-full min-w-0 shrink-0 self-stretch items-center justify-center rounded-full bg-[#FF9600] px-3 text-[13px] font-semibold tracking-tight text-white transition-opacity active:opacity-70 disabled:opacity-45";

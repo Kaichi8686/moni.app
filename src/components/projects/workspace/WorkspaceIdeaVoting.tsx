@@ -238,7 +238,7 @@ export default function WorkspaceIdeaVoting() {
   }, [ideaIds, selectedIds, tallies.mine]);
 
   const canSubmitVote =
-    !closed && !submitting && selectedIds.size > 0 && selectedIds.size <= maxSelectable && voteDiffs.length > 0;
+    !closed && !submitting && selectedIds.size <= maxSelectable && voteDiffs.length > 0;
 
   /** 期限なし投票は作成者だけ手動で締め切れる */
   const canCloseManually = Boolean(
@@ -268,15 +268,17 @@ export default function WorkspaceIdeaVoting() {
     if (!selected || closed) return;
     setSelectionDirty(true);
     setSelectedIds((prev) => {
+      // 選択中の候補をもう一度押したらチェックを外す
+      if (prev.has(ideaId)) {
+        const next = new Set(prev);
+        next.delete(ideaId);
+        return next;
+      }
       // 1人1票: 押した候補へチェックが移る（ラジオ）
       if (singleSelect) {
         return new Set([ideaId]);
       }
       const next = new Set(prev);
-      if (next.has(ideaId)) {
-        next.delete(ideaId);
-        return next;
-      }
       if (next.size >= maxSelectable) {
         // 上限いっぱいなら、先に入っている1つを外して付け替え
         const first = next.values().next().value;
@@ -473,11 +475,13 @@ export default function WorkspaceIdeaVoting() {
                 ? iHaveVoted
                   ? tx("更新中…", "Updating…")
                   : tx("投票中…", "Voting…")
-                : iHaveVoted
-                  ? tx("票を変更する", "Change vote")
-                  : selectedIds.size > 1
-                    ? tx(`投票する（${selectedIds.size}）`, `Vote (${selectedIds.size})`)
-                    : tx("投票する", "Vote")}
+                : iHaveVoted && selectedIds.size === 0
+                  ? tx("票を取り消す", "Clear vote")
+                  : iHaveVoted
+                    ? tx("票を変更する", "Change vote")
+                    : selectedIds.size > 1
+                      ? tx(`投票する（${selectedIds.size}）`, `Vote (${selectedIds.size})`)
+                      : tx("投票する", "Vote")}
             </button>
           </div>
         </div>
