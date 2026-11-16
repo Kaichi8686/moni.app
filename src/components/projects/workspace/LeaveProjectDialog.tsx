@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LogOut, X } from "lucide-react";
-import { Avatar } from "@/components/ui/Avatar";
+import { Check, LogOut, X } from "lucide-react";
+import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { HOME_PROJECTS_HREF } from "@/lib/navigation/homeProjects";
 import {
   leaveProject,
@@ -108,17 +108,17 @@ export function LeaveProjectDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/45 px-4"
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/45 px-4 py-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="leave-project-title"
       onClick={resetAndClose}
     >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200"
+        className="flex max-h-[min(36rem,calc(100dvh-3rem))] w-full max-w-sm flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
           <h2 id="leave-project-title" className="text-[15px] font-bold text-zinc-950">
             {tx("プロジェクトを脱退", "Leave project")}
           </h2>
@@ -132,7 +132,7 @@ export function LeaveProjectDialog({
           </button>
         </div>
 
-        <div className="px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {err ? (
             <p className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800">
               {err}
@@ -154,7 +154,8 @@ export function LeaveProjectDialog({
                   "As owner, pick the next owner before leaving.",
                 )}
               </p>
-              <ul className="max-h-56 space-y-1 overflow-y-auto">
+              {/* 余白を確保して選択リングが切れないようにする。多いときはこの領域内でスクロール */}
+              <ul className="max-h-[min(18rem,45dvh)] space-y-1.5 overflow-y-auto overscroll-contain px-0.5 py-0.5">
                 {otherMembers.map((m) => {
                   const active = transferTargetId === m.id;
                   return (
@@ -163,26 +164,40 @@ export function LeaveProjectDialog({
                         type="button"
                         onClick={() => setTransferTargetId(m.id)}
                         className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition ${
-                          active ? "bg-orange-50 ring-1 ring-[#FF9600]/50" : "hover:bg-zinc-50"
+                          active
+                            ? "bg-orange-50 ring-1 ring-[#FF9600]/60"
+                            : "hover:bg-zinc-50"
                         }`}
                       >
-                        <Avatar name={m.name} url={m.avatarUrl} />
+                        <MemberAvatarBubble
+                          userId={m.id}
+                          name={m.name}
+                          avatarUrl={m.avatarUrl}
+                          size="sm"
+                        />
                         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-zinc-900">
                           {m.name}
                         </span>
                         <span
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                            active ? "border-[#FF9600] bg-[#FF9600] text-white" : "border-zinc-300 bg-white"
+                            active
+                              ? "border-[#FF9600] bg-[#FF9600] text-white"
+                              : "border-zinc-300 bg-white"
                           }`}
                           aria-hidden
                         >
-                          {active ? "✓" : null}
+                          {active ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
                         </span>
                       </button>
                     </li>
                   );
                 })}
               </ul>
+              {otherMembers.length > 4 ? (
+                <p className="text-center text-[11px] text-zinc-400">
+                  {tx("スクロールして全員を表示", "Scroll to see everyone")}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-3 text-center">
@@ -207,12 +222,12 @@ export function LeaveProjectDialog({
           )}
         </div>
 
-        <div className="flex gap-2 border-t border-zinc-100 px-4 py-3">
+        <div className="flex shrink-0 gap-2 border-t border-zinc-100 px-4 py-3">
           <button
             type="button"
             disabled={busy}
             onClick={resetAndClose}
-            className="flex-1 rounded-xl border border-zinc-200 bg-white py-2.5 text-[13px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+            className="flex-1 rounded-full border border-zinc-200 bg-white py-3 text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
           >
             {tx("キャンセル", "Cancel")}
           </button>
@@ -221,7 +236,7 @@ export function LeaveProjectDialog({
               type="button"
               disabled={!transferTargetId || busy}
               onClick={() => setStep("confirm")}
-              className="flex-1 rounded-xl bg-[#FF9600] py-2.5 text-[13px] font-bold text-white shadow-[0_3px_0_#E08600] transition active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+              className="flex-1 rounded-full bg-[#FF9600] py-3 text-[14px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
             >
               {tx("次へ", "Next")}
             </button>
@@ -230,7 +245,7 @@ export function LeaveProjectDialog({
               type="button"
               disabled={busy || (isOwner && !transferTargetId)}
               onClick={() => void confirmLeave()}
-              className="flex-1 rounded-xl bg-rose-600 py-2.5 text-[13px] font-bold text-white shadow-[0_3px_0_#BE123C] transition active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+              className="flex-1 rounded-full bg-rose-600 py-3 text-[14px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
             >
               {busy ? tx("脱退中…", "Leaving…") : tx("脱退する", "Leave")}
             </button>
