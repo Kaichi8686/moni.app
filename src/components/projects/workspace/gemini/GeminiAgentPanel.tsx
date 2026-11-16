@@ -1,9 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, History, Lightbulb, Loader2, MessageCircle, MessageSquarePlus, X } from "lucide-react";
+import { History, Lightbulb, Loader2, Menu, MessageCircle, MessageSquarePlus, X } from "lucide-react";
 import type {
   GeminiAgentMode,
   IdeasAgentPayload,
@@ -76,8 +75,7 @@ type Props = {
   initialUserMessage?: string;
   /** fullscreen = ChatGPT-like full viewport (coach page) */
   variant?: "card" | "fullscreen";
-  backHref?: string;
-  /** Switch between 相談 / アイデア (general | ideas) */
+  /** Switch between 相談 / アイデア (general | ideas) — empty-state picker only */
   onModeChange?: (mode: "general" | "ideas") => void;
   /** When true, open a blank chat (keep history list) instead of restoring last thread */
   startFresh?: boolean;
@@ -97,7 +95,6 @@ export function GeminiAgentPanel({
   onReload,
   initialUserMessage,
   variant = "card",
-  backHref,
   onModeChange,
   startFresh = false,
   onFreshConsumed,
@@ -422,7 +419,7 @@ export function GeminiAgentPanel({
   const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
   const circleBtn =
     "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]";
-  const showModeToggle = Boolean(onModeChange && (mode === "general" || mode === "ideas"));
+  const showModePicker = Boolean(onModeChange && (mode === "general" || mode === "ideas"));
 
   return (
     <div
@@ -432,81 +429,31 @@ export function GeminiAgentPanel({
           : "flex min-h-[520px] overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm"
       }
     >
-      <div
-        className={`hidden shrink-0 border-r border-[#E5E7EB] md:block ${fullscreen ? "w-[260px]" : "w-[240px]"}`}
-      >
-        {historyRail}
-      </div>
+      {!fullscreen ? (
+        <div className="hidden w-[240px] shrink-0 border-r border-[#E5E7EB] md:block">{historyRail}</div>
+      ) : null}
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {fullscreen ? (
-          <>
-            <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
-              <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-                {backHref ? (
-                  <Link
-                    href={backHref}
-                    className={circleBtn}
-                    aria-label={tx("プロジェクトに戻る", "Back to project")}
-                  >
-                    <ArrowLeft className="h-5 w-5" aria-hidden />
-                  </Link>
-                ) : (
-                  <span className="inline-block h-10 w-10" aria-hidden />
-                )}
-                <div className="min-w-0 flex-1">
-                  {showModeToggle ? (
-                    <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100/95 p-1 shadow-sm ring-1 ring-zinc-200/80">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (mode === "general") return;
-                          onModeChange?.("general");
-                        }}
-                        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
-                          mode === "general" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
-                        }`}
-                      >
-                        {tx("相談", "Chat")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (mode === "ideas") return;
-                          onModeChange?.("ideas");
-                        }}
-                        className={`min-h-11 rounded-xl px-1 text-[12px] font-extrabold tracking-tight transition sm:text-sm ${
-                          mode === "ideas" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
-                        }`}
-                      >
-                        {tx("アイデア", "Ideas")}
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="truncate text-center text-[14px] font-bold text-[#1A1A1A]">AI</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setHistoryOpen(true)}
-                    className={`${circleBtn} md:hidden`}
-                    aria-label={tx("履歴", "History")}
-                  >
-                    <History className="h-[18px] w-[18px]" aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={startNewChat}
-                    className={circleBtn}
-                    aria-label={tx("新規", "New")}
-                  >
-                    <MessageSquarePlus className="h-[18px] w-[18px]" aria-hidden />
-                  </button>
-                </div>
+          <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
+            <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className={circleBtn}
+                aria-label={tx("メニュー", "Menu")}
+                aria-expanded={historyOpen}
+              >
+                <Menu className="h-5 w-5" aria-hidden />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-center text-[14px] font-bold text-[#1A1A1A]">
+                  {messages.length === 0 ? "AI" : activeTitle}
+                </p>
               </div>
-            </header>
-          </>
+              <span className="inline-block h-10 w-10 shrink-0" aria-hidden />
+            </div>
+          </header>
         ) : (
           <div className="sticky top-0 z-20 shrink-0 border-b border-[#F3F4F6] bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4">
             <div className="flex items-center gap-2">
@@ -545,13 +492,13 @@ export function GeminiAgentPanel({
         >
           {messages.length === 0 ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
-              {!fullscreen && onModeChange && (mode === "general" || mode === "ideas") ? (
+              {showModePicker ? (
                 <div className="grid w-full max-w-md grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       if (mode === "general") return;
-                      onModeChange("general");
+                      onModeChange?.("general");
                     }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "general"
@@ -569,7 +516,7 @@ export function GeminiAgentPanel({
                     type="button"
                     onClick={() => {
                       if (mode === "ideas") return;
-                      onModeChange("ideas");
+                      onModeChange?.("ideas");
                     }}
                     className={`flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition ${
                       mode === "ideas"
@@ -849,7 +796,9 @@ export function GeminiAgentPanel({
 
       {historyOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex justify-end bg-black/40 md:hidden"
+          className={`fixed inset-0 z-[100] flex bg-black/40 ${
+            fullscreen ? "justify-start" : "justify-end md:hidden"
+          }`}
           role="dialog"
           aria-modal="true"
           aria-label={tx("チャット履歴", "Chat history")}

@@ -132,7 +132,6 @@ export default function WorkspaceGeminiHub() {
         onReload={reload}
         initialUserMessage={mode === "ideas" ? handoffPrompt ?? undefined : undefined}
         variant="fullscreen"
-        backHref={`/projects/${projectId}/overview`}
         onModeChange={changeMode}
         startFresh={startFresh}
         onFreshConsumed={() => setStartFresh(false)}
