@@ -1,10 +1,9 @@
-/** メッセージ専用: 画面全体を覆い、背面のホーム等が見えないようにする */
+/** メッセージ: 他タブと同じドキュメントフローで描画する。
+ *  `fixed inset-0` だと iOS Safari が layout viewport を縮めたままにし、
+ *  `position:fixed; bottom:0` のタブバーが画面途中に浮いて下に空白ができる。 */
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
   return (
-    // inset-0 alone fills the layout viewport. Avoid h-[100dvh] here: on iOS Safari
-    // dvh can lag after keyboard/chrome changes and leave a short shell that makes
-    // nested fixed chrome (tab bar) appear too high.
-    <div className="fixed inset-0 z-[45] mx-auto w-full max-w-lg bg-[#fafaf8]">
+    <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col bg-[#fafaf8]">
       {children}
     </div>
   );

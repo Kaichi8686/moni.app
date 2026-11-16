@@ -743,7 +743,7 @@ export function AppBottomNav({ className }: { className?: string }) {
     </Suspense>
   );
 
-  // Portal to body so nested `position:fixed` shells (e.g. messages layout)
+  // Portal to body so any nested `position:fixed` / transformed ancestor
   // cannot trap the tab bar above the true screen bottom on iOS Safari.
   // Keep an in-tree fallback until mount so the bar never flashes away.
   if (!mounted || typeof document === "undefined") return content;
