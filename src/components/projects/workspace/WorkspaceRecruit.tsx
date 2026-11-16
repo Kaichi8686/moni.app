@@ -26,9 +26,13 @@ type Panel = { kind: "detail"; row: ProjectRecruitment } | { kind: "create" };
 
 const SLIDE_OUT_MS = 220;
 
-/** 課題タブのジャンル行と同じフラットボタン（募集行・追加行で共通） */
+/** 課題タブのジャンル行と同じフラットボタン（既存募集行） */
 const RECRUIT_ROW =
   "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100";
+
+/** 「募集を追加」：薄いオレンジの行＋同系色のアイコン丸 */
+const RECRUIT_ADD_ROW =
+  "inline-flex w-full select-none items-center justify-start gap-3 rounded-2xl border border-[#F0D4A8] bg-[#FFF6E8] px-4 py-3.5 text-left text-[14px] font-bold leading-snug text-[#9A5B1F] shadow-sm transition hover:bg-[#FFEFD6] active:bg-[#FFE6C2]";
 
 function formatWeeklyHours(raw: string): string {
   const trimmed = raw.trim();
@@ -397,17 +401,17 @@ export default function WorkspaceRecruit() {
 
         <div className="flex flex-col gap-2.5">
           {canEdit && filter === "all" ? (
-            <button type="button" onClick={openCreate} className={RECRUIT_ROW}>
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FF9600] text-white">
+            <button type="button" onClick={openCreate} className={RECRUIT_ADD_ROW}>
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF9600] text-white shadow-sm ring-2 ring-[#FFD59A]">
                 <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate">{tx("募集を追加", "Add recruitment")}</span>
-                <span className="truncate text-[11px] font-semibold text-zinc-500">
+                <span className="truncate text-[11px] font-semibold text-[#9A5B1F]/80">
                   {tx("欲しい人材を公開する", "Post an opening")}
                 </span>
               </span>
-              <ChevronRight className="h-5 w-5 shrink-0 text-zinc-400" aria-hidden strokeWidth={2.5} />
+              <ChevronRight className="h-5 w-5 shrink-0 text-[#D4A574]" aria-hidden strokeWidth={2.5} />
             </button>
           ) : null}
 
