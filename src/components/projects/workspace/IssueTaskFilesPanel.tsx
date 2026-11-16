@@ -1198,9 +1198,9 @@ export function IssueTaskFilesPanel({
                         if (!requiredFilesReady(files)) return;
                         void onSaveWork({ submittedAt: new Date().toISOString(), workFiles: files });
                       }}
-                      className={`inline-flex min-h-[50px] w-full select-none items-center justify-center rounded-2xl px-4 text-[16px] font-bold transition hover:opacity-95 active:bg-[#E07E00] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:bg-[#FF9600] ${
+                      className={`inline-flex min-h-[50px] w-full select-none items-center justify-center rounded-full px-6 text-[17px] font-semibold tracking-[-0.022em] transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40 ${
                         submitted
-                          ? "bg-zinc-100 text-zinc-500 hover:opacity-100 active:bg-zinc-100"
+                          ? "bg-[#F2F2F7] text-[#3C3C43]/60"
                           : "bg-[#FF9600] text-white"
                       }`}
                     >
