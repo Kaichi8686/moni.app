@@ -15,7 +15,7 @@ type Props = {
 const SIZES = {
   md: { box: "h-10 w-10 text-sm", radius: "rounded-lg" },
   lg: { box: "h-20 w-20 text-2xl", radius: "rounded-xl" },
-  xl: { box: "h-20 w-20 text-2xl", radius: "rounded-xl" },
+  xl: { box: "h-[68px] w-[68px] text-xl", radius: "rounded-xl" },
 } as const;
 
 export function ProfileAvatar({
