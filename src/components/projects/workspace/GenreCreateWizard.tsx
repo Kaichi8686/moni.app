@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft } from "lucide-react";
-import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {
+  clearGenreCreateDraft,
+  clearGenreCreateOpen,
+  markGenreCreateOpen,
+  readGenreCreateDraft,
+  writeGenreCreateDraft,
+} from "@/lib/workspace/genreCreateDraft";
 import {
   CUSTOM_COLOR_PRESETS,
   CUSTOM_GENRE_ICON_PRESETS,
@@ -16,6 +22,7 @@ import {
 import type { CustomTaskGenreDef } from "@/lib/workspace/types";
 
 type Props = {
+  projectId: string;
   phaseId: string | null;
   existingCount: number;
   existingLabels: string[];
@@ -35,6 +42,7 @@ function resetViewportZoom() {
 }
 
 export function GenreCreateWizard({
+  projectId,
   phaseId,
   existingCount,
   existingLabels,
@@ -45,6 +53,7 @@ export function GenreCreateWizard({
   const [portalReady, setPortalReady] = useState(false);
   const [entered, setEntered] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [label, setLabel] = useState("");
   const [hint, setHint] = useState("");
   const [colorKey, setColorKey] = useState(() => nextCustomColorKey(existingCount));
@@ -52,13 +61,39 @@ export function GenreCreateWizard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const closedRef = useRef(false);
 
   const isDirty = Boolean(label.trim()) || Boolean(hint.trim());
   const canSubmit = Boolean(normalizeCustomTaskGenreLabel(label));
   const SelectedIcon = CUSTOM_GENRE_ICON_PRESETS.find((p) => p.key === iconKey)?.icon ?? CUSTOM_GENRE_ICON_PRESETS[0]!.icon;
 
+  // 下書き復元
+  useEffect(() => {
+    closedRef.current = false;
+    const draft = readGenreCreateDraft(projectId, phaseId);
+    if (draft) {
+      setLabel(draft.label);
+      setHint(draft.hint);
+      if (draft.colorKey) setColorKey(draft.colorKey);
+      setIconKey(draft.iconKey);
+    }
+    setHydrated(true);
+  }, [projectId, phaseId]);
+
+  // 下書き保存
+  useEffect(() => {
+    if (!hydrated || closedRef.current) return;
+    writeGenreCreateDraft(projectId, phaseId, {
+      label,
+      hint,
+      colorKey,
+      iconKey,
+    });
+  }, [hydrated, projectId, phaseId, label, hint, colorKey, iconKey]);
+
   useEffect(() => {
     setPortalReady(true);
+    markGenreCreateOpen(projectId, phaseId);
     const id = window.requestAnimationFrame(() => setEntered(true));
     const prevOverflow = document.body.style.overflow;
     const prevHtmlOverflowX = document.documentElement.style.overflowX;
@@ -69,9 +104,12 @@ export function GenreCreateWizard({
       document.body.style.overflow = prevOverflow;
       document.documentElement.style.overflowX = prevHtmlOverflowX;
     };
-  }, []);
+  }, [projectId, phaseId]);
 
-  function closeWizard() {
+  function clearDraftAndClose() {
+    closedRef.current = true;
+    clearGenreCreateDraft(projectId, phaseId);
+    clearGenreCreateOpen(projectId);
     setConfirmDiscard(false);
     setExiting(true);
     window.setTimeout(() => onClose(), 220);
@@ -83,7 +121,7 @@ export function GenreCreateWizard({
       setConfirmDiscard(true);
       return;
     }
-    closeWizard();
+    clearDraftAndClose();
   }
 
   async function finish() {
@@ -104,6 +142,9 @@ export function GenreCreateWizard({
         iconKey,
         phaseId: phaseId ?? undefined,
       });
+      closedRef.current = true;
+      clearGenreCreateDraft(projectId, phaseId);
+      clearGenreCreateOpen(projectId);
       setExiting(true);
       window.setTimeout(() => onClose(), 180);
     } catch (e) {
@@ -128,10 +169,10 @@ export function GenreCreateWizard({
           type="button"
           disabled={saving}
           onClick={requestClose}
-          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-zinc-800 shadow-[0_2px_0_#D4D4D8] transition-[transform,box-shadow] duration-75 enabled:active:translate-y-[2px] enabled:active:shadow-none disabled:opacity-50"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 active:bg-zinc-100 disabled:opacity-50"
           aria-label={tx("戻る", "Back")}
         >
-          <ArrowLeft className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+          <ArrowLeft className="h-5 w-5" strokeWidth={2.5} aria-hidden />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-[20px] font-extrabold leading-tight text-zinc-900">
           {tx("ジャンルを作成", "Create genre")}
@@ -207,20 +248,21 @@ export function GenreCreateWizard({
               {CUSTOM_GENRE_ICON_PRESETS.map((preset) => {
                 const Icon = preset.icon;
                 const selected = iconKey === preset.key;
+                const markLabel = locale === "en" ? preset.labelEn : preset.labelJa;
                 return (
                   <button
                     key={preset.key}
                     type="button"
                     onClick={() => setIconKey(preset.key)}
-                    className={`inline-flex h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border text-[10px] font-semibold ${
+                    className={`inline-flex h-12 w-full items-center justify-center rounded-2xl border ${
                       selected
                         ? "border-[#FF9600] bg-[#FFF4E5] text-[#9A5B1F]"
                         : "border-zinc-200 bg-white text-zinc-600"
                     }`}
+                    aria-label={markLabel}
                     aria-pressed={selected}
                   >
-                    <Icon className="h-4 w-4" aria-hidden />
-                    <span className="truncate px-0.5">{locale === "en" ? preset.labelEn : preset.labelJa}</span>
+                    <Icon className="h-5 w-5" aria-hidden />
                   </button>
                 );
               })}
@@ -233,16 +275,14 @@ export function GenreCreateWizard({
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-100 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
         <div className="mx-auto max-w-lg">
-          <DuoButton
+          <button
             type="button"
-            tone="orange"
-            size="lg"
-            fullWidth
             disabled={!canSubmit || saving}
             onClick={() => void finish()}
+            className="inline-flex w-full select-none items-center justify-center rounded-full bg-[#FF9600] px-4 min-h-[50px] text-[17px] font-semibold tracking-[-0.022em] text-white transition-[opacity,transform] duration-100 ease-out active:scale-[0.99] active:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 disabled:active:opacity-40"
           >
             {saving ? tx("作成中…", "Creating…") : tx("完了", "Done")}
-          </DuoButton>
+          </button>
         </div>
       </div>
 
@@ -267,7 +307,7 @@ export function GenreCreateWizard({
               <button
                 type="button"
                 className="rounded-xl bg-[#d93025] px-4 py-3 text-sm font-semibold text-white hover:bg-[#c5221f]"
-                onClick={closeWizard}
+                onClick={clearDraftAndClose}
               >
                 {tx("捨てて戻る", "Discard")}
               </button>

@@ -8,6 +8,7 @@ import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWi
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
 import { IssueTaskFilesPanel } from "@/components/projects/workspace/IssueTaskFilesPanel";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
+import { shouldResumeGenreCreate } from "@/lib/workspace/genreCreateDraft";
 import { readIssueCreateDraft, readIssueCreateOpen } from "@/lib/workspace/issueCreateDraft";
 import {
   getStepMemoFiles,
@@ -288,6 +289,9 @@ export default function WorkspaceIssues() {
         if (restored.kind === "genre" && shouldResumeIssueCreate(projectId, restored.phaseId, restored.genre)) {
           setCreating(true);
         }
+        if (restored.kind === "step" && shouldResumeGenreCreate(projectId, restored.phaseId)) {
+          setAddingGenre(true);
+        }
         return;
       }
     }
@@ -301,6 +305,14 @@ export default function WorkspaceIssues() {
       setCreating(true);
     }
   }, [screen, projectId, creating]);
+
+  // ジャンル作成中に他画面へ行っても、開いていた作成画面を再開する
+  useEffect(() => {
+    if (!screen || screen.kind !== "step" || addingGenre || !canEdit) return;
+    if (shouldResumeGenreCreate(projectId, screen.phaseId)) {
+      setAddingGenre(true);
+    }
+  }, [screen, projectId, addingGenre, canEdit]);
 
   // 見ている画面を記憶／離脱時刻を刻む。長時間バックグラウンドならいまのステップへ戻す
   useEffect(() => {
@@ -543,6 +555,7 @@ export default function WorkspaceIssues() {
 
         {addingGenre && canEdit ? (
           <GenreCreateWizard
+            projectId={projectId}
             phaseId={stepPhaseId}
             existingCount={customGenres.length}
             existingLabels={customGenres
