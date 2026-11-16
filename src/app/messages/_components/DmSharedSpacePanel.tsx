@@ -17,6 +17,7 @@ import {
 import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
 import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   createDmBoard,
@@ -600,8 +601,8 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
 
           <ul className="min-h-0 flex-1 divide-y divide-[#e8eaed] overflow-y-auto pb-28">
             {loading ? (
-              <li className="px-4 py-16 text-center text-[14px] text-[#5f6368]">
-                {tx("読み込み中...", "Loading…")}
+              <li className="px-4 py-4">
+                <StackSkeleton count={5} className="space-y-2" />
               </li>
             ) : files.length === 0 ? (
               <li className="px-4 py-16 text-center text-[14px] text-[#5f6368]">

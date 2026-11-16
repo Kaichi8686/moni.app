@@ -1,5 +1,6 @@
 "use client";
 
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import { BookTemplate, Layers, Save, Trash2, X } from "lucide-react";
 import { ARCHETYPE_LABELS } from "@/lib/projects/builtinRoadmapTemplates";
@@ -330,7 +331,7 @@ export function ProjectTemplateModal({
                 </fieldset>
               ) : null}
 
-              {loading ? <p className="text-[12px] text-[#6B7280]">読み込み中…</p> : null}
+              {loading ? <StackSkeleton count={3} className="py-1" /> : null}
 
               {ARCHETYPE_ORDER.map((arch) => {
                 const meta = ARCHETYPE_LABELS[arch];

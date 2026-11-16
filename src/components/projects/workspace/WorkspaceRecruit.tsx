@@ -1,5 +1,6 @@
 "use client";
 
+import { StackSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Plus } from "lucide-react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
@@ -328,8 +329,8 @@ export default function WorkspaceRecruit() {
 
   if (loading) {
     return (
-      <div className="flex h-full min-h-[50vh] items-center justify-center px-4">
-        <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+      <div className="px-4 py-4">
+        <WorkspacePageSkeleton />
       </div>
     );
   }
@@ -410,7 +411,7 @@ export default function WorkspaceRecruit() {
           ) : null}
 
           {listLoading ? (
-            <p className="py-6 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+            <StackSkeleton count={4} className="py-2" />
           ) : filteredRows.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
               {filter === "closed"
@@ -661,7 +662,7 @@ export default function WorkspaceRecruit() {
                   {tx(`応募者 ${applicants.length}`, `Applicants ${applicants.length}`)}
                 </h2>
                 {applicantsLoading ? (
-                  <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+                  <StackSkeleton count={3} />
                 ) : applicants.length === 0 ? (
                   <p className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-center text-sm text-zinc-500">
                     {tx("まだ応募はありません。", "No applications yet.")}

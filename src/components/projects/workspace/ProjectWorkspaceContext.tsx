@@ -68,6 +68,7 @@ import { ProjectSettingsModal, type ProjectSettingsMeta } from "@/components/pro
 import { ProjectWorkspaceSwitcher } from "@/components/projects/workspace/ProjectWorkspaceSwitcher";
 import type { CalendarSchedule } from "@/components/projects/ProjectScheduleCalendar";
 import { ProjectDeleteVotePanel } from "@/components/projects/workspace/ProjectDeleteVotePanel";
+import { Skeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { fetchDeletionState } from "@/lib/projects/deletionVote";
 import {
   busyDateKeysFromSchedules,
@@ -1285,14 +1286,19 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           <div className="mx-auto max-w-3xl">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <ProjectWorkspaceSwitcher
-                  projectId={projectId}
-                  projectName={
-                    project?.name ?? (loading ? tx("読み込み中…", "Loading…") : tx("プロジェクト", "Project"))
-                  }
-                  thumbnailUrl={projectMeta?.thumbnail_url}
-                  icon={project?.icon}
-                />
+                {loading && !project ? (
+                  <div className="flex items-center gap-2 px-1 py-1" aria-busy="true" aria-label="Loading">
+                    <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                ) : (
+                  <ProjectWorkspaceSwitcher
+                    projectId={projectId}
+                    projectName={project?.name ?? tx("プロジェクト", "Project")}
+                    thumbnailUrl={projectMeta?.thumbnail_url}
+                    icon={project?.icon}
+                  />
+                )}
               </div>
               <div className="pointer-events-auto relative z-[110] flex shrink-0 items-center gap-0.5">
                 <ProjectWorkspaceNoticeBell userId={uid} projectId={projectId} disabled={!project} />
@@ -1503,8 +1509,8 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                   {error}
                 </div>
               ) : null}
-              {loading && !error && !isCoachChat ? <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p> : null}
-              {children}
+              {loading && !error && !isCoachChat ? <WorkspacePageSkeleton /> : null}
+              {!loading || isCoachChat || error ? children : null}
             </div>
           </main>
         </div>

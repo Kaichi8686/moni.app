@@ -19,6 +19,7 @@ import { resolveProjectBrief } from "@/lib/projects/projectBrief";
 import { buildStepListItems } from "@/lib/roadmap/buildStepListItems";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { addDays } from "date-fns";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function WorkspaceOverview() {
   const { tx } = useI18n();
@@ -100,7 +101,7 @@ export default function WorkspaceOverview() {
     ).length;
   }, [achievePhaseId, issues]);
 
-  if (loading) return <p className="text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
+  if (loading) return <WorkspacePageSkeleton />;
   if (!project) return <p className="text-sm text-zinc-500">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
   const completedSteps = sortedPhases.filter((phase) => phase.status === "completed").length;

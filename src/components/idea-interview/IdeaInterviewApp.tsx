@@ -17,6 +17,7 @@ import {
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import {
   newAiId,
   upsertActiveConversation,
@@ -743,11 +744,7 @@ export function IdeaInterviewApp({
   );
 
   if (!ownerReady || !hydrated) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center bg-white text-sm text-[#6B7280]">
-        {tx("読み込み中…", "Loading…")}
-      </div>
-    );
+    return <WorkspacePageSkeleton className="bg-white px-4 py-8" />;
   }
 
   const shellClass = isHub

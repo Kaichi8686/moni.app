@@ -9,6 +9,7 @@ import { saveCoachingContextPatch } from "@/lib/projects/saveCoachingContextPatc
 import type { ProjectMemberRow, ProjectRow } from "@/lib/projects/types";
 import { bumpTeamActivityStreak } from "@/lib/projects/teamActivityStreak";
 import { supabase } from "@/lib/supabase";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 function isSchemaError(err: { message?: string } | null | undefined): boolean {
   const m = (err?.message ?? "").toLowerCase();
@@ -119,7 +120,7 @@ export default function WorkspaceCoachingRoadmap() {
   }, [project, projectId]);
 
   if (workspaceLoading || loading) {
-    return <p className="text-sm text-[#6B7280]">ロードマップを読み込み中…</p>;
+    return <WorkspacePageSkeleton />;
   }
   if (error) {
     return <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">{error}</div>;

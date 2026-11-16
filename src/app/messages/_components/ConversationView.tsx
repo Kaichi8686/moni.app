@@ -29,6 +29,7 @@ import { markDirectConversationOpened } from "@/lib/messages/openedDirectConvers
 import { closeProjectCluster, openProjectCluster } from "@/lib/navigation/projectCluster";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { ConversationSkeleton } from "@/components/ui/Skeleton";
 import type { Message } from "@/lib/types/messages";
 
 type Props = { conversationId: string };
@@ -333,11 +334,7 @@ export function ConversationView({ conversationId }: Props) {
     .join("\n");
 
   if (!header) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-4 text-sm text-zinc-400">
-        {tx("読み込み中...", "Loading…")}
-      </div>
-    );
+    return <ConversationSkeleton />;
   }
 
   const headerTitle =

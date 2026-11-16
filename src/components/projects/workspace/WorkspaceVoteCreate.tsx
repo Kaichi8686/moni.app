@@ -8,6 +8,7 @@ import { voteAppleBtn, voteInput } from "@/components/projects/idea-voting/voteU
 import { createIdea, createVoteEvent, VOTE_LIMIT_MAX } from "@/lib/projects/ideaVoting/ideaVotingApi";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 function localDatetimeToIso(value: string): string | null {
   if (!value.trim()) return null;
@@ -141,7 +142,7 @@ export default function WorkspaceVoteCreate() {
   }
 
   if (loading) {
-    return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+    return <WorkspacePageSkeleton />;
   }
 
   return (

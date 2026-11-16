@@ -7,6 +7,7 @@ import { hasProjectBriefContent, resolveProjectBrief } from "@/lib/projects/proj
 import type { ProjectRow } from "@/lib/projects/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 const PROJECT_SELECT =
   "id,owner_id,name,description,category,tags,thumbnail_url,visibility,business_type,recruitment_target,recruitment_message,coaching_context,created_at,updated_at";
@@ -269,7 +270,7 @@ export function ExploreFriendProjectDetail({ projectId, seed, onClose }: Props) 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-4">
           {loading ? (
-            <p className="py-16 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+            <WorkspacePageSkeleton className="py-8" />
           ) : error ? (
             <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center">
               <p className="text-sm font-medium text-zinc-700">{error}</p>

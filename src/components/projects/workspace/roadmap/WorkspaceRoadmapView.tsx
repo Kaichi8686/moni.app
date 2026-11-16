@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -107,7 +108,7 @@ export default function WorkspaceRoadmapView() {
   );
 
   if (wsLoading || roadmap.loading) {
-    return <p className="p-6 text-sm text-gray-500">{tx("読み込み中...", "Loading…")}</p>;
+    return <WorkspacePageSkeleton className="p-6" />;
   }
 
   const err = roadmap.error || actionError;

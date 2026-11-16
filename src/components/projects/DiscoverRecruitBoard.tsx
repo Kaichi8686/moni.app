@@ -9,6 +9,7 @@ import {
   type ProjectRecruitment,
 } from "@/lib/projects/projectRecruitments";
 import { applyToRecruitment } from "@/lib/projects/projectRecruitmentApplications";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -153,7 +154,7 @@ export function DiscoverRecruitBoard() {
               : tx("仲間募集中（最近更新）", "Open roles (recently updated)")}
           </p>
         ) : null}
-        {loading ? <p className="py-8 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p> : null}
+        {loading ? <StackSkeleton count={5} className="py-2" /> : null}
         {!loading && browseList.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
             <p className="text-sm font-medium text-zinc-700">

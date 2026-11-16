@@ -9,6 +9,7 @@ import { OfficeApp } from "@/components/office/OfficeApp";
 import { IdeaInterviewApp } from "@/components/idea-interview/IdeaInterviewApp";
 import { IdeaQnAPanel } from "@/components/idea-hub/IdeaQnAPanel";
 import { InterviewsComingSoon } from "@/components/idea-hub/InterviewsComingSoon";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { INTERVIEW_ARTICLE_MOCKS } from "@/lib/idea-hub/interviewMocks";
 import { parseIdeaHubTab, type IdeaHubTab } from "@/lib/idea-hub/types";
 import type { IdeaPersonalAiMode } from "@/lib/idea-interview/personalAi";
@@ -275,11 +276,7 @@ function IdeaHubInner() {
 export function IdeaHub() {
   return (
     <Suspense
-      fallback={
-        <div className="flex min-h-[100dvh] items-center justify-center bg-white text-sm text-zinc-500">
-          読み込み中…
-        </div>
-      }
+      fallback={<WorkspacePageSkeleton className="min-h-[100dvh] bg-white px-4 py-8" />}
     >
       <IdeaHubInner />
     </Suspense>

@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import { WhiteboardToolbar, WhiteboardToolHint } from "@/components/projects/whiteboard/WhiteboardToolbar";
@@ -751,7 +752,7 @@ export function ProjectWhiteboard({
   }
 
   if (loading) {
-    return <p className="text-sm text-[#6B7280]">ホワイトボードを読み込み中…</p>;
+    return <WorkspacePageSkeleton />;
   }
 
   const selected = selectedId ? elements.find((e) => e.id === selectedId) ?? null : null;

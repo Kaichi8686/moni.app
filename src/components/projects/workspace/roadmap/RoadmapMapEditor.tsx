@@ -20,6 +20,7 @@ import { splitRoadmapPathLayout } from "@/lib/roadmap/pathLayout";
 import { useRoadmapProject } from "@/lib/roadmap/useRoadmapProject";
 import { supabase } from "@/lib/supabase";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 type DraftMessage = { id: string; role: "user" | "assistant"; content: string };
 
@@ -260,7 +261,7 @@ export function RoadmapMapEditor() {
   }
 
   if (roadmap.loading) {
-    return <p className="p-6 text-sm text-zinc-500">{tx("読み込み中...", "Loading…")}</p>;
+    return <WorkspacePageSkeleton className="p-6" />;
   }
 
   const hasSteps = steps.length > 0;

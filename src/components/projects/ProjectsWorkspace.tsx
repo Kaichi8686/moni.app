@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -557,7 +558,13 @@ export function ProjectsWorkspace({ projectId }: Props) {
               <input className={input} placeholder="検索" value={query} onChange={(e) => setQuery(e.target.value)} />
               <input className={input} placeholder="タグ絞り込み" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} />
             </div>
-            <h2 className="mt-3 text-base font-semibold">{loading ? "読み込み中..." : `公開/参加可能プロジェクト (${filteredProjects.length})`}</h2>
+            <h2 className="mt-3 text-base font-semibold">
+              {loading ? (
+                <span className="inline-block h-5 w-56 animate-pulse rounded bg-zinc-200/80" aria-hidden />
+              ) : (
+                `公開/参加可能プロジェクト (${filteredProjects.length})`
+              )}
+            </h2>
             <ul className="mt-3 space-y-2">
               {filteredProjects.map((p) => (
                 <li key={p.id} className="rounded-xl border border-zinc-200 p-3">
@@ -878,7 +885,7 @@ export function ProjectsWorkspace({ projectId }: Props) {
           </Link>
         </section>
       ) : (
-        <section className={card}>プロジェクトを読み込み中...</section>
+        <section className={card}><WorkspacePageSkeleton /></section>
       )}
     </main>
   );

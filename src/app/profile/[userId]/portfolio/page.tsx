@@ -11,6 +11,7 @@ import { loadProfileGamification } from "@/lib/gamification/profileGamification"
 import { buildPortfolioData, type PortfolioData } from "@/lib/portfolio/buildPortfolioData";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function PortfolioPage() {
   const { t, locale, tx } = useI18n();
@@ -41,7 +42,7 @@ export default function PortfolioPage() {
   }
 
   if (loading) {
-    return <p className="p-8 text-center text-sm text-gray-500">{tx("読み込み中…", "Loading…")}</p>;
+    return <WorkspacePageSkeleton className="p-8" />;
   }
   if (!data?.profile) {
     return <p className="p-8 text-center text-sm text-rose-600">{tx("見つかりません", "Not found")}</p>;

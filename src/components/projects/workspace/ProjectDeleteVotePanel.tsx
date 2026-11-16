@@ -1,5 +1,6 @@
 "use client";
 
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import {
   cancelDeletionProposal,
@@ -115,7 +116,7 @@ export function ProjectDeleteVotePanel({
         {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{error}</p> : null}
 
         {!state ? (
-          <p className="mt-4 text-sm text-[#6B7280]">読み込み中…</p>
+          <StackSkeleton count={3} className="mt-4" />
         ) : !state.proposal ? (
           <div className="mt-4 space-y-3">
             <p className="text-[12px] text-[#6B7280]">現在、削除提案はありません。</p>

@@ -10,6 +10,7 @@ import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { FollowingChatEntry } from "@/app/messages/_components/FollowingChatEntry";
 import { FollowingChatPicker } from "@/app/messages/_components/FollowingChatPicker";
 import { InboxVoteCards } from "@/app/messages/_components/InboxVoteCards";
+import { InboxListSkeleton } from "@/components/ui/Skeleton";
 import {
   ensureMyProjectConversations,
   ensureProjectScopedMail,
@@ -413,9 +414,7 @@ export function InboxList() {
                   : loadError}
             </p>
           ) : loading ? (
-            <p className="px-4 py-8 text-center text-sm text-zinc-400">
-              {tx("読み込み中...", "Loading…")}
-            </p>
+            <InboxListSkeleton />
           ) : (
             <>
               {!scopedProjectId ? (

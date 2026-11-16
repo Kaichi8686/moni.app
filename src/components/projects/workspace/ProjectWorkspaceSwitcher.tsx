@@ -12,6 +12,7 @@ import { loadMemberProjects, type MemberProjectLite } from "@/lib/projects/loadM
 import { fetchUnreadWorkspaceProjectIds } from "@/lib/projects/workspaceNotifications";
 import { rememberLastProject } from "@/lib/workspace/lastProject";
 import { supabase } from "@/lib/supabase";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 
 type Props = {
   projectId: string;
@@ -181,7 +182,7 @@ export function ProjectWorkspaceSwitcher({ projectId, projectName, thumbnailUrl,
           </p>
           <div className="max-h-[min(50vh,20rem)] overflow-y-auto">
             {loading && rows.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+              <StackSkeleton count={3} className="px-3 py-2" />
             ) : null}
             {!loading && rows.length === 0 ? (
               <p className="px-3 py-3 text-sm text-zinc-500">

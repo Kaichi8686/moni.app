@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
 import { ExploreFriendCard } from "@/components/explore/ExploreFriendCard";
+import { CardGridSkeleton } from "@/components/ui/Skeleton";
 import { readStoredAvatarUrl } from "@/lib/memberAvatar";
 import { HOME_PROJECTS_HREF, resolveAppEntryHref } from "@/lib/navigation/homeProjects";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
@@ -5130,9 +5131,7 @@ export function MoniHomeApp() {
                         : "Results"}
                   </p>
                 ) : null}
-                {matchLoading ? (
-                  <p className="mt-6 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
-                ) : null}
+                {matchLoading ? <CardGridSkeleton count={6} className="mt-4" /> : null}
                 {!matchLoading && matches.length === 0 ? (
                   <div className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
                     <p className="text-sm font-medium text-zinc-700">

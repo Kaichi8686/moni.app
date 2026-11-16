@@ -1,5 +1,6 @@
 "use client";
 
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import {
   useEffect,
   useMemo,
@@ -415,7 +416,7 @@ export function QnAQuestionList({
       )}
 
       {loading ? (
-        <p className={`${PANEL} px-4 py-8 text-center text-sm text-zinc-500`}>{tx("読み込み中…", "Loading…")}</p>
+        <div className={`${PANEL} px-4 py-4`}><StackSkeleton count={4} /></div>
       ) : filtered.length === 0 ? (
         <div className={`${PANEL} border-dashed px-4 py-12 text-center dark:border-zinc-600`}>
           <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">

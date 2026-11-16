@@ -3,6 +3,7 @@
 import { Bell, ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 import {
@@ -172,7 +173,7 @@ export function ProjectWorkspaceNoticeBell({ userId, projectId, disabled }: Prop
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
               {loading ? (
-                <p className="py-8 text-center text-sm text-zinc-400">{tx("読み込み中…", "Loading…")}</p>
+                <StackSkeleton count={4} className="py-2" />
               ) : rows.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-3 py-8 text-center text-sm text-zinc-500">
                   {tx("このプロジェクトの新しい通知はありません", "No notifications for this project yet")}

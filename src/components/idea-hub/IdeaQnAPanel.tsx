@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { QnABoard } from "@/components/qna/QnABoard";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -99,11 +100,7 @@ export function IdeaQnAPanel({ active }: { active: boolean }) {
   );
 
   if (!ready) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
-        {tx("読み込み中…", "Loading…")}
-      </div>
-    );
+    return <WorkspacePageSkeleton className="px-4 py-8" />;
   }
 
   return (
