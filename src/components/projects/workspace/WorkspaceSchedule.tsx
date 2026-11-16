@@ -8,6 +8,7 @@ import { IssueModal } from "@/components/issues/IssueModal";
 import { sortIssuesByDueDate } from "@/lib/workspace/sortIssuesByDueDate";
 import type { Issue } from "@/lib/workspace/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 export default function WorkspaceSchedule() {
   const { tx } = useI18n();
@@ -35,7 +36,7 @@ export default function WorkspaceSchedule() {
   const editIssueLive = editIssue ? issues.find((i) => i.id === editIssue.id) ?? editIssue : null;
   const detailPhase = detailIssueLive?.phaseId ? phases.find((p) => p.id === detailIssueLive.phaseId) : undefined;
 
-  if (loading) return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+  if (loading) return <WorkspacePageSkeleton />;
   if (!project) return <p className="text-sm text-[#6B7280]">{tx("プロジェクトがありません。", "No project found.")}</p>;
 
   return (

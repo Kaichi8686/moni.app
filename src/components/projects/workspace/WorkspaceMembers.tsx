@@ -1,5 +1,6 @@
 "use client";
 
+import { StackSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, MessageCircle } from "lucide-react";
@@ -273,7 +274,7 @@ export default function WorkspaceMembers() {
     }
   }
 
-  if (loading) return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+  if (loading) return <WorkspacePageSkeleton />;
   if (!project) return null;
 
   return (
@@ -480,7 +481,7 @@ export default function WorkspaceMembers() {
             </button>
           </div>
           <ul className="mt-3 space-y-2">
-            {requestsLoading ? <li className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</li> : null}
+            {requestsLoading ? <li className="list-none"><StackSkeleton count={3} /></li> : null}
             {joinRequests.map((r) => (
               <li key={r.id} className="rounded-md border border-[#E5E7EB] px-3 py-2">
                 <p className="text-[12px] text-[#6B7280]">{requesterNames[r.requester_id] ?? r.requester_id.slice(0, 8)}</p>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Sparkles, Trash2, TrendingUp, X } from "lucide-react";
 import { createMyIdea, deleteMyIdea, listMyIdeas } from "@/lib/idea-hub/myIdeas";
 import type { MyIdea } from "@/lib/idea-hub/types";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 function formatSavedAt(iso: string, locale: "ja" | "en") {
@@ -95,12 +96,7 @@ export function MyIdeasPanel() {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-zinc-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        {tx("読み込み中…", "Loading…")}
-      </div>
-    );
+    return <WorkspacePageSkeleton className="px-4 py-8" />;
   }
 
   if (loginRequired) {

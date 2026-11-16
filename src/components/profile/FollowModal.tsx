@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { PeopleListSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { FollowListUser } from "@/lib/profile/types";
 
@@ -53,7 +54,7 @@ export function FollowModal({ type, profileId, viewerId, onClose, loadUsers, onT
         </div>
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <p className="px-4 py-8 text-center text-sm text-gray-500">{tx("読み込み中…", "Loading…")}</p>
+            <PeopleListSkeleton />
           ) : users.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-gray-500">
               {type === "followers"

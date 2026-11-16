@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -956,7 +957,7 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     setDocContent(activeDoc.content ?? "");
   }, [activeDoc]);
 
-  if (loading) return <main className="mx-auto max-w-5xl p-4 text-sm text-zinc-600">プロジェクトを読み込み中...</main>;
+  if (loading) return <main className="mx-auto max-w-5xl p-4"><WorkspacePageSkeleton /></main>;
   if (!selectedProject)
     return (
       <main className="mx-auto max-w-lg space-y-4 p-4">

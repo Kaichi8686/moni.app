@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { MemberAvatarBubble } from "@/components/MemberAvatarBubble";
+import { PeopleListSkeleton } from "@/components/ui/Skeleton";
 import { openDirectMessage } from "@/lib/messages/openDirectMessage";
 import { clearMailProjectScope, conversationHref } from "@/lib/messages/mailScope";
 import { markDirectConversationOpened } from "@/lib/messages/openedDirectConversations";
@@ -129,9 +130,7 @@ export function FollowingChatPicker({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
-            <p className="px-4 py-8 text-center text-sm text-zinc-400">
-              {tx("読み込み中…", "Loading…")}
-            </p>
+            <PeopleListSkeleton count={8} />
           ) : filtered.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-zinc-500">
               {peers.length === 0

@@ -14,6 +14,7 @@ import { EmptyPotArt } from "@/components/idea-garden/illustrations/EmptyPotArt"
 import { FlowerArt } from "@/components/idea-garden/illustrations/FlowerArt";
 import { SeedArt } from "@/components/idea-garden/illustrations/SeedArt";
 import { SeedBagArt } from "@/components/idea-garden/illustrations/SeedBagArt";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import {
   isGrowDay,
   isSunday,
@@ -505,11 +506,7 @@ export function IdeaGardenApp({ onImmersiveChange }: Props) {
   };
 
   if (!hydrated) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm font-semibold text-zinc-500">
-        {tx("読み込み中…", "Loading…")}
-      </div>
-    );
+    return <WorkspacePageSkeleton className="px-4 py-8" />;
   }
 
   /* ——— DETAIL (private flower — title + description) ——— */

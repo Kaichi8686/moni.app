@@ -8,6 +8,7 @@ import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { computeMoniTier } from "@/lib/gamification/moniTier";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { ProfileSkeleton } from "@/components/ui/Skeleton";
 import { loadLeagueProfile } from "@/lib/idea-league/api";
 import type { LeagueTier } from "@/lib/idea-league/types";
 import { loadProfileGamification } from "@/lib/gamification/profileGamification";
@@ -241,7 +242,7 @@ export function ProfileScreen({ userId: propUserId }: Props) {
       />
 
       {loading ? (
-        <p className="px-4 py-12 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+        <ProfileSkeleton />
       ) : error ? (
         <p className="px-4 py-12 text-center text-sm text-rose-600">{error}</p>
       ) : !viewerId && !propUserId ? (

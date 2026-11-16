@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import WorkspaceIdeaVoting from "@/components/projects/workspace/WorkspaceIdeaVoting";
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 export const metadata: Metadata = {
   title: "投票 | moni",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function IdeaVotingPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-[#6B7280]">読み込み中…</p>}>
+    <Suspense fallback={<WorkspacePageSkeleton />}>
       <WorkspaceIdeaVoting />
     </Suspense>
   );

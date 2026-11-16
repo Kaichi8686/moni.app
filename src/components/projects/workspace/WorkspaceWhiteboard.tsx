@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
@@ -191,7 +192,7 @@ export default function WorkspaceWhiteboard() {
     <div>
       {error ? <p className="mb-2 text-[13px] text-red-600">{error}</p> : null}
       {boardsLoading ? (
-        <p className="text-sm text-[#6B7280]">読み込み中…</p>
+        <WorkspacePageSkeleton />
       ) : (
         <DocumentsHomeList
           documents={boards}

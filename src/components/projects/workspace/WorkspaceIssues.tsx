@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
@@ -403,7 +404,7 @@ export default function WorkspaceIssues() {
   }
 
   if (!screen) {
-    return <p className="text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>;
+    return <WorkspacePageSkeleton />;
   }
 
   const stepPhaseId = screen.phaseId;

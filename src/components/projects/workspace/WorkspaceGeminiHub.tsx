@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GeminiAgentPanel } from "@/components/projects/workspace/gemini/GeminiAgentPanel";
+import { ConversationSkeleton } from "@/components/ui/Skeleton";
 import type { GeminiAgentMode } from "@/lib/ai/geminiAgents/types";
 import { IDEA_INTERVIEW_HANDOFF_KEY, type IdeaInterviewHandoff } from "@/lib/idea-interview/types";
 import { userSituationPromptLabel } from "@/lib/projects/userSituation";
@@ -103,11 +104,7 @@ export default function WorkspaceGeminiHub() {
     : undefined;
 
   if (loading) {
-    return (
-      <div className="flex h-[100dvh] items-center justify-center text-sm text-[#6B7280]">
-        {tx("読み込み中…", "Loading…")}
-      </div>
-    );
+    return <ConversationSkeleton className="h-[100dvh]" />;
   }
   if (!project) {
     return (

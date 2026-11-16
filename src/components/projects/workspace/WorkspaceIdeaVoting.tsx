@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -330,7 +331,7 @@ export default function WorkspaceIdeaVoting() {
   }
 
   if (loading || !hydrated) {
-    return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+    return <WorkspacePageSkeleton />;
   }
 
   if (!eventParam) {

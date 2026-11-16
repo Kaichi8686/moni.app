@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { ProjectRow } from "@/lib/projects/types";
 import { PROJECT_ICON_BG, projectHashIndex } from "@/lib/projects/projectCardVisual";
 import { hasProjectBriefContent, resolveProjectBrief } from "@/lib/projects/projectBrief";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const PROJECT_SELECT =
@@ -267,9 +268,7 @@ export function DiscoverPublicProjects({ showSectionHeader = true, recruitBoard 
             {tx(`${browseList.length}件見つかりました`, `${browseList.length} found`)}
           </p>
         ) : null}
-        {loading ? (
-          <p className="py-8 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
-        ) : null}
+        {loading ? <StackSkeleton count={5} className="py-2" /> : null}
         {!loading && browseList.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
             <p className="text-sm font-medium text-zinc-700">

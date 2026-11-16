@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -300,7 +301,7 @@ export default function WorkspaceDocuments() {
   }
 
   if (workspaceLoading || docsLoading) {
-    return <p className="text-sm text-[#6B7280]">読み込み中…</p>;
+    return <WorkspacePageSkeleton />;
   }
 
   if (!project) return null;

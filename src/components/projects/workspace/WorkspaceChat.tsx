@@ -9,6 +9,7 @@ import { uploadProjectImage, validateProjectImageFile } from "@/lib/projects/upl
 import { supabase } from "@/lib/supabase";
 import { ensureRealtimeAuth } from "@/lib/messages/ensureRealtimeAuth";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { InboxListSkeleton, WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 
 /** 統合メッセージ（グループ / 個別DM 共通で扱う正規化形） */
 type ChatMessage = {
@@ -394,7 +395,7 @@ export default function WorkspaceChat() {
     }
   }
 
-  if (loading) return <p className="text-sm text-[#6B7280]">{tx("読み込み中…", "Loading…")}</p>;
+  if (loading) return <WorkspacePageSkeleton />;
   if (!project) return null;
 
   if (!uid) {
@@ -464,7 +465,11 @@ export default function WorkspaceChat() {
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-[#7c98b8] px-3 py-3">
           {chatLoading ? (
-            <p className="py-8 text-center text-sm text-white/90">{tx("メッセージを読み込み中…", "Loading messages…")}</p>
+            <div className="space-y-3 px-4 py-6">
+              <div className="ml-0 h-12 w-48 animate-pulse rounded-2xl bg-white/20" />
+              <div className="ml-auto h-10 w-40 animate-pulse rounded-2xl bg-white/25" />
+              <div className="ml-0 h-14 w-56 animate-pulse rounded-2xl bg-white/20" />
+            </div>
           ) : activeMessages.length === 0 ? (
             <div className="mx-auto mt-6 w-fit rounded-full bg-black/15 px-4 py-1.5 text-center text-xs text-white">
               {isGroup
@@ -666,7 +671,7 @@ export default function WorkspaceChat() {
         </button>
 
         {chatLoading ? (
-          <p className="px-4 py-8 text-center text-sm text-[#9CA3AF]">{tx("読み込み中…", "Loading…")}</p>
+          <InboxListSkeleton count={5} />
         ) : (
           <>
             {!dmAvailable ? (

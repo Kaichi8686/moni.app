@@ -13,6 +13,7 @@ import { useWorkspaceUiStore } from "@/lib/workspace/store";
 import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import { applyTemplateToProject, listProjectTemplates } from "@/lib/projects/projectTemplates";
 import type { TemplateListItem } from "@/lib/projects/projectTemplates";
+import { StackSkeleton } from "@/components/ui/Skeleton";
 
 type ProjectDbRow = ProjectRow & {
   icon?: string | null;
@@ -280,7 +281,7 @@ export function ProjectsLinearHome() {
           </div>
         ) : null}
         <div className="mx-auto max-w-3xl px-4 py-4">
-          {loading ? <p className="text-sm text-[#6B7280]">読み込み中…</p> : null}
+          {loading ? <StackSkeleton count={4} className="py-1" /> : null}
           {!loading && filtered.length === 0 ? <p className="text-sm text-[#6B7280]">プロジェクトがありません。</p> : null}
           {!loading
             ? filtered.map((r) => {

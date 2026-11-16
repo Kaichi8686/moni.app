@@ -1,5 +1,6 @@
 "use client";
 
+import { PeopleListSkeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronRight, MessageCircle, Share2, UserPlus, UserCheck, UserMinus } from "lucide-react";
@@ -378,7 +379,7 @@ export function ExploreFriendProfilePreview({
               {tx("参加中のプロジェクト", "Joined projects")}
             </h3>
             {projectsLoading ? (
-              <p className="py-6 text-center text-sm text-zinc-500">{tx("読み込み中…", "Loading…")}</p>
+              <PeopleListSkeleton count={4} className="py-2" />
             ) : projects.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-7 text-center text-sm leading-relaxed text-zinc-500">
                 {member.id
