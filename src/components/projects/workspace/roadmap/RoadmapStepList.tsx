@@ -105,16 +105,13 @@ export function RoadmapStepList({
                 aria-hidden
               >
                 {isCurrent ? (
-                  <>
-                    <span
-                      className="roadmap-current-badge-haze pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.72)_0%,rgba(255,255,255,0.92)_38%,rgba(255,150,0,0.28)_58%,transparent_78%)] blur-[3.5px]"
-                      aria-hidden
-                    />
-                    <span
-                      className="roadmap-current-badge-haze roadmap-current-badge-haze--delay pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.62)_0%,rgba(255,255,255,0.85)_40%,rgba(255,150,0,0.22)_60%,transparent_78%)] blur-[3.5px]"
-                      aria-hidden
-                    />
-                  </>
+                  <span
+                    className="pointer-events-none absolute left-1/2 top-1/2 h-[175%] w-[175%] -translate-x-1/2 -translate-y-1/2"
+                    aria-hidden
+                  >
+                    <span className="roadmap-current-badge-haze absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.72)_0%,rgba(255,255,255,0.92)_38%,rgba(255,150,0,0.28)_58%,transparent_78%)] blur-[3.5px]" />
+                    <span className="roadmap-current-badge-haze roadmap-current-badge-haze--delay absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,150,0,0.62)_0%,rgba(255,255,255,0.85)_40%,rgba(255,150,0,0.22)_60%,transparent_78%)] blur-[3.5px]" />
+                  </span>
                 ) : null}
                 <span
                   className={`relative z-[1] flex h-full w-full items-center justify-center rounded-full font-bold tabular-nums ${numberClass}`}
