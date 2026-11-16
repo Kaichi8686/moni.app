@@ -38,8 +38,8 @@ export function CompanyCard({
   const remain = recovering && nextRecoverAt ? msUntil(new Date(nextRecoverAt), new Date(now)) : null;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-      <div className="p-3 pb-0 sm:p-4 sm:pb-0">
+    <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+      <div className="bg-[#FFF7ED] p-2 sm:p-2.5">
         <OfficeScene level={company.level} industry={company.industry} fx={sceneFx} />
       </div>
 

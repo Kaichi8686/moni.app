@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import type { OfficeIndustry } from "@/lib/office/industries";
 import { parseOfficeIndustry } from "@/lib/office/industries";
 
@@ -16,7 +17,13 @@ function workerCount(level: number): number {
   return 4;
 }
 
-function IndustryProps({ industry }: { industry: OfficeIndustry | null }) {
+function IndustryProps({
+  industry,
+  uid,
+}: {
+  industry: OfficeIndustry | null;
+  uid: string;
+}) {
   const id = parseOfficeIndustry(industry);
   switch (id) {
     case "food":
@@ -52,6 +59,7 @@ function IndustryProps({ industry }: { industry: OfficeIndustry | null }) {
           <rect x="246" y="68" width="58" height="40" rx="4" fill="#1E293B" />
           <rect x="252" y="74" width="46" height="28" rx="2" fill="#38BDF8" opacity="0.85" />
           <rect x="262" y="112" width="28" height="10" rx="3" fill="#64748B" />
+          <circle cx="270" cy="88" r="2" fill="#F8FAFC" className="office-rec-dot" />
         </g>
       );
     case "event":
@@ -109,7 +117,8 @@ function IndustryProps({ industry }: { industry: OfficeIndustry | null }) {
       return (
         <g aria-hidden>
           <rect x="255" y="80" width="40" height="28" rx="3" fill="#E4E4E7" />
-          <rect x="262" y="86" width="26" height="16" rx="2" fill="#A1A1AA" />
+          <rect x="262" y="86" width="26" height="16" rx="2" fill={`url(#${uid}-screen)`} />
+          <circle cx="275" cy="94" r="2" fill="#F8FAFC" className="office-rec-dot" />
         </g>
       );
   }
@@ -168,26 +177,43 @@ function Worker({
 }
 
 export function OfficeScene({ level, industry, fx }: Props) {
+  const uid = useId().replace(/:/g, "");
   const n = workerCount(level);
   const xs = n === 2 ? [70, 150] : n === 3 ? [55, 110, 165] : [42, 90, 138, 186];
   const delays = ["0s", "0.35s", "0.7s", "1.1s"];
 
   return (
     <div
-      className={`office-scene overflow-hidden rounded-2xl ${fx ? `office-fx--${fx}` : ""}`}
-      style={{ height: 160 }}
+      className={`office-scene relative w-full overflow-hidden rounded-2xl ring-1 ring-amber-100 ${
+        fx ? `office-fx--${fx}` : ""
+      }`}
+      style={{ height: 168, minHeight: 168 }}
     >
-      <svg viewBox="0 0 320 160" className="h-full w-full" role="img" aria-label="オフィス">
+      <svg
+        viewBox="0 0 320 160"
+        width="100%"
+        height="168"
+        className="block w-full"
+        role="img"
+        aria-label="オフィスの様子"
+        preserveAspectRatio="xMidYMid slice"
+      >
         <defs>
-          <linearGradient id="officeWall" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`${uid}-wall`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#FFF7ED" />
             <stop offset="100%" stopColor="#FFEDD5" />
           </linearGradient>
+          <linearGradient id={`${uid}-screen`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#38BDF8" />
+            <stop offset="100%" stopColor="#6366F1" />
+          </linearGradient>
         </defs>
-        <rect width="320" height="160" fill="url(#officeWall)" />
+        <rect width="320" height="160" fill={`url(#${uid}-wall)`} />
         <rect x="0" y="120" width="320" height="40" fill="#F5F5F4" />
-        <rect x="18" y="28" width="36" height="28" rx="3" fill="#FEF3C7" stroke="#FDE68A" />
-        <IndustryProps industry={industry} />
+        {/* window light */}
+        <rect x="18" y="22" width="40" height="32" rx="3" fill="#FEF3C7" stroke="#FDE68A" />
+        <path d="M38 22 v32 M18 38 h40" stroke="#FCD34D" strokeWidth="1.5" opacity="0.7" />
+        <IndustryProps industry={industry} uid={uid} />
         <g className="office-rival-shadow" opacity="0">
           <ellipse cx="20" cy="125" rx="18" ry="6" fill="#00000055" />
           <path d="M8 125 L20 70 L32 125 Z" fill="#18181B" opacity="0.55" />

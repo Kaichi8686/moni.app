@@ -8,31 +8,36 @@ export type OfflineIncidentCtx = {
   recentTitles: string[];
 };
 
+/** 旧オフライン案で説明を途中切断して混ぜた文（サー…らしい など） */
+export function isMangledOfflineDescription(description: string): boolean {
+  const d = String(description ?? "");
+  return /…(らしい|としての|の現場)/.test(d) || /（[^）]{0,40}…[^）]{0,20}）/.test(d);
+}
+
 export function offlineIncident(
   ctx?: OfflineIncidentCtx,
 ): { title: string; description: string; type: IncidentType } {
   const name = ctx?.companyName?.trim() || "きみの会社";
-  const about = ctx?.companyAbout?.trim() || "小さな会社";
-  const short = about.length > 28 ? `${about.slice(0, 28)}…` : about;
+  // 説明文は文中に埋め込まない（途中切断で文字が崩れるのを防ぐ）
   const pool: Array<{ title: string; description: string; type: IncidentType }> = [
     {
       title: "やる気が急降下！",
-      description: `『${name}』（${short}）で三日坊主ばかり。新企画が進まない…どうする？`,
+      description: `『${name}』で三日坊主ばかり。いまの事業に合う立て直し方は？`,
       type: "people",
     },
     {
       title: "突然の引き合い！",
-      description: `『${name}』に想定外の依頼が来た。${short}らしいチャンスの活かし方は？`,
+      description: `『${name}』に想定外の依頼が来た。強みを活かすチャンスのつかみ方は？`,
       type: "chance",
     },
     {
       title: "ライバルが現れた",
-      description: `『${name}』と同系統の相手が近くに出てきた。${short}としての差別化は？`,
+      description: `『${name}』と同系統の相手が出てきた。どう差別化する？`,
       type: "rival",
     },
     {
       title: "現場が回らない",
-      description: `『${name}』で忙しくて手が足りない。${short}の現場をどう切り抜ける？`,
+      description: `『${name}』で忙しくて手が足りない。いまのやり方でどう切り抜ける？`,
       type: "pinch",
     },
   ];

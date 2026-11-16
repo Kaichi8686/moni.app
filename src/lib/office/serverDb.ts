@@ -8,6 +8,7 @@ import {
 import { generateIncidentWithClaude, scoreAnswerWithClaude } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { parseOfficeIndustry } from "@/lib/office/industries";
+import { isMangledOfflineDescription } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -239,7 +240,13 @@ export async function dbCurrentIncident(
     .eq("user_id", userId)
     .eq("status", "open")
     .maybeSingle();
-  if (open) return { incident: mapIncident(open as Record<string, unknown>), created: false };
+  if (open) {
+    const mapped = mapIncident(open as Record<string, unknown>);
+    if (!isMangledOfflineDescription(mapped.description)) {
+      return { incident: mapped, created: false };
+    }
+    await admin.from("office_incidents").delete().eq("id", mapped.id);
+  }
 
   const { data: recentRows } = await admin
     .from("office_incidents")
