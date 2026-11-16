@@ -12,6 +12,9 @@ export type OfficeCompany = {
   id: string;
   userId: string;
   name: string;
+  /** プレイヤーが書いた会社の説明（事件生成の主コンテキスト） */
+  about: string | null;
+  /** 演出用。説明から推定、または旧データの系統 */
   industry: OfficeIndustry | null;
   totalRevenue: number;
   level: number;

@@ -1,12 +1,11 @@
 import { supabase, supabaseEnabled } from "@/lib/supabase";
-import type { OfficeIndustry } from "@/lib/office/industries";
 import {
   localCreateCompany,
   localCurrentIncident,
   localGetCompany,
   localMarkResultSeen,
   localRanking,
-  localSetIndustry,
+  localSetAbout,
   localSubmit,
   localToggleRanking,
 } from "@/lib/office/localStore";
@@ -87,29 +86,29 @@ export async function fetchCompany(): Promise<CompanyPayload> {
   }
 }
 
-export async function createCompany(name: string, industry: OfficeIndustry): Promise<OfficeCompany> {
+export async function createCompany(name: string, about: string): Promise<OfficeCompany> {
   try {
     const res = await api<{ company: OfficeCompany }>("/api/office/company", {
       method: "POST",
-      body: JSON.stringify({ name, industry }),
+      body: JSON.stringify({ name, about }),
     });
     return res.company;
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
-    return localCreateCompany(GUEST_ID, name, industry);
+    return localCreateCompany(GUEST_ID, name, about);
   }
 }
 
-export async function setIndustry(industry: OfficeIndustry): Promise<OfficeCompany> {
+export async function setAbout(about: string): Promise<OfficeCompany> {
   try {
     const res = await api<{ company: OfficeCompany }>("/api/office/company", {
       method: "POST",
-      body: JSON.stringify({ industry }),
+      body: JSON.stringify({ about }),
     });
     return res.company;
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
-    return localSetIndustry(GUEST_ID, industry);
+    return localSetAbout(GUEST_ID, about);
   }
 }
 

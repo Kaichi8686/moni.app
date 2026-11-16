@@ -3,7 +3,8 @@ import type { IncidentType, OfficeScores } from "@/lib/office/types";
 
 export type OfflineIncidentCtx = {
   companyName: string;
-  industryLabel: string;
+  /** 会社の説明（自由記述） */
+  companyAbout: string;
   recentTitles: string[];
 };
 
@@ -11,26 +12,27 @@ export function offlineIncident(
   ctx?: OfflineIncidentCtx,
 ): { title: string; description: string; type: IncidentType } {
   const name = ctx?.companyName?.trim() || "きみの会社";
-  const industry = ctx?.industryLabel || "会社";
+  const about = ctx?.companyAbout?.trim() || "小さな会社";
+  const short = about.length > 28 ? `${about.slice(0, 28)}…` : about;
   const pool: Array<{ title: string; description: string; type: IncidentType }> = [
     {
       title: "やる気が急降下！",
-      description: `${industry}『${name}』で三日坊主ばかり。新企画が進まない…どうする？`,
+      description: `『${name}』（${short}）で三日坊主ばかり。新企画が進まない…どうする？`,
       type: "people",
     },
     {
-      title: "突然の大人気！",
-      description: `『${name}』に行列ができた。チャンスを逃さない作戦は？`,
+      title: "突然の引き合い！",
+      description: `『${name}』に想定外の依頼が来た。${short}らしいチャンスの活かし方は？`,
       type: "chance",
     },
     {
-      title: "ライバルが隣に",
-      description: `『${name}』の向かいに同業が出店。差別化アイデアを考えて！`,
+      title: "ライバルが現れた",
+      description: `『${name}』と同系統の相手が近くに出てきた。${short}としての差別化は？`,
       type: "rival",
     },
     {
-      title: "ピークで大混乱",
-      description: `『${name}』のランチピークで手が足りない。どう切り抜ける？`,
+      title: "現場が回らない",
+      description: `『${name}』で忙しくて手が足りない。${short}の現場をどう切り抜ける？`,
       type: "pinch",
     },
   ];

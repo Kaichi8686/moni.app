@@ -15,12 +15,11 @@ import {
   fetchIncident,
   fetchRanking,
   markResultSeen,
-  setIndustry,
+  setAbout,
   submitAnswer,
   toggleRanking,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
-import type { OfficeIndustry } from "@/lib/office/industries";
 import type { OfficeIncident, OfficeSubmission, RankingRow } from "@/lib/office/types";
 
 type Props = {
@@ -81,7 +80,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     setErr("");
     const data = await fetchCompany();
     setPayload(data);
-    if (data.company?.industry) {
+    if (data.company?.about) {
       try {
         // 既存 open の再表示は演出なし
         await loadIncident({ allowFx: false });
@@ -128,14 +127,14 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     })();
   }, [active, tab, payload?.company?.id, payload?.seasonRevenue]);
 
-  async function onSetup(input: { name: string; industry: OfficeIndustry }) {
+  async function onSetup(input: { name: string; about: string }) {
     setBusy(true);
     setErr("");
     try {
-      if (payload?.company && !payload.company.industry) {
-        await setIndustry(input.industry);
+      if (payload?.company && !payload.company.about) {
+        await setAbout(input.about);
       } else {
-        await createCompany(input.name, input.industry);
+        await createCompany(input.name, input.about);
       }
       const data = await fetchCompany();
       setPayload(data);
@@ -183,7 +182,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     }
   }
 
-  const needsSetup = !payload?.company || !payload.company.industry;
+  const needsSetup = !payload?.company || !payload.company.about;
 
   const body = boot ? (
     <div className="mx-auto max-w-lg space-y-3 px-4 pt-6">
@@ -196,7 +195,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       busy={busy}
       error={err}
       existingName={
-        payload?.company && !payload.company.industry ? payload.company.name : null
+        payload?.company && !payload.company.about ? payload.company.name : null
       }
       onSubmit={onSetup}
     />

@@ -72,7 +72,10 @@ export function IncidentPanel({
         </div>
         <p className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
           <span aria-hidden>{ind?.icon ?? "🏢"}</span>
-          <span className="truncate">{company.name}</span>
+          <span className="truncate">
+            {company.name}
+            {company.about ? ` · ${company.about}` : ""}
+          </span>
         </p>
         <h3 className="mt-1 text-lg font-black tracking-tight text-zinc-900">{incident.title}</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{incident.description}</p>

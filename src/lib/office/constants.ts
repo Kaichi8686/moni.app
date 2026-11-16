@@ -47,13 +47,16 @@ export const OFFICE_SCORING_SYSTEM_PROMPT = `あなたは学生向けビジネ�
 {"solve":数値,"fun":数値,"feasible":数値,"comment":"..."}`;
 
 export const OFFICE_NAME_MAX = 12;
+export const OFFICE_ABOUT_MIN = 8;
+export const OFFICE_ABOUT_MAX = 100;
 
 export const OFFICE_INCIDENT_SYSTEM_PROMPT = `あなたは学生向けビジネスゲーム「moni」のシナリオライターです。
 プレイヤーの小さな会社に起きる「事件」を1件だけ作ってください。
 
 ルール：
-- 事件はその系統（〇〇系）の会社で実際に起こりそうな出来事にする
-- description に会社名をちょうど1回入れる（例：「飲食系『〇〇』で〜」）
+- 事件は「会社の説明」の内容に必ず沿わせる。説明と無関係な業種・場面（例: 説明がアプリ開発なのに模擬店）は禁止
+- 説明に出てくる商品・サービス・顧客・場所・活動を具体的に事件へ反映する
+- description に会社名をちょうど1回入れる（例：「アプリ開発の『〇〇』で〜」）
 - 直近の事件タイトルと似た内容は避ける
 - トーンは軽くユーモアあり。正解がなく、ふざけた答えも許される空気のお題にする
 - title は30字以内、description は80字以内。日本語

@@ -6,7 +6,8 @@ import {
   OFFICE_SIMILARITY_THRESHOLD,
 } from "@/lib/office/constants";
 import { generateIncidentWithClaude, scoreAnswerWithClaude } from "@/lib/office/claude";
-import { industryLabelJa, parseOfficeIndustry, type OfficeIndustry } from "@/lib/office/industries";
+import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { parseOfficeIndustry } from "@/lib/office/industries";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -23,11 +24,16 @@ import type {
 } from "@/lib/office/types";
 
 function mapCompany(row: Record<string, unknown>): OfficeCompany {
+  const aboutRaw = row.about == null ? null : String(row.about);
+  const about = aboutRaw && aboutRaw.trim() ? aboutRaw.trim() : null;
+  const industry =
+    parseOfficeIndustry(row.industry) ?? guessIndustryFromAbout(about);
   return {
     id: String(row.id),
     userId: String(row.user_id),
     name: String(row.name),
-    industry: parseOfficeIndustry(row.industry),
+    about,
+    industry,
     totalRevenue: Number(row.total_revenue ?? 0),
     level: Number(row.level ?? 1),
     rankingEnabled: Boolean(row.ranking_enabled ?? true),
@@ -157,11 +163,13 @@ export async function dbCreateCompany(
   admin: SupabaseClient,
   userId: string,
   name: string,
-  industry: OfficeIndustry,
+  aboutRaw: string,
 ) {
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
-  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
+  const about = parseCompanyAbout(aboutRaw);
+  if (!about) throw new Error("会社の説明を書いてね");
+  const industry = guessIndustryFromAbout(about);
   const { data: existing } = await admin
     .from("office_companies")
     .select("id")
@@ -174,6 +182,7 @@ export async function dbCreateCompany(
     .insert({
       user_id: userId,
       name: trimmed,
+      about,
       industry,
       league_id: "rookie",
       stamina: 5,
@@ -187,9 +196,10 @@ export async function dbCreateCompany(
   return company;
 }
 
-/** 既存会社の industry が null のときだけ補完（変更不可） */
-export async function dbSetIndustry(admin: SupabaseClient, userId: string, industry: OfficeIndustry) {
-  if (!parseOfficeIndustry(industry)) throw new Error("系統を選んでね");
+/** 既存会社の about が null のときだけ補完（変更不可）。open 事件は破棄して作り直す */
+export async function dbSetAbout(admin: SupabaseClient, userId: string, aboutRaw: string) {
+  const about = parseCompanyAbout(aboutRaw);
+  if (!about) throw new Error("会社の説明を書いてね");
   const { data: row } = await admin
     .from("office_companies")
     .select("*")
@@ -197,14 +207,16 @@ export async function dbSetIndustry(admin: SupabaseClient, userId: string, indus
     .maybeSingle();
   if (!row) throw new Error("会社がないよ");
   const company = mapCompany(row as Record<string, unknown>);
-  if (company.industry) throw new Error("系統はもう決め済みだよ");
+  if (company.about) throw new Error("説明はもう決め済みだよ");
+  const industry = company.industry ?? guessIndustryFromAbout(about);
   const { data, error } = await admin
     .from("office_companies")
-    .update({ industry })
+    .update({ about, industry })
     .eq("user_id", userId)
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message ?? "update failed");
+  await admin.from("office_incidents").delete().eq("user_id", userId).eq("status", "open");
   return mapCompany(data as Record<string, unknown>);
 }
 
@@ -219,7 +231,7 @@ export async function dbCurrentIncident(
     .maybeSingle();
   if (!companyRow) throw new Error("先に会社を作ってね");
   const company = mapCompany(companyRow as Record<string, unknown>);
-  if (!company.industry) throw new Error("先に系統を選んでね");
+  if (!company.about) throw new Error("先に会社の説明を書いてね");
 
   const { data: open } = await admin
     .from("office_incidents")
@@ -239,7 +251,7 @@ export async function dbCurrentIncident(
 
   const gen = await generateIncidentWithClaude({
     companyName: company.name,
-    industryLabel: industryLabelJa(company.industry),
+    companyAbout: company.about,
     recentTitles,
   });
   if (!gen.ok) throw new Error(gen.message);

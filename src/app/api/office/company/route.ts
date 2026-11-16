@@ -1,11 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthedUserId } from "@/lib/auth/getAuthedUserId";
-import { parseOfficeIndustry } from "@/lib/office/industries";
 import {
   dbCreateCompany,
   dbGetCompany,
   dbMarkResultSeen,
-  dbSetIndustry,
+  dbSetAbout,
 } from "@/lib/office/serverDb";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
       name?: string;
-      industry?: string;
+      about?: string;
       markResultSeen?: string;
     };
     if (body.markResultSeen) {
@@ -46,19 +45,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const industry = parseOfficeIndustry(body.industry);
     const existing = await dbGetCompany(admin, auth.userId);
 
-    // 既存会社の系統補完
-    if (existing.company && !existing.company.industry) {
-      if (!industry) throw new Error("系統を選んでね");
-      const company = await dbSetIndustry(admin, auth.userId, industry);
+    // 既存会社の説明補完
+    if (existing.company && !existing.company.about) {
+      if (!body.about) throw new Error("会社の説明を書いてね");
+      const company = await dbSetAbout(admin, auth.userId, body.about);
       return NextResponse.json({ company });
     }
 
     if (existing.company) throw new Error("すでに会社があるよ");
-    if (!industry) throw new Error("系統を選んでね");
-    const company = await dbCreateCompany(admin, auth.userId, body.name ?? "", industry);
+    if (!body.about) throw new Error("会社の説明を書いてね");
+    const company = await dbCreateCompany(admin, auth.userId, body.name ?? "", body.about);
     return NextResponse.json({ company });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 400 });
