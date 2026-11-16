@@ -240,11 +240,6 @@ export function IssueTaskFilesPanel({
     return map;
   }, [members]);
 
-  const userInitial = useMemo(() => {
-    if (!uid) return "?";
-    return (names[uid]?.trim().charAt(0) || "?").toUpperCase();
-  }, [names, uid]);
-
   useEffect(() => {
     setFiles(sortWorkFilesByUpdated(issue.workFiles ?? []));
   }, [issue.id, issue.workFiles]);
@@ -1070,13 +1065,10 @@ export function IssueTaskFilesPanel({
         <div className="sticky top-0 z-10 border-b border-[#e8eaed] bg-white px-3 pb-2 pt-2 sm:px-4">
           <div className="flex items-center gap-2 rounded-full bg-[#f1f3f4] px-3 py-2.5">
             <FileText className="h-4 w-4 shrink-0 text-[#5f6368]" aria-hidden />
-            <span className="min-w-0 flex-1 text-[14px] text-[#5f6368]">
+            <span className="min-w-0 flex-1 truncate text-[14px] text-[#5f6368]">
               {isMemo
                 ? tx("メモのファイル", "Files in this memo")
                 : tx("この課題のファイル", "Files in this task")}
-            </span>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a73e8] text-xs font-bold text-white">
-              {userInitial}
             </span>
           </div>
           <div className="mt-3 flex items-center justify-between px-1">
@@ -1124,7 +1116,6 @@ export function IssueTaskFilesPanel({
                     </span>
                     <span className="mt-0.5 block truncate text-[13px] text-[#5f6368]">
                       {kindLabel(file.kind, tx)}
-                      {!isMemo && file.required && file.completedAt ? ` · ${tx("できた", "Done")}` : ""}
                       {isCollectSlot(file) ? ` · ${tx(`${items.length}件`, `${items.length}`)}` : ""}
                       {file.updatedAt ? ` · ${formatUpdated(file.updatedAt, locale)}` : ""}
                     </span>
