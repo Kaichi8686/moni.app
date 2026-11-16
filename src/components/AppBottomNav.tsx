@@ -15,7 +15,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Megaphone, Search, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, ListTodo, Mail, Search, Sparkles } from "lucide-react";
 import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { HOME_PROJECTS_HREF, resolveHomeProjectsHref } from "@/lib/navigation/homeProjects";
@@ -78,8 +78,8 @@ function isProjectIssuesPath(pathname: string): boolean {
   return /^\/projects\/[0-9a-f-]{36}\/issues(?:\/|$)/i.test(pathname);
 }
 
-function isProjectRecruitPath(pathname: string): boolean {
-  return /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(pathname);
+function isProjectCoachPath(pathname: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/coach(?:\/|$)/i.test(pathname);
 }
 
 /** 投票（メッセージ導線）— ホーム／概要タブではなくメッセージ側として扱う */
@@ -89,7 +89,7 @@ function isProjectIdeasPath(pathname: string): boolean {
 
 function resolveProjectScopedHref(
   pathname: string,
-  suffix: "issues" | "recruit",
+  suffix: "issues" | "recruit" | "coach",
   lastProjectId?: string | null,
 ): string {
   const fromPath = pathname.match(/^\/projects\/([0-9a-f-]{36})(?:\/|$)/i);
@@ -103,8 +103,8 @@ function resolveProjectIssuesHref(pathname: string, lastProjectId?: string | nul
   return resolveProjectScopedHref(pathname, "issues", lastProjectId);
 }
 
-function resolveProjectRecruitHref(pathname: string, lastProjectId?: string | null): string {
-  return resolveProjectScopedHref(pathname, "recruit", lastProjectId);
+function resolveProjectCoachHref(pathname: string, lastProjectId?: string | null): string {
+  return resolveProjectScopedHref(pathname, "coach", lastProjectId);
 }
 
 function subscribeLastProject(onStoreChange: () => void) {
@@ -140,8 +140,9 @@ const PROJECT_ITEM: NavItem = {
     const m = p.match(/^\/projects\/([0-9a-f-]{36})(?:\/(.*))?$/i);
     if (!m) return false;
     const rest = m[2] ?? "";
-    // 課題・募集は開いたクラスタ側の専用タブ
+    // 課題・AI（旧募集）は開いたクラスタ側の専用タブ
     if (rest === "issues" || rest.startsWith("issues/")) return false;
+    if (rest === "coach" || rest.startsWith("coach/")) return false;
     if (rest === "recruit" || rest.startsWith("recruit/")) return false;
     // 投票はメッセージ導線（プロジェクトホーム扱いしない）
     if (rest === "ideas" || rest.startsWith("ideas/")) return false;
@@ -190,7 +191,7 @@ const CLOSED_TABS: NavItem[] = [
   },
 ];
 
-/** Open (project cluster): Messages / Issues / Recruit — with proper marks */
+/** Open (project cluster): Messages / Issues / AI */
 const OPEN_TABS: NavItem[] = [
   {
     id: PROJECT_MAIL_ID,
@@ -209,12 +210,12 @@ const OPEN_TABS: NavItem[] = [
     match: (p) => isProjectIssuesPath(p),
   },
   {
-    id: "recruit",
+    id: "coach",
     // href is resolved at render time via last/current project
     href: HOME_PROJECTS_HREF,
-    labelKey: "navRecruit",
-    icon: <Megaphone className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
-    match: (p) => isProjectRecruitPath(p),
+    labelKey: "navAi",
+    icon: <Sparkles className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
+    match: (p) => isProjectCoachPath(p),
   },
 ];
 
@@ -385,17 +386,17 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const insideProject = isInsideProjectWorkspace(pathname);
   const onProjectsList = pathname === "/projects" || pathname === "/projects/";
   const profileActive = PROFILE_ITEM.match(pathname, tab, segment);
-  // 課題・募集は開いたクラスタ専用（閉じた側の AI / 探すとは別）
+  // 課題・AIは開いたクラスタ専用（閉じた側の AI / 探すとは別）
   const openOnlyActive = OPEN_TABS.some(
     (item) =>
-      (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
+      (item.id === "coach" || item.id === "issues") && item.match(pathname, tab, segment),
   );
   /** 一覧モード中／未オープン時はクラスタ開けない＝矢印なし */
   const projectClusterUnlocked =
     !listMode && (clusterUnlockedStored || insideProject || openOnlyActive);
 
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
-  const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
+  const coachHref = resolveProjectCoachHref(pathname, lastProjectId);
   /** プロジェクトブロックのメールは、そのプロジェクトのメンバー／グループに絞る */
   const projectMailHref = mailInboxHref(lastProjectId);
   /** 一覧モード中はキューブへ。そうでなければ最後のプロジェクトへ */
@@ -601,9 +602,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const projectLabel = t(PROJECT_ITEM.labelKey);
   const profileLabel = t(PROFILE_ITEM.labelKey);
   const expandLabel =
-    locale === "ja" ? "メッセージ・課題・募集を表示" : "Show messages, issues, and recruiting";
+    locale === "ja" ? "メッセージ・課題・AIを表示" : "Show messages, issues, and AI";
   const collapseLabel =
-    locale === "ja" ? "メッセージ・課題・募集を隠す" : "Hide messages, issues, and recruiting";
+    locale === "ja" ? "メッセージ・課題・AIを隠す" : "Hide messages, issues, and AI";
 
   const keyboardOpen = useVirtualKeyboardOpen();
 
@@ -621,8 +622,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
     const href =
       item.id === "issues"
         ? issuesHref
-        : item.id === "recruit"
-          ? recruitHref
+        : item.id === "coach"
+          ? coachHref
           : isMail
             ? side === "open"
               ? projectMailHref

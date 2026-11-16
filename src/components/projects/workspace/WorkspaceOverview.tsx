@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { PenLine, Plus, Sparkles } from "lucide-react";
+import { PenLine, Plus } from "lucide-react";
 import { ProjectBriefSection } from "@/components/projects/workspace/ProjectBriefSection";
 import { ProjectDeletionVoteBanner } from "@/components/projects/workspace/ProjectDeletionVoteBanner";
 import { ProjectGoalBanner } from "@/components/projects/workspace/ProjectGoalBanner";
@@ -362,15 +362,6 @@ export default function WorkspaceOverview() {
         />
       </div>
 
-      {/* 左下 → AI コーチ（フラット） */}
-      <Link
-        href={`/projects/${projectId}/coach`}
-        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex h-[60px] w-[60px] select-none flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#6B5CF6] text-[12px] font-bold leading-none tracking-tight text-white shadow-lg transition hover:bg-[#5B4CE6] active:scale-[0.98] active:opacity-90"
-        aria-label={tx("AI", "AI")}
-      >
-        <Sparkles className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />
-        AI
-      </Link>
     </div>
   );
 }

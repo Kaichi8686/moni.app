@@ -134,7 +134,7 @@ export function RoadmapStepList({
               <div
                 className={`overflow-hidden rounded-2xl border bg-white transition-[box-shadow,border-color] ${
                   expanded
-                    ? "border-zinc-200 shadow-lg"
+                    ? "border-zinc-200 shadow-[0_0_6px_rgba(0,0,0,0.08)]"
                     : "border-zinc-200 shadow-sm hover:border-zinc-300"
                 }`}
               >
