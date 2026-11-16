@@ -15,6 +15,7 @@ import {
 import { pickDefaultProjectPhoto } from "@/lib/projects/defaultProjectPhotos";
 import type { ProjectMemberRow, ProjectRow, ProjectTaskRow } from "@/lib/projects/types";
 import type { UserSituation } from "@/lib/projects/userSituation";
+import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 import { isValidProjectUuid, normalizeProjectIdParam } from "@/lib/projects/validateProjectId";
 import { UserSituationPicker } from "@/components/projects/UserSituationPicker";
 
@@ -341,6 +342,14 @@ export function ProjectsWorkspace({ projectId }: Props) {
     const { error } = await supabase.rpc("project_review_join_request", { p_request_id: requestId, p_action: action });
     if (error) setErr(error.message);
     if (!error && action === "accept") {
+      const row = requests.find((r) => r.id === requestId);
+      if (uid && row) {
+        void logMemberJoinedActivity(supabase, {
+          projectId: selected.id,
+          actorUserId: uid,
+          memberUserId: row.requester_id,
+        });
+      }
       try {
         const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
         await getOrCreateProjectConversation(supabase, selected.id);

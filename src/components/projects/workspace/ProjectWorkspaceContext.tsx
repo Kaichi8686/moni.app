@@ -1250,7 +1250,10 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
   const isVoteCreatePage = Boolean(pathname?.match(/^\/projects\/[^/]+\/ideas\/new\/?$/));
   /** 課題タブはヘッダーなし */
   const isIssuesPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/issues(?:\/|$)/));
-  const isImmersivePage = isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage || isIssuesPage;
+  /** 活動（オーバーフローメニュー）はヘッダー・タブなし（戻るは画面側） */
+  const isActivityPage = Boolean(pathname?.match(/^\/projects\/[^/]+\/activity\/?$/));
+  const isImmersivePage =
+    isCoachChat || isRecruitPage || isRoadmapEditPage || isVotePage || isIssuesPage || isActivityPage;
 
   useEffect(() => {
     if (project?.id && project.name) rememberLastProject(project.id, project.name);
@@ -1283,7 +1286,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
       <div
         className={`min-h-[100dvh] bg-[#FAFAFA] text-[#1A1A1A] ${isImmersivePage ? "bg-white" : ""}`}
       >
-        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage ? null : (
+        {isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage ? null : (
         <header
           ref={workspaceHeaderRef}
           className="project-workspace-header sticky top-0 z-[100] isolate bg-transparent px-3 py-1.5 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:px-4"
@@ -1480,7 +1483,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         )}
         <div
           className={
-            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage
+            isCoachChat || isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage
               ? "min-h-[100dvh]"
               : "min-h-[calc(100dvh-3.75rem)]"
           }
@@ -1489,7 +1492,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
             className={`project-workspace-main min-w-0 bg-white ${
               isCoachChat
                 ? "h-[100dvh]"
-                : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage
+                : isRoadmapEditPage || isVotePage || isIssuesPage || isRecruitPage || isActivityPage
                   ? "min-h-[100dvh]"
                   : ""
             }`}
@@ -1498,24 +1501,26 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
               className={
                 isCoachChat
                   ? "h-full"
-                  : isVoteCreatePage
-                    ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                    : isVotePage
-                      ? "mx-auto max-w-2xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                      : isIssuesPage || isRecruitPage
-                        ? "mx-auto max-w-3xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
-                        : isRoadmapEditPage
-                          ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
-                          : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
+                  : isActivityPage
+                    ? "min-h-[100dvh] w-full"
+                    : isVoteCreatePage
+                      ? "mx-auto max-w-lg px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
+                      : isVotePage
+                        ? "mx-auto max-w-2xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
+                        : isIssuesPage || isRecruitPage
+                          ? "mx-auto max-w-3xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))]"
+                          : isRoadmapEditPage
+                            ? "mx-auto max-w-6xl px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-6"
+                            : "mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-5"
               }
             >
-              {error && !isCoachChat ? (
+              {error && !isCoachChat && !isActivityPage ? (
                 <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {error}
                 </div>
               ) : null}
-              {loading && !error && !isCoachChat ? <WorkspacePageSkeleton /> : null}
-              {!loading || isCoachChat || error ? children : null}
+              {loading && !error && !isCoachChat && !isActivityPage ? <WorkspacePageSkeleton /> : null}
+              {!loading || isCoachChat || isActivityPage || error ? children : null}
             </div>
           </main>
         </div>

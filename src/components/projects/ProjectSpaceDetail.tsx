@@ -37,6 +37,7 @@ import { SquareImageCropModal } from "@/components/projects/SquareImageCropModal
 import { saveCoachingContextPatch } from "@/lib/projects/saveCoachingContextPatch";
 import { bumpTeamActivityStreak, type BumpTeamActivityStreakResult } from "@/lib/projects/teamActivityStreak";
 import { countWeekCompletedTasksJapan } from "@/lib/projects/weekTaskStats";
+import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { normalizeTaskStatus } from "@/lib/projects/taskStatus";
 import { maybeCelebrateStreakMilestone, maybeCelebrateWeeklyGoalReached } from "@/lib/ui/activityCelebration";
@@ -749,6 +750,14 @@ export function ProjectSpaceDetail({ projectId }: Props) {
     const { error } = await supabase.rpc("project_review_join_request", { p_request_id: requestId, p_action: action });
     if (error) setActionErr(error.message);
     if (!error && action === "accept") {
+      const row = joinRequests.find((r) => r.id === requestId);
+      if (uid && row) {
+        void logMemberJoinedActivity(supabase, {
+          projectId: selectedProject.id,
+          actorUserId: uid,
+          memberUserId: row.requester_id,
+        });
+      }
       try {
         const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
         await getOrCreateProjectConversation(supabase, selectedProject.id);

@@ -14,6 +14,7 @@ import {
   transferOwnershipAndLeave,
   type LeaveProjectErrorCode,
 } from "@/lib/projects/leaveProject";
+import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 import { sendProjectInvite } from "@/lib/projects/projectInvites";
 import { supabase } from "@/lib/supabase";
 import { clearLastProjectIfMatches } from "@/lib/workspace/lastProject";
@@ -204,6 +205,15 @@ export default function WorkspaceMembers() {
           : tx("参加申請を拒否しました。", "Join request rejected."),
       );
       if (action === "accept") {
+        const row = joinRequests.find((r) => r.id === requestId);
+        if (uid && row) {
+          void logMemberJoinedActivity(supabase, {
+            projectId,
+            actorUserId: uid,
+            memberUserId: row.requester_id,
+            memberName: requesterNames[row.requester_id],
+          });
+        }
         try {
           const { getOrCreateProjectConversation } = await import("@/lib/messages/api");
           await getOrCreateProjectConversation(supabase, projectId);

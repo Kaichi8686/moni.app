@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logMemberJoinedActivity } from "@/lib/projects/projectActivity";
 
 export type RecruitmentApplicationStatus = "pending" | "accepted" | "rejected" | "cancelled";
 
@@ -167,7 +168,7 @@ export async function reviewRecruitmentApplication(
 ): Promise<void> {
   const { data: app, error: fetchErr } = await client
     .from("project_recruitment_applications")
-    .select("id,join_request_id,status")
+    .select("id,join_request_id,status,applicant_id,project_id")
     .eq("id", input.applicationId)
     .maybeSingle();
   if (fetchErr) throw new Error(fetchErr.message);
@@ -182,6 +183,7 @@ export async function reviewRecruitmentApplication(
   if (updateErr) throw new Error(updateErr.message);
 
   const joinRequestId = (app.join_request_id as string | null) ?? null;
+  let memberJoined = false;
   if (joinRequestId) {
     const { error: rpcErr } = await client.rpc("project_review_join_request", {
       p_request_id: joinRequestId,
@@ -190,6 +192,21 @@ export async function reviewRecruitmentApplication(
     // 参加申請が既に処理済みでも応募ステータスは更新済みにする
     if (rpcErr && !/already|処理|status/i.test(rpcErr.message)) {
       throw new Error(rpcErr.message);
+    }
+    memberJoined = input.action === "accept" && !rpcErr;
+  }
+
+  if (memberJoined) {
+    const projectId = (app.project_id as string | null) ?? null;
+    const applicantId = (app.applicant_id as string | null) ?? null;
+    const { data: authData } = await client.auth.getUser();
+    const actorUserId = authData.user?.id ?? null;
+    if (projectId && applicantId && actorUserId) {
+      void logMemberJoinedActivity(client, {
+        projectId,
+        actorUserId,
+        memberUserId: applicantId,
+      });
     }
   }
 }
