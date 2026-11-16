@@ -86,13 +86,14 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = extFromFile(file);
-  const path = `${userData.user.id}/project-bg/${projectId}/background.${ext}`;
+  // 一意パスにして、保存前の差し替えでも既存 background_url を壊さない
+  const path = `${userData.user.id}/project-bg/${projectId}/background-${Date.now()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = file.type || "image/jpeg";
 
   const { error: upErr } = await userClient.storage.from("post-images").upload(path, buffer, {
     contentType,
-    upsert: true,
+    upsert: false,
     cacheControl: "3600",
   });
   if (upErr) {
@@ -102,22 +103,7 @@ export async function POST(req: NextRequest) {
   const { data: urlData } = userClient.storage.from("post-images").getPublicUrl(path);
   const publicUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
-  const { error: updateErr } = await userClient
-    .from("projects")
-    .update({ background_url: publicUrl, updated_at: new Date().toISOString() })
-    .eq("id", projectId);
-  if (updateErr) {
-    return NextResponse.json(
-      {
-        error:
-          updateErr.code === "42703" || /background_url/i.test(updateErr.message)
-            ? "背景を保存するには Supabase で supabase/apply_project_background_url.sql を実行してください。"
-            : updateErr.message,
-      },
-      { status: 500 },
-    );
-  }
-
+  // DB 更新はクライアントの「保存」時。ここではストレージ URL だけ返す
   return NextResponse.json({ publicUrl, backgroundUrl: publicUrl });
 }
 

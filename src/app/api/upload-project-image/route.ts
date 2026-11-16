@@ -86,13 +86,14 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = extFromFile(file);
-  const path = `${userData.user.id}/project-thumb/${projectId}/cover.${ext}`;
+  // 一意パスにして、保存前の差し替えでも既存 thumbnail_url を壊さない
+  const path = `${userData.user.id}/project-thumb/${projectId}/cover-${Date.now()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = file.type || "image/jpeg";
 
   const { error: upErr } = await userClient.storage.from("post-images").upload(path, buffer, {
     contentType,
-    upsert: true,
+    upsert: false,
     cacheControl: "3600",
   });
   if (upErr) {
@@ -102,13 +103,6 @@ export async function POST(req: NextRequest) {
   const { data: urlData } = userClient.storage.from("post-images").getPublicUrl(path);
   const publicUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
-  const { error: updateErr } = await userClient
-    .from("projects")
-    .update({ thumbnail_url: publicUrl, updated_at: new Date().toISOString() })
-    .eq("id", projectId);
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
-  }
-
+  // DB 更新はクライアントの「保存」時。ここではストレージ URL だけ返す
   return NextResponse.json({ publicUrl });
 }
