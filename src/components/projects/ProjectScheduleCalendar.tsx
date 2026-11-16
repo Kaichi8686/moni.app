@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { ArrowLeft, Plus, Search } from "lucide-react";
 import { displayScheduleDescription, isBusySchedule } from "@/lib/workspace/busyScheduleDays";
 
 export type CalendarSchedule = {
@@ -142,6 +144,8 @@ type Props = {
   /** 親ヘッダーの検索トグルと連動 */
   searchOpen?: boolean;
   onSearchOpenChange?: (open: boolean) => void;
+  /** フルスクリーン時: 戻る＋検索/追加を年月行に載せる */
+  onBack?: () => void;
 };
 
 export function ProjectScheduleCalendar({
@@ -157,6 +161,7 @@ export function ProjectScheduleCalendar({
   onRequestAdd,
   searchOpen: searchOpenProp,
   onSearchOpenChange,
+  onBack,
 }: Props) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -184,12 +189,25 @@ export function ProjectScheduleCalendar({
     [onSearchOpenChange],
   );
 
-  useEffect(() => {
+  const openSearchAndFocus = useCallback(() => {
     if (searchOpen) {
-      const t = window.setTimeout(() => searchInputRef.current?.focus(), 40);
-      return () => window.clearTimeout(t);
+      setSearchOpen(false);
+      return;
     }
-  }, [searchOpen]);
+    // 同一ジェスチャ内でフォーカスし、すぐキーボード入力できるようにする
+    flushSync(() => {
+      setSearchOpen(true);
+    });
+    const input = searchInputRef.current;
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    try {
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
+    } catch {
+      /* ignore */
+    }
+  }, [searchOpen, setSearchOpen]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, DayItem[]>();
@@ -396,11 +414,27 @@ export function ProjectScheduleCalendar({
     return list;
   }, []);
 
+  const immersive = Boolean(onBack);
+
   return (
     <div className={fullBleed ? "flex min-h-0 flex-1 flex-col bg-white" : "overflow-hidden rounded-2xl border border-zinc-200 bg-white"}>
-      {/* 月タイトル */}
-      <div className="flex items-end justify-between px-4 pb-2 pt-1">
-        <div>
+      {/* 月タイトル（フルスクリーン時は戻る＋検索/追加を同列） */}
+      <div
+        className={`flex items-end gap-1 pb-2 ${
+          immersive ? "px-3 pt-[max(0.5rem,env(safe-area-inset-top))]" : "px-4 pt-1"
+        }`}
+      >
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-800 transition hover:bg-zinc-100 active:scale-95"
+            aria-label="戻る"
+          >
+            <ArrowLeft className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-zinc-400">{titleYear}</p>
           <div className="flex items-center gap-2">
             <h2 className="text-[28px] font-bold tracking-tight text-zinc-950">{titleMonth}</h2>
@@ -415,11 +449,11 @@ export function ProjectScheduleCalendar({
             ) : null}
           </div>
         </div>
-        <div className="mb-1 flex items-center gap-1">
+        <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             onClick={goPrevMonth}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100"
             aria-label="前の月"
           >
             ‹
@@ -427,49 +461,92 @@ export function ProjectScheduleCalendar({
           <button
             type="button"
             onClick={goNextMonth}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100"
             aria-label="次の月"
           >
             ›
           </button>
+          {immersive ? (
+            <div className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-zinc-100/90 p-1 ring-1 ring-zinc-200/80">
+              <button
+                type="button"
+                onClick={openSearchAndFocus}
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition ${
+                  searchOpen ? "bg-white text-[#FF9600] shadow-sm" : "text-zinc-700 hover:bg-white/80"
+                }`}
+                aria-label="予定を検索"
+                aria-pressed={searchOpen}
+              >
+                <Search className="h-5 w-5" strokeWidth={2.25} />
+              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const base = selectedKey ? parseDateKey(selectedKey) : new Date();
+                    const pad = (n: number) => String(n).padStart(2, "0");
+                    onRequestAdd?.({
+                      startsAt: `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T10:00`,
+                      endsAt: `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T11:00`,
+                    });
+                  }}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-700 transition hover:bg-white/80"
+                  aria-label="予定を追加"
+                >
+                  <Plus className="h-6 w-6" strokeWidth={2.25} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {/* 検索 */}
-      {searchOpen ? (
-        <div className="relative border-b border-zinc-100 px-4 pb-3">
+      {/* 検索（上から展開・開いた瞬間に入力可能） */}
+      <div
+        className={`relative border-zinc-100 transition-[max-height,opacity] duration-200 ease-out ${
+          searchOpen
+            ? "max-h-24 overflow-visible border-b opacity-100"
+            : "pointer-events-none max-h-0 overflow-hidden opacity-0"
+        }`}
+        aria-hidden={!searchOpen}
+      >
+        <div className="px-4 pb-3 pt-1">
           <input
             ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="予定を検索"
-            className="h-10 w-full rounded-xl bg-zinc-100 px-3 text-[15px] outline-none ring-[#FF9600]/30 focus:bg-white focus:ring-2"
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            tabIndex={searchOpen ? 0 : -1}
+            className="h-11 w-full rounded-xl bg-zinc-100 px-3 text-[16px] outline-none ring-[#FF9600]/30 focus:bg-white focus:ring-2"
           />
-          {searchQuery.trim() ? (
-            <ul className="absolute left-4 right-4 top-[calc(100%-0.25rem)] z-30 max-h-64 overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-xl">
-              {searchSuggestions.length === 0 ? (
-                <li className="px-3 py-3 text-[13px] text-zinc-500">一致する予定がありません</li>
-              ) : (
-                searchSuggestions.map((s) => (
-                  <li key={`${s.kind}-${s.id}`}>
-                    <button
-                      type="button"
-                      className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-zinc-50"
-                      onClick={() => jumpToSuggestion(s)}
-                    >
-                      <span className="text-[14px] font-semibold text-zinc-900">{s.title}</span>
-                      <span className="text-[12px] text-zinc-500">{s.subtitle}</span>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          ) : null}
         </div>
-      ) : null}
+        {searchOpen && searchQuery.trim() ? (
+          <ul className="absolute left-4 right-4 top-[calc(100%-0.25rem)] z-30 max-h-64 overflow-y-auto rounded-2xl border border-zinc-200 bg-white py-1 shadow-xl">
+            {searchSuggestions.length === 0 ? (
+              <li className="px-3 py-3 text-[13px] text-zinc-500">一致する予定がありません</li>
+            ) : (
+              searchSuggestions.map((s) => (
+                <li key={`${s.kind}-${s.id}`}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-zinc-50"
+                    onClick={() => jumpToSuggestion(s)}
+                  >
+                    <span className="text-[14px] font-semibold text-zinc-950">{s.title}</span>
+                    <span className="text-[12px] text-zinc-500">{s.subtitle}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+      </div>
 
       {/* 曜日 */}
-      <div className="grid grid-cols-7 px-2 pb-1 pt-1">
+      <div className="grid shrink-0 grid-cols-7 px-2 pb-1 pt-1">
         {WEEKDAYS_JA.map((w, i) => (
           <div
             key={w}
@@ -482,20 +559,25 @@ export function ProjectScheduleCalendar({
         ))}
       </div>
 
-      {/* 週グリッド（選択時は該当週だけ上に残す） */}
-      <div className="relative overflow-hidden">
+      {/* 週グリッド（選択時は該当週だけ上に残す／空きスペースでマスを大きく） */}
+      <div
+        className={`relative overflow-hidden ${
+          dayFocus ? "shrink-0" : fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
+        }`}
+      >
         {weeks.map((week, weekIdx) => {
-          const isSelectedWeek = dayFocus && weekIdx === selectedWeekIndex;
           const collapsedAway = dayFocus && weekIdx !== selectedWeekIndex;
           return (
             <div
               key={weekIdx}
-              className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              className={`grid grid-cols-7 border-t border-zinc-100 px-2 transition-[max-height,opacity,transform,flex] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                 collapsedAway
                   ? "max-h-0 overflow-hidden opacity-0"
                   : dayFocus
-                    ? "max-h-[88px] opacity-100"
-                    : "max-h-[110px] opacity-100"
+                    ? "max-h-[100px] opacity-100"
+                    : fullBleed
+                      ? "min-h-0 flex-1 opacity-100"
+                      : "max-h-[130px] opacity-100"
               }`}
               style={collapsedAway && weekIdx < selectedWeekIndex ? { transform: "translateY(-8px)" } : undefined}
             >
@@ -510,10 +592,12 @@ export function ProjectScheduleCalendar({
                     key={key}
                     type="button"
                     onClick={() => onPickDay(key)}
-                    className="flex min-h-[72px] flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50"
+                    className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
+                      dayFocus || !fullBleed ? "min-h-[88px]" : "min-h-[96px]"
+                    }`}
                   >
                     <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums ${
                         isSelected || isToday
                           ? "bg-[#FF9600] text-white"
                           : inMonth
@@ -523,8 +607,8 @@ export function ProjectScheduleCalendar({
                     >
                       {cell.getDate()}
                     </span>
-                    <div className="flex w-full flex-col gap-[2px] px-[1px]">
-                      {list.slice(0, 3).map((item) =>
+                    <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
+                      {list.slice(0, fullBleed && !dayFocus ? 4 : 3).map((item) =>
                         item.kind === "schedule" ? (
                           <span
                             key={`s-${item.schedule.id}`}
