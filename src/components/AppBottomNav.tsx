@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
   useCallback,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -33,14 +34,20 @@ import {
 import {
   clearMailProjectScope,
   isProjectId,
-  readMailProjectScope,
-  subscribeMailProjectScope,
+  mailInboxHref,
   writeMailProjectScope,
 } from "@/lib/messages/mailScope";
 import { fetchInboxUnreadCount } from "@/lib/messages/unreadCount";
 import { supabase } from "@/lib/supabase";
 import { LAST_PROJECT_CHANGE_EVENT, readLastProject } from "@/lib/workspace/lastProject";
 import type { MessageKey } from "@/lib/i18n/messages";
+
+const PROFILE_MAIL_ID = "profile-mail";
+const PROJECT_MAIL_ID = "project-mail";
+
+function isMailTabId(id: string): boolean {
+  return id === PROFILE_MAIL_ID || id === PROJECT_MAIL_ID || id === "mail";
+}
 
 function getClusterUnlockedSnapshot(): boolean {
   return readProjectClusterUnlocked();
@@ -145,7 +152,7 @@ const PROJECT_ITEM: NavItem = {
 /** Closed (default): same as before — Messages / AI / Find */
 const CLOSED_TABS: NavItem[] = [
   {
-    id: "mail",
+    id: PROFILE_MAIL_ID,
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
@@ -186,7 +193,7 @@ const CLOSED_TABS: NavItem[] = [
 /** Open (project cluster): Messages / Issues / Recruit — with proper marks */
 const OPEN_TABS: NavItem[] = [
   {
-    id: "mail",
+    id: PROJECT_MAIL_ID,
     href: "/messages",
     labelKey: "navMail",
     icon: <Mail className="app-bottom-nav-svg" strokeWidth={1.75} aria-hidden />,
@@ -313,7 +320,7 @@ function NavLink({
   locale: string;
   className?: string;
   href?: string;
-  onNavigate?: () => void;
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <Link
@@ -329,7 +336,7 @@ function NavLink({
       }
       title={label}
       data-nav-id={item.id}
-      onClick={() => onNavigate?.()}
+      onClick={(event) => onNavigate?.(event)}
     >
       <span className="app-bottom-nav-item-icon" aria-hidden>
         {item.icon}
@@ -343,6 +350,7 @@ function NavLink({
 
 function AppBottomNavInner({ className }: { className?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab");
   const segment = searchParams.get("segment");
@@ -350,6 +358,11 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const [mailUnread, setMailUnread] = useState(0);
   const [openPref, setOpenPref] = useState(() => readStoredProjectClusterOpen() ?? false);
   const [seenRouteKey, setSeenRouteKey] = useState("");
+  // クラスタ展開アニメ中は開側タブをまだ押せなくする（閉じ側メッセージ位置と一瞬重なるため）
+  const [openTabsArmed, setOpenTabsArmed] = useState(false);
+  // プロフィール側メッセージへ遷移中に、古い ?project= URL のまま route sync が
+  // プロジェクトクラスタを開き直して飛び移るのを防ぐ
+  const [mailNavIntent, setMailNavIntent] = useState<"profile" | "project" | null>(null);
   const projectPillRef = useRef<HTMLDivElement>(null);
   const profilePillRef = useRef<HTMLDivElement>(null);
   const lastProjectId = useSyncExternalStore(
@@ -366,11 +379,6 @@ function AppBottomNavInner({ className }: { className?: string }) {
     subscribeProjectCluster,
     getListModeSnapshot,
     getServerFalseSnapshot,
-  );
-  const mailProjectScope = useSyncExternalStore(
-    subscribeMailProjectScope,
-    readMailProjectScope,
-    () => null,
   );
 
   const projectActive = PROJECT_ITEM.match(pathname, tab, segment);
@@ -389,7 +397,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const issuesHref = resolveProjectIssuesHref(pathname, lastProjectId);
   const recruitHref = resolveProjectRecruitHref(pathname, lastProjectId);
   /** プロジェクトブロックのメールは、そのプロジェクトのメンバー／グループに絞る */
-  const projectMailHref = lastProjectId ? `/messages?project=${lastProjectId}` : "/messages";
+  const projectMailHref = mailInboxHref(lastProjectId);
   /** 一覧モード中はキューブへ。そうでなければ最後のプロジェクトへ */
   const projectsHomeHref = resolveHomeProjectsHref(lastProjectId, listMode);
   const messagesProjectParam = searchParams.get("project");
@@ -399,24 +407,43 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const onProjectMail =
     (onMessagesPath && isProjectId(messagesProjectParam)) || isProjectIdeasPath(pathname);
   const onProfileMail = onMessagesPath && !onProjectMail;
-  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}|${mailProjectScope ?? ""}`;
+  // mailProjectScope は routeKey に入れない。クリアした瞬間に再 sync され、
+  // まだ ?project= の URL だとプロジェクトクラスタが開き直ってしまうため。
+  const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}`;
 
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
+    const intent =
+      mailNavIntent === "profile" && onProfileMail
+        ? null
+        : mailNavIntent === "project" && onProjectMail
+          ? null
+          : mailNavIntent;
+    if (intent !== mailNavIntent) setMailNavIntent(intent);
+
     if (openOnlyActive || insideProject) {
       // 具体的なプロジェクト内にいるときだけホームブロックを伸ばす
+      if (mailNavIntent !== null) setMailNavIntent(null);
       openProjectCluster();
       setOpenPref(true);
     } else if (onProjectsList || listMode) {
       // キューブ一覧：ブロック閉じ＋矢印なしを維持
+      if (mailNavIntent !== null) setMailNavIntent(null);
       enterProjectListMode();
       setOpenPref(false);
     } else if (onProjectMail) {
-      // プロジェクト側メール／投票：ホームブロックを伸ばす（プロフィール側メールとは別）
-      openProjectCluster();
-      setOpenPref(true);
+      // プロフィール側へ遷移中は、古い ?project= のままクラスタを開き直さない
+      if (intent === "profile" || mailNavIntent === "profile") {
+        closeProjectCluster();
+        setOpenPref(false);
+      } else {
+        // プロジェクト側メール／投票：ホームブロックを伸ばす（プロフィール側メールとは別）
+        openProjectCluster();
+        setOpenPref(true);
+      }
     } else if (onProfileMail || profileActive) {
       // プロフィール側メッセージ／プロフィール: プロフィールブロックを伸ばす
+      if (mailNavIntent !== null) setMailNavIntent(null);
       closeProjectCluster();
       setOpenPref(false);
     } else {
@@ -426,14 +453,18 @@ function AppBottomNavInner({ className }: { className?: string }) {
   }
 
   const clusterOpen = openPref && projectClusterUnlocked;
+  if (!clusterOpen && openTabsArmed) {
+    setOpenTabsArmed(false);
+  }
+  const openTabsLive = clusterOpen && openTabsArmed;
   // メッセージはプロジェクト側 / プロフィール側で別タブ扱い。閉じたクラスタにプロジェクトメールのマークを付けない
   const openSetActiveId =
     OPEN_TABS.find((item) =>
-      item.id === "mail" ? onProjectMail : item.match(pathname, tab, segment),
+      isMailTabId(item.id) ? onProjectMail : item.match(pathname, tab, segment),
     )?.id ?? (projectActive ? "projects" : null);
   const closedSetActiveId =
     CLOSED_TABS.find((item) =>
-      item.id === "mail" ? onProfileMail : item.match(pathname, tab, segment),
+      isMailTabId(item.id) ? onProfileMail : item.match(pathname, tab, segment),
     )?.id ?? (profileActive ? "profile" : null);
 
   const { thumb: projectThumb, ready: projectThumbReady } = useSlidingThumb(
@@ -448,6 +479,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
     closedSetActiveId,
     clusterOpen,
   );
+
+  useEffect(() => {
+    if (!clusterOpen) return;
+    const timer = window.setTimeout(() => setOpenTabsArmed(true), 280);
+    return () => window.clearTimeout(timer);
+  }, [clusterOpen]);
 
   const setClusterOpen = useCallback((open: boolean) => {
     if (open) markProjectClusterUnlocked();
@@ -466,15 +503,29 @@ function AppBottomNavInner({ className }: { className?: string }) {
     setClusterOpen(false);
   }, [setClusterOpen]);
 
-  const goProfileMail = useCallback(() => {
-    clearMailProjectScope();
-    setClusterOpen(false);
-  }, [setClusterOpen]);
+  const goProfileMail = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      // Link のデフォルト遷移と scope クリアが競合すると、古い ?project= のまま
+      // プロジェクトクラスタが開き直す。意図を先に固定してから明示遷移する。
+      event.preventDefault();
+      setMailNavIntent("profile");
+      clearMailProjectScope();
+      setClusterOpen(false);
+      router.push("/messages");
+    },
+    [router, setClusterOpen],
+  );
 
-  const goProjectMail = useCallback(() => {
-    if (lastProjectId) writeMailProjectScope(lastProjectId);
-    setClusterOpen(true);
-  }, [lastProjectId, setClusterOpen]);
+  const goProjectMail = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      setMailNavIntent("project");
+      if (lastProjectId) writeMailProjectScope(lastProjectId);
+      setClusterOpen(true);
+      router.push(mailInboxHref(lastProjectId));
+    },
+    [lastProjectId, router, setClusterOpen],
+  );
 
   const toggleCluster = useCallback(() => {
     if (readProjectListMode()) return;
@@ -557,12 +608,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const keyboardOpen = useVirtualKeyboardOpen();
 
   const renderTab = (item: NavItem, className: string, side: "open" | "closed") => {
-    const active =
-      item.id === "mail"
-        ? side === "open"
-          ? onProjectMail
-          : onProfileMail
-        : item.match(pathname, tab, segment);
+    const isMail = isMailTabId(item.id);
+    const active = isMail
+      ? side === "open"
+        ? onProjectMail
+        : onProfileMail
+      : item.match(pathname, tab, segment);
     const badgeCount = item.badgeKey === "mail" ? mailUnread : 0;
     // href は clusterOpen ではなく「どちらのタブ群か」で決める。
     // 開いている間も閉じ側 DOM は残るので、clusterOpen に合わせると
@@ -572,13 +623,12 @@ function AppBottomNavInner({ className }: { className?: string }) {
         ? issuesHref
         : item.id === "recruit"
           ? recruitHref
-          : item.id === "mail"
+          : isMail
             ? side === "open"
               ? projectMailHref
               : "/messages"
             : undefined;
-    const onNavigate =
-      item.id === "mail" ? (side === "open" ? goProjectMail : goProfileMail) : undefined;
+    const onNavigate = isMail ? (side === "open" ? goProjectMail : goProfileMail) : undefined;
     return (
       <NavLink
         key={`${side}-${item.id}`}
@@ -635,7 +685,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
           <div
             id="app-bottom-nav-open-tabs"
             className="app-bottom-nav-open-tabs"
-            {...(!clusterOpen ? { inert: true } : {})}
+            {...(!openTabsLive ? { inert: true } : {})}
           >
             {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra", "open"))}
           </div>
@@ -681,9 +731,10 @@ function AppBottomNavInner({ className }: { className?: string }) {
 }
 
 export function AppBottomNav({ className }: { className?: string }) {
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    setPortalTarget(document.body);
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const content = (
@@ -695,6 +746,6 @@ export function AppBottomNav({ className }: { className?: string }) {
   // Portal to body so nested `position:fixed` shells (e.g. messages layout)
   // cannot trap the tab bar above the true screen bottom on iOS Safari.
   // Keep an in-tree fallback until mount so the bar never flashes away.
-  if (!portalTarget) return content;
-  return createPortal(content, portalTarget);
+  if (!mounted || typeof document === "undefined") return content;
+  return createPortal(content, document.body);
 }

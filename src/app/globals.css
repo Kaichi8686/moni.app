@@ -544,11 +544,13 @@ html.moni-recruit-drill .app-bottom-nav {
   opacity: 0;
   transform: translateX(-0.5rem);
   pointer-events: none;
+  visibility: hidden;
   transition:
     max-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 220ms ease,
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0ms linear 320ms;
 }
 
 .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-open-tabs {
@@ -556,7 +558,16 @@ html.moni-recruit-drill .app-bottom-nav {
   max-width: 18rem;
   opacity: 1;
   transform: translateX(0);
+  /* 展開アニメ中はプロフィール側メッセージ位置と重なりやすいので、
+     見え始めてから少し遅らせてクリック可能にする */
   pointer-events: auto;
+  visibility: visible;
+  transition:
+    max-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0ms linear 0ms;
 }
 
 /* Sliding active highlight inside a connected pill */
@@ -632,11 +643,13 @@ html.moni-recruit-drill .app-bottom-nav {
   max-width: 18rem;
   opacity: 1;
   transform: translateX(0);
+  visibility: visible;
   transition:
     max-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 200ms ease,
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0ms linear 0ms;
 }
 
 .app-bottom-nav-inner.is-cluster-open .app-bottom-nav-default-tabs {
@@ -645,6 +658,14 @@ html.moni-recruit-drill .app-bottom-nav {
   opacity: 0;
   transform: translateX(0.45rem);
   pointer-events: none;
+  visibility: hidden;
+  /* すぐに hit 対象から外す（閉じ側メッセージを押したのに開側へ飛ぶのを防ぐ） */
+  transition:
+    max-width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    flex-grow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0ms linear 0ms;
 }
 
 .app-bottom-nav-profile-slot {
