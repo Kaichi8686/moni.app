@@ -226,6 +226,35 @@ const PROFILE_ITEM: NavItem = {
   match: (p) => p.startsWith("/profile"),
 };
 
+/** URL だけで「プロジェクトクラスタを開くべきか」を決める（session の残骸を信じない） */
+function clusterShouldOpenForLocation(
+  pathname: string,
+  messagesProjectParam: string | null,
+  listMode: boolean,
+): boolean | null {
+  if (listMode || pathname === "/projects" || pathname === "/projects/") return false;
+  if (isInsideProjectWorkspace(pathname)) return true;
+  if (isProjectIssuesPath(pathname) || isProjectRecruitPath(pathname) || isProjectIdeasPath(pathname)) {
+    return true;
+  }
+  const onMessages = pathname === "/messages" || pathname.startsWith("/messages/");
+  if (onMessages) return isProjectId(messagesProjectParam);
+  if (pathname.startsWith("/profile")) return false;
+  if (CLOSED_TABS.some((item) => !isMailTabId(item.id) && item.match(pathname, null, null))) {
+    return false;
+  }
+  return null;
+}
+
+function readInitialClusterOpenPref(): boolean {
+  if (typeof window === "undefined") return false;
+  const pathname = window.location.pathname;
+  const project = new URLSearchParams(window.location.search).get("project");
+  const fromUrl = clusterShouldOpenForLocation(pathname, project, readProjectListMode());
+  if (fromUrl !== null) return fromUrl;
+  return readStoredProjectClusterOpen() ?? false;
+}
+
 function measureThumb(container: HTMLElement | null): ThumbState {
   if (!container) return { x: 0, y: 0, w: 0, h: 0, visible: false };
   const active = container.querySelector<HTMLElement>(".app-bottom-nav-item.is-active");
@@ -356,7 +385,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   const segment = searchParams.get("segment");
   const { t, locale } = useI18n();
   const [mailUnread, setMailUnread] = useState(0);
-  const [openPref, setOpenPref] = useState(() => readStoredProjectClusterOpen() ?? false);
+  const [openPref, setOpenPref] = useState(readInitialClusterOpenPref);
   const [seenRouteKey, setSeenRouteKey] = useState("");
   // クラスタ展開アニメ中は開側タブをまだ押せなくする（閉じ側メッセージ位置と一瞬重なるため）
   const [openTabsArmed, setOpenTabsArmed] = useState(false);
@@ -390,6 +419,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
     (item) =>
       (item.id === "recruit" || item.id === "issues") && item.match(pathname, tab, segment),
   );
+  const closedSideActive = CLOSED_TABS.some(
+    (item) => !isMailTabId(item.id) && item.match(pathname, tab, segment),
+  );
   /** 一覧モード中／未オープン時はクラスタ開けない＝矢印なし */
   const projectClusterUnlocked =
     !listMode && (clusterUnlockedStored || insideProject || openOnlyActive);
@@ -411,6 +443,8 @@ function AppBottomNavInner({ className }: { className?: string }) {
   // まだ ?project= の URL だとプロジェクトクラスタが開き直ってしまうため。
   const routeKey = `${pathname}|${tab ?? ""}|${segment ?? ""}|${openOnlyActive ? "1" : "0"}|${listMode ? "L" : "P"}|${messagesProjectParam ?? ""}`;
 
+  // 同じ render で反映する（復帰直後に session の「開」が1フレーム残ってプロジェクト側メッセージが押せるのを防ぐ）
+  let nextOpenPref = openPref;
   if (routeKey !== seenRouteKey) {
     setSeenRouteKey(routeKey);
     const intent =
@@ -425,34 +459,51 @@ function AppBottomNavInner({ className }: { className?: string }) {
       // 具体的なプロジェクト内にいるときだけホームブロックを伸ばす
       if (mailNavIntent !== null) setMailNavIntent(null);
       openProjectCluster();
+      nextOpenPref = true;
       setOpenPref(true);
     } else if (onProjectsList || listMode) {
       // キューブ一覧：ブロック閉じ＋矢印なしを維持
       if (mailNavIntent !== null) setMailNavIntent(null);
       enterProjectListMode();
+      nextOpenPref = false;
       setOpenPref(false);
     } else if (onProjectMail) {
       // プロフィール側へ遷移中は、古い ?project= のままクラスタを開き直さない
       if (intent === "profile" || mailNavIntent === "profile") {
         closeProjectCluster();
+        nextOpenPref = false;
         setOpenPref(false);
       } else {
         // プロジェクト側メール／投票：ホームブロックを伸ばす（プロフィール側メールとは別）
         openProjectCluster();
+        nextOpenPref = true;
         setOpenPref(true);
       }
-    } else if (onProfileMail || profileActive) {
-      // プロフィール側メッセージ／プロフィール: プロフィールブロックを伸ばす
+    } else if (onProfileMail || profileActive || closedSideActive) {
+      // プロフィール側／AI／探す: 長時間離席後も session の「開」残骸でプロジェクト側を出さない
       if (mailNavIntent !== null) setMailNavIntent(null);
+      clearMailProjectScope();
       closeProjectCluster();
+      nextOpenPref = false;
       setOpenPref(false);
     } else {
-      const stored = readStoredProjectClusterOpen();
-      if (stored !== null) setOpenPref(stored);
+      const fromUrl = clusterShouldOpenForLocation(pathname, messagesProjectParam, listMode);
+      if (fromUrl !== null) {
+        nextOpenPref = fromUrl;
+        setOpenPref(fromUrl);
+        if (fromUrl) openProjectCluster();
+        else closeProjectCluster();
+      } else {
+        const stored = readStoredProjectClusterOpen();
+        if (stored !== null) {
+          nextOpenPref = stored;
+          setOpenPref(stored);
+        }
+      }
     }
   }
 
-  const clusterOpen = openPref && projectClusterUnlocked;
+  const clusterOpen = nextOpenPref && projectClusterUnlocked;
   if (!clusterOpen && openTabsArmed) {
     setOpenTabsArmed(false);
   }
@@ -485,6 +536,37 @@ function AppBottomNavInner({ className }: { className?: string }) {
     const timer = window.setTimeout(() => setOpenTabsArmed(true), 280);
     return () => window.clearTimeout(timer);
   }, [clusterOpen]);
+
+  // 長時間バックグラウンド復帰 / bfcache 復元時: URL を正とし、session の残骸を捨てる
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const path = window.location.pathname;
+      const project = new URLSearchParams(window.location.search).get("project");
+      const fromUrl = clusterShouldOpenForLocation(path, project, readProjectListMode());
+      if (fromUrl === false) {
+        clearMailProjectScope();
+        closeProjectCluster();
+        setOpenPref(false);
+        setMailNavIntent(null);
+      } else if (fromUrl === true) {
+        openProjectCluster();
+        setOpenPref(true);
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncFromUrl();
+    };
+    const onPageShow = () => {
+      // bfcache 復元でも session の開閉が URL と食い違うことがある
+      syncFromUrl();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, []);
 
   const setClusterOpen = useCallback((open: boolean) => {
     if (open) markProjectClusterUnlocked();
@@ -687,7 +769,10 @@ function AppBottomNavInner({ className }: { className?: string }) {
             className="app-bottom-nav-open-tabs"
             {...(!openTabsLive ? { inert: true } : {})}
           >
-            {OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra", "open"))}
+            {/* 閉じているときは DOM から外す。CSS 崩れ／復帰直後でもプロジェクト側メッセージを押せないようにする */}
+            {clusterOpen
+              ? OPEN_TABS.map((item) => renderTab(item, "app-bottom-nav-item--extra", "open"))
+              : null}
           </div>
 
           <button
@@ -711,7 +796,9 @@ function AppBottomNavInner({ className }: { className?: string }) {
         >
           <SlidingThumb thumb={profileThumb} ready={profileThumbReady} />
           <div className="app-bottom-nav-default-tabs" {...(clusterOpen ? { inert: true } : {})}>
-            {CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default", "closed"))}
+            {!clusterOpen
+              ? CLOSED_TABS.map((item) => renderTab(item, "app-bottom-nav-item--default", "closed"))
+              : null}
           </div>
           <div className={`app-bottom-nav-profile-slot ${profileActive ? "is-active" : ""}`}>
             <NavLink
