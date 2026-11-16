@@ -1363,7 +1363,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 {actionMenuOpen ? (
                   <div
                     role="menu"
-                    className="absolute right-0 top-[calc(100%+6px)] z-[120] w-56 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-xl"
+                    className="absolute right-0 top-[calc(100%+6px)] z-[120] w-56 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-lg"
                   >
                     <button type="button" role="menuitem" className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium text-[#1A1A1A] transition hover:bg-[#F7F8F8]" onClick={() => {
                       setActionMenuOpen(false);

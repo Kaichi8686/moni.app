@@ -196,7 +196,7 @@ export default function WorkspaceOverview() {
             {canEdit ? (
               <Link
                 href={roadmapEditHref}
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[12px] font-bold text-orange-700 shadow-sm transition hover:border-orange-300 hover:bg-orange-100"
               >
                 <PenLine className="h-3.5 w-3.5" aria-hidden />
                 {tx("編集する", "Edit")}
@@ -263,7 +263,7 @@ export default function WorkspaceOverview() {
                 }}
                 className="flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-6 py-10 text-center transition hover:border-orange-300 hover:bg-orange-50/40 disabled:opacity-50"
               >
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 text-white shadow-[0_4px_0_#c2410c]">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm">
                   <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
                 </span>
                 <span className="text-sm font-semibold text-zinc-800">
@@ -362,10 +362,10 @@ export default function WorkspaceOverview() {
         />
       </div>
 
-      {/* アイデアタブと同系の Duo 角丸正方形ボタン（左下）→ AI コーチ */}
+      {/* 左下 → AI コーチ（フラット） */}
       <Link
         href={`/projects/${projectId}/coach`}
-        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex h-[60px] w-[60px] select-none flex-col items-center justify-center gap-0.5 rounded-[1.15rem] bg-[#6B5CF6] text-[12px] font-extrabold leading-none tracking-tight text-white shadow-[0_4px_0_#4C3FBF] transition-[transform,box-shadow] duration-75 active:translate-y-[4px] active:shadow-none"
+        className="pointer-events-auto fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] left-4 z-30 inline-flex h-[60px] w-[60px] select-none flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#6B5CF6] text-[12px] font-bold leading-none tracking-tight text-white shadow-lg transition hover:bg-[#5B4CE6] active:scale-[0.98] active:opacity-90"
         aria-label={tx("AI", "AI")}
       >
         <Sparkles className="h-5 w-5 shrink-0" aria-hidden strokeWidth={2.5} />

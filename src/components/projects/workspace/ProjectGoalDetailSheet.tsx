@@ -110,7 +110,7 @@ export function ProjectGoalDetailSheet({
         onClick={requestClose}
       />
       <div
-        className={`relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-12px_40px_rgba(0,0,0,0.15)] sm:mx-4 sm:mb-4 sm:rounded-2xl ${
+        className={`relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:mx-4 sm:mb-4 sm:rounded-2xl ${
           closing ? "roadmap-phase-sheet-panel-out" : "roadmap-phase-sheet-panel-in"
         }`}
       >

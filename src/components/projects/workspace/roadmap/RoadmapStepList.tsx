@@ -114,7 +114,7 @@ export function RoadmapStepList({
                   </span>
                 ) : null}
                 <span
-                  className={`relative z-[1] flex h-full w-full items-center justify-center rounded-full font-bold tabular-nums ${numberClass}`}
+                  className={`relative z-[1] flex h-full w-full items-center justify-center rounded-full font-bold tabular-nums shadow-sm ${numberClass}`}
                 >
                   {step.stepNumber}
                 </span>
@@ -134,8 +134,8 @@ export function RoadmapStepList({
               <div
                 className={`overflow-hidden rounded-2xl border bg-white transition-[box-shadow,border-color] ${
                   expanded
-                    ? "border-zinc-200 shadow-sm"
-                    : "border-zinc-200 hover:border-zinc-300"
+                    ? "border-zinc-200 shadow-lg"
+                    : "border-zinc-200 shadow-sm hover:border-zinc-300"
                 }`}
               >
                 <button

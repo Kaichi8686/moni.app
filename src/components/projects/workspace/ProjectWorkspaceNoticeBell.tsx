@@ -150,7 +150,7 @@ export function ProjectWorkspaceNoticeBell({ userId, projectId, disabled }: Prop
             }}
           />
           <div
-            className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-[-8px_0_32px_rgba(0,0,0,0.12)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               entered ? "translate-x-0" : "translate-x-full"
             }`}
           >

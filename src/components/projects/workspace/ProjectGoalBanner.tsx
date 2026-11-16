@@ -56,7 +56,7 @@ export function ProjectGoalBanner({
   );
 
   const surface = [
-    "relative w-full rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 sm:px-5",
+    "relative w-full rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 shadow-sm sm:px-5",
     "transition-colors duration-150",
   ].join(" ");
 
