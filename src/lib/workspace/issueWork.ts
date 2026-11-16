@@ -45,6 +45,8 @@ export type IssueWork = {
   workFiles: IssueWorkFile[];
   attachments: string[];
   submittedAt: string | null;
+  /** ピン留め時刻（ISO）。null/未設定は未ピン */
+  pinnedAt: string | null;
 };
 
 type WorkRow = {
@@ -162,6 +164,10 @@ export function readIssueWork(row: WorkRow): IssueWork & { legacyWorkflow: boole
     (typeof row.submitted_at === "string" && row.submitted_at) ||
     (typeof packed?.submittedAt === "string" && packed.submittedAt) ||
     (row.status === "done" ? row.updated_at ?? null : null);
+  const pinnedAt =
+    (typeof packed?.pinnedAt === "string" && packed.pinnedAt.trim()) ||
+    pinnedAtFromLabels(row.labels) ||
+    null;
   const textFromBoard = boardPlainText(workspaceBoard);
   return {
     genre,
@@ -170,6 +176,7 @@ export function readIssueWork(row: WorkRow): IssueWork & { legacyWorkflow: boole
     workFiles,
     attachments: boardImageUrls(workspaceBoard).length > 0 ? boardImageUrls(workspaceBoard) : attachments,
     submittedAt: submittedAt || null,
+    pinnedAt: pinnedAt || null,
     legacyWorkflow: Boolean(workflow),
   };
 }
@@ -184,6 +191,7 @@ export function packWorkDescription(work: IssueWork): string {
     workFiles: serializeIssueWorkFiles(work.workFiles),
     attachments: board ? boardImageUrls(board) : work.attachments,
     submittedAt: work.submittedAt,
+    pinnedAt: work.pinnedAt,
   };
   return text ? `${text}\n\n${WORK_MARKER}\n${JSON.stringify(payload)}` : `${WORK_MARKER}\n${JSON.stringify(payload)}`;
 }
@@ -218,6 +226,7 @@ export function mergeWorkPatch(
     workFiles,
     attachments: patch.attachments ?? current.attachments,
     submittedAt: patch.submittedAt === undefined ? current.submittedAt : patch.submittedAt,
+    pinnedAt: patch.pinnedAt === undefined ? current.pinnedAt : patch.pinnedAt,
   });
 }
 
@@ -226,6 +235,23 @@ export function isIssueSubmitted(issue: { status: string; submittedAt?: string |
 }
 
 const BEGIN_PREFIX = "begin:";
+const PIN_PREFIX = "pin:";
+
+export function pinnedAtFromLabels(labels: string[] | null | undefined): string | undefined {
+  const raw = (labels ?? []).find((label) => label.startsWith(PIN_PREFIX))?.slice(PIN_PREFIX.length)?.trim();
+  if (!raw) return undefined;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+export function withPinnedLabel(labels: string[] | null | undefined, pinnedAt: string | null): string[] {
+  const rest = (labels ?? []).filter((label) => !label.startsWith(PIN_PREFIX));
+  if (!pinnedAt) return rest;
+  const date = new Date(pinnedAt);
+  if (Number.isNaN(date.getTime())) return rest;
+  return [...rest, `${PIN_PREFIX}${date.toISOString()}`];
+}
 
 export function dateInputToIso(value: string): string | null {
   const day = value.trim();

@@ -45,6 +45,7 @@ import {
   packWorkDescription,
   withBeginLabel,
   withGenreLabel,
+  withPinnedLabel,
   type IssueWork,
   type TaskGenre,
 } from "@/lib/workspace/issueWork";
@@ -600,6 +601,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
         workFiles,
         attachments: [],
         submittedAt: null,
+        pinnedAt: null,
       };
       // 列が無い環境でも復元できるよう、作成時ファイルは description にも二重保存する
       const packedDescription =
@@ -1009,14 +1011,16 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           workFiles: issue.workFiles ?? [],
           attachments: issue.attachments,
           submittedAt: issue.submittedAt ?? null,
+          pinnedAt: issue.pinnedAt ?? null,
         },
         patch,
       );
       const updatedAt = new Date().toISOString();
       const status = next.submittedAt ? "done" : issue.status === "done" ? "todo" : issue.status;
+      const nextLabels = withPinnedLabel(withGenreLabel(issue.labels, next.genre), next.pinnedAt);
       const row: Record<string, unknown> = {
         description: next.workspaceText,
-        labels: withGenreLabel(issue.labels, next.genre),
+        labels: nextLabels,
         genre: next.genre,
         workspace_text: next.workspaceText,
         workspace_board_json: next.workspaceBoard,
@@ -1044,7 +1048,7 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
           .from("project_issues")
           .update({
             description: packWorkDescription(next),
-            labels: withGenreLabel(issue.labels, next.genre),
+            labels: nextLabels,
             status,
             workflow_json: null,
             updated_at: updatedAt,
@@ -1069,8 +1073,9 @@ export function ProjectWorkspaceProvider({ projectId: rawId, children }: { proje
                 ...next,
                 workFiles: next.workFiles,
                 submittedAt: next.submittedAt ?? undefined,
+                pinnedAt: next.pinnedAt ?? undefined,
                 status,
-                labels: withGenreLabel(item.labels, next.genre),
+                labels: nextLabels,
                 description: next.workspaceText,
                 workflow: undefined,
                 legacyWorkflow: false,

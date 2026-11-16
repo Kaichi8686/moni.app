@@ -96,6 +96,7 @@ export function mapIssueRow(row: IssueRowDb): Issue {
     workFiles: work.workFiles,
     attachments: work.attachments,
     submittedAt: work.submittedAt ?? undefined,
+    pinnedAt: work.pinnedAt ?? undefined,
     legacyWorkflow: work.legacyWorkflow,
     workflow,
     completionAnswer: workflow?.completionAnswer?.trim() || undefined,

@@ -11,6 +11,7 @@ import {
   Link2,
   MoreVertical,
   PenTool,
+  Pin,
   Plus,
   StickyNote,
   X,
@@ -47,6 +48,7 @@ import {
   removeWorkFile,
   requiredFilesReady,
   resolveDraftLinkCreation,
+  setWorkFilePinned,
   sortWorkFilesByUpdated,
   upsertWorkFile,
   type IssueWorkFile,
@@ -979,11 +981,14 @@ export function IssueTaskFilesPanel({
               </>
             ) : null}
           </p>
-          <h1 className="truncate text-xl font-bold tracking-tight text-zinc-950">
-            {isMemo ? tx("メモ", "Memo") : issue.title}
+          <h1 className="flex min-w-0 items-center gap-1.5 text-xl font-bold tracking-tight text-zinc-950">
+            {!isMemo && issue.pinnedAt ? (
+              <Pin className="h-5 w-5 shrink-0 fill-[#FF9600] text-[#FF9600]" aria-hidden strokeWidth={2.25} />
+            ) : null}
+            <span className="truncate">{isMemo ? tx("メモ", "Memo") : issue.title}</span>
           </h1>
         </div>
-        {!isMemo && canEdit && onDelete ? (
+        {!isMemo && canEdit ? (
           <div className="relative shrink-0">
             <button
               type="button"
@@ -1002,17 +1007,33 @@ export function IssueTaskFilesPanel({
                   aria-label={tx("閉じる", "Close")}
                   onClick={() => setIssueMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[140px] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[160px] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
                   <button
                     type="button"
-                    className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-[#d93025] hover:bg-[#fce8e6]"
+                    className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-zinc-800 hover:bg-zinc-50"
                     onClick={() => {
                       setIssueMenuOpen(false);
-                      setConfirmDeleteIssue(true);
+                      void onSaveWork({
+                        pinnedAt: issue.pinnedAt ? null : new Date().toISOString(),
+                      });
                     }}
                   >
-                    {tx("削除する", "Delete")}
+                    {issue.pinnedAt
+                      ? tx("ピン留めを解除", "Unpin")
+                      : tx("この課題をピン留め", "Pin this task")}
                   </button>
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      className="block w-full px-4 py-2.5 text-left text-[14px] font-bold text-[#d93025] hover:bg-[#fce8e6]"
+                      onClick={() => {
+                        setIssueMenuOpen(false);
+                        setConfirmDeleteIssue(true);
+                      }}
+                    >
+                      {tx("削除する", "Delete")}
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -1089,6 +1110,9 @@ export function IssueTaskFilesPanel({
                   <FileIcon kind={file.kind} url={items[0]?.url || file.url} />
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
+                      {file.pinnedAt ? (
+                        <Pin className="h-4 w-4 shrink-0 fill-[#FF9600] text-[#FF9600]" aria-hidden strokeWidth={2.25} />
+                      ) : null}
                       <span className="block min-w-0 truncate text-[15px] font-normal text-[#202124]">
                         {file.title?.trim() || defaultTitle(file.kind)}
                       </span>
@@ -1132,7 +1156,21 @@ export function IssueTaskFilesPanel({
                 {menuId === file.id ? (
                   <>
                     <button type="button" className="fixed inset-0 z-40" aria-label={tx("閉じる", "Close")} onClick={() => setMenuId(null)} />
-                    <div className="absolute right-2 top-full z-50 min-w-[140px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
+                    <div className="absolute right-2 top-full z-50 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
+                      <button
+                        type="button"
+                        className="block w-full px-4 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa]"
+                        onClick={() => {
+                          setMenuId(null);
+                          void persistFiles(
+                            upsertWorkFile(files, setWorkFilePinned(file, !file.pinnedAt)),
+                          );
+                        }}
+                      >
+                        {file.pinnedAt
+                          ? tx("ピン留めを解除", "Unpin")
+                          : tx("ピン留め", "Pin")}
+                      </button>
                       <button
                         type="button"
                         className="block w-full px-4 py-2.5 text-left text-[14px] text-[#d93025] hover:bg-[#fce8e6]"

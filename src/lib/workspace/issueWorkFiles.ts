@@ -32,6 +32,8 @@ export type IssueWorkFile = {
   required?: boolean;
   /** 必須ファイルを担当者が完了した時刻 */
   completedAt?: string | null;
+  /** ピン留め時刻（ISO） */
+  pinnedAt?: string | null;
 };
 
 function isKind(value: unknown): value is IssueWorkFileKind {
@@ -111,6 +113,13 @@ export function parseIssueWorkFiles(raw: unknown): IssueWorkFile[] {
         : o.completedAt === null
           ? null
           : undefined;
+    const pinnedAtRaw = typeof o.pinnedAt === "string" ? o.pinnedAt.trim() : "";
+    const pinnedAt = pinnedAtRaw
+      ? (() => {
+          const date = new Date(pinnedAtRaw);
+          return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+        })()
+      : undefined;
     out.push({
       id,
       kind: o.kind,
@@ -122,6 +131,7 @@ export function parseIssueWorkFiles(raw: unknown): IssueWorkFile[] {
       items,
       required: required || undefined,
       completedAt: completedAt === undefined ? undefined : completedAt,
+      pinnedAt,
     });
     if (out.length >= 40) break;
   }
@@ -148,6 +158,7 @@ export function serializeIssueWorkFiles(files: IssueWorkFile[]): IssueWorkFile[]
     ...(file.items && file.items.length > 0 ? { items: file.items } : {}),
     ...(file.required ? { required: true } : {}),
     ...(file.completedAt ? { completedAt: file.completedAt } : file.completedAt === null ? { completedAt: null } : {}),
+    ...(file.pinnedAt ? { pinnedAt: file.pinnedAt } : {}),
   }));
 }
 
@@ -268,13 +279,28 @@ export function removeWorkFile(files: IssueWorkFile[], id: string): IssueWorkFil
   return files.filter((file) => file.id !== id);
 }
 
-/** 必須を先頭に。同じグループ内は更新が新しい順 */
+/** ピン → 必須 → 更新が新しい順 */
 export function sortWorkFilesByUpdated(files: IssueWorkFile[]): IssueWorkFile[] {
   return [...files].sort((a, b) => {
+    const pinA = a.pinnedAt ? 1 : 0;
+    const pinB = b.pinnedAt ? 1 : 0;
+    if (pinA !== pinB) return pinB - pinA;
+    if (pinA && pinB && a.pinnedAt && b.pinnedAt) {
+      const byPin = b.pinnedAt.localeCompare(a.pinnedAt);
+      if (byPin !== 0) return byPin;
+    }
     const req = Number(Boolean(b.required)) - Number(Boolean(a.required));
     if (req !== 0) return req;
     return b.updatedAt.localeCompare(a.updatedAt);
   });
+}
+
+export function setWorkFilePinned(file: IssueWorkFile, pinned: boolean): IssueWorkFile {
+  return {
+    ...file,
+    pinnedAt: pinned ? new Date().toISOString() : undefined,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function setWorkFileRequired(file: IssueWorkFile, required: boolean): IssueWorkFile {

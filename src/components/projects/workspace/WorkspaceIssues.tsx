@@ -2,7 +2,7 @@
 
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, MoreVertical, Plus, StickyNote } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, MoreVertical, Pin, Plus, StickyNote } from "lucide-react";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
@@ -372,16 +372,20 @@ export default function WorkspaceIssues() {
     return listStepTaskGenres(screen.phaseId, customGenres, openIssues);
   }, [screen, customGenres, openIssues]);
 
-  /** 未提出を先に、その中では提出期限が近い順。提出済みは後ろ。 */
+  /** ピン留めを先頭に。その後は未提出→提出済み、期限が近い順。 */
   function issuesFor(phaseId: PhaseKey, genre?: TaskGenre) {
     const filtered = openIssues.filter((issue) => {
       if (phaseKeyOf(issue) !== phaseId) return false;
       if (genre && issue.genre !== genre) return false;
       return true;
     });
-    const open = sortIssuesByDueDate(filtered.filter((issue) => !isIssueSubmitted(issue)));
-    const done = sortIssuesByDueDate(filtered.filter((issue) => isIssueSubmitted(issue)));
-    return [...open, ...done];
+    const pinned = [...filtered]
+      .filter((issue) => Boolean(issue.pinnedAt))
+      .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
+    const unpinned = filtered.filter((issue) => !issue.pinnedAt);
+    const open = sortIssuesByDueDate(unpinned.filter((issue) => !isIssueSubmitted(issue)));
+    const done = sortIssuesByDueDate(unpinned.filter((issue) => isIssueSubmitted(issue)));
+    return [...pinned, ...open, ...done];
   }
 
   function openCountFor(phaseId: PhaseKey, genre?: TaskGenre) {
@@ -716,7 +720,18 @@ export default function WorkspaceIssues() {
                     className={submitted ? ISSUE_ROW_DONE : ISSUE_ROW_OPEN}
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="line-clamp-2">{issue.title}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {issue.pinnedAt ? (
+                          <Pin
+                            className={`h-4 w-4 shrink-0 ${
+                              submitted ? "fill-[#3F6212] text-[#3F6212]" : "fill-[#FF9600] text-[#FF9600]"
+                            }`}
+                            aria-hidden
+                            strokeWidth={2.25}
+                          />
+                        ) : null}
+                        <span className="line-clamp-2">{issue.title}</span>
+                      </span>
                       <span
                         className={`truncate text-[11px] font-semibold ${
                           submitted ? "text-[#3F6212]/75" : "text-[#9A5B1F]/80"

@@ -61,6 +61,8 @@ export interface Issue {
   workFiles: IssueWorkFile[];
   attachments: string[];
   submittedAt?: string;
+  /** ピン留め時刻（ISO）。ジャンル一覧で先頭表示 */
+  pinnedAt?: string;
   /** 旧5ステップが残っていて、作業スペースへ移す必要がある */
   legacyWorkflow?: boolean;
   workflow?: IssueWorkflow;
