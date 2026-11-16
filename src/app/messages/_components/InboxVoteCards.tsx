@@ -67,7 +67,7 @@ export function InboxVoteCards({ projectId }: Props) {
         <article className={CARD_SHELL} style={{ minHeight: "10.5rem" }}>
           <div className="h-1.5 w-full bg-[#FF9600]" aria-hidden />
           <div className="flex min-h-0 flex-1 flex-col items-stretch px-2 pb-3 pt-2.5">
-            <span className="mx-auto mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-white bg-[#FF9600] text-white">
+            <span className="mx-auto mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#FF9600] text-white">
               <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
             </span>
             <p className={CARD_TITLE}>{tx("投票を作る", "Create vote")}</p>
