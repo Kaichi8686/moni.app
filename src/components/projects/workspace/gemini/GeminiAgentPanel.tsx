@@ -136,6 +136,9 @@ export function GeminiAgentPanel({
   /** Lift composer above the soft keyboard (overlays-content does not shrink layout). */
   const [keyboardInset, setKeyboardInset] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
+  /** Peak inset while the keyboard is open — ignore downward settle so the composer only moves up. */
+  const keyboardInsetPeakRef = useRef(0);
+  const composerFocusedRef = useRef(false);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
   const handoffAppliedRef = useRef(false);
@@ -240,23 +243,50 @@ export function GeminiAgentPanel({
 
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
-    const sync = () => {
+
+    const lockScrollTop = () => {
+      // iOS pans visualViewport / document to reveal the focused field; that then
+      // shrinks our inset and makes the composer bounce down. Keep scroll at 0.
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+      if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+    };
+
+    const readInset = () => {
       const vv = window.visualViewport;
-      if (!vv) {
+      if (!vv) return 0;
+      // Prefer keyboard occlusion height. Ignoring offsetTop while scroll-locked
+      // avoids the up-then-down bounce from iOS focus scrolling.
+      return Math.max(0, Math.round(window.innerHeight - vv.height));
+    };
+
+    const sync = () => {
+      if (composerFocusedRef.current) lockScrollTop();
+      const inset = readInset();
+      const open = composerFocusedRef.current && inset >= 8;
+      if (!open) {
+        keyboardInsetPeakRef.current = 0;
         setKeyboardInset(0);
         return;
       }
-      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      // Only move up while the keyboard is opening / open — never settle downward.
+      if (inset > keyboardInsetPeakRef.current) {
+        keyboardInsetPeakRef.current = inset;
+        setKeyboardInset(inset);
+      }
     };
+
     sync();
     const vv = window.visualViewport;
     vv?.addEventListener("resize", sync);
     vv?.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
+    window.addEventListener("scroll", lockScrollTop, { passive: true });
     return () => {
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
+      window.removeEventListener("scroll", lockScrollTop);
     };
   }, [fullscreen]);
 
@@ -499,7 +529,11 @@ export function GeminiAgentPanel({
 
       <div
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-        style={fullscreen && keyboardInset > 0 ? { paddingBottom: keyboardInset } : undefined}
+        style={
+          fullscreen && keyboardInset > 0
+            ? { paddingBottom: keyboardInset, transition: "none" }
+            : undefined
+        }
       >
         {fullscreen ? (
           <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
@@ -831,6 +865,22 @@ export function GeminiAgentPanel({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 disabled={loading}
+                onFocus={() => {
+                  if (!fullscreen) return;
+                  composerFocusedRef.current = true;
+                  keyboardInsetPeakRef.current = 0;
+                  if (typeof window !== "undefined") {
+                    window.scrollTo(0, 0);
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                  }
+                }}
+                onBlur={() => {
+                  if (!fullscreen) return;
+                  composerFocusedRef.current = false;
+                  keyboardInsetPeakRef.current = 0;
+                  setKeyboardInset(0);
+                }}
                 placeholder={
                   fullscreen
                     ? mode === "ideas"
