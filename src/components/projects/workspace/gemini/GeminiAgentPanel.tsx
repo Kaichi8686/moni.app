@@ -139,8 +139,6 @@ export function GeminiAgentPanel({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   /** Peak inset while the keyboard is open — ignore downward settle so the composer only moves up. */
   const keyboardInsetPeakRef = useRef(0);
-  /** Last stable keyboard height — applied on the first open frame of a session (not on focus alone). */
-  const lastKeyboardHeightRef = useRef(0);
   const composerFocusedRef = useRef(false);
   const keyboardCloseTimerRef = useRef<number | null>(null);
   const fullscreen = variant === "fullscreen";
@@ -286,18 +284,10 @@ export function GeminiAgentPanel({
 
       if (inset >= 8) {
         clearCloseTimer();
-        // First frame of this open: jump to last known height so reopen doesn't climb.
-        if (keyboardInsetPeakRef.current < 8) {
-          const next = Math.max(inset, lastKeyboardHeightRef.current);
-          keyboardInsetPeakRef.current = next;
-          lastKeyboardHeightRef.current = next;
-          setKeyboardInset(next);
-          return;
-        }
-        // After that: only move up (ignore settle-down overshoot).
+        // Follow the real keyboard height upward only — never jump ahead to a
+        // cached taller value (that flashed the mid-screen gap during open).
         if (inset > keyboardInsetPeakRef.current) {
           keyboardInsetPeakRef.current = inset;
-          lastKeyboardHeightRef.current = inset;
           setKeyboardInset(inset);
         }
         return;
@@ -305,11 +295,11 @@ export function GeminiAgentPanel({
 
       // Keyboard gone (including iOS dismiss-while-focused). Debounce so brief
       // mid-animation 0 frames don't drop the composer during open.
-      if (keyboardInsetPeakRef.current > 0 || inset < 8) {
+      if (keyboardInsetPeakRef.current > 0) {
         clearCloseTimer();
         keyboardCloseTimerRef.current = window.setTimeout(() => {
           if (readInset() < 8) dropInset();
-        }, 120);
+        }, 180);
       }
     };
 
@@ -328,12 +318,17 @@ export function GeminiAgentPanel({
     };
   }, [fullscreen]);
 
-  // useVirtualKeyboardOpen already detects "focus remains after keyboard closes".
+  // Drop inset when the soft keyboard is gone. Debounce: useVirtualKeyboardOpen
+  // can flicker false for a frame mid-open and would otherwise flash mid-screen.
   useEffect(() => {
     if (!fullscreen) return;
     if (keyboardOpen) return;
-    keyboardInsetPeakRef.current = 0;
-    setKeyboardInset((prev) => (prev === 0 ? prev : 0));
+    const timer = window.setTimeout(() => {
+      if (keyboardOpen) return;
+      keyboardInsetPeakRef.current = 0;
+      setKeyboardInset((prev) => (prev === 0 ? prev : 0));
+    }, 180);
+    return () => window.clearTimeout(timer);
   }, [fullscreen, keyboardOpen]);
 
   useEffect(() => {
