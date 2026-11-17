@@ -1469,10 +1469,6 @@ export function IssueWorkspaceCanvas({
 
   const selectedImage =
     selectedIds.length === 1 ? board.items.find((item): item is BoardImage => item.kind === "image" && item.id === selectedId) : null;
-  const selectedTextBox =
-    selectedIds.length === 1
-      ? board.items.find((item): item is BoardTextBox => item.kind === "text" && item.id === selectedId)
-      : null;
   const editingTextBox = editingTextId
     ? board.items.find((item): item is BoardTextBox => item.kind === "text" && item.id === editingTextId) ?? null
     : null;
