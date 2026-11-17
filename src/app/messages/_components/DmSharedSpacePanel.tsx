@@ -138,39 +138,13 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
 }
 
 function DocEditorViewport({ children }: { children: ReactNode }) {
-  const [box, setBox] = useState(() => ({
-    top: 0,
-    height: typeof window !== "undefined" ? window.innerHeight : 800,
-    left: 0,
-    width: typeof window !== "undefined" ? window.innerWidth : 400,
-  }));
-  useEffect(() => {
-    const sync = () => {
-      const vv = window.visualViewport;
-      if (vv) setBox({ top: vv.offsetTop, height: vv.height, left: vv.offsetLeft, width: vv.width });
-      else setBox({ top: 0, height: window.innerHeight, left: 0, width: window.innerWidth });
-    };
-    sync();
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", sync);
-    vv?.addEventListener("scroll", sync);
-    window.addEventListener("resize", sync);
-    return () => {
-      vv?.removeEventListener("resize", sync);
-      vv?.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-    };
-  }, []);
   return (
-    <>
-      <div className="fixed inset-0 z-[239] bg-white" aria-hidden />
-      <div
-        className="fixed z-[240] flex flex-col bg-white"
-        style={{ top: box.top, left: box.left, width: box.width || "100%", height: box.height || "100dvh" }}
-      >
-        {children}
-      </div>
-    </>
+    <div
+      className="fixed inset-0 z-[240] flex flex-col overscroll-none bg-white"
+      style={{ height: "100lvh", minHeight: "100%" }}
+    >
+      {children}
+    </div>
   );
 }
 

@@ -207,7 +207,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const [docPan, setDocPan] = useState({ x: 0, y: 0 });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [viewportBox, setViewportBox] = useState({ top: 0, height: 0 });
+  /** キーボード高さ分だけ下余白（シェル自体は lvh 全面のまま＝ジャンルが透けない） */
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const [imageBusy, setImageBusy] = useState(false);
   const [imageErr, setImageErr] = useState("");
   const [colorOpen, setColorOpen] = useState(false);
@@ -587,16 +588,16 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     };
   }, [autoSave, activeDocId, readEditorHtml]);
 
-  /** キーボード直上にツールバーが来るよう visualViewport に合わせる */
+  /** 書式バーをキーボード直上へ（シェル高さは縮めない） */
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
     const sync = () => {
       const vv = window.visualViewport;
-      if (vv) {
-        setViewportBox({ top: vv.offsetTop, height: vv.height });
-      } else {
-        setViewportBox({ top: 0, height: window.innerHeight });
+      if (!vv) {
+        setKeyboardInset(0);
+        return;
       }
+      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
     };
     sync();
     const vv = window.visualViewport;
@@ -750,10 +751,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const showSidebar = !hideSidebar && sidebar && !fullscreen;
   const canEditDoc = activeDocId !== null && autoSave;
   const editing = canEditDoc && editMode;
-  const fullscreenStyle =
-    fullscreen && viewportBox.height > 0
-      ? { height: viewportBox.height, maxHeight: viewportBox.height }
-      : undefined;
 
   return (
     <section
@@ -764,7 +761,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               showSidebar ? "lg:flex-row" : ""
             }`
       }
-      style={fullscreenStyle}
+      style={fullscreen ? { paddingBottom: keyboardInset } : undefined}
     >
       {showSidebar ? (
         <aside className="flex max-h-[200px] shrink-0 flex-col border-b border-[#E5E7EB] bg-[#FAFAFA] lg:max-h-none lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r xl:w-60">
@@ -972,7 +969,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
         {editing ? (
           <div
             className={`relative z-50 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)] ${
-              fullscreen && viewportBox.height >= (typeof window !== "undefined" ? window.innerHeight - 8 : 9999)
+              fullscreen && keyboardInset < 8
                 ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
                 : "pb-1"
             }`}
