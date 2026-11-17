@@ -343,6 +343,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     lastSubmit && step === "result" ? (
       <ResultStep
         submission={lastSubmit}
+        company={company}
         busy={busy}
         onNext={() => void onNextIncident()}
       />

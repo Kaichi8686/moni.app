@@ -20,10 +20,18 @@ import {
 } from "@/lib/office/incidentValidate";
 import {
   applyMeterDecay,
+  applyMetersDelta,
+  computeMetersDelta,
   ensureMeters,
   lowestMeterKey,
 } from "@/lib/office/meters";
 import { isMangledOfflineDescription, offlineIncident } from "@/lib/office/offline";
+import {
+  buildResultPanels,
+  parseMetersDelta,
+  parseResultPanels,
+  reactionForTone,
+} from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { seasonThemeFor } from "@/lib/office/seasonTheme";
@@ -38,6 +46,7 @@ import {
 } from "@/lib/office/strategy";
 import { targetsPassValidation } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
+import { parseCastEmotion } from "@/lib/office/scenes";
 import type {
   IncidentStrategy,
   IncidentTargetInternal,
@@ -180,6 +189,13 @@ function mapSubmission(row: Record<string, unknown>): OfficeSubmission {
     wasSimilar: Boolean(row.was_similar),
     seasonKey: String(row.season_key),
     createdAt: String(row.created_at),
+    panels: parseResultPanels(row.panels),
+    strategyTitle: row.strategy_title == null ? null : String(row.strategy_title),
+    castMemberId: row.cast_member_id == null ? null : String(row.cast_member_id),
+    npcLine: row.npc_line == null ? null : String(row.npc_line),
+    reactionEmotion: parseCastEmotion(row.reaction_emotion),
+    metersDelta: parseMetersDelta(row.meters_delta),
+    safe: row.safe == null ? true : Boolean(row.safe),
   };
 }
 
@@ -625,6 +641,26 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
   const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   const season = await ensureSeasonRow(admin, userId, company.leagueId);
 
+  const metersDelta = computeMetersDelta({
+    scoreTotal: scored.scores.total,
+    strategyKind,
+    metersAtRisk: incident.metersAtRisk ?? [],
+  });
+  const nextMeters = applyMetersDelta(company.meters, metersDelta);
+  const reaction = reactionForTone(scored.scores.storyTone);
+  const speakerMember =
+    company.cast.find((c) => c.role === incident.speaker?.castRole) ?? company.cast[0] ?? null;
+  const panels = buildResultPanels({
+    incidentTitle: incident.title,
+    incidentLine: incident.line,
+    incidentDescription: incident.description,
+    strategyTitle,
+    targetLabels,
+    story: scored.scores.story,
+    storyTone: scored.scores.storyTone,
+    comment: scored.scores.comment,
+  });
+
   const { error: incErr } = await admin
     .from("office_incidents")
     .update({ status: "solved" })
@@ -635,47 +671,77 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     throw new Error(incErr.message);
   }
 
-  const { data: subRow, error: subErr } = await admin
-    .from("office_submissions")
-    .insert({
-      user_id: userId,
-      company_id: company.id,
-      incident_id: incident.id,
-      answer: text,
-      strategy_id: strategyId,
-      strategy_kind: strategyKind,
-      target_ids: targetIds,
-      target_other_text: hasOther ? otherText : null,
-      score_solve: scored.scores.solve,
-      score_fun: scored.scores.fun,
-      score_feasible: scored.scores.feasible,
-      score_fit: scored.scores.fit,
-      score_total: scored.scores.total,
-      comment: scored.scores.comment,
-      story: scored.scores.story,
-      story_tone: scored.scores.storyTone,
-      next_hint: scored.scores.nextHint,
-      multiplier: rev.multiplier,
-      is_original: rev.isOriginal,
-      revenue: rev.revenue,
-      was_similar: wasSimilar,
-      season_key: season.seasonKey,
-    })
-    .select("*")
-    .single();
-  if (subErr || !subRow) {
-    await admin.rpc("office_restore_stamina", { p_user_id: userId });
-    await admin.from("office_incidents").update({ status: "open" }).eq("id", incident.id);
-    throw new Error(subErr?.message ?? "submit failed");
+  const baseSub = {
+    user_id: userId,
+    company_id: company.id,
+    incident_id: incident.id,
+    answer: text,
+    strategy_id: strategyId,
+    strategy_kind: strategyKind,
+    target_ids: targetIds,
+    target_other_text: hasOther ? otherText : null,
+    score_solve: scored.scores.solve,
+    score_fun: scored.scores.fun,
+    score_feasible: scored.scores.feasible,
+    score_fit: scored.scores.fit,
+    score_total: scored.scores.total,
+    comment: scored.scores.comment,
+    story: scored.scores.story,
+    story_tone: scored.scores.storyTone,
+    next_hint: scored.scores.nextHint,
+    multiplier: rev.multiplier,
+    is_original: rev.isOriginal,
+    revenue: rev.revenue,
+    was_similar: wasSimilar,
+    season_key: season.seasonKey,
+  };
+  const stageSub = {
+    cast_member_id: speakerMember?.id ?? null,
+    strategy_title: strategyTitle,
+    panels,
+    npc_line: reaction.line,
+    reaction_emotion: reaction.emotion,
+    meters_delta: metersDelta,
+    safe: true,
+  };
+
+  let subRow: Record<string, unknown> | null = null;
+  {
+    const first = await admin
+      .from("office_submissions")
+      .insert({ ...baseSub, ...stageSub })
+      .select("*")
+      .single();
+    if (!first.error && first.data) {
+      subRow = first.data as Record<string, unknown>;
+    } else {
+      // SQL未適用時は旧カラムのみでフォールバック
+      const second = await admin.from("office_submissions").insert(baseSub).select("*").single();
+      if (second.error || !second.data) {
+        await admin.rpc("office_restore_stamina", { p_user_id: userId });
+        await admin.from("office_incidents").update({ status: "open" }).eq("id", incident.id);
+        throw new Error(second.error?.message ?? first.error?.message ?? "submit failed");
+      }
+      subRow = second.data as Record<string, unknown>;
+    }
   }
 
-  await admin
+  const metersNow = new Date().toISOString();
+  const companyPatch: Record<string, unknown> = {
+    total_revenue: growth.totalRevenue,
+    level: growth.level,
+  };
+  const metersPatch = await admin
     .from("office_companies")
     .update({
-      total_revenue: growth.totalRevenue,
-      level: growth.level,
+      ...companyPatch,
+      meters: nextMeters,
+      meters_updated_at: metersNow,
     })
     .eq("user_id", userId);
+  if (metersPatch.error) {
+    await admin.from("office_companies").update(companyPatch).eq("user_id", userId);
+  }
 
   await admin
     .from("office_season_scores")
@@ -686,8 +752,15 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     .eq("id", season.id);
 
   const refreshed = await dbGetCompany(admin, userId);
+  const submission = mapSubmission(subRow);
+  if (!submission.panels) submission.panels = panels;
+  if (!submission.strategyTitle) submission.strategyTitle = strategyTitle;
+  if (!submission.npcLine) submission.npcLine = reaction.line;
+  if (!submission.reactionEmotion) submission.reactionEmotion = reaction.emotion;
+  if (!submission.metersDelta) submission.metersDelta = metersDelta;
+  if (!submission.castMemberId && speakerMember) submission.castMemberId = speakerMember.id;
   return {
-    submission: mapSubmission(subRow as Record<string, unknown>),
+    submission,
     company: refreshed.company!,
     seasonRevenue: refreshed.seasonRevenue,
     stamina: refreshed.stamina,

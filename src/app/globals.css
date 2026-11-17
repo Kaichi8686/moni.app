@@ -2842,6 +2842,14 @@ html.moni-goal-stuck .project-workspace-header {
   animation: office-cast-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.office-comic-panel {
+  animation: office-comic-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.office-coin-pop {
+  animation: office-coin-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes office-stage-fade {
   from {
     opacity: 0.35;
@@ -2859,6 +2867,32 @@ html.moni-goal-stuck .project-workspace-header {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes office-comic-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes office-coin-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -2893,7 +2927,9 @@ html.moni-goal-stuck .project-workspace-header {
   .office-speech,
   .office-meter-risk,
   .office-stage-enter,
-  .office-cast-enter {
+  .office-cast-enter,
+  .office-comic-panel,
+  .office-coin-pop {
     animation: none !important;
   }
   .office-incident-enter {

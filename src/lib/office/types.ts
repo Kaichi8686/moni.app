@@ -1,6 +1,7 @@
 import type { CastMember } from "@/lib/office/cast";
 import type { OfficeIndustry } from "@/lib/office/industries";
 import type { OfficeMeters } from "@/lib/office/meters";
+import type { ResultPanel } from "@/lib/office/resultPanels";
 import type {
   CastEmotion,
   CastRole,
@@ -128,6 +129,14 @@ export type OfficeSubmission = {
   wasSimilar: boolean;
   seasonKey: string;
   createdAt: string;
+  /** 結果3コマ */
+  panels?: ResultPanel[] | null;
+  strategyTitle?: string | null;
+  castMemberId?: string | null;
+  npcLine?: string | null;
+  reactionEmotion?: CastEmotion | null;
+  metersDelta?: Partial<OfficeMeters> | null;
+  safe?: boolean;
 };
 
 export type OfficeSeasonScore = {

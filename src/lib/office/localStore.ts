@@ -6,13 +6,20 @@ import {
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { ensureCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
-import { applyMeterDecay, defaultMeters, ensureMeters } from "@/lib/office/meters";
+import {
+  applyMeterDecay,
+  applyMetersDelta,
+  computeMetersDelta,
+  defaultMeters,
+  ensureMeters,
+} from "@/lib/office/meters";
 import {
   isMangledOfflineDescription,
   offlineIncident,
   offlineScores,
   offlineStrategies,
 } from "@/lib/office/offline";
+import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -346,17 +353,44 @@ export async function localSubmit(
     .slice(0, 10)
     .map((s) => s.answer);
   const wasSimilar = isTooSimilar(text, recent, OFFICE_SIMILARITY_THRESHOLD);
+  const metersBefore = company.meters ?? defaultMeters();
   const rev = calcRevenue({
     scoreTotal: scores.total,
     size: incident.size,
     strategyKind,
     strategyId,
     wasSimilar,
-    meters: company.meters ?? defaultMeters(),
+    meters: metersBefore,
   });
   const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   company.totalRevenue = growth.totalRevenue;
   company.level = growth.level;
+
+  const metersDelta = computeMetersDelta({
+    scoreTotal: scores.total,
+    strategyKind,
+    metersAtRisk: incident.metersAtRisk ?? [],
+  });
+  company.meters = applyMetersDelta(metersBefore, metersDelta);
+  company.metersUpdatedAt = new Date().toISOString();
+
+  const targetLabels = targetIds.map((tid) => {
+    if (tid === "other") return otherText || "その他";
+    return incident.targets.find((t) => t.id === tid)?.label ?? tid;
+  });
+  const reaction = reactionForTone(scores.storyTone);
+  const speakerMember =
+    company.cast.find((c) => c.role === incident.speaker?.castRole) ?? company.cast[0] ?? null;
+  const panels = buildResultPanels({
+    incidentTitle: incident.title,
+    incidentLine: incident.line,
+    incidentDescription: incident.description,
+    strategyTitle,
+    targetLabels,
+    story: scores.story,
+    storyTone: scores.storyTone,
+    comment: scores.comment,
+  });
 
   incident.status = "solved";
   const season = ensureSeason(store, userId, company.leagueId);
@@ -388,6 +422,13 @@ export async function localSubmit(
     wasSimilar,
     seasonKey: season.seasonKey,
     createdAt: new Date().toISOString(),
+    panels,
+    strategyTitle,
+    castMemberId: speakerMember?.id ?? null,
+    npcLine: reaction.line,
+    reactionEmotion: reaction.emotion,
+    metersDelta,
+    safe: true,
   };
   store.submissions.push(submission);
   write(store);
