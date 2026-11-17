@@ -1567,20 +1567,35 @@ export function IssueWorkspaceCanvas({
 
   const keyboard = useVisualKeyboard();
   const coarsePointer = useCoarsePointer();
-  /** 書式バー操作中も編集を落とさないための最終操作時刻 */
+  /** 入力・書式バー操作の最終時刻。VV 揺れで編集が落ちるのを防ぐ */
   const textEditKeepAliveRef = useRef(0);
-  // タッチはキーボードが開いてからバーを出す（開く途中のスライド演出を避ける）。デスクトップはすぐ表示
+  /**
+   * タッチではキーボードが一度開いてから書式バーを出す（上昇中の追従スライドを避ける）。
+   * 開いたあとは keyboard.open のチラつきで外さない（外すとフォーカス喪失→キーボード閉じになる）。
+   */
+  const [workspaceFormatBarLatched, setWorkspaceFormatBarLatched] = useState(false);
+  useEffect(() => {
+    if (!editingTextId) {
+      setWorkspaceFormatBarLatched(false);
+      return;
+    }
+    if (!coarsePointer || keyboard.open) setWorkspaceFormatBarLatched(true);
+  }, [editingTextId, keyboard.open, coarsePointer]);
   const showWorkspaceFormatBar =
     Boolean(editingTextBox && canEdit && !toolbarHidden && toolbarMounted) &&
-    (!coarsePointer || keyboard.open);
+    (!coarsePointer || workspaceFormatBarLatched);
+
+  function touchWorkspaceTextKeepAlive() {
+    textEditKeepAliveRef.current = Date.now();
+  }
 
   function beginWorkspaceTextEdit(id: string) {
-    textEditKeepAliveRef.current = Date.now();
+    touchWorkspaceTextKeepAlive();
     setEditingTextId(id);
   }
 
   function keepWorkspaceTextFocus() {
-    textEditKeepAliveRef.current = Date.now();
+    touchWorkspaceTextKeepAlive();
     textEditRef.current?.focus({ preventScroll: true });
   }
 
@@ -1604,7 +1619,7 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }, [editingTextId]);
 
-  // キーボード閉じボタン等で inset が下がったら編集終了（書式バーを消し、挿入バーを戻す）
+  // キーボード閉じボタン等で inset が下がったら編集終了。入力中の VV 揺れでは落とさない。
   const workspaceKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (!editingTextId) {
@@ -1616,7 +1631,9 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (!workspaceKeyboardWasOpenRef.current) return;
-    if (Date.now() - textEditKeepAliveRef.current < 1200) return;
+    if (Date.now() - textEditKeepAliveRef.current < 1800) return;
+    // まだ textarea にフォーカスがある＝誤検知の可能性が高い
+    if (document.activeElement === textEditRef.current) return;
     workspaceKeyboardWasOpenRef.current = false;
     finishWorkspaceTextEdit();
   }, [keyboard.open, editingTextId]);
@@ -2061,11 +2078,16 @@ export function IssueWorkspaceCanvas({
                         ref={textEditRef}
                         data-board-ui
                         value={node.text}
-                        onChange={(e) => updateItem(node.id, { text: e.target.value })}
+                        onChange={(e) => {
+                          touchWorkspaceTextKeepAlive();
+                          updateItem(node.id, { text: e.target.value });
+                        }}
+                        onInput={touchWorkspaceTextKeepAlive}
+                        onFocus={touchWorkspaceTextKeepAlive}
                         onBlur={() => {
                           window.setTimeout(() => {
                             // 書式バー連続操作・フォーカス直後の揺れでは編集を維持
-                            if (Date.now() - textEditKeepAliveRef.current < 1200) {
+                            if (Date.now() - textEditKeepAliveRef.current < 1800) {
                               keepWorkspaceTextFocus();
                               return;
                             }
@@ -2700,13 +2722,33 @@ function SheetFullscreenEditor({
   overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
-  function beginOverlayTextEdit(id: string) {
+  /** 一度開いたら VV 揺れで書式バーを外さない（外すとキーボードが閉じる） */
+  const [overlayFormatBarLatched, setOverlayFormatBarLatched] = useState(false);
+  useEffect(() => {
+    if (!editingOverlayId) {
+      setOverlayFormatBarLatched(false);
+      return;
+    }
+    if (!coarsePointer || keyboard.open) setOverlayFormatBarLatched(true);
+  }, [editingOverlayId, keyboard.open, coarsePointer]);
+  const editingOverlayText =
+    editingOverlayId && selectedOverlay && selectedOverlay.kind === "text" && selectedOverlay.id === editingOverlayId
+      ? selectedOverlay
+      : null;
+  const showOverlayFormatBar =
+    Boolean(canEdit && editingOverlayText) && (!coarsePointer || overlayFormatBarLatched);
+
+  function touchOverlayTextKeepAlive() {
     overlayEditKeepAliveRef.current = Date.now();
+  }
+
+  function beginOverlayTextEdit(id: string) {
+    touchOverlayTextKeepAlive();
     setEditingOverlayId(id);
   }
 
   function keepOverlayTextFocus() {
-    overlayEditKeepAliveRef.current = Date.now();
+    touchOverlayTextKeepAlive();
     overlayTextRef.current?.focus({ preventScroll: true });
   }
 
@@ -2740,7 +2782,7 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // キーボード閉じ → 書式バーを消し、上のパーツ挿入バーを戻す
+  // キーボード閉じ → 書式バーを消し、上のパーツ挿入バーを戻す。入力中の VV 揺れでは落とさない。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (!editingOverlayId) {
@@ -2752,7 +2794,8 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    if (Date.now() - overlayEditKeepAliveRef.current < 1200) return;
+    if (Date.now() - overlayEditKeepAliveRef.current < 1800) return;
+    if (document.activeElement === overlayTextRef.current) return;
     overlayKeyboardWasOpenRef.current = false;
     finishOverlayTextEdit();
   }, [keyboard.open, editingOverlayId]);
@@ -3535,10 +3578,15 @@ function SheetFullscreenEditor({
                           <textarea
                             ref={overlayTextRef}
                             value={ov.text}
-                            onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
+                            onChange={(e) => {
+                              touchOverlayTextKeepAlive();
+                              patchOverlay(ov.id, { text: e.target.value });
+                            }}
+                            onInput={touchOverlayTextKeepAlive}
+                            onFocus={touchOverlayTextKeepAlive}
                             onBlur={() => {
                               window.setTimeout(() => {
-                                if (Date.now() - overlayEditKeepAliveRef.current < 1200) {
+                                if (Date.now() - overlayEditKeepAliveRef.current < 1800) {
                                   keepOverlayTextFocus();
                                   return;
                                 }
@@ -3615,23 +3663,19 @@ function SheetFullscreenEditor({
           )
         : null}
 
-      {/* キーボードが開いた瞬間に直上へ（追従スライドなし） */}
-      {canEdit &&
-      editingOverlayId &&
-      selectedOverlay &&
-      selectedOverlay.kind === "text" &&
-      (!coarsePointer || keyboard.open)
+      {/* 一度開いたら VV 揺れで外さない。inset 直上固定（transition なし） */}
+      {showOverlayFormatBar && editingOverlayText
         ? createPortal(
             <div className="pointer-events-none" style={keyboard.dockStyle}>
               <SlidesTextFormatBar
-                fontSize={selectedOverlay.fontSize}
-                textColor={selectedOverlay.textColor}
-                align={selectedOverlay.align}
-                bold={Boolean(selectedOverlay.bold)}
-                italic={Boolean(selectedOverlay.italic)}
-                underline={Boolean(selectedOverlay.underline)}
+                fontSize={editingOverlayText.fontSize}
+                textColor={editingOverlayText.textColor}
+                align={editingOverlayText.align}
+                bold={Boolean(editingOverlayText.bold)}
+                italic={Boolean(editingOverlayText.italic)}
+                underline={Boolean(editingOverlayText.underline)}
                 tx={tx}
-                onChange={(patch) => patchOverlay(selectedOverlay.id, patch)}
+                onChange={(patch) => patchOverlay(editingOverlayText.id, patch)}
                 onKeepFocus={keepOverlayTextFocus}
               />
             </div>,
