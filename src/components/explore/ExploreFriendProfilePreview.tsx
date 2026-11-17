@@ -282,7 +282,7 @@ export function ExploreFriendProfilePreview({
                 ? "shrink-0 bg-white/18 px-3.5 text-[13px] text-white backdrop-blur-md ring-1 ring-white/25"
                 : isPending
                   ? "w-full bg-white/18 px-5 text-[16px] text-white backdrop-blur-md ring-1 ring-white/25"
-                  : "w-full bg-[#FFE600] px-5 text-[16px] text-zinc-950 shadow-[0_8px_24px_rgba(255,230,0,0.28)]"
+                  : "w-full bg-[#FF9600] px-5 text-[16px] text-white shadow-[0_8px_24px_rgba(255,150,0,0.28)]"
             }`}
           >
             <AddIcon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
@@ -293,7 +293,7 @@ export function ExploreFriendProfilePreview({
               type="button"
               disabled={messageLoading}
               onClick={() => void handleMessage()}
-              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#FF9600] px-4 text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(255,150,0,0.28)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
+              className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-white px-4 text-[15px] font-bold text-zinc-950 shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300 ease-out active:scale-[0.985] disabled:opacity-60"
               aria-label={tx("メッセージ", "Message")}
             >
               <MessageCircle className="h-[18px] w-[18px] shrink-0" strokeWidth={2.4} />
