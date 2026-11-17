@@ -154,11 +154,29 @@ export type BoardPen = {
 export type BoardArrow = {
   id: string;
   kind: "arrow";
-  fromId: string;
-  toId: string;
+  /** カード同士の接続（任意） */
+  fromId?: string;
+  toId?: string;
+  /** フリー矢印（スワイプ描画） */
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
   color: string;
   z: number;
 };
+
+export function isConnectorArrow(
+  arrow: BoardArrow,
+): arrow is BoardArrow & { fromId: string; toId: string } {
+  return typeof arrow.fromId === "string" && typeof arrow.toId === "string";
+}
+
+export function isFreeformArrow(
+  arrow: BoardArrow,
+): arrow is BoardArrow & { x1: number; y1: number; x2: number; y2: number } {
+  return [arrow.x1, arrow.y1, arrow.x2, arrow.y2].every(isFiniteNumber);
+}
 
 /** 位置と大きさを持つ要素（移動・リサイズ対象） */
 export type BoardNode = BoardSheet | BoardImage | BoardTextBox | BoardShape;
@@ -417,17 +435,26 @@ function parsePen(raw: Record<string, unknown>): BoardPen | null {
 
 function parseArrow(raw: Record<string, unknown>): BoardArrow | null {
   if (typeof raw.id !== "string" || !raw.id) return null;
-  if (typeof raw.fromId !== "string" || !raw.fromId) return null;
-  if (typeof raw.toId !== "string" || !raw.toId) return null;
-  if (raw.fromId === raw.toId) return null;
-  return {
-    id: raw.id,
-    kind: "arrow",
-    fromId: raw.fromId,
-    toId: raw.toId,
-    color: typeof raw.color === "string" && raw.color ? raw.color : "#52525B",
-    z: isFiniteNumber(raw.z) ? raw.z : 0,
-  };
+  const color = typeof raw.color === "string" && raw.color ? raw.color : "#52525B";
+  const z = isFiniteNumber(raw.z) ? raw.z : 0;
+  const fromId = typeof raw.fromId === "string" && raw.fromId ? raw.fromId : undefined;
+  const toId = typeof raw.toId === "string" && raw.toId ? raw.toId : undefined;
+  if (fromId && toId && fromId !== toId) {
+    return { id: raw.id, kind: "arrow", fromId, toId, color, z };
+  }
+  if ([raw.x1, raw.y1, raw.x2, raw.y2].every(isFiniteNumber)) {
+    return {
+      id: raw.id,
+      kind: "arrow",
+      x1: raw.x1 as number,
+      y1: raw.y1 as number,
+      x2: raw.x2 as number,
+      y2: raw.y2 as number,
+      color,
+      z,
+    };
+  }
+  return null;
 }
 
 export function isBoardNode(item: BoardItem): item is BoardNode {
@@ -506,7 +533,8 @@ export function parseWorkspaceBoard(raw: unknown): IssueWorkspaceBoard | null {
   const nodeIds = new Set(items.filter(isBoardNode).map((item) => item.id));
   const cleaned = items.filter((item) => {
     if (item.kind !== "arrow") return true;
-    return nodeIds.has(item.fromId) && nodeIds.has(item.toId);
+    if (isConnectorArrow(item)) return nodeIds.has(item.fromId) && nodeIds.has(item.toId);
+    return isFreeformArrow(item);
   });
   return { v: 1, items: cleaned };
 }

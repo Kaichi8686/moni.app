@@ -271,10 +271,32 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const exec = useCallback(
     (command: string, value?: string) => {
       restoreSelection();
-      editorRef.current?.focus();
+      const el = editorRef.current;
+      el?.focus();
       try {
         document.execCommand("styleWithCSS", false, "true");
-        document.execCommand(command, false, value);
+        const ok = document.execCommand(command, false, value);
+        // iOS などで foreColor / fontSize が効かない場合は span でフォールバック
+        if (!ok && (command === "foreColor" || command === "hiliteColor" || command === "fontSize")) {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
+            const range = sel.getRangeAt(0);
+            const span = document.createElement("span");
+            if (command === "foreColor" && value) span.style.color = value;
+            if (command === "hiliteColor" && value) span.style.backgroundColor = value;
+            if (command === "fontSize" && value) span.style.fontSize = value;
+            try {
+              range.surroundContents(span);
+            } catch {
+              span.appendChild(range.extractContents());
+              range.insertNode(span);
+            }
+            sel.removeAllRanges();
+            const next = document.createRange();
+            next.selectNodeContents(span);
+            sel.addRange(next);
+          }
+        }
       } catch {
         /* noop */
       }
@@ -282,6 +304,32 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       refreshHistoryState();
     },
     [rememberSelection, refreshHistoryState, restoreSelection],
+  );
+
+  const applyFontSizePx = useCallback(
+    (px: number) => {
+      restoreSelection();
+      editorRef.current?.focus();
+      try {
+        document.execCommand("styleWithCSS", false, "true");
+        document.execCommand("fontSize", false, "7");
+        const el = editorRef.current;
+        el?.querySelectorAll('font[size="7"]').forEach((node) => {
+          const span = document.createElement("span");
+          span.style.fontSize = `${px}px`;
+          while (node.firstChild) span.appendChild(node.firstChild);
+          node.parentNode?.replaceChild(span, node);
+        });
+        el?.querySelectorAll('span[style*="xxx-large"]').forEach((node) => {
+          (node as HTMLElement).style.fontSize = `${px}px`;
+        });
+      } catch {
+        exec("fontSize", `${px}px`);
+      }
+      rememberSelection();
+      refreshHistoryState();
+    },
+    [exec, rememberSelection, refreshHistoryState, restoreSelection],
   );
 
   const readEditorHtml = useCallback(() => {
@@ -1150,7 +1198,28 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               {styleOpen ? (
                 <>
                   <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setStyleOpen(false)} />
-                  <div className="absolute bottom-full right-0 z-50 mb-1 min-w-[140px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
+                  <div className="absolute bottom-full right-0 z-50 mb-1 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
+                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-[#80868b]">文字サイズ</p>
+                    <div className="flex flex-wrap gap-1 px-3 pb-2">
+                      {[12, 14, 16, 18, 24, 32].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          className="min-w-[2.25rem] rounded-md border border-[#dadce0] px-2 py-1.5 text-[12px] font-semibold text-[#202124] hover:bg-[#f1f3f4]"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onPointerDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            applyFontSizePx(size);
+                            setStyleOpen(false);
+                            scheduleAutoSave();
+                          }}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mx-2 border-t border-[#dadce0]" />
+                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-[#80868b]">スタイル</p>
                     {(
                       [
                         ["p", "本文"],
@@ -1163,6 +1232,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                         key={v}
                         type="button"
                         className="block w-full px-4 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onPointerDown={(e) => e.preventDefault()}
                         onClick={() => applyBlockStyle(v)}
                       >
                         {label}

@@ -19,9 +19,6 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  AlignVerticalJustifyCenter,
-  AlignVerticalJustifyEnd,
-  AlignVerticalJustifyStart,
   ArrowUpRight,
   ChevronLeft,
   Circle,
@@ -38,7 +35,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { WorkspaceImageCropSheet } from "@/components/projects/workspace/WorkspaceImageCropSheet";
 import {
   defaultSheetTextStyle,
   edgePoint,
@@ -52,6 +48,8 @@ import {
   SHEET_COLOR_ORDER,
   SHEET_COLORS,
   TEXT_COLOR_ORDER,
+  isConnectorArrow,
+  isFreeformArrow,
   type BoardArrow,
   type BoardImage,
   type BoardImageCrop,
@@ -66,7 +64,6 @@ import {
   type SheetColor,
   type SheetOverlay,
   type TextAlign,
-  type TextVAlign,
 } from "@/lib/workspace/issueWorkspaceBoard";
 
 /** navigate = 通常 / select = 囲み選択 / text·shape·pen = 挿入 / sheet·arrow = 既存 */
@@ -140,6 +137,21 @@ type DragState =
   | {
       kind: "draw-pen";
       points: Array<{ x: number; y: number }>;
+    }
+  | {
+      kind: "draw-arrow";
+      startX: number;
+      startY: number;
+      curX: number;
+      curY: number;
+    }
+  | {
+      kind: "crop-adjust";
+      id: string;
+      handle: ResizeHandle;
+      startX: number;
+      startY: number;
+      orig: BoardImageCrop;
     };
 
 type PinchState = {
@@ -413,7 +425,7 @@ export function IssueWorkspaceCanvas({
   const [dragTick, setDragTick] = useState(0);
   const toolbarMounted = useSyncExternalStore(subscribeNever, () => true, () => false);
   const toolbarHidden = openSheetId !== null;
-  const insertToolbarHidden = Boolean(cropImageId);
+  const insertToolbarHidden = Boolean(cropImageId) || Boolean(editingTextId);
 
   function setSelectedId(id: string | null) {
     setSelectedIds(id ? [id] : []);
@@ -508,6 +520,7 @@ export function IssueWorkspaceCanvas({
   const marqueePreview = dragRef.current?.kind === "marquee" ? dragRef.current : null;
   const drawShapePreview = dragRef.current?.kind === "draw-shape" ? dragRef.current : null;
   const drawPenPreview = dragRef.current?.kind === "draw-pen" ? dragRef.current : null;
+  const drawArrowPreview = dragRef.current?.kind === "draw-arrow" ? dragRef.current : null;
   void dragTick;
 
   function commit(items: BoardItem[]) {
@@ -533,32 +546,28 @@ export function IssueWorkspaceCanvas({
     };
   }
 
-  function viewportCenterWorld() {
-    return {
-      x: (viewport.w / 2 - viewPan.x) / zoom,
-      y: (viewport.h / 2 - viewPan.y) / zoom,
-    };
+  function pickSheetColor(color: SheetColor) {
+    if (!canEdit) return;
+    setSheetColor(color);
+    selectTool("sheet");
   }
 
-  function addSheetWithColor(color: SheetColor) {
+  function placeSheetAt(worldX: number, worldY: number) {
     if (!canEdit) return;
-    const center = viewportCenterWorld();
     const sheet: BoardSheet = {
       id: newBoardId("sheet"),
       kind: "sheet",
-      x: center.x - DEFAULT_SHEET_W / 2,
-      y: center.y - DEFAULT_SHEET_H / 2,
+      x: worldX - DEFAULT_SHEET_W / 2,
+      y: worldY - DEFAULT_SHEET_H / 2,
       w: DEFAULT_SHEET_W,
       h: DEFAULT_SHEET_H,
-      color,
+      color: sheetColor,
       text: "",
       z: nextZ(board.items),
       ...defaultSheetTextStyle(),
     };
-    setSheetColor(color);
     commit([...board.items, sheet]);
     setSelectedId(sheet.id);
-    setOpenSheetId(sheet.id);
     selectTool("navigate");
   }
 
@@ -584,7 +593,12 @@ export function IssueWorkspaceCanvas({
     commit(
       board.items.filter((item) => {
         if (drop.has(item.id)) return false;
-        if (item.kind === "arrow" && (drop.has(item.fromId) || drop.has(item.toId))) return false;
+        if (
+          item.kind === "arrow" &&
+          ((item.fromId && drop.has(item.fromId)) || (item.toId && drop.has(item.toId)))
+        ) {
+          return false;
+        }
         return true;
       }),
     );
@@ -664,6 +678,13 @@ export function IssueWorkspaceCanvas({
 
     const world = clientToWorld(event.clientX, event.clientY);
 
+    // 切り取り中に写真以外をタップ → 確定
+    if (cropImageId) {
+      setCropImageId(null);
+      setHandlesVisible(false);
+      return;
+    }
+
     if (canEdit && tool === "text") {
       const box: BoardTextBox = {
         id: newBoardId("text"),
@@ -686,10 +707,28 @@ export function IssueWorkspaceCanvas({
       return;
     }
 
+    if (canEdit && tool === "sheet") {
+      placeSheetAt(world.x, world.y);
+      return;
+    }
+
     if (canEdit && tool === "shape") {
       dragRef.current = {
         kind: "draw-shape",
         shape: shapeKind,
+        startX: world.x,
+        startY: world.y,
+        curX: world.x,
+        curY: world.y,
+      };
+      setDragTick((n) => n + 1);
+      return;
+    }
+
+    if (canEdit && tool === "arrow") {
+      setConnectFromId(null);
+      dragRef.current = {
+        kind: "draw-arrow",
         startX: world.x,
         startY: world.y,
         curX: world.x,
@@ -714,19 +753,6 @@ export function IssueWorkspaceCanvas({
         curY: world.y,
       };
       setDragTick((n) => n + 1);
-      return;
-    }
-
-    if (tool === "sheet") {
-      selectTool("navigate");
-      setSelectedId(null);
-      dragRef.current = {
-        kind: "pan",
-        startX: event.clientX,
-        startY: event.clientY,
-        panX: viewPan.x,
-        panY: viewPan.y,
-      };
       return;
     }
 
@@ -868,10 +894,45 @@ export function IssueWorkspaceCanvas({
       return;
     }
 
-    if (drag.kind === "marquee" || drag.kind === "draw-shape") {
+    if (drag.kind === "marquee" || drag.kind === "draw-shape" || drag.kind === "draw-arrow") {
       const world = clientToWorld(event.clientX, event.clientY);
       drag.curX = world.x;
       drag.curY = world.y;
+      setDragTick((n) => n + 1);
+      return;
+    }
+
+    if (drag.kind === "crop-adjust") {
+      const image = board.items.find((item): item is BoardImage => item.kind === "image" && item.id === drag.id);
+      if (!image) return;
+      const dx = (event.clientX - drag.startX) / zoom / Math.max(1, image.w);
+      const dy = (event.clientY - drag.startY) / zoom / Math.max(1, image.h);
+      let { x, y, w, h } = drag.orig;
+      const handle = drag.handle;
+      if (handle.includes("e")) w = drag.orig.w + dx;
+      if (handle.includes("s")) h = drag.orig.h + dy;
+      if (handle.includes("w")) {
+        w = drag.orig.w - dx;
+        x = drag.orig.x + dx;
+      }
+      if (handle.includes("n")) {
+        h = drag.orig.h - dy;
+        y = drag.orig.y + dy;
+      }
+      const min = 0.08;
+      if (w < min) {
+        if (handle.includes("w")) x = drag.orig.x + drag.orig.w - min;
+        w = min;
+      }
+      if (h < min) {
+        if (handle.includes("n")) y = drag.orig.y + drag.orig.h - min;
+        h = min;
+      }
+      x = Math.min(1 - min, Math.max(0, x));
+      y = Math.min(1 - min, Math.max(0, y));
+      w = Math.min(1 - x, Math.max(min, w));
+      h = Math.min(1 - y, Math.max(min, h));
+      updateItem(drag.id, { crop: { x, y, w, h } });
       setDragTick((n) => n + 1);
       return;
     }
@@ -993,9 +1054,34 @@ export function IssueWorkspaceCanvas({
           width: 3,
           z: nextZ(board.items),
         };
+        // 描いた直後に選択しない（黄色フラッシュ防止）
         commit([...board.items, stroke]);
-        setSelectedIds([stroke.id]);
       }
+      setDragTick((n) => n + 1);
+      return;
+    }
+
+    if (drag.kind === "draw-arrow") {
+      const len = Math.hypot(drag.curX - drag.startX, drag.curY - drag.startY);
+      if (len >= 12) {
+        const arrow: BoardArrow = {
+          id: newBoardId("arrow"),
+          kind: "arrow",
+          x1: drag.startX,
+          y1: drag.startY,
+          x2: drag.curX,
+          y2: drag.curY,
+          color: "#52525B",
+          z: nextZ(board.items),
+        };
+        commit([...board.items, arrow]);
+        selectTool("navigate");
+      }
+      setDragTick((n) => n + 1);
+      return;
+    }
+
+    if (drag.kind === "crop-adjust") {
       setDragTick((n) => n + 1);
       return;
     }
@@ -1106,11 +1192,20 @@ export function IssueWorkspaceCanvas({
               </marker>
             </defs>
             {arrows.map((arrow) => {
-              const from = nodeMap.get(arrow.fromId);
-              const to = nodeMap.get(arrow.toId);
-              if (!from || !to) return null;
-              const start = edgePoint(from, to);
-              const end = edgePoint(to, from);
+              let start: { x: number; y: number } | null = null;
+              let end: { x: number; y: number } | null = null;
+              if (isConnectorArrow(arrow)) {
+                const from = nodeMap.get(arrow.fromId);
+                const to = nodeMap.get(arrow.toId);
+                if (!from || !to) return null;
+                start = edgePoint(from, to);
+                end = edgePoint(to, from);
+              } else if (isFreeformArrow(arrow)) {
+                start = { x: arrow.x1, y: arrow.y1 };
+                end = { x: arrow.x2, y: arrow.y2 };
+              } else {
+                return null;
+              }
               const selected = selectedIds.includes(arrow.id);
               return (
                 <g key={arrow.id}>
@@ -1119,10 +1214,22 @@ export function IssueWorkspaceCanvas({
                     y1={start.y}
                     x2={end.x}
                     y2={end.y}
-                    stroke={selected ? SELECTION_YELLOW : arrow.color}
+                    stroke={arrow.color}
                     strokeWidth={selected ? 3.5 : 2.5}
                     markerEnd="url(#issue-board-arrowhead)"
+                    opacity={selected ? 1 : 0.95}
                   />
+                  {selected ? (
+                    <line
+                      x1={start.x}
+                      y1={start.y}
+                      x2={end.x}
+                      y2={end.y}
+                      stroke={SELECTION_YELLOW}
+                      strokeWidth={6}
+                      opacity={0.35}
+                    />
+                  ) : null}
                   <line
                     x1={start.x}
                     y1={start.y}
@@ -1142,12 +1249,23 @@ export function IssueWorkspaceCanvas({
             {pens.map((pen) => {
               const selected = selectedIds.includes(pen.id);
               return (
+                <g key={pen.id}>
+                  {selected ? (
+                    <path
+                      d={penToPath(pen.points)}
+                      fill="none"
+                      stroke={SELECTION_YELLOW}
+                      strokeWidth={pen.width + 4}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.45}
+                    />
+                  ) : null}
                 <path
-                  key={pen.id}
                   d={penToPath(pen.points)}
                   fill="none"
-                  stroke={selected ? SELECTION_YELLOW : pen.color}
-                  strokeWidth={pen.width + (selected ? 1.5 : 0)}
+                  stroke={pen.color}
+                  strokeWidth={pen.width}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   opacity={pen.opacity ?? 1}
@@ -1182,6 +1300,7 @@ export function IssueWorkspaceCanvas({
                     (event.currentTarget as SVGElement).setPointerCapture?.(event.pointerId);
                   }}
                 />
+                </g>
               );
             })}
             {drawPenPreview ? (
@@ -1192,6 +1311,18 @@ export function IssueWorkspaceCanvas({
                 strokeWidth={3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
+              />
+            ) : null}
+            {drawArrowPreview ? (
+              <line
+                x1={drawArrowPreview.startX}
+                y1={drawArrowPreview.startY}
+                x2={drawArrowPreview.curX}
+                y2={drawArrowPreview.curY}
+                stroke="#52525B"
+                strokeWidth={2.5}
+                strokeDasharray="6 4"
+                markerEnd="url(#issue-board-arrowhead)"
               />
             ) : null}
             {drawShapePreview ? (
@@ -1263,7 +1394,7 @@ export function IssueWorkspaceCanvas({
                 <div
                   key={node.id}
                   data-board-node
-                  className={`absolute flex flex-col rounded-sm ${selected ? "overflow-visible" : "overflow-hidden"}`}
+                  className={`absolute flex flex-col select-none rounded-sm ${selected ? "overflow-visible" : "overflow-hidden"}`}
                   style={{
                     left: node.x,
                     top: node.y,
@@ -1272,8 +1403,11 @@ export function IssueWorkspaceCanvas({
                     zIndex: node.z,
                     backgroundColor: colors.bg,
                     border: `1px solid ${colors.border}`,
+                    WebkitUserSelect: "none",
+                    WebkitTouchCallout: "none",
                     ...selectionStyle,
                   }}
+                  onContextMenu={(event) => event.preventDefault()}
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                 >
                   <div
@@ -1284,8 +1418,10 @@ export function IssueWorkspaceCanvas({
                       textAlign: style.textAlign,
                     }}
                   >
-                    <span className="w-full shrink-0">
-                      {node.text.trim() || (
+                    <span className="w-full shrink-0 select-none">
+                      {(node.overlays?.some((o) => o.kind === "text" && o.text.trim())
+                        ? ""
+                        : node.text.trim()) || (
                         <span className="text-zinc-400" style={{ fontSize: 12 }}>
                           {tx("タップして開く", "Tap to open")}
                         </span>
@@ -1371,7 +1507,7 @@ export function IssueWorkspaceCanvas({
                 <div
                   key={node.id}
                   data-board-node
-                  className={`absolute ${selected ? "overflow-visible" : "overflow-hidden"}`}
+                  className={`absolute select-none ${selected ? "overflow-visible" : "overflow-hidden"}`}
                   style={{
                     left: node.x,
                     top: node.y,
@@ -1380,8 +1516,11 @@ export function IssueWorkspaceCanvas({
                     zIndex: node.z,
                     border: selected ? `1.5px solid ${SELECTION_YELLOW}` : "1px dashed rgba(0,0,0,0.2)",
                     background: editing ? "rgba(255,255,255,0.92)" : "transparent",
+                    WebkitUserSelect: editing ? "text" : "none",
+                    WebkitTouchCallout: "none",
                     ...selectionStyle,
                   }}
+                  onContextMenu={(event) => event.preventDefault()}
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                   onDoubleClick={(event) => {
                     event.stopPropagation();
@@ -1403,11 +1542,19 @@ export function IssueWorkspaceCanvas({
                         color: node.textColor,
                         textAlign: node.align,
                       }}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-form-type="other"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      enterKeyHint="done"
                       onPointerDown={(e) => e.stopPropagation()}
                     />
                   ) : (
                     <div
-                      className="h-full w-full whitespace-pre-wrap px-1 py-0.5"
+                      className="h-full w-full select-none whitespace-pre-wrap px-1 py-0.5"
                       style={{
                         fontSize: node.fontSize,
                         color: node.textColor,
@@ -1429,15 +1576,18 @@ export function IssueWorkspaceCanvas({
                 <div
                   key={node.id}
                   data-board-node
-                  className={`absolute ${selected ? "overflow-visible" : "overflow-hidden"}`}
+                  className={`absolute select-none ${selected ? "overflow-visible" : "overflow-hidden"}`}
                   style={{
                     left: node.x,
                     top: node.y,
                     width: node.w,
                     height: node.h,
                     zIndex: node.z,
+                    WebkitUserSelect: "none",
+                    WebkitTouchCallout: "none",
                     ...selectionStyle,
                   }}
+                  onContextMenu={(event) => event.preventDefault()}
                   onPointerDown={(event) => onNodePointerDown(event, node)}
                 >
                   <svg width={node.w} height={node.h} className="overflow-visible">
@@ -1450,43 +1600,113 @@ export function IssueWorkspaceCanvas({
 
             const image = node as BoardImage;
             const crop = image.crop;
+            const cropping = cropImageId === node.id;
             return (
               <div
                 key={node.id}
                 data-board-node
-                className={`absolute rounded-sm bg-white ${selected ? "overflow-visible" : "overflow-hidden"}`}
+                className={`absolute select-none rounded-sm bg-white ${
+                  selected || cropping ? "overflow-visible" : "overflow-hidden"
+                }`}
                 style={{
                   left: node.x,
                   top: node.y,
                   width: node.w,
                   height: node.h,
                   zIndex: node.z,
-                  border: "1px solid #D4D4D8",
+                  border: cropping ? "1px solid #2563EB" : "1px solid #D4D4D8",
+                  WebkitUserSelect: "none",
+                  WebkitTouchCallout: "none",
                   ...selectionStyle,
                 }}
-                onPointerDown={(event) => onNodePointerDown(event, node)}
+                onContextMenu={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  if (cropping) {
+                    event.stopPropagation();
+                    return;
+                  }
+                  onNodePointerDown(event, node);
+                }}
               >
-                <div className="h-full w-full overflow-hidden rounded-sm">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={image.url}
-                    alt=""
-                    className="pointer-events-none max-w-none select-none"
-                    draggable={false}
-                    style={
-                      crop
-                        ? {
-                            width: `${100 / crop.w}%`,
-                            height: `${100 / crop.h}%`,
-                            maxWidth: "none",
-                            transform: `translate(${-crop.x * 100}%, ${-crop.y * 100}%)`,
-                            objectFit: "cover",
-                          }
-                        : { width: "100%", height: "100%", objectFit: "cover" }
-                    }
-                  />
+                <div className={`h-full w-full rounded-sm ${cropping ? "overflow-visible" : "overflow-hidden"}`}>
+                  {cropping ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.url}
+                        alt=""
+                        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover opacity-40"
+                        draggable={false}
+                      />
+                      <div
+                        className="absolute overflow-hidden border-2 border-dashed border-[#2563EB] bg-transparent"
+                        style={{
+                          left: `${(crop?.x ?? 0) * 100}%`,
+                          top: `${(crop?.y ?? 0) * 100}%`,
+                          width: `${(crop?.w ?? 1) * 100}%`,
+                          height: `${(crop?.h ?? 1) * 100}%`,
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={image.url}
+                          alt=""
+                          className="pointer-events-none absolute max-w-none select-none"
+                          draggable={false}
+                          style={{
+                            width: `${100 / Math.max(0.08, crop?.w ?? 1)}%`,
+                            height: `${100 / Math.max(0.08, crop?.h ?? 1)}%`,
+                            left: `${-((crop?.x ?? 0) / Math.max(0.08, crop?.w ?? 1)) * 100}%`,
+                            top: `${-((crop?.y ?? 0) / Math.max(0.08, crop?.h ?? 1)) * 100}%`,
+                          }}
+                        />
+                        {RESIZE_HANDLES.map((handle) => (
+                          <button
+                            key={handle}
+                            type="button"
+                            data-board-ui
+                            aria-label={tx("切り取り枠", "Crop frame")}
+                            style={{ ...handleStyle(handle), borderColor: "#2563EB", cursor: handleCursor(handle) }}
+                            onPointerDown={(event) => {
+                              if (!canEdit || event.button !== 0) return;
+                              event.stopPropagation();
+                              const orig = crop ?? { x: 0, y: 0, w: 1, h: 1 };
+                              dragRef.current = {
+                                kind: "crop-adjust",
+                                id: node.id,
+                                handle,
+                                startX: event.clientX,
+                                startY: event.clientY,
+                                orig: { ...orig },
+                              };
+                              (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={image.url}
+                      alt=""
+                      className="pointer-events-none max-w-none select-none"
+                      draggable={false}
+                      style={
+                        crop
+                          ? {
+                              width: `${100 / crop.w}%`,
+                              height: `${100 / crop.h}%`,
+                              maxWidth: "none",
+                              transform: `translate(${-crop.x * 100}%, ${-crop.y * 100}%)`,
+                              objectFit: "cover",
+                            }
+                          : { width: "100%", height: "100%", objectFit: "cover" }
+                      }
+                    />
+                  )}
                 </div>
-                {handles}
+                {!cropping ? handles : null}
               </div>
             );
           })}
@@ -1585,7 +1805,7 @@ export function IssueWorkspaceCanvas({
                         key={color}
                         type="button"
                         title={locale === "en" ? SHEET_COLORS[color].labelEn : SHEET_COLORS[color].labelJa}
-                        onClick={() => addSheetWithColor(color)}
+                        onClick={() => pickSheetColor(color)}
                         className={`h-9 w-9 rounded-full border-2 shadow-sm transition active:scale-95 ${
                           sheetColor === color ? "scale-110 border-zinc-900" : "border-white"
                         }`}
@@ -1739,7 +1959,12 @@ export function IssueWorkspaceCanvas({
                         active={Boolean(cropImageId)}
                         label={tx("切り取り", "Crop")}
                         icon={Crop}
-                        onClick={() => setCropImageId(selectedImage.id)}
+                        onClick={() => {
+                          const existing = selectedImage.crop ?? { x: 0.08, y: 0.08, w: 0.84, h: 0.84 };
+                          updateItem(selectedImage.id, { crop: existing });
+                          setCropImageId(selectedImage.id);
+                          setHandlesVisible(false);
+                        }}
                       />
                     </div>
                   ) : null}
@@ -1757,26 +1982,9 @@ export function IssueWorkspaceCanvas({
                   ) : null}
                 </div>
 
-                {tool === "arrow" ? (
+                {tool === "sheet" ? (
                   <p className="pointer-events-none rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
-                    {connectFromId
-                      ? tx("つなげ先をタップ", "Tap the target")
-                      : tx("つなぎ始めをタップ", "Tap the start")}
-                  </p>
-                ) : null}
-                {tool === "select" ? (
-                  <p className="pointer-events-none rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
-                    {tx("ドラッグして囲む", "Drag to select")}
-                  </p>
-                ) : null}
-                {tool === "text" ? (
-                  <p className="pointer-events-none rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
-                    {tx("置きたい場所をタップ", "Tap to place text")}
-                  </p>
-                ) : null}
-                {tool === "shape" ? (
-                  <p className="pointer-events-none rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white">
-                    {tx("タップまたはスワイプで図形", "Tap or swipe to draw")}
+                    {tx("置きたい場所をタップ", "Tap to place")}
                   </p>
                 ) : null}
               </div>
@@ -1802,26 +2010,11 @@ export function IssueWorkspaceCanvas({
           )
         : null}
 
-      {toolbarMounted && cropImage
-        ? createPortal(
-            <WorkspaceImageCropSheet
-              open
-              sourceUrl={cropImage.url}
-              initialCrop={cropImage.crop}
-              onCancel={() => setCropImageId(null)}
-              onConfirm={(crop: BoardImageCrop) => {
-                updateItem(cropImage.id, { crop });
-                setCropImageId(null);
-              }}
-            />,
-            document.body,
-          )
-        : null}
     </div>
   );
 }
 
-type SheetEditTool = "body" | "text" | "shape" | "pen" | "photo";
+type SheetEditTool = "text" | "shape" | "pen" | "photo";
 
 function SheetFullscreenEditor({
   sheet,
@@ -1841,13 +2034,6 @@ function SheetFullscreenEditor({
   onDelete: () => void;
 }) {
   const colors = SHEET_COLORS[sheet.color];
-  const fontSize = sheet.fontSize ?? 14;
-  const textColor = sheet.textColor ?? "#1A1A1A";
-  const align = (sheet.align ?? "center") as TextAlign;
-  const valign = sheet.valign ?? "middle";
-  const justify =
-    valign === "top" ? "justify-start" : valign === "bottom" ? "justify-end" : "justify-center";
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const sheetRatio = useMemo(() => {
@@ -1856,7 +2042,7 @@ function SheetFullscreenEditor({
     return Math.min(2.4, Math.max(0.45, w / h));
   }, [sheet.w, sheet.h]);
   const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
-  const [editTool, setEditTool] = useState<SheetEditTool>("body");
+  const [editTool, setEditTool] = useState<SheetEditTool>("text");
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
   const [shapeColor, setShapeColor] = useState<string>(SHAPE_COLORS[0]!);
   const [penColor, setPenColor] = useState("#1A1A1A");
@@ -1899,27 +2085,6 @@ function SheetFullscreenEditor({
       window.removeEventListener("orientationchange", update);
     };
   }, [sheetRatio]);
-
-  useEffect(() => {
-    if (editTool !== "body") return;
-    const el = textareaRef.current;
-    if (!el || !canEdit) return;
-    el.focus();
-    const len = el.value.length;
-    el.setSelectionRange(len, len);
-  }, [canEdit, sheet.id, editTool]);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [fontSize, sheet.text, align, cardSize.h]);
-
-  const displayFontSize = Math.max(
-    18,
-    Math.min(Math.round(fontSize * 1.6), Math.max(16, Math.floor(cardSize.h * 0.12))),
-  );
 
   function setOverlays(next: SheetOverlay[]) {
     onPatch({ overlays: next.length > 0 ? next : undefined });
@@ -2038,7 +2203,7 @@ function SheetFullscreenEditor({
       };
       setOverlays([...overlays, overlay]);
       setSelectedOverlayId(id);
-      setEditTool("body");
+      setEditTool("text");
       setOverlayTick((n) => n + 1);
       return;
     }
@@ -2048,7 +2213,7 @@ function SheetFullscreenEditor({
         ...overlays,
         { id, kind: "pen", points: drag.points, color: penColor, width: 2.2 },
       ]);
-      setSelectedOverlayId(id);
+      // 描いた直後は選択しない（黄色フラッシュ防止）
     }
     setOverlayTick((n) => n + 1);
   }
@@ -2056,90 +2221,6 @@ function SheetFullscreenEditor({
   void overlayTick;
   const shapePreview = overlayDrag.current?.kind === "shape" ? overlayDrag.current : null;
   const penPreview = overlayDrag.current?.kind === "pen" ? overlayDrag.current : null;
-
-  const bodyStylePanel =
-    canEdit && editTool === "body" && !selectedOverlay ? (
-      <div className="flex w-full flex-col gap-2.5 rounded-2xl bg-white px-3 py-3 shadow-[0_8px_28px_rgba(0,0,0,0.12)] landscape:max-h-full landscape:overflow-y-auto">
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-            {FONT_SIZE_PRESETS.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => onPatch({ fontSize: size })}
-                className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
-                  fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                }`}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {TEXT_COLOR_ORDER.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => onPatch({ textColor: color })}
-                className={`h-7 w-7 rounded-full border-2 ${
-                  textColor.toLowerCase() === color.toLowerCase()
-                    ? "scale-110 border-zinc-900"
-                    : "border-zinc-200"
-                }`}
-                style={{ backgroundColor: color }}
-                aria-label={tx("文字色", "Text color")}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-            {(
-              [
-                ["left", AlignLeft, tx("左寄せ", "Left")],
-                ["center", AlignCenter, tx("中央", "Center")],
-                ["right", AlignRight, tx("右寄せ", "Right")],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <button
-                key={value}
-                type="button"
-                title={label}
-                onClick={() => onPatch({ align: value })}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                  align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                }`}
-                aria-label={label}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-            {(
-              [
-                ["top", AlignVerticalJustifyStart, tx("上寄せ", "Top")],
-                ["middle", AlignVerticalJustifyCenter, tx("中央", "Middle")],
-                ["bottom", AlignVerticalJustifyEnd, tx("下寄せ", "Bottom")],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <button
-                key={value}
-                type="button"
-                title={label}
-                onClick={() => onPatch({ valign: value })}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                  valign === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                }`}
-                aria-label={label}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    ) : null;
 
   const overlayTextPanel =
     canEdit && selectedOverlay?.kind === "text" ? (
@@ -2231,7 +2312,6 @@ function SheetFullscreenEditor({
           <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
             {(
               [
-                ["body", StickyNote, tx("本文", "Body")],
                 ["text", Type, tx("文字", "Text")],
                 ["shape", Square, tx("図形", "Shape")],
                 ["photo", Paperclip, tx("写真", "Photo")],
@@ -2292,7 +2372,7 @@ function SheetFullscreenEditor({
               { id, kind: "image", x: 20, y: 20, w: 40, h: 30, url },
             ]);
             setSelectedOverlayId(id);
-            setEditTool("body");
+            setEditTool("text");
           };
           reader.readAsDataURL(file);
         }}
@@ -2356,7 +2436,7 @@ function SheetFullscreenEditor({
       <div className="relative z-10 flex min-h-0 flex-1 flex-col landscape:flex-row">
         {canEdit ? (
           <div className="shrink-0 px-3 pb-1 pt-1 landscape:order-2 landscape:flex landscape:w-[min(42%,20rem)] landscape:items-center landscape:pb-3 landscape:pl-1 landscape:pr-[max(0.75rem,env(safe-area-inset-right))] landscape:pt-2">
-            {overlayTextPanel ?? bodyStylePanel}
+            {overlayTextPanel}
             {selectedOverlay && canEdit ? (
               <div className="mt-2 flex justify-center">
                 <button
@@ -2379,7 +2459,7 @@ function SheetFullscreenEditor({
             <div
               ref={cardRef}
               data-sheet-card
-              className="relative flex flex-col overflow-hidden rounded-sm touch-none"
+              className="relative flex flex-col overflow-hidden rounded-sm touch-none select-none"
               style={{
                 width: cardSize.w > 0 ? cardSize.w : undefined,
                 height: cardSize.h > 0 ? cardSize.h : undefined,
@@ -2388,78 +2468,54 @@ function SheetFullscreenEditor({
                 backgroundColor: colors.bg,
                 border: `1px solid ${colors.border}`,
                 boxShadow: "2px 3px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.14)",
+                WebkitUserSelect: "none",
+                WebkitTouchCallout: "none",
+                userSelect: "none",
               }}
               onPointerDown={onCardPointerDown}
               onPointerMove={onCardPointerMove}
               onPointerUp={onCardPointerUp}
               onPointerCancel={onCardPointerUp}
+              onContextMenu={(e) => e.preventDefault()}
             >
-              <div className={`pointer-events-none flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 ${justify}`}>
-                {canEdit && editTool === "body" ? (
-                  <textarea
-                    ref={textareaRef}
-                    value={sheet.text}
-                    onChange={(event) => {
-                      const el = event.target;
-                      onPatch({ text: el.value });
-                      el.style.height = "auto";
-                      el.style.height = `${el.scrollHeight}px`;
-                    }}
-                    placeholder={tx("ここに書く…", "Write here…")}
-                    rows={1}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-form-type="other"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    className="pointer-events-auto w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:text-zinc-500/70"
-                    style={{
-                      fontSize: displayFontSize,
-                      color: textColor,
-                      textAlign: align,
-                      height: "auto",
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <p
-                    className="w-full whitespace-pre-wrap leading-relaxed"
-                    style={{
-                      fontSize: displayFontSize,
-                      color: textColor,
-                      textAlign: align,
-                    }}
-                  >
-                    {sheet.text.trim() || (editTool === "body" ? tx("（空の用紙）", "(Empty sheet)") : "")}
-                  </p>
-                )}
-              </div>
-
               <div className="pointer-events-none absolute inset-0">
                 <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                   {overlays.map((ov) => {
                     if (ov.kind === "pen") {
+                      const selected = selectedOverlayId === ov.id;
                       return (
-                        <path
-                          key={ov.id}
-                          d={penToPath(ov.points)}
-                          fill="none"
-                          stroke={selectedOverlayId === ov.id ? SELECTION_YELLOW : ov.color}
-                          strokeWidth={ov.width}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          vectorEffect="non-scaling-stroke"
-                          className="pointer-events-auto"
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            setSelectedOverlayId(ov.id);
-                          }}
-                        />
+                        <g key={ov.id}>
+                          {selected ? (
+                            <path
+                              d={penToPath(ov.points)}
+                              fill="none"
+                              stroke={SELECTION_YELLOW}
+                              strokeWidth={ov.width + 2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              vectorEffect="non-scaling-stroke"
+                              opacity={0.45}
+                            />
+                          ) : null}
+                          <path
+                            d={penToPath(ov.points)}
+                            fill="none"
+                            stroke={ov.color}
+                            strokeWidth={ov.width}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                            className="pointer-events-auto"
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedOverlayId(ov.id);
+                            }}
+                          />
+                        </g>
                       );
                     }
                     if (ov.kind === "shape") {
+                      const selected = selectedOverlayId === ov.id;
                       return (
                         <g
                           key={ov.id}
@@ -2470,9 +2526,18 @@ function SheetFullscreenEditor({
                             setSelectedOverlayId(ov.id);
                           }}
                         >
+                          {selected ? (
+                            <ShapeGeometry
+                              shape={ov.shape}
+                              color={SELECTION_YELLOW}
+                              w={ov.w}
+                              h={ov.h}
+                              dashed
+                            />
+                          ) : null}
                           <ShapeGeometry
                             shape={ov.shape}
-                            color={selectedOverlayId === ov.id ? SELECTION_YELLOW : ov.color}
+                            color={ov.color}
                             fill={ov.fill}
                             w={ov.w}
                             h={ov.h}
