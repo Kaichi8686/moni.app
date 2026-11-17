@@ -22,11 +22,11 @@ export function TargetPicker({
 
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between gap-2">
-        <p className="text-xs font-bold text-zinc-600">ターゲット（最大2つ）</p>
-        <p className="text-[11px] tabular-nums text-zinc-400">{selectedIds.length}/2</p>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="text-sm font-bold text-zinc-600">ターゲット（最大2つ）</p>
+        <p className="text-xs tabular-nums text-zinc-400">{selectedIds.length}/2</p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2.5">
         {targets.map((t) => {
           const on = selectedIds.includes(t.id);
           return (
@@ -34,10 +34,10 @@ export function TargetPicker({
               key={t.id}
               type="button"
               onClick={() => onToggle(t.id)}
-              className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 transition ${
+              className={`rounded-2xl px-3.5 py-2 text-sm font-bold ring-1 transition ${
                 on
                   ? "bg-[#FFF7E8] text-amber-900 ring-[#FF9600]"
-                  : "bg-white text-zinc-600 ring-zinc-200 hover:ring-zinc-300"
+                  : "bg-white/95 text-zinc-600 ring-zinc-200 hover:ring-zinc-300"
               }`}
             >
               {t.label}
@@ -47,10 +47,10 @@ export function TargetPicker({
         <button
           type="button"
           onClick={() => onToggle("other")}
-          className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 transition ${
+          className={`rounded-2xl px-3.5 py-2 text-sm font-bold ring-1 transition ${
             hasOther
               ? "bg-[#FFF7E8] text-amber-900 ring-[#FF9600]"
-              : "bg-white text-zinc-600 ring-zinc-200 hover:ring-zinc-300"
+              : "bg-white/95 text-zinc-600 ring-zinc-200 hover:ring-zinc-300"
           }`}
         >
           その他

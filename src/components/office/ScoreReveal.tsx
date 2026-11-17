@@ -93,12 +93,12 @@ export function ScoreReveal({ submission, busy, onNext }: Props) {
 
   return (
     <section
-      className={`space-y-4 rounded-2xl border p-4 ${
+      className={`space-y-5 rounded-3xl border p-5 shadow-[0_16px_48px_rgba(28,25,23,0.1)] backdrop-blur-md sm:p-6 ${
         submission.storyTone === "great"
-          ? "border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
+          ? "border-emerald-200/70 bg-gradient-to-br from-emerald-50/95 via-white/90 to-amber-50/90"
           : submission.storyTone === "bitter"
-            ? "border-amber-200/80 bg-gradient-to-br from-amber-50 via-white to-orange-50"
-            : "border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-amber-50"
+            ? "border-amber-200/70 bg-gradient-to-br from-amber-50/95 via-white/90 to-orange-50/90"
+            : "border-sky-200/70 bg-gradient-to-br from-sky-50/95 via-white/90 to-amber-50/90"
       }`}
       onClick={phase !== "done" ? skip : undefined}
       role="presentation"

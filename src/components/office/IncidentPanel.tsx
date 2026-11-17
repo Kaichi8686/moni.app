@@ -53,7 +53,7 @@ export function IncidentPanel({
   useEffect(() => {
     setLocalIncident(incident);
     setAnswer("");
-    setStrategyId(null);
+    setStrategyId(incident?.strategies?.length ? null : "custom");
     setTargetIds([]);
     setOtherText("");
   }, [incident?.id]);
@@ -92,7 +92,7 @@ export function IncidentPanel({
 
   if (!localIncident) {
     return (
-      <section className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 p-6 text-center text-sm text-zinc-500">
+      <section className="rounded-3xl border border-dashed border-white/80 bg-white/75 p-8 text-center text-base text-zinc-500 shadow-[0_12px_40px_rgba(28,25,23,0.08)] backdrop-blur-md">
         事件を用意してるよ…
       </section>
     );
@@ -113,7 +113,13 @@ export function IncidentPanel({
     try {
       const next = await onRerollStrategies();
       setLocalIncident(next);
-      if (strategyId && strategyId !== "custom" && !next.strategies.some((s) => s.id === strategyId)) {
+      if (!next.strategies.length) {
+        setStrategyId("custom");
+      } else if (
+        strategyId &&
+        strategyId !== "custom" &&
+        !next.strategies.some((s) => s.id === strategyId)
+      ) {
         setStrategyId(null);
       }
     } finally {
@@ -123,28 +129,32 @@ export function IncidentPanel({
 
   return (
     <section
-      className={`overflow-hidden rounded-2xl border border-zinc-200 bg-white ${
+      className={`overflow-hidden rounded-3xl border border-white/70 bg-white/90 shadow-[0_16px_48px_rgba(28,25,23,0.1)] backdrop-blur-md ${
         playEnter ? "office-incident-enter" : ""
       }`}
     >
-      <div className={`border-b bg-gradient-to-r px-4 py-3 ${ui.bar}`}>
+      <div className={`border-b border-white/50 bg-gradient-to-r px-5 py-4 sm:px-6 sm:py-5 ${ui.bar}`}>
         <div className="flex items-center justify-between gap-2">
-          <p className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${ui.chip}`}>
+          <p className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${ui.chip}`}>
             {ui.label}
           </p>
-          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-zinc-700 ring-1 ring-zinc-200">
+          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-bold text-zinc-700 ring-1 ring-zinc-200">
             大きさ ×{localIncident.size}
           </span>
         </div>
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
+        <p className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-zinc-500">
           <span aria-hidden>{ind?.icon ?? "🏢"}</span>
           <span className="truncate">{company.name}</span>
         </p>
-        <h3 className="mt-1 text-lg font-black tracking-tight text-zinc-900">{localIncident.title}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-zinc-600">{localIncident.description}</p>
+        <h3 className="mt-1.5 text-xl font-black tracking-tight text-zinc-900 sm:text-2xl">
+          {localIncident.title}
+        </h3>
+        <p className="mt-2 text-[15px] leading-relaxed text-zinc-600 sm:text-base">
+          {localIncident.description}
+        </p>
       </div>
 
-      <div className="space-y-4 px-4 py-4">
+      <div className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
         <StrategyPicker
           strategies={localIncident.strategies}
           selectedId={strategyId}
@@ -163,17 +173,17 @@ export function IncidentPanel({
         />
 
         <label className="block">
-          <div className="mb-1 flex items-baseline justify-between gap-2">
-            <span className="text-xs font-bold text-zinc-600">解決アイデア</span>
-            <span className="text-[11px] tabular-nums text-zinc-400">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2">
+            <span className="text-sm font-bold text-zinc-600">解決アイデア</span>
+            <span className="text-xs tabular-nums text-zinc-400">
               {answer.length}/{OFFICE_ANSWER_MAX}
             </span>
           </div>
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value.slice(0, OFFICE_ANSWER_MAX))}
-            rows={4}
-            className="w-full resize-y rounded-2xl border border-zinc-200 bg-white px-3.5 py-3 text-sm leading-relaxed outline-none ring-[#FF9600] focus:ring-2"
+            rows={5}
+            className="w-full resize-y rounded-2xl border border-zinc-200 bg-white/95 px-4 py-3.5 text-[15px] leading-relaxed outline-none ring-[#FF9600] focus:ring-2 sm:text-base"
             placeholder={placeholder}
           />
         </label>
