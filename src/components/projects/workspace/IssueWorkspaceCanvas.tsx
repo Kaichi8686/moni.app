@@ -20,10 +20,15 @@ import {
   AlignLeft,
   AlignRight,
   ArrowUpRight,
+  Bold,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Circle,
   Crop,
   Eraser,
+  Highlighter,
+  Italic,
   Link2,
   Minus,
   MousePointer2,
@@ -36,6 +41,7 @@ import {
   Triangle,
   Type,
   Trash2,
+  Underline,
   Undo2,
   type LucideIcon,
 } from "lucide-react";
@@ -43,7 +49,6 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   defaultSheetTextStyle,
   edgePoint,
-  FONT_SIZE_PRESETS,
   isBoardNode,
   newBoardId,
   nextZ,
@@ -1831,6 +1836,13 @@ export function IssueWorkspaceCanvas({
               const editing = editingTextId === node.id;
               // iOS は input/textarea が 16px 未満だと勝手にズームする
               const editFontPx = Math.max(16, node.fontSize);
+              const textStyle: CSSProperties = {
+                color: node.textColor,
+                textAlign: node.align,
+                fontWeight: node.bold ? 700 : 400,
+                fontStyle: node.italic ? "italic" : "normal",
+                textDecoration: node.underline ? "underline" : "none",
+              };
               return (
                 <div
                   key={node.id}
@@ -1842,8 +1854,12 @@ export function IssueWorkspaceCanvas({
                     width: node.w,
                     height: node.h,
                     zIndex: node.z,
-                    border: selected || editing ? `1.5px solid ${SELECTION_YELLOW}` : "1px dashed rgba(0,0,0,0.2)",
-                    background: editing ? "rgba(255,255,255,0.92)" : "transparent",
+                    border: editing
+                      ? "1.5px solid #2563EB"
+                      : selected
+                        ? `1.5px solid ${SELECTION_YELLOW}`
+                        : "1px dashed rgba(0,0,0,0.2)",
+                    background: "transparent",
                     WebkitUserSelect: editing ? "text" : "none",
                     WebkitTouchCallout: "none",
                     ...selectionStyle,
@@ -1879,9 +1895,8 @@ export function IssueWorkspaceCanvas({
                         }}
                         className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
                         style={{
+                          ...textStyle,
                           fontSize: editFontPx,
-                          color: node.textColor,
-                          textAlign: node.align,
                           // 実フォントが 16 未満でも見た目は合わせる
                           transform: node.fontSize < 16 ? `scale(${node.fontSize / 16})` : undefined,
                           transformOrigin: "top left",
@@ -1902,9 +1917,8 @@ export function IssueWorkspaceCanvas({
                     <div
                       className="h-full w-full select-none whitespace-pre-wrap px-1 py-0.5"
                       style={{
+                        ...textStyle,
                         fontSize: node.fontSize,
-                        color: node.textColor,
-                        textAlign: node.align,
                       }}
                     >
                       {node.text || (
@@ -2134,72 +2148,24 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
-              {/* 文字編集中：キーボード直上の書式バー */}
+              {/* 文字編集中：キーボード直上のスライド風書式バー（横スワイプ） */}
               {editingTextId && selectedTextBox && canEdit && !toolbarHidden ? (
                 <div
-                  className="pointer-events-none fixed inset-x-0 z-[520] flex justify-center px-3"
+                  className="pointer-events-none fixed inset-x-0 z-[520]"
                   style={{
-                    bottom: `calc(${keyboardInset}px + max(0.35rem, env(safe-area-inset-bottom)))`,
+                    bottom: `calc(${keyboardInset}px + env(safe-area-inset-bottom, 0px))`,
                   }}
                 >
-                  <div
-                    data-board-ui
-                    className="pointer-events-auto flex max-w-[min(100%,28rem)] flex-wrap items-center justify-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {FONT_SIZE_PRESETS.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => updateItem(selectedTextBox.id, { fontSize: size })}
-                          className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
-                            selectedTextBox.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {TEXT_COLOR_ORDER.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => updateItem(selectedTextBox.id, { textColor: color })}
-                          className={`h-7 w-7 rounded-full border-2 ${
-                            selectedTextBox.textColor.toLowerCase() === color.toLowerCase()
-                              ? "scale-110 border-zinc-900"
-                              : "border-zinc-200"
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label={tx("文字色", "Text color")}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {(
-                        [
-                          ["left", AlignLeft, tx("左寄せ", "Left")],
-                          ["center", AlignCenter, tx("中央", "Center")],
-                          ["right", AlignRight, tx("右寄せ", "Right")],
-                        ] as const
-                      ).map(([value, Icon, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          title={label}
-                          onClick={() => updateItem(selectedTextBox.id, { align: value })}
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                            selectedTextBox.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                          }`}
-                          aria-label={label}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <SlidesTextFormatBar
+                    fontSize={selectedTextBox.fontSize}
+                    textColor={selectedTextBox.textColor}
+                    align={selectedTextBox.align}
+                    bold={Boolean(selectedTextBox.bold)}
+                    italic={Boolean(selectedTextBox.italic)}
+                    underline={Boolean(selectedTextBox.underline)}
+                    tx={tx}
+                    onChange={(patch) => updateItem(selectedTextBox.id, patch)}
+                  />
                 </div>
               ) : null}
 
@@ -2211,62 +2177,17 @@ export function IssueWorkspaceCanvas({
               >
                 {/* ワンタップ選択中（未編集）の書式 */}
                 {selectedTextBox && canEdit && !editingTextId && handlesVisible ? (
-                  <div
-                    data-board-ui
-                    className="pointer-events-auto flex max-w-[min(100%,28rem)] flex-wrap items-center justify-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
-                  >
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {FONT_SIZE_PRESETS.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => updateItem(selectedTextBox.id, { fontSize: size })}
-                          className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
-                            selectedTextBox.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {TEXT_COLOR_ORDER.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => updateItem(selectedTextBox.id, { textColor: color })}
-                          className={`h-7 w-7 rounded-full border-2 ${
-                            selectedTextBox.textColor.toLowerCase() === color.toLowerCase()
-                              ? "scale-110 border-zinc-900"
-                              : "border-zinc-200"
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label={tx("文字色", "Text color")}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                      {(
-                        [
-                          ["left", AlignLeft, tx("左寄せ", "Left")],
-                          ["center", AlignCenter, tx("中央", "Center")],
-                          ["right", AlignRight, tx("右寄せ", "Right")],
-                        ] as const
-                      ).map(([value, Icon, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          title={label}
-                          onClick={() => updateItem(selectedTextBox.id, { align: value })}
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                            selectedTextBox.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                          }`}
-                          aria-label={label}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </button>
-                      ))}
-                    </div>
+                  <div className="pointer-events-auto w-full max-w-[min(100%,28rem)] overflow-hidden rounded-2xl shadow-[0_8px_28px_rgba(0,0,0,0.12)]">
+                    <SlidesTextFormatBar
+                      fontSize={selectedTextBox.fontSize}
+                      textColor={selectedTextBox.textColor}
+                      align={selectedTextBox.align}
+                      bold={Boolean(selectedTextBox.bold)}
+                      italic={Boolean(selectedTextBox.italic)}
+                      underline={Boolean(selectedTextBox.underline)}
+                      tx={tx}
+                      onChange={(patch) => updateItem(selectedTextBox.id, patch)}
+                    />
                   </div>
                 ) : null}
 
@@ -2860,62 +2781,16 @@ function SheetFullscreenEditor({
 
   function renderOverlayTextToolbar(ov: Extract<SheetOverlay, { kind: "text" }>) {
     return (
-      <div
-        data-board-ui
-        className="pointer-events-auto flex max-w-[min(92vw,22rem)] flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-white/95 px-2.5 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-sm"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-          {FONT_SIZE_PRESETS.map((size) => (
-            <button
-              key={size}
-              type="button"
-              onClick={() => patchOverlay(ov.id, { fontSize: size })}
-              className={`min-w-[1.75rem] rounded-full px-1.5 py-1 text-[11px] font-bold ${
-                ov.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-              }`}
-            >
-              {size}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          {TEXT_COLOR_ORDER.map((color) => (
-            <button
-              key={color}
-              type="button"
-              onClick={() => patchOverlay(ov.id, { textColor: color })}
-              className={`h-6 w-6 rounded-full border-2 ${
-                ov.textColor.toLowerCase() === color.toLowerCase() ? "scale-110 border-zinc-900" : "border-zinc-200"
-              }`}
-              style={{ backgroundColor: color }}
-              aria-label={tx("文字色", "Text color")}
-            />
-          ))}
-        </div>
-        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-          {(
-            [
-              ["left", AlignLeft, tx("左寄せ", "Left")],
-              ["center", AlignCenter, tx("中央", "Center")],
-              ["right", AlignRight, tx("右寄せ", "Right")],
-            ] as const
-          ).map(([value, Icon, label]) => (
-            <button
-              key={value}
-              type="button"
-              title={label}
-              onClick={() => patchOverlay(ov.id, { align: value })}
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                ov.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-              }`}
-              aria-label={label}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </button>
-          ))}
-        </div>
-      </div>
+      <SlidesTextFormatBar
+        fontSize={ov.fontSize}
+        textColor={ov.textColor}
+        align={ov.align}
+        bold={Boolean(ov.bold)}
+        italic={Boolean(ov.italic)}
+        underline={Boolean(ov.underline)}
+        tx={tx}
+        onChange={(patch) => patchOverlay(ov.id, patch)}
+      />
     );
   }
 
@@ -2978,7 +2853,8 @@ function SheetFullscreenEditor({
           <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
           {tx("完了", "Done")}
         </button>
-        {canEdit ? (
+        {/* テキスト入力中は上の挿入ボタンを隠す */}
+        {canEdit && !editingOverlayId ? (
           <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
             {(
               [
@@ -3068,7 +2944,7 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {canEdit && editTool === "shape" ? (
+      {canEdit && editTool === "shape" && !editingOverlayId ? (
         <div className="relative z-10 flex justify-center px-3 pb-1">
           <div className="flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
             {(
@@ -3103,7 +2979,7 @@ function SheetFullscreenEditor({
         </div>
       ) : null}
 
-      {canEdit && editTool === "pen" ? (
+      {canEdit && editTool === "pen" && !editingOverlayId ? (
         <div className="relative z-10 flex justify-center gap-1.5 px-3 pb-1">
           {SHAPE_COLORS.map((color) => (
             <button
@@ -3359,10 +3235,12 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          border: selected || editing
-                            ? `1px dashed ${SELECTION_YELLOW}`
-                            : "1px dashed rgba(0,0,0,0.18)",
-                          background: editing ? "rgba(255,255,255,0.85)" : "transparent",
+                          border: editing
+                            ? "1.5px solid #2563EB"
+                            : selected
+                              ? `1px dashed ${SELECTION_YELLOW}`
+                              : "1px dashed rgba(0,0,0,0.18)",
+                          background: "transparent",
                           borderRadius: 4,
                         }}
                         onPointerDown={(e) => {
@@ -3406,6 +3284,9 @@ function SheetFullscreenEditor({
                               color: ov.textColor,
                               textAlign: ov.align,
                               fontSize: editFontPx,
+                              fontWeight: ov.bold ? 700 : 400,
+                              fontStyle: ov.italic ? "italic" : "normal",
+                              textDecoration: ov.underline ? "underline" : "none",
                               transform:
                                 ov.fontSize * 0.55 < 16 ? `scale(${(ov.fontSize * 0.55) / 16})` : undefined,
                               transformOrigin: "top left",
@@ -3424,7 +3305,14 @@ function SheetFullscreenEditor({
                         ) : (
                           <div
                             className="h-full w-full overflow-hidden whitespace-pre-wrap px-1"
-                            style={{ color: ov.textColor, textAlign: ov.align, fontSize: ov.fontSize * 0.55 }}
+                            style={{
+                              color: ov.textColor,
+                              textAlign: ov.align,
+                              fontSize: ov.fontSize * 0.55,
+                              fontWeight: ov.bold ? 700 : 400,
+                              fontStyle: ov.italic ? "italic" : "normal",
+                              textDecoration: ov.underline ? "underline" : "none",
+                            }}
                           >
                             {ov.text || tx("テキスト", "Text")}
                           </div>
@@ -3440,20 +3328,223 @@ function SheetFullscreenEditor({
         </div>
       </div>
 
-      {/* カード内テキスト編集：キーボード直上の書式バー */}
+      {/* カード内テキスト編集：キーボード直上の書式バー（横スワイプ） */}
       {canEdit &&
       editingOverlayId &&
       selectedOverlay &&
       selectedOverlay.kind === "text" ? (
         <div
-          className="pointer-events-none absolute inset-x-0 z-40 flex justify-center px-3"
+          className="pointer-events-none absolute inset-x-0 z-40"
           style={{
-            bottom: `calc(${keyboardInset}px + max(0.35rem, env(safe-area-inset-bottom)))`,
+            bottom: `calc(${keyboardInset}px + env(safe-area-inset-bottom, 0px))`,
           }}
         >
           {renderOverlayTextToolbar(selectedOverlay)}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Googleスライド風：キーボード上の横スクロール書式バー */
+function SlidesTextFormatBar({
+  fontSize,
+  textColor,
+  align,
+  bold,
+  italic,
+  underline,
+  tx,
+  onChange,
+}: {
+  fontSize: number;
+  textColor: string;
+  align: TextAlign;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  tx: (ja: string, en: string) => string;
+  onChange: (
+    patch: Partial<{
+      fontSize: number;
+      textColor: string;
+      align: TextAlign;
+      bold: boolean;
+      italic: boolean;
+      underline: boolean;
+    }>,
+  ) => void;
+}) {
+  const [sizeEditing, setSizeEditing] = useState(false);
+  const [sizeDraft, setSizeDraft] = useState(String(fontSize));
+  const [colorOpen, setColorOpen] = useState(false);
+
+  useEffect(() => {
+    if (!sizeEditing) setSizeDraft(String(fontSize));
+  }, [fontSize, sizeEditing]);
+
+  function commitSize(raw: string) {
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n)) {
+      setSizeDraft(String(fontSize));
+      setSizeEditing(false);
+      return;
+    }
+    onChange({ fontSize: Math.min(96, Math.max(8, n)) });
+    setSizeEditing(false);
+  }
+
+  return (
+    <div
+      data-board-ui
+      className="pointer-events-auto w-full border-t border-zinc-200 bg-white"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {colorOpen ? (
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TEXT_COLOR_ORDER.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => {
+                onChange({ textColor: color });
+                setColorOpen(false);
+              }}
+              className={`h-7 w-7 shrink-0 rounded-full border-2 ${
+                textColor.toLowerCase() === color.toLowerCase() ? "border-zinc-900" : "border-zinc-200"
+              }`}
+              style={{ backgroundColor: color }}
+              aria-label={tx("文字色", "Text color")}
+            />
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* サイズ：左に上下V、右に数字（タップで入力） */}
+        <div className="flex shrink-0 items-center gap-0.5 pr-1">
+          <div className="flex flex-col">
+            <button
+              type="button"
+              className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
+              aria-label={tx("大きく", "Larger")}
+              onClick={() => onChange({ fontSize: Math.min(96, fontSize + 1) })}
+            >
+              <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
+              aria-label={tx("小さく", "Smaller")}
+              onClick={() => onChange({ fontSize: Math.max(8, fontSize - 1) })}
+            >
+              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+          </div>
+          {sizeEditing ? (
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={sizeDraft}
+              onChange={(e) => setSizeDraft(e.target.value.replace(/[^\d]/g, ""))}
+              onBlur={() => commitSize(sizeDraft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitSize(sizeDraft);
+                if (e.key === "Escape") {
+                  setSizeDraft(String(fontSize));
+                  setSizeEditing(false);
+                }
+              }}
+              className="h-8 w-10 rounded bg-zinc-100 text-center text-[14px] font-semibold text-zinc-900 outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSizeDraft(String(fontSize));
+                setSizeEditing(true);
+              }}
+              className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-1 text-[14px] font-semibold text-zinc-800"
+            >
+              {fontSize}
+            </button>
+          )}
+        </div>
+
+        <div className="mx-1 h-6 w-px shrink-0 bg-zinc-200" />
+
+        <button
+          type="button"
+          onClick={() => onChange({ bold: !bold })}
+          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+            bold ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
+          }`}
+          aria-label={tx("太字", "Bold")}
+        >
+          <Bold className="h-4 w-4" strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ italic: !italic })}
+          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+            italic ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
+          }`}
+          aria-label={tx("斜体", "Italic")}
+        >
+          <Italic className="h-4 w-4" strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ underline: !underline })}
+          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+            underline ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
+          }`}
+          aria-label={tx("下線", "Underline")}
+        >
+          <Underline className="h-4 w-4" strokeWidth={2.25} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setColorOpen((v) => !v)}
+          className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded text-zinc-700"
+          aria-label={tx("文字色", "Text color")}
+        >
+          <span className="text-[13px] font-bold leading-none" style={{ color: textColor }}>
+            A
+          </span>
+          <span className="mt-0.5 h-1 w-4 rounded-sm" style={{ backgroundColor: textColor }} />
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-zinc-400"
+          aria-label={tx("ハイライト", "Highlight")}
+          disabled
+          title={tx("準備中", "Coming soon")}
+        >
+          <Highlighter className="h-4 w-4" strokeWidth={2.25} />
+        </button>
+
+        {(
+          [
+            ["left", AlignLeft, tx("左寄せ", "Left")],
+            ["center", AlignCenter, tx("中央", "Center")],
+            ["right", AlignRight, tx("右寄せ", "Right")],
+          ] as const
+        ).map(([value, Icon, label]) => (
+          <button
+            key={value}
+            type="button"
+            title={label}
+            onClick={() => onChange({ align: value })}
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+              align === value ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
+            }`}
+            aria-label={label}
+          >
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
