@@ -17,6 +17,7 @@ import { isTooSimilar } from "@/lib/office/similarity";
 import { pickIncidentSize } from "@/lib/office/sizePick";
 import { computeStamina, consumeStamina } from "@/lib/office/stamina";
 import { stripTargetFit } from "@/lib/office/strategy";
+import { isValidTargetLabel } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
 import type {
   OfficeCompany,
@@ -183,16 +184,20 @@ export async function localCurrentIncident(
   if (!company.about) throw new Error("先に会社の説明を書いてね");
   const open = store.incidents.find((i) => i.userId === userId && i.status === "open");
   if (open && !isMangledOfflineDescription(open.description)) {
-    if (!open.strategies?.length || !open.targets?.length) {
+    const about = company.about;
+    const rawTargets = open.targets ?? [];
+    const needStrategies = open.strategies?.length !== 3;
+    const needTargets =
+      rawTargets.length !== 4 ||
+      rawTargets.some((t) => !isValidTargetLabel(t.label, about));
+    if (needStrategies || needTargets) {
       const fb = offlineIncident({
         companyName: company.name,
-        companyAbout: company.about,
+        companyAbout: about,
         recentTitles: [],
       });
-      open.strategies = open.strategies?.length === 3 ? open.strategies : fb.strategies;
-      open.targets = open.targets?.length
-        ? open.targets
-        : stripTargetFit(fb.targets);
+      open.strategies = needStrategies ? fb.strategies : open.strategies;
+      open.targets = needTargets ? stripTargetFit(fb.targets) : open.targets;
       open.strategyRerolls = open.strategyRerolls ?? 0;
       write(store);
     }

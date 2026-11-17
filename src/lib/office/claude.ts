@@ -14,6 +14,7 @@ import {
 } from "@/lib/office/offline";
 import { clampScore, scoreTotal, storyToneFromTotal } from "@/lib/office/scoring";
 import { parseStrategies, parseTargets } from "@/lib/office/strategy";
+import { filterValidTargetsOrNull } from "@/lib/office/targetValidate";
 import type {
   IncidentStrategy,
   IncidentTargetInternal,
@@ -60,11 +61,9 @@ function normalizeIncidentFields(
     description = (`『${companyName}』で` + description).slice(0, 80);
   }
   const strategies = parseStrategies(parsed.strategies) ?? offlineStrategies();
-  const targets = parseTargets(parsed.targets) ?? offlineIncident({
-    companyName,
-    companyAbout,
-    recentTitles: [],
-  }).targets;
+  const parsedTargets = parseTargets(parsed.targets);
+  const targets = filterValidTargetsOrNull(parsedTargets, companyAbout);
+  if (!targets) return null;
   return { title, description, type, strategies, targets };
 }
 
@@ -109,13 +108,15 @@ ${recent}
     return normalized;
   };
 
-  const first = await run();
-  if ("title" in first) return { ok: true, ...first };
-  if ("offline" in first && first.offline) return { ok: true, ...offlineIncident(ctx) };
-  const second = await run();
-  if ("title" in second) return { ok: true, ...second };
-  if ("offline" in second && second.offline) return { ok: true, ...offlineIncident(ctx) };
-  return { ok: false, message: first.message || "事件の生成に失敗しました" };
+  // ターゲット検証失敗時も含め、最大2回リトライ（計3試行）→だめならオフライン
+  let lastMessage = "事件の生成に失敗しました";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await run();
+    if ("title" in result) return { ok: true, ...result };
+    if ("offline" in result && result.offline) return { ok: true, ...offlineIncident(ctx) };
+    lastMessage = result.message || lastMessage;
+  }
+  return { ok: true, ...offlineIncident(ctx) };
 }
 
 export async function regenerateStrategiesWithClaude(input: {

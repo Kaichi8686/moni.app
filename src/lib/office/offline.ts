@@ -51,13 +51,13 @@ export function offlineStrategies(): IncidentStrategy[] {
   ];
 }
 
-export function offlineTargets(companyAbout: string): IncidentTargetInternal[] {
-  const about = companyAbout.trim() || "利用者";
-  const slice = about.length > 10 ? `${about.slice(0, 10)}…` : about;
+export function offlineTargets(companyAbout?: string): IncidentTargetInternal[] {
+  void companyAbout;
+  // 会社説明文をラベルに使わない（名詞句のみ）
   return [
     { id: "t1", label: "熱心なファン", fit: "good" },
-    { id: "t2", label: "初めての人", fit: "good" },
-    { id: "t3", label: slice.slice(0, 12) || "関係者", fit: "ok" },
+    { id: "t2", label: "初めて来た人", fit: "good" },
+    { id: "t3", label: "近所の人", fit: "ok" },
     { id: "t4", label: "無関心の人", fit: "mismatch" },
   ];
 }

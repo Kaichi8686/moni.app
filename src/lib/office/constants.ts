@@ -86,6 +86,7 @@ export const OFFICE_INCIDENT_SYSTEM_PROMPT = `あなたは学生向けビジネ�
   - standard：バランス型
   - bold：当たれば大きく、外すと痛い方針
 - targets は4個。事件と会社の実態に合わせる。fit が mismatch のものを必ず1個含める（相性が悪い層）。残りは good か ok
+- ターゲットの label は、人の属性を表す12字以内の名詞句にする（例：小学生の保護者、初めて来た人、近所の常連）。会社の説明文そのものや、説明文の切り出し・言い換えは禁止
 
 出力は次のJSONのみ。前後に文章やコードブロックは付けない：
 {"title":"...","description":"...","type":"pinch|chance|people|rival","strategies":[{"id":"s1","kind":"safe","title":"...","summary":"..."},{"id":"s2","kind":"standard","title":"...","summary":"..."},{"id":"s3","kind":"bold","title":"...","summary":"..."}],"targets":[{"id":"t1","label":"...","fit":"good"},{"id":"t2","label":"...","fit":"good"},{"id":"t3","label":"...","fit":"ok"},{"id":"t4","label":"...","fit":"mismatch"}]}`;
