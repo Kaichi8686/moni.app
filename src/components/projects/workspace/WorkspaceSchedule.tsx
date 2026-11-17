@@ -171,22 +171,22 @@ export default function WorkspaceSchedule() {
                 value={form.title}
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
               />
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block text-[11px] font-semibold text-zinc-500">
+              <div className="flex flex-col gap-2">
+                <label className="block min-w-0 text-[11px] font-semibold text-zinc-500">
                   {tx("開始", "Starts")}
                   <input
                     required
                     type="datetime-local"
-                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                    className="mt-1 box-border w-full max-w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
                     value={form.startsAt}
                     onChange={(e) => setForm((p) => ({ ...p, startsAt: e.target.value }))}
                   />
                 </label>
-                <label className="block text-[11px] font-semibold text-zinc-500">
+                <label className="block min-w-0 text-[11px] font-semibold text-zinc-500">
                   {tx("終了（任意）", "Ends (optional)")}
                   <input
                     type="datetime-local"
-                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#FF9600]"
+                    className="mt-1 box-border w-full max-w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[16px] outline-none focus:border-[#FF9600]"
                     value={form.endsAt}
                     onChange={(e) => setForm((p) => ({ ...p, endsAt: e.target.value }))}
                   />
