@@ -627,26 +627,62 @@ export function IssueWorkspaceCanvas({
     return () => observer.disconnect();
   }, []);
 
-  // iOS 長押しの「コピー / Google で検索」を抑止
+  // iOS ダブルタップ＋2打目長押しのテキスト選択・「コピー / Google で検索」を抑止
   useEffect(() => {
     const shell = shellRef.current;
     const root = rootRef.current;
     if (!shell && !root) return;
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return Boolean(el?.closest?.("textarea, input, [contenteditable='true']"));
+    };
+
     const block = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("textarea, input, [contenteditable='true']")) return;
+      if (isEditableTarget(event.target)) return;
       event.preventDefault();
     };
+
+    /** 戻るボタン等の UI 文字が拾われても即クリア（ボード表示中は編集欄以外を許さない） */
+    const clearBoardSelection = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+      const anchor = sel.anchorNode;
+      if (!anchor) return;
+      const el =
+        anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : (anchor as HTMLElement | null);
+      if (isEditableTarget(el)) return;
+      sel.removeAllRanges();
+    };
+
+    const onContextMenuCapture = (event: Event) => {
+      if (isEditableTarget(event.target)) return;
+      const el = event.target as HTMLElement | null;
+      if (!el) return;
+      if (el.closest("[data-board-ui]") || shell?.contains(el) || root?.contains(el)) {
+        event.preventDefault();
+      }
+    };
+
     const nodes = [shell, root].filter(Boolean) as HTMLElement[];
     for (const node of nodes) {
       node.addEventListener("selectstart", block);
       node.addEventListener("dragstart", block);
+      node.addEventListener("contextmenu", block);
     }
+    // ポータル UI（戻る等）も含め、キャプチャで selectstart を止める
+    document.addEventListener("selectstart", block, true);
+    document.addEventListener("selectionchange", clearBoardSelection);
+    document.addEventListener("contextmenu", onContextMenuCapture, true);
     return () => {
       for (const node of nodes) {
         node.removeEventListener("selectstart", block);
         node.removeEventListener("dragstart", block);
+        node.removeEventListener("contextmenu", block);
       }
+      document.removeEventListener("selectstart", block, true);
+      document.removeEventListener("selectionchange", clearBoardSelection);
+      document.removeEventListener("contextmenu", onContextMenuCapture, true);
     };
   }, []);
 
@@ -964,6 +1000,10 @@ export function IssueWorkspaceCanvas({
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-board-ui]")) return;
+
+    // ダブルタップ長押しで残ったネイティブ選択を消す
+    const nativeSel = window.getSelection();
+    if (nativeSel && !nativeSel.isCollapsed) nativeSel.removeAllRanges();
 
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
@@ -2340,11 +2380,17 @@ export function IssueWorkspaceCanvas({
               {/* 戻るは画面左上に固定 */}
               {toolbarStart ? (
                 <div
-                  className={`pointer-events-none fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[500] transition-opacity duration-200 ${
+                  className={`pointer-events-none fixed left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[500] select-none transition-opacity duration-200 ${
                     toolbarHidden ? "pointer-events-none opacity-0" : "opacity-100"
                   }`}
+                  style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
                 >
-                  <div className="pointer-events-auto" data-board-ui>
+                  <div
+                    className="pointer-events-auto select-none"
+                    data-board-ui
+                    style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+                    onContextMenu={(event) => event.preventDefault()}
+                  >
                     {toolbarStart}
                   </div>
                 </div>
@@ -2353,13 +2399,16 @@ export function IssueWorkspaceCanvas({
               {/* ドキュメント同様：右上に Undo / Redo */}
               {canEdit ? (
                 <div
-                  className={`pointer-events-none fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[500] transition-opacity duration-200 ${
+                  className={`pointer-events-none fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[500] select-none transition-opacity duration-200 ${
                     toolbarHidden ? "pointer-events-none opacity-0" : "opacity-100"
                   }`}
+                  style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
                 >
                   <div
                     data-board-ui
-                    className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                    className="pointer-events-auto flex select-none items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                    style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+                    onContextMenu={(event) => event.preventDefault()}
                   >
                     <button
                       type="button"
@@ -2407,9 +2456,11 @@ export function IssueWorkspaceCanvas({
 
               {/* 下のフローティング操作バー */}
               <div
-                className={`pointer-events-none fixed inset-x-0 bottom-0 z-[500] flex flex-col items-center gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition-transform duration-200 ease-out ${
+                className={`pointer-events-none fixed inset-x-0 bottom-0 z-[500] flex select-none flex-col items-center gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition-transform duration-200 ease-out ${
                   toolbarHidden || editingTextId ? "translate-y-[120%]" : "translate-y-0"
                 }`}
+                style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+                onContextMenu={(event) => event.preventDefault()}
               >
                 {tool === "sheet" && canEdit ? (
                   <div
