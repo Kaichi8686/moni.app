@@ -498,12 +498,12 @@ export function ProjectSettingsModal({
       onClose={onClose}
       onBackRequest={handleBackRequest}
       contentClassName="px-0 pt-0"
-      footerClassName="border-0 bg-transparent p-0"
+      footerClassName="border-0 bg-transparent px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
       footer={
         canEdit && !textFieldFocused ? (
           <button
             type="button"
-            className="w-full rounded-none bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50 pb-[max(0.875rem,calc(0.875rem+env(safe-area-inset-bottom)))]"
+            className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
             disabled={busy}
             onClick={() => void save()}
           >
