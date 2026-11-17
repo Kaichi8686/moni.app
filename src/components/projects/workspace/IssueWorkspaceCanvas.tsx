@@ -142,14 +142,29 @@ function useVisualKeyboard() {
   return {
     inset,
     open,
+    /** アニメなしでキーボード直上に固定（inset 追従のスライド演出を出さない） */
     dockStyle: {
       position: "fixed" as const,
       left: 0,
       right: 0,
       bottom: inset,
       zIndex: 720,
+      transition: "none",
     } satisfies CSSProperties,
   };
+}
+
+function useCoarsePointer() {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === "undefined" || !window.matchMedia) return () => {};
+      const mq = window.matchMedia("(pointer: coarse)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(pointer: coarse)").matches : false),
+    () => false,
+  );
 }
 
 const MIN_ZOOM = 0.25;
@@ -543,6 +558,8 @@ export function IssueWorkspaceCanvas({
   const [handlesVisible, setHandlesVisible] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
+  /** pointerdown 時点で黄選択済みだったか（再タップで文字入力） */
+  const nodeWasYellowSelectedRef = useRef(false);
   const lastNodeTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
   const cropDraftRef = useRef<BoardImageCrop | null>(null);
   const [pan, setPan] = useState({ x: 24, y: 24 });
@@ -610,6 +627,29 @@ export function IssueWorkspaceCanvas({
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+
+  // iOS 長押しの「コピー / Google で検索」を抑止
+  useEffect(() => {
+    const shell = shellRef.current;
+    const root = rootRef.current;
+    if (!shell && !root) return;
+    const block = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("textarea, input, [contenteditable='true']")) return;
+      event.preventDefault();
+    };
+    const nodes = [shell, root].filter(Boolean) as HTMLElement[];
+    for (const node of nodes) {
+      node.addEventListener("selectstart", block);
+      node.addEventListener("dragstart", block);
+    }
+    return () => {
+      for (const node of nodes) {
+        node.removeEventListener("selectstart", block);
+        node.removeEventListener("dragstart", block);
+      }
+    };
   }, []);
 
   // カード編集中のシートを記憶（他タブ／他画面から戻ったとき復元）
@@ -945,7 +985,7 @@ export function IssueWorkspaceCanvas({
       commit([...board.items, box]);
       setSelectedIds([box.id]);
       beginWorkspaceTextEdit(box.id);
-      setHandlesVisible(true);
+      setHandlesVisible(false);
       selectTool("navigate");
       return;
     }
@@ -1064,6 +1104,13 @@ export function IssueWorkspaceCanvas({
       selectTool("navigate");
     }
     setPlusMenuOpen(false);
+
+    nodeWasYellowSelectedRef.current =
+      node.kind === "text" &&
+      selectedIds.length === 1 &&
+      selectedIds[0] === node.id &&
+      !handlesVisible &&
+      editingTextId !== node.id;
 
     const inGroup = selectedIds.includes(node.id) && selectedIds.length > 1;
     const ids = inGroup ? selectedIds : [node.id];
@@ -1469,16 +1516,11 @@ export function IssueWorkspaceCanvas({
       Math.hypot(event.clientX - prev.x, event.clientY - prev.y) < 28;
     lastNodeTap.current = { id: node.id, t: now, x: event.clientX, y: event.clientY };
 
-                if (isDouble) {
-      if (node.kind === "text") {
-        setSelectedIds([node.id]);
-        setHandlesVisible(false);
-        beginWorkspaceTextEdit(node.id);
-        return;
-      }
-      // その他パーツ：ダブルタップでサイズ編集ハンドル
+    if (isDouble) {
+      // ダブルタップ：大きさ調整ハンドル（文字入力は黄選択中の再タップ）
       setSelectedIds([node.id]);
       setHandlesVisible(true);
+      setEditingTextId(null);
       return;
     }
 
@@ -1487,13 +1529,17 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (node.kind === "text") {
-      // ワンタップはサイズ編集（ハンドル表示）。文字入力はダブルタップ
+      // ワンタップ：カード同様に黄色選択のみ。黄選択中の再タップで文字入力
+      if (nodeWasYellowSelectedRef.current) {
+        beginWorkspaceTextEdit(node.id);
+        return;
+      }
       setSelectedIds([node.id]);
-      setHandlesVisible(true);
+      setHandlesVisible(false);
       setEditingTextId(null);
       return;
     }
-    // 画像はワンタップで選択（切り取りバー表示）。ハンドルは長押し / ダブルタップ
+    // 画像・図形：ワンタップは選択のみ。ハンドルは長押し / ダブルタップ
     setSelectedIds([node.id]);
     setHandlesVisible(false);
   }
@@ -1527,8 +1573,13 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
+  const coarsePointer = useCoarsePointer();
   /** 書式バー操作中も編集を落とさないための最終操作時刻 */
   const textEditKeepAliveRef = useRef(0);
+  // タッチはキーボードが開いてからバーを出す（開く途中のスライド演出を避ける）。デスクトップはすぐ表示
+  const showWorkspaceFormatBar =
+    Boolean(editingTextBox && canEdit && !toolbarHidden && toolbarMounted) &&
+    (!coarsePointer || keyboard.open);
 
   function beginWorkspaceTextEdit(id: string) {
     textEditKeepAliveRef.current = Date.now();
@@ -1598,11 +1649,16 @@ export function IssueWorkspaceCanvas({
   const crosshairTool = tool === "sheet" || tool === "text" || tool === "shape" || tool === "pen" || tool === "select";
 
   return (
-    <div ref={shellRef} className={shellClass}>
+    <div
+      ref={shellRef}
+      className={shellClass}
+      style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <div
         ref={rootRef}
         id="issue-workspace-canvas-surface"
-        className={`absolute inset-0 touch-none overflow-hidden ${
+        className={`absolute inset-0 touch-none overflow-hidden select-none ${
           crosshairTool ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
         }`}
         style={{
@@ -1611,7 +1667,11 @@ export function IssueWorkspaceCanvas({
             "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
           backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
           backgroundPosition: `${viewPan.x}px ${viewPan.y}px`,
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
         }}
+        onContextMenu={(event) => event.preventDefault()}
         onPointerDown={onCanvasPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1986,10 +2046,11 @@ export function IssueWorkspaceCanvas({
                       ? "1.5px solid #2563EB"
                       : selected
                         ? `1.5px solid ${SELECTION_YELLOW}`
-                        : "1px dashed rgba(0,0,0,0.2)",
+                        : "1px solid rgba(0,0,0,0.28)",
                     background: "transparent",
                     WebkitUserSelect: editing ? "text" : "none",
                     WebkitTouchCallout: "none",
+                    userSelect: editing ? "text" : "none",
                     ...selectionStyle,
                   }}
                   onContextMenu={(event) => event.preventDefault()}
@@ -1998,8 +2059,8 @@ export function IssueWorkspaceCanvas({
                     event.stopPropagation();
                     if (!canEdit) return;
                     setSelectedIds([node.id]);
-                    setHandlesVisible(false);
-                    beginWorkspaceTextEdit(node.id);
+                    setHandlesVisible(true);
+                    setEditingTextId(null);
                   }}
                 >
                   {editing && canEdit ? (
@@ -2048,6 +2109,9 @@ export function IssueWorkspaceCanvas({
                       style={{
                         ...textStyle,
                         fontSize: node.fontSize,
+                        WebkitUserSelect: "none",
+                        WebkitTouchCallout: "none",
+                        userSelect: "none",
                       }}
                     >
                       {node.text || (
@@ -2277,19 +2341,19 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
-              {/* 文字編集中は書式バーを表示（inset でキーボード直上へ。open 判定に依存しない） */}
-              {editingTextBox && canEdit && !toolbarHidden && toolbarMounted
+              {/* キーボードが開いた瞬間に直上へ（追従スライドなし） */}
+              {showWorkspaceFormatBar
                 ? createPortal(
                     <div className="pointer-events-none" style={keyboard.dockStyle}>
                       <SlidesTextFormatBar
-                        fontSize={editingTextBox.fontSize}
-                        textColor={editingTextBox.textColor}
-                        align={editingTextBox.align}
-                        bold={Boolean(editingTextBox.bold)}
-                        italic={Boolean(editingTextBox.italic)}
-                        underline={Boolean(editingTextBox.underline)}
+                        fontSize={editingTextBox!.fontSize}
+                        textColor={editingTextBox!.textColor}
+                        align={editingTextBox!.align}
+                        bold={Boolean(editingTextBox!.bold)}
+                        italic={Boolean(editingTextBox!.italic)}
+                        underline={Boolean(editingTextBox!.underline)}
                         tx={tx}
-                        onChange={(patch) => updateItem(editingTextBox.id, patch)}
+                        onChange={(patch) => updateItem(editingTextBox!.id, patch)}
                         onKeepFocus={keepWorkspaceTextFocus}
                       />
                     </div>,
@@ -2605,6 +2669,7 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
+  const coarsePointer = useCoarsePointer();
   const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
@@ -2636,6 +2701,7 @@ function SheetFullscreenEditor({
   const lastOverlayTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
   const overlayLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayLongPressFiredRef = useRef(false);
+  const overlayWasYellowSelectedRef = useRef(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const overlays = sheet.overlays ?? [];
   const overlaysRef = useRef(overlays);
@@ -2781,6 +2847,12 @@ function SheetFullscreenEditor({
     clientY: number,
   ) {
     const pt = cardLocalPoint(clientX, clientY);
+    overlayWasYellowSelectedRef.current =
+      ov.kind === "text" &&
+      selectedOverlayIds.length === 1 &&
+      selectedOverlayIds[0] === ov.id &&
+      !overlayHandlesVisible &&
+      editingOverlayId !== ov.id;
     setSelectedOverlayIds([ov.id]);
     setEditingOverlayId(null);
     overlayLongPressFiredRef.current = false;
@@ -2818,25 +2890,25 @@ function SheetFullscreenEditor({
     lastOverlayTap.current = { id: ov.id, t: now, x: clientX, y: clientY };
 
     if (isDouble) {
-      if (ov.kind === "text") {
-        setSelectedOverlayIds([ov.id]);
-        setOverlayHandlesVisible(false);
-        beginOverlayTextEdit(ov.id);
-        return;
-      }
+      // ダブルタップ：大きさ調整（文字入力は黄選択中の再タップ）
       setSelectedOverlayIds([ov.id]);
       setOverlayHandlesVisible(ov.kind !== "pen");
+      setEditingOverlayId(null);
       return;
     }
 
     setSelectedOverlayIds([ov.id]);
     if (ov.kind === "text") {
-      // ワンタップはサイズ編集。文字入力はダブルタップ
-      setOverlayHandlesVisible(true);
+      // ワンタップ：黄色選択のみ。黄選択中の再タップで文字入力
+      if (overlayWasYellowSelectedRef.current) {
+        beginOverlayTextEdit(ov.id);
+        return;
+      }
+      setOverlayHandlesVisible(false);
       setEditingOverlayId(null);
       return;
     }
-    // 画像・図形・手書き：ワンタップは選択のみ。ハンドルは長押し / ダブルタップ
+    // 画像・図形・手書き：ワンタップは黄色選択のみ。ハンドルは長押し / ダブルタップ
     setOverlayHandlesVisible(false);
   }
 
@@ -3342,7 +3414,6 @@ function SheetFullscreenEditor({
                               color={SELECTION_YELLOW}
                               w={ov.w}
                               h={ov.h}
-                              dashed
                               hairline
                             />
                           ) : null}
@@ -3416,10 +3487,13 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          outline: selected ? `1px dashed ${SELECTION_YELLOW}` : undefined,
+                          outline: selected ? `2px solid ${SELECTION_YELLOW}` : undefined,
                           outlineOffset: 1,
                           borderRadius: 4,
+                          WebkitTouchCallout: "none",
+                          userSelect: "none",
                         }}
+                        onContextMenu={(e) => e.preventDefault()}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
@@ -3448,11 +3522,15 @@ function SheetFullscreenEditor({
                           border: editing
                             ? "1.5px solid #2563EB"
                             : selected
-                              ? `1px dashed ${SELECTION_YELLOW}`
-                              : "1px dashed rgba(0,0,0,0.18)",
+                              ? `2px solid ${SELECTION_YELLOW}`
+                              : "1px solid rgba(0,0,0,0.28)",
                           background: "transparent",
                           borderRadius: 4,
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: editing ? "text" : "none",
+                          userSelect: editing ? "text" : "none",
                         }}
+                        onContextMenu={(e) => e.preventDefault()}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           if (editing) return;
@@ -3461,8 +3539,8 @@ function SheetFullscreenEditor({
                         onDoubleClick={(e) => {
                           e.stopPropagation();
                           setSelectedOverlayIds([ov.id]);
-                          setOverlayHandlesVisible(false);
-                          beginOverlayTextEdit(ov.id);
+                          setOverlayHandlesVisible(true);
+                          setEditingOverlayId(null);
                         }}
                       >
                         {editing && canEdit ? (
@@ -3549,8 +3627,12 @@ function SheetFullscreenEditor({
           )
         : null}
 
-      {/* 文字編集中は書式バー（inset でキーボード直上。open 判定に依存しない） */}
-      {canEdit && editingOverlayId && selectedOverlay && selectedOverlay.kind === "text"
+      {/* キーボードが開いた瞬間に直上へ（追従スライドなし） */}
+      {canEdit &&
+      editingOverlayId &&
+      selectedOverlay &&
+      selectedOverlay.kind === "text" &&
+      (!coarsePointer || keyboard.open)
         ? createPortal(
             <div className="pointer-events-none" style={keyboard.dockStyle}>
               <SlidesTextFormatBar
