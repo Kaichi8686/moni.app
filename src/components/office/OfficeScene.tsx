@@ -190,8 +190,10 @@ export function OfficeScene({ level, industry, fx, variant = "card", speech }: P
 
   return (
     <div
-      className={`office-scene h-full w-full max-w-full overflow-hidden ${
-        backdrop ? "absolute inset-0 rounded-none ring-0" : "relative"
+      className={`office-scene overflow-hidden ${
+        backdrop
+          ? "pointer-events-none absolute inset-0 h-full w-full max-w-[100vw] rounded-none ring-0"
+          : "relative h-full w-full max-w-full"
       } ${fx ? `office-fx--${fx}` : ""}`}
       aria-hidden={backdrop || undefined}
     >

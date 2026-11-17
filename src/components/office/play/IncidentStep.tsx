@@ -28,16 +28,16 @@ export function IncidentStep({ incident, company, playEnter, onNext }: Props) {
 
   return (
     <section
-      className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${
+      className={`overflow-hidden rounded-3xl border bg-white/90 shadow-[0_16px_48px_rgba(28,25,23,0.1)] backdrop-blur-md ${
         playEnter ? "office-incident-enter" : ""
       } ${
         incident.type === "pinch"
-          ? "border-rose-200"
+          ? "border-rose-200/80"
           : incident.type === "chance"
-            ? "border-amber-200"
+            ? "border-amber-200/80"
             : incident.type === "people"
-              ? "border-sky-200"
-              : "border-violet-200"
+              ? "border-sky-200/80"
+              : "border-violet-200/80"
       }`}
     >
       <div className={`border-b bg-gradient-to-r px-4 py-4 ${ui.bar}`}>
