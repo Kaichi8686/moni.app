@@ -558,8 +558,6 @@ export function IssueWorkspaceCanvas({
   const [handlesVisible, setHandlesVisible] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
-  /** pointerdown 時点で黄選択済みだったか（再タップで文字入力） */
-  const nodeWasYellowSelectedRef = useRef(false);
   const lastNodeTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
   const cropDraftRef = useRef<BoardImageCrop | null>(null);
   const [pan, setPan] = useState({ x: 24, y: 24 });
@@ -1105,13 +1103,6 @@ export function IssueWorkspaceCanvas({
     }
     setPlusMenuOpen(false);
 
-    nodeWasYellowSelectedRef.current =
-      node.kind === "text" &&
-      selectedIds.length === 1 &&
-      selectedIds[0] === node.id &&
-      !handlesVisible &&
-      editingTextId !== node.id;
-
     const inGroup = selectedIds.includes(node.id) && selectedIds.length > 1;
     const ids = inGroup ? selectedIds : [node.id];
     if (!inGroup) setSelectedIds([node.id]);
@@ -1517,10 +1508,16 @@ export function IssueWorkspaceCanvas({
     lastNodeTap.current = { id: node.id, t: now, x: event.clientX, y: event.clientY };
 
     if (isDouble) {
-      // ダブルタップ：大きさ調整ハンドル（文字入力は黄選択中の再タップ）
+      if (node.kind === "text") {
+        // ダブルタップ：文字入力
+        setSelectedIds([node.id]);
+        setHandlesVisible(false);
+        beginWorkspaceTextEdit(node.id);
+        return;
+      }
+      // その他：ダブルタップで大きさ調整ハンドル
       setSelectedIds([node.id]);
       setHandlesVisible(true);
-      setEditingTextId(null);
       return;
     }
 
@@ -1529,11 +1526,7 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (node.kind === "text") {
-      // ワンタップ：カード同様に黄色選択のみ。黄選択中の再タップで文字入力
-      if (nodeWasYellowSelectedRef.current) {
-        beginWorkspaceTextEdit(node.id);
-        return;
-      }
+      // ワンタップ：黄色選択のみ。大きさ調整は長押し
       setSelectedIds([node.id]);
       setHandlesVisible(false);
       setEditingTextId(null);
@@ -2059,8 +2052,8 @@ export function IssueWorkspaceCanvas({
                     event.stopPropagation();
                     if (!canEdit) return;
                     setSelectedIds([node.id]);
-                    setHandlesVisible(true);
-                    setEditingTextId(null);
+                    setHandlesVisible(false);
+                    beginWorkspaceTextEdit(node.id);
                   }}
                 >
                   {editing && canEdit ? (
@@ -2701,7 +2694,6 @@ function SheetFullscreenEditor({
   const lastOverlayTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
   const overlayLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayLongPressFiredRef = useRef(false);
-  const overlayWasYellowSelectedRef = useRef(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const overlays = sheet.overlays ?? [];
   const overlaysRef = useRef(overlays);
@@ -2847,12 +2839,6 @@ function SheetFullscreenEditor({
     clientY: number,
   ) {
     const pt = cardLocalPoint(clientX, clientY);
-    overlayWasYellowSelectedRef.current =
-      ov.kind === "text" &&
-      selectedOverlayIds.length === 1 &&
-      selectedOverlayIds[0] === ov.id &&
-      !overlayHandlesVisible &&
-      editingOverlayId !== ov.id;
     setSelectedOverlayIds([ov.id]);
     setEditingOverlayId(null);
     overlayLongPressFiredRef.current = false;
@@ -2890,20 +2876,22 @@ function SheetFullscreenEditor({
     lastOverlayTap.current = { id: ov.id, t: now, x: clientX, y: clientY };
 
     if (isDouble) {
-      // ダブルタップ：大きさ調整（文字入力は黄選択中の再タップ）
+      if (ov.kind === "text") {
+        // ダブルタップ：文字入力
+        setSelectedOverlayIds([ov.id]);
+        setOverlayHandlesVisible(false);
+        beginOverlayTextEdit(ov.id);
+        return;
+      }
+      // その他：ダブルタップで大きさ調整ハンドル
       setSelectedOverlayIds([ov.id]);
       setOverlayHandlesVisible(ov.kind !== "pen");
-      setEditingOverlayId(null);
       return;
     }
 
     setSelectedOverlayIds([ov.id]);
     if (ov.kind === "text") {
-      // ワンタップ：黄色選択のみ。黄選択中の再タップで文字入力
-      if (overlayWasYellowSelectedRef.current) {
-        beginOverlayTextEdit(ov.id);
-        return;
-      }
+      // ワンタップ：黄色選択のみ。大きさ調整は長押し
       setOverlayHandlesVisible(false);
       setEditingOverlayId(null);
       return;
@@ -3539,8 +3527,8 @@ function SheetFullscreenEditor({
                         onDoubleClick={(e) => {
                           e.stopPropagation();
                           setSelectedOverlayIds([ov.id]);
-                          setOverlayHandlesVisible(true);
-                          setEditingOverlayId(null);
+                          setOverlayHandlesVisible(false);
+                          beginOverlayTextEdit(ov.id);
                         }}
                       >
                         {editing && canEdit ? (
