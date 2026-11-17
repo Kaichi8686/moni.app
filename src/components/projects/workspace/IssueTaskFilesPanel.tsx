@@ -996,6 +996,7 @@ export function IssueTaskFilesPanel({
             canEdit={canEdit}
             uploading={uploading}
             fullscreen
+            storageKey={`issue:${issue.projectId}:${issue.id}:${openFile.id}`}
             onChange={persistCanvas}
             onRequestPhoto={() => fileRef.current?.click()}
             toolbarStart={

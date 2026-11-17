@@ -529,6 +529,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
             canEdit
             uploading={uploading}
             fullscreen
+            storageKey={`dm:${conversationId}:${openFile.id}`}
             onChange={persistCanvas}
             onRequestPhoto={() => fileRef.current?.click()}
             toolbarStart={
