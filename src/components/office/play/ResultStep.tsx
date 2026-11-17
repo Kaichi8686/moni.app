@@ -3,17 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { PeerSolutions } from "@/components/office/play/PeerSolutions";
 import { ResultComic } from "@/components/office/stage/ResultComic";
 import { castMemberByRole, type CastMember } from "@/lib/office/cast";
 import type { OfficeMeters } from "@/lib/office/meters";
+import type { PeerSolution } from "@/lib/office/peers";
 import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
-import { METER_KEYS, METER_LABEL_JA } from "@/lib/office/scenes";
-import type { OfficeCompany, OfficeSubmission } from "@/lib/office/types";
+import { METER_KEYS, METER_LABEL_JA, type OfficeSceneId } from "@/lib/office/scenes";
+import type { IncidentType, OfficeCompany, OfficeSubmission } from "@/lib/office/types";
 
 type Props = {
   submission: OfficeSubmission;
   company: OfficeCompany | null;
   codexBonus?: number;
+  peerScene?: OfficeSceneId | null;
+  peerType?: IncidentType | null;
+  fetchPeers?: (scene: OfficeSceneId, type: IncidentType) => Promise<PeerSolution[]>;
+  onVotePeer?: (id: string) => Promise<PeerSolution[]>;
+  onReportPeer?: (id: string) => Promise<PeerSolution[]>;
   busy: boolean;
   onNext: () => void;
 };
@@ -95,7 +102,18 @@ function metersBeforeFrom(
   return before;
 }
 
-export function ResultStep({ submission, company, codexBonus = 0, busy, onNext }: Props) {
+export function ResultStep({
+  submission,
+  company,
+  codexBonus = 0,
+  peerScene,
+  peerType,
+  fetchPeers,
+  onVotePeer,
+  onReportPeer,
+  busy,
+  onNext,
+}: Props) {
   const reduce = useReducedMotion();
   const reaction = useMemo(
     () =>
@@ -266,6 +284,15 @@ export function ResultStep({ submission, company, codexBonus = 0, busy, onNext }
             <p className="text-center text-[11px] font-medium text-zinc-500">
               ヒント: {submission.nextHint}
             </p>
+          ) : null}
+          {peerScene && peerType && fetchPeers && onVotePeer && onReportPeer ? (
+            <PeerSolutions
+              scene={peerScene}
+              type={peerType}
+              fetchPeers={fetchPeers}
+              onVote={onVotePeer}
+              onReport={onReportPeer}
+            />
           ) : null}
           <DuoButton type="button" tone="orange" size="lg" fullWidth disabled={busy} onClick={onNext}>
             {busy ? "準備中…" : "次の事件へ"}

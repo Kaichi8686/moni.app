@@ -21,6 +21,7 @@ import {
 } from "@/lib/office/offline";
 import { parseCodex, unlockCodexCell, type CodexCell } from "@/lib/office/codex";
 import { nextLoginStreak } from "@/lib/office/loginStreak";
+import { localPublishPeer } from "@/lib/office/peersLocal";
 import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
@@ -171,6 +172,14 @@ export function localMarkSecretaryGuideDone(userId: string): OfficeCompany {
   const store = read();
   if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
   store.company.secretaryGuideDone = true;
+  write(store);
+  return store.company;
+}
+
+export function localSetSfxMuted(userId: string, muted: boolean): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  store.company.sfxMuted = muted;
   write(store);
   return store.company;
 }
@@ -474,6 +483,19 @@ export async function localSubmit(
   };
   store.submissions.push(submission);
   write(store);
+
+  if (incident.scene && !company.shareOptOut) {
+    localPublishPeer({
+      id: submission.id,
+      userId,
+      scene: incident.scene,
+      type: incident.type,
+      answer: text,
+      strategyTitle,
+      scoreTotal: scores.total,
+      shareOptOut: company.shareOptOut,
+    });
+  }
 
   return {
     submission,

@@ -25,13 +25,17 @@ import {
   fetchCodex,
   fetchCompany,
   fetchIncident,
+  fetchPeers,
   fetchRanking,
   markResultSeen,
   markSecretaryGuideDone,
+  reportPeer,
   rerollStrategies,
   setAbout,
+  setSfxMuted,
   submitAnswer,
   toggleRanking,
+  votePeer,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
 import {
@@ -41,8 +45,11 @@ import {
 import { castMemberByRole } from "@/lib/office/cast";
 import type { CodexCell } from "@/lib/office/codex";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
+import { playOfficeSfx, setOfficeSfxMuted } from "@/lib/office/sfx";
 import { formatRemainMmSs, msUntil } from "@/lib/office/stamina";
+import type { OfficeSceneId } from "@/lib/office/scenes";
 import type {
+  IncidentType,
   OfficeIncident,
   OfficeSubmission,
   OfficeSubmitInput,
@@ -84,6 +91,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [lastSubmit, setLastSubmit] = useState<OfficeSubmission | null>(null);
   const [codexBonus, setCodexBonus] = useState(0);
   const [codexCells, setCodexCells] = useState<CodexCell[]>([]);
+  const [peerScene, setPeerScene] = useState<OfficeSceneId | null>(null);
+  const [peerType, setPeerType] = useState<IncidentType | null>(null);
   const [rankRows, setRankRows] = useState<RankingRow[]>([]);
   const [rankMeta, setRankMeta] = useState<{
     seasonKey: string;
@@ -114,6 +123,10 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
 
   useEffect(() => () => clearAdvance(), [clearAdvance]);
 
+  useEffect(() => {
+    setOfficeSfxMuted(payload?.company?.sfxMuted !== false);
+  }, [payload?.company?.sfxMuted]);
+
   const resetChoices = useCallback(() => {
     clearAdvance();
     setStrategyId(null);
@@ -123,6 +136,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }, [clearAdvance]);
 
   const triggerFx = useCallback((type: string) => {
+    playOfficeSfx("enter");
     if (preferReducedMotion()) {
       setSceneFx(null);
       setPlayEnter(true);
@@ -245,6 +259,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       const res = await submitAnswer(input);
       setLastSubmit(res.submission);
       setCodexBonus(res.codexBonus ?? 0);
+      setPeerScene(incident?.scene ?? null);
+      setPeerType(incident?.type ?? null);
       setPayload({
         company: res.company,
         stamina: res.stamina,
@@ -255,6 +271,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       setPlayEnter(false);
       setStep("result");
       const tone = res.submission.storyTone;
+      playOfficeSfx(tone === "great" ? "level" : "coin");
       triggerFx(tone === "great" ? "chance" : tone === "bitter" ? "people" : "rival");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "提出失敗");
@@ -278,6 +295,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }
 
   function onSelectStrategy(id: string) {
+    playOfficeSfx("tap");
     setStrategyId(id);
     scheduleAdvance("target");
   }
@@ -364,6 +382,11 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         submission={lastSubmit}
         company={company}
         codexBonus={codexBonus}
+        peerScene={peerScene}
+        peerType={peerType}
+        fetchPeers={fetchPeers}
+        onVotePeer={votePeer}
+        onReportPeer={reportPeer}
         busy={busy}
         onNext={() => void onNextIncident()}
       />
@@ -505,6 +528,15 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             nextRecoverAt={payload!.stamina.nextRecoverAt}
             onOpenRank={() => setPanel("rank")}
             onOpenCodex={() => setPanel("codex")}
+            onToggleSfx={() => {
+              void (async () => {
+                const nextMuted = company!.sfxMuted === false;
+                playOfficeSfx("tap");
+                const c = await setSfxMuted(nextMuted);
+                setOfficeSfxMuted(c.sfxMuted !== false);
+                setPayload((p) => (p ? { ...p, company: c } : p));
+              })();
+            }}
           />
 
           <StageView

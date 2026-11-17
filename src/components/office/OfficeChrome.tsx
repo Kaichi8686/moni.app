@@ -12,6 +12,7 @@ type Props = {
   nextRecoverAt: string | null;
   onOpenRank: () => void;
   onOpenCodex?: () => void;
+  onToggleSfx?: () => void;
 };
 
 /** 1行ヘッダー＋タップで詳細。順位は右上アイコン */
@@ -22,6 +23,7 @@ export function OfficeChrome({
   nextRecoverAt,
   onOpenRank,
   onOpenCodex,
+  onToggleSfx,
 }: Props) {
   const [open, setOpen] = useState(false);
   const recovering = Boolean(nextRecoverAt) && staminaValue < OFFICE_MAX_STAMINA;
@@ -127,6 +129,15 @@ export function OfficeChrome({
               <p className="text-xs font-medium text-zinc-400">満タン</p>
             )}
           </div>
+          {onToggleSfx ? (
+            <button
+              type="button"
+              onClick={onToggleSfx}
+              className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-xs font-bold text-zinc-600"
+            >
+              効果音: {company.sfxMuted === false ? "オン" : "オフ"}（タップで切替）
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

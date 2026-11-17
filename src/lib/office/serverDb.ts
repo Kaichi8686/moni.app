@@ -14,6 +14,13 @@ import {
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { ensureCompanyCast } from "@/lib/office/cast";
 import { unlockCodexCell, type CodexCell } from "@/lib/office/codex";
+import {
+  clipPeerAnswer,
+  OFFICE_PEER_VOTES_PER_DAY,
+  peerDayKey,
+  shouldHidePeer,
+  type PeerSolution,
+} from "@/lib/office/peers";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
 import {
   defaultStageForType,
@@ -876,6 +883,17 @@ export async function dbMarkSecretaryGuideDone(admin: SupabaseClient, userId: st
   return mapCompany(data as Record<string, unknown>);
 }
 
+export async function dbSetSfxMuted(admin: SupabaseClient, userId: string, muted: boolean) {
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({ sfx_muted: muted })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "sfx update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
 export async function dbGetCodex(admin: SupabaseClient, userId: string): Promise<CodexCell[]> {
   const { data, error } = await admin
     .from("office_codex")
@@ -919,4 +937,146 @@ async function dbUnlockCodex(
   );
   if (error) return 0;
   return unlocked.bonus;
+}
+
+export async function dbListPeers(
+  admin: SupabaseClient,
+  userId: string,
+  scene: NonNullable<OfficeIncident["scene"]>,
+  type: IncidentType,
+): Promise<PeerSolution[]> {
+  const { data: subs } = await admin
+    .from("office_submissions")
+    .select(
+      "id, user_id, answer, strategy_title, score_total, safe, incident_id, office_incidents!inner(scene, type), office_companies!inner(share_opt_out)",
+    )
+    .eq("office_incidents.scene", scene)
+    .eq("office_incidents.type", type)
+    .eq("safe", true)
+    .neq("user_id", userId)
+    .order("score_total", { ascending: false })
+    .limit(24);
+
+  if (!subs?.length) return [];
+
+  const ids = (subs as Record<string, unknown>[]).map((s) => String(s.id));
+  const [{ data: votes }, { data: reports }] = await Promise.all([
+    admin.from("office_peer_votes").select("submission_id, voter_id").in("submission_id", ids),
+    admin.from("office_peer_reports").select("submission_id, reporter_id").in("submission_id", ids),
+  ]);
+
+  const voteCount = new Map<string, number>();
+  const myVotes = new Set<string>();
+  for (const v of (votes ?? []) as { submission_id: string; voter_id: string }[]) {
+    voteCount.set(v.submission_id, (voteCount.get(v.submission_id) ?? 0) + 1);
+    if (v.voter_id === userId) myVotes.add(v.submission_id);
+  }
+  const reportCount = new Map<string, number>();
+  const myReports = new Set<string>();
+  for (const r of (reports ?? []) as { submission_id: string; reporter_id: string }[]) {
+    reportCount.set(r.submission_id, (reportCount.get(r.submission_id) ?? 0) + 1);
+    if (r.reporter_id === userId) myReports.add(r.submission_id);
+  }
+
+  const out: PeerSolution[] = [];
+  for (const raw of subs as Record<string, unknown>[]) {
+    const id = String(raw.id);
+    if (shouldHidePeer(reportCount.get(id) ?? 0)) continue;
+    const co = raw.office_companies as { share_opt_out?: boolean } | { share_opt_out?: boolean }[] | null;
+    const company = Array.isArray(co) ? co[0] : co;
+    if (company?.share_opt_out) continue;
+    out.push({
+      id,
+      answer: clipPeerAnswer(String(raw.answer ?? "")),
+      strategyTitle: raw.strategy_title == null ? null : String(raw.strategy_title),
+      scoreTotal: Number(raw.score_total ?? 0),
+      voteCount: voteCount.get(id) ?? 0,
+      votedByMe: myVotes.has(id),
+      reportedByMe: myReports.has(id),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export async function dbVotePeer(
+  admin: SupabaseClient,
+  userId: string,
+  submissionId: string,
+): Promise<PeerSolution[]> {
+  const { data: sub } = await admin
+    .from("office_submissions")
+    .select("id, user_id, office_incidents!inner(scene, type)")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (!sub) throw new Error("解決策が見つからないよ");
+  if (String((sub as { user_id: string }).user_id) === userId) {
+    throw new Error("自分の解決策には投票できないよ");
+  }
+  const incident = (sub as { office_incidents: { scene: string; type: string } | { scene: string; type: string }[] })
+    .office_incidents;
+  const inc = Array.isArray(incident) ? incident[0] : incident;
+  const scene = parseOfficeScene(inc?.scene);
+  const type = String(inc?.type ?? "") as IncidentType;
+  if (!scene || !["pinch", "chance", "people", "rival"].includes(type)) {
+    throw new Error("この解決策は対象外だよ");
+  }
+
+  const dayKey = peerDayKey();
+  const { count } = await admin
+    .from("office_peer_votes")
+    .select("id", { count: "exact", head: true })
+    .eq("voter_id", userId)
+    .eq("day_key", dayKey);
+  const { data: existing } = await admin
+    .from("office_peer_votes")
+    .select("id")
+    .eq("voter_id", userId)
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+  if (!existing) {
+    if ((count ?? 0) >= OFFICE_PEER_VOTES_PER_DAY) {
+      throw new Error(`投票は1日${OFFICE_PEER_VOTES_PER_DAY}回までだよ`);
+    }
+    const { error } = await admin.from("office_peer_votes").insert({
+      voter_id: userId,
+      submission_id: submissionId,
+      day_key: dayKey,
+    });
+    if (error) throw new Error(error.message);
+  }
+  return dbListPeers(admin, userId, scene, type);
+}
+
+export async function dbReportPeer(
+  admin: SupabaseClient,
+  userId: string,
+  submissionId: string,
+): Promise<PeerSolution[]> {
+  const { data: sub } = await admin
+    .from("office_submissions")
+    .select("id, office_incidents!inner(scene, type)")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (!sub) throw new Error("解決策が見つからないよ");
+  const incident = (sub as { office_incidents: { scene: string; type: string } | { scene: string; type: string }[] })
+    .office_incidents;
+  const inc = Array.isArray(incident) ? incident[0] : incident;
+  const scene = parseOfficeScene(inc?.scene);
+  const type = String(inc?.type ?? "") as IncidentType;
+  if (!scene) throw new Error("この解決策は対象外だよ");
+
+  await admin.from("office_peer_reports").upsert(
+    { reporter_id: userId, submission_id: submissionId },
+    { onConflict: "reporter_id,submission_id", ignoreDuplicates: true },
+  );
+
+  const { count } = await admin
+    .from("office_peer_reports")
+    .select("id", { count: "exact", head: true })
+    .eq("submission_id", submissionId);
+  if (shouldHidePeer(count ?? 0)) {
+    await admin.from("office_submissions").update({ safe: false }).eq("id", submissionId);
+  }
+  return dbListPeers(admin, userId, scene, type);
 }

@@ -9,11 +9,20 @@ import {
   localRanking,
   localRerollStrategies,
   localSetAbout,
+  localSetSfxMuted,
   localSubmit,
   localToggleRanking,
 } from "@/lib/office/localStore";
 import type { CodexCell } from "@/lib/office/codex";
+import type { PeerSolution } from "@/lib/office/peers";
+import {
+  localListPeers,
+  localReportPeer,
+  localVotePeer,
+} from "@/lib/office/peersLocal";
+import type { OfficeSceneId } from "@/lib/office/scenes";
 import type {
+  IncidentType,
   OfficeCompany,
   OfficeIncident,
   OfficeSeasonScore,
@@ -169,6 +178,60 @@ export async function fetchCodex(): Promise<CodexCell[]> {
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
     return localGetCodex(GUEST_ID);
+  }
+}
+
+export async function fetchPeers(
+  scene: OfficeSceneId,
+  type: IncidentType,
+): Promise<PeerSolution[]> {
+  try {
+    const res = await api<{ peers: PeerSolution[] }>(
+      `/api/office/peers?scene=${encodeURIComponent(scene)}&type=${encodeURIComponent(type)}`,
+    );
+    return res.peers ?? [];
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localListPeers(GUEST_ID, scene, type);
+  }
+}
+
+export async function votePeer(submissionId: string): Promise<PeerSolution[]> {
+  try {
+    const res = await api<{ peers: PeerSolution[] }>("/api/office/peers", {
+      method: "POST",
+      body: JSON.stringify({ submissionId, action: "vote" }),
+    });
+    return res.peers ?? [];
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localVotePeer(GUEST_ID, submissionId);
+  }
+}
+
+export async function reportPeer(submissionId: string): Promise<PeerSolution[]> {
+  try {
+    const res = await api<{ peers: PeerSolution[] }>("/api/office/peers", {
+      method: "POST",
+      body: JSON.stringify({ submissionId, action: "report" }),
+    });
+    return res.peers ?? [];
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localReportPeer(GUEST_ID, submissionId);
+  }
+}
+
+export async function setSfxMuted(muted: boolean): Promise<OfficeCompany> {
+  try {
+    const res = await api<{ company: OfficeCompany }>("/api/office/sfx", {
+      method: "POST",
+      body: JSON.stringify({ muted }),
+    });
+    return res.company;
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localSetSfxMuted(GUEST_ID, muted);
   }
 }
 
