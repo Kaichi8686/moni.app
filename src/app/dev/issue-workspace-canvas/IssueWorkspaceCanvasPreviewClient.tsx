@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import {
   defaultSheetTextStyle,
@@ -15,10 +15,10 @@ const PREVIEW_BOARD: IssueWorkspaceBoard = {
       kind: "sheet",
       x: 80,
       y: 100,
-      w: 200,
-      h: 160,
+      w: 220,
+      h: 150,
       color: "yellow",
-      text: "アイデアをメモ",
+      text: "",
       z: 1,
       ...defaultSheetTextStyle(),
     },
@@ -85,21 +85,55 @@ const PREVIEW_BOARD: IssueWorkspaceBoard = {
   ],
 };
 
+declare global {
+  interface Window {
+    __moniSetKbDemo?: (inset: number | null) => void;
+  }
+}
+
 export function IssueWorkspaceCanvasPreviewClient() {
   const [board, setBoard] = useState<IssueWorkspaceBoard>(PREVIEW_BOARD);
+  const [kbOn, setKbOn] = useState(false);
+
+  useEffect(() => {
+    // カード編集をすぐ開けるよう、黄カードを開いた状態で開始
+    try {
+      window.sessionStorage.setItem("moni:ws-open-sheet:dev-preview", "preview_sheet_a");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleKeyboardDemo() {
+    const next = !kbOn;
+    setKbOn(next);
+    window.__moniSetKbDemo?.(next ? 320 : null);
+  }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col gap-4 bg-white p-4 md:p-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">dev preview</p>
-        <h1 className="text-2xl font-bold text-zinc-950">課題作業スペース（フリーキャンバス）</h1>
-        <p className="mt-1 text-sm text-zinc-600">用紙・写真・矢印の操作確認用</p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-zinc-950">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 text-white">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">dev preview</p>
+          <p className="text-sm font-semibold">カード中央 / キーボード持ち上げ</p>
+        </div>
+        <button
+          type="button"
+          data-kb-demo-toggle
+          onClick={toggleKeyboardDemo}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+            kbOn ? "bg-sky-400 text-zinc-950" : "bg-zinc-700 text-white"
+          }`}
+        >
+          {kbOn ? "KB ON" : "KB 模す"}
+        </button>
       </div>
-      <div className="h-[min(80dvh,720px)] overflow-hidden rounded-2xl border border-zinc-200">
+      <div className="relative h-[min(844px,calc(100dvh-48px))] overflow-hidden bg-zinc-100">
         <IssueWorkspaceCanvas
           board={board}
           canEdit
           fullscreen
+          storageKey="dev-preview"
           onChange={setBoard}
           onRequestPhoto={() => {
             void appendImageToBoard(
