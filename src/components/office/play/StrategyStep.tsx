@@ -15,9 +15,16 @@ function RiskMeter({ kind }: { kind: Exclude<StrategyKind, "custom"> }) {
   // 見た目だけのバー。safe=短く中央 / standard=中 / bold=広く
   const width =
     kind === "safe" ? "w-[28%]" : kind === "standard" ? "w-[52%]" : "w-[88%]";
+  const arrows =
+    kind === "safe" ? "▲" : kind === "standard" ? "▲〜▲▲" : "▲▲▲／▼▼▼";
   return (
     <div className="mt-3">
-      <p className="mb-1 text-[10px] font-bold text-zinc-400">当たり外れの幅</p>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold text-zinc-400">当たり外れの幅</p>
+        <p className="text-[10px] font-bold tracking-wide text-amber-700" aria-label="メーター変化のヒント">
+          {arrows}
+        </p>
+      </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-zinc-100">
         <div
           className={`absolute left-1/2 top-0 h-full -translate-x-1/2 rounded-full bg-gradient-to-r from-amber-300 to-[#FF9600] ${width}`}

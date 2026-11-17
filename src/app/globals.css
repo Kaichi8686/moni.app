@@ -2834,6 +2834,34 @@ html.moni-goal-stuck .project-workspace-header {
   animation: office-meter-blink 0.45s ease-in-out 2;
 }
 
+.office-stage-enter {
+  animation: office-stage-fade 0.55s ease-out both;
+}
+
+.office-cast-enter {
+  animation: office-cast-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes office-stage-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes office-cast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes office-meter-blink {
   0%,
   100% {
@@ -2863,7 +2891,9 @@ html.moni-goal-stuck .project-workspace-header {
   .office-fx--people .office-think,
   .office-fx--rival .office-rival-shadow,
   .office-speech,
-  .office-meter-risk {
+  .office-meter-risk,
+  .office-stage-enter,
+  .office-cast-enter {
     animation: none !important;
   }
   .office-incident-enter {

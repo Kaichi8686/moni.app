@@ -34,6 +34,7 @@ import {
   OFFICE_ANSWER_MIN,
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
+import { castMemberByRole } from "@/lib/office/cast";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
 import { formatRemainMmSs, msUntil } from "@/lib/office/stamina";
 import type {
@@ -487,6 +488,14 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             industry={company!.industry}
             fx={sceneFx}
             speech={speech}
+            scene={incident?.scene}
+            speaker={
+              incident?.speaker
+                ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
+                : null
+            }
+            emotion={incident?.speaker?.emotion}
+            enter={playEnter && step === "incident"}
           />
 
           <PlayStepper
