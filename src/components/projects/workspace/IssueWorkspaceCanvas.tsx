@@ -23,10 +23,12 @@ import {
   ChevronLeft,
   Circle,
   Crop,
+  Eraser,
   Minus,
   MousePointer2,
   Paperclip,
   PenLine,
+  Plus,
   Redo2,
   Square,
   StickyNote,
@@ -90,11 +92,56 @@ const DEFAULT_SHEET_W = 200;
 const DEFAULT_SHEET_H = 160;
 const DEFAULT_IMAGE_W = 200;
 const DEFAULT_IMAGE_H = 150;
+const IMAGE_INSERT_MAX_W = 240;
 /** 画面内に必ず残すコンテンツの最低ピクセル */
 const KEEP_VISIBLE_PX = 96;
 const EMPTY_WORLD = { minX: 40, minY: 40, maxX: 520, maxY: 420 };
 /** ロイロノート / スライド風の選択枠 */
 const SELECTION_YELLOW = "#FACC15";
+const FULL_CROP: BoardImageCrop = { x: 0, y: 0, w: 1, h: 1 };
+
+function measureImageDisplaySize(url: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    if (typeof Image === "undefined") {
+      resolve({ w: DEFAULT_IMAGE_W, h: DEFAULT_IMAGE_H });
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const nw = Math.max(1, img.naturalWidth || DEFAULT_IMAGE_W);
+      const nh = Math.max(1, img.naturalHeight || DEFAULT_IMAGE_H);
+      const w = IMAGE_INSERT_MAX_W;
+      const h = Math.max(48, Math.round((IMAGE_INSERT_MAX_W * nh) / nw));
+      resolve({ w, h });
+    };
+    img.onerror = () => resolve({ w: DEFAULT_IMAGE_W, h: DEFAULT_IMAGE_H });
+    img.src = url;
+  });
+}
+
+function strokesNear(
+  a: Array<{ x: number; y: number }>,
+  b: Array<{ x: number; y: number }>,
+  thresh: number,
+) {
+  for (const p of a) {
+    for (const q of b) {
+      if (Math.hypot(p.x - q.x, p.y - q.y) <= thresh) return true;
+    }
+  }
+  return false;
+}
+
+/** 図形ツール用：複数図形が見えるアイコン */
+function ShapesGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="9" height="9" rx="1.5" />
+      <circle cx="17.5" cy="7.5" r="3.5" />
+      <path d="M8 21 L12 13 L16 21 Z" />
+    </svg>
+  );
+}
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -417,6 +464,8 @@ export function IssueWorkspaceCanvas({
   const [shapeColor, setShapeColor] = useState<string>(SHAPE_COLORS[0]!);
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
   const [penColor, setPenColor] = useState("#1A1A1A");
+  const [penEraser, setPenEraser] = useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedId = selectedIds[0] ?? null;
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
@@ -428,6 +477,7 @@ export function IssueWorkspaceCanvas({
   const [cropDraft, setCropDraft] = useState<BoardImageCrop | null>(null);
   const [handlesVisible, setHandlesVisible] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const lastNodeTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
   const cropDraftRef = useRef<BoardImageCrop | null>(null);
   const [pan, setPan] = useState({ x: 24, y: 24 });
@@ -528,9 +578,14 @@ export function IssueWorkspaceCanvas({
     setTool(next);
     if (next !== "arrow") setConnectFromId(null);
     if (next !== "shape") setShapePickerOpen(false);
-    if (next === "select" || next === "text" || next === "shape" || next === "pen") {
+    if (next === "select" || next === "text" || next === "shape" || next === "pen" || next === "sheet" || next === "arrow") {
       setHandlesVisible(false);
     }
+    // 挿入後に navigate へ戻ったときだけプラスメニューを閉じる
+    if (next === "navigate" || next === "select" || next === "pen") {
+      setPlusMenuOpen(false);
+    }
+    if (next !== "pen") setPenEraser(false);
   }
 
   const pens = useMemo(
@@ -908,8 +963,10 @@ export function IssueWorkspaceCanvas({
     if (!inGroup) setSelectedIds([node.id]);
     bringToFront(node.id);
 
+    longPressFiredRef.current = false;
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     longPressTimer.current = setTimeout(() => {
+      longPressFiredRef.current = true;
       setHandlesVisible(true);
       if (node.kind === "image") setCropImageId(null);
     }, 420);
@@ -1227,16 +1284,26 @@ export function IssueWorkspaceCanvas({
 
     if (drag.kind === "draw-pen") {
       if (drag.points.length >= 2) {
-        const stroke: BoardPen = {
-          id: newBoardId("pen"),
-          kind: "pen",
-          points: drag.points,
-          color: penColor,
-          width: 3,
-          z: nextZ(board.items),
-        };
-        // 描いた直後に選択しない（黄色フラッシュ防止）
-        commit([...board.items, stroke]);
+        if (penEraser) {
+          const thresh = 14 / Math.max(0.4, zoom);
+          commit(
+            boardRef.current.items.filter((item) => {
+              if (item.kind !== "pen") return true;
+              return !strokesNear(item.points, drag.points, thresh);
+            }),
+          );
+        } else {
+          const stroke: BoardPen = {
+            id: newBoardId("pen"),
+            kind: "pen",
+            points: drag.points,
+            color: penColor,
+            width: 3,
+            z: nextZ(board.items),
+          };
+          // 描いた直後に選択しない（黄色フラッシュ防止）
+          commit([...board.items, stroke]);
+        }
       }
       setDragTick((n) => n + 1);
       return;
@@ -1277,6 +1344,14 @@ export function IssueWorkspaceCanvas({
     const node = nodeMap.get(drag.id);
     if (!node) return;
 
+    // 長押しでハンドルを出したあとは、指を離しても編集可能のまま
+    if (longPressFiredRef.current) {
+      setSelectedIds([node.id]);
+      setHandlesVisible(true);
+      longPressFiredRef.current = false;
+      return;
+    }
+
     // モバイル向けダブルタップ検出（onDoubleClick が飛ばない端末対策）
     const now = Date.now();
     const prev = lastNodeTap.current;
@@ -1313,7 +1388,6 @@ export function IssueWorkspaceCanvas({
       return;
     }
     // 画像はワンタップで選択（切り取りバー表示）。ハンドルは長押し / ダブルタップ
-    // 図形なども同様
     setSelectedIds([node.id]);
     setHandlesVisible(false);
   }
@@ -1344,6 +1418,8 @@ export function IssueWorkspaceCanvas({
       : null;
   // 写真選択中は切り取りバーを出す（ハンドル表示前でも）
   const showInsertBar = !insertToolbarHidden && !selectedImage;
+  const insertFanOpen =
+    plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape" || tool === "arrow";
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1524,10 +1600,11 @@ export function IssueWorkspaceCanvas({
               <path
                 d={penToPath(drawPenPreview.points)}
                 fill="none"
-                stroke={penColor}
-                strokeWidth={3}
+                stroke={penEraser ? "#A1A1AA" : penColor}
+                strokeWidth={penEraser ? 14 : 3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                opacity={penEraser ? 0.45 : 1}
               />
             ) : null}
             {drawArrowPreview ? (
@@ -1954,45 +2031,46 @@ export function IssueWorkspaceCanvas({
                   onNodePointerDown(event, node);
                 }}
               >
-                <div className="relative h-full w-full overflow-hidden rounded-sm">
+                <div className={`relative h-full w-full ${cropping ? "overflow-visible" : "overflow-hidden rounded-sm"}`}>
                   {cropping ? (
                     <>
-                      {/* 全体（薄く） */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={image.url}
-                        alt=""
-                        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover opacity-35"
-                        draggable={false}
-                      />
-                      {/* 切り取り枠内だけ鮮明 */}
-                      <div
-                        className="absolute overflow-hidden"
-                        style={{
-                          left: `${crop.x * 100}%`,
-                          top: `${crop.y * 100}%`,
-                          width: `${crop.w * 100}%`,
-                          height: `${crop.h * 100}%`,
-                          boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
-                          outline: "1.5px dashed #2563EB",
-                          outlineOffset: 0,
-                        }}
-                        onPointerDown={(event) => beginCropAdjust(event, node.id, "move", crop)}
-                      >
+                      {/* 画像だけクリップ。ハンドルは外に出して欠けないようにする */}
+                      <div className="absolute inset-0 overflow-hidden rounded-sm">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={image.url}
                           alt=""
-                          className="pointer-events-none absolute select-none object-cover"
+                          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover opacity-35"
                           draggable={false}
-                          style={{
-                            width: `${100 / Math.max(0.08, crop.w)}%`,
-                            height: `${100 / Math.max(0.08, crop.h)}%`,
-                            left: `${(-crop.x / Math.max(0.08, crop.w)) * 100}%`,
-                            top: `${(-crop.y / Math.max(0.08, crop.h)) * 100}%`,
-                            maxWidth: "none",
-                          }}
                         />
+                        <div
+                          className="absolute overflow-hidden"
+                          style={{
+                            left: `${crop.x * 100}%`,
+                            top: `${crop.y * 100}%`,
+                            width: `${crop.w * 100}%`,
+                            height: `${crop.h * 100}%`,
+                            boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
+                            outline: "1.5px dashed #2563EB",
+                            outlineOffset: 0,
+                          }}
+                          onPointerDown={(event) => beginCropAdjust(event, node.id, "move", crop)}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={image.url}
+                            alt=""
+                            className="pointer-events-none absolute select-none object-cover"
+                            draggable={false}
+                            style={{
+                              width: `${100 / Math.max(0.08, crop.w)}%`,
+                              height: `${100 / Math.max(0.08, crop.h)}%`,
+                              left: `${(-crop.x / Math.max(0.08, crop.w)) * 100}%`,
+                              top: `${(-crop.y / Math.max(0.08, crop.h)) * 100}%`,
+                              maxWidth: "none",
+                            }}
+                          />
+                        </div>
                       </div>
                       {RESIZE_HANDLES.map((handle) => {
                         const left = handle.includes("w")
@@ -2012,7 +2090,7 @@ export function IssueWorkspaceCanvas({
                             tabIndex={0}
                             data-board-ui
                             aria-label={tx("切り取り枠", "Crop frame")}
-                            className="absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-[#2563EB] bg-white"
+                            className="absolute z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-[#2563EB] bg-white shadow-sm"
                             style={{ left: `${left * 100}%`, top: `${top * 100}%`, cursor: handleCursor(handle) }}
                             onPointerDown={(event) => beginCropAdjust(event, node.id, handle, crop)}
                           />
@@ -2240,14 +2318,28 @@ export function IssueWorkspaceCanvas({
                       <button
                         key={color}
                         type="button"
-                        onClick={() => setPenColor(color)}
+                        onClick={() => {
+                          setPenEraser(false);
+                          setPenColor(color);
+                        }}
                         className={`h-7 w-7 rounded-full border-2 ${
-                          penColor === color ? "scale-110 border-zinc-900" : "border-zinc-200"
+                          !penEraser && penColor === color ? "scale-110 border-zinc-900" : "border-zinc-200"
                         }`}
                         style={{ backgroundColor: color }}
                         aria-label={tx("ペン色", "Pen color")}
                       />
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => setPenEraser(true)}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                        penEraser ? "scale-110 border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
+                      }`}
+                      aria-label={tx("消しゴム", "Eraser")}
+                      title={tx("消しゴム", "Eraser")}
+                    >
+                      <Eraser className="h-4 w-4" strokeWidth={2.25} />
+                    </button>
                   </div>
                 ) : null}
 
@@ -2255,70 +2347,95 @@ export function IssueWorkspaceCanvas({
                   {showInsertBar ? (
                     <div
                       data-board-ui
-                      className="flex items-center gap-0.5 rounded-full bg-white p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.14)]"
+                      className="relative flex items-center gap-0.5 rounded-full bg-white p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.14)]"
                     >
-                      <PillIconButton
-                        active={tool === "select"}
-                        label={tx("選択", "Select")}
-                        icon={MousePointer2}
-                        disabled={!canEdit}
-                        onClick={() => canEdit && selectTool(tool === "select" ? "navigate" : "select")}
-                      />
-                      <PillIconButton
-                        active={tool === "sheet"}
-                        label={tx("用紙", "Sheet")}
-                        icon={StickyNote}
-                        disabled={!canEdit}
-                        onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
-                      />
-                      <PillIconButton
-                        active={tool === "text"}
-                        label={tx("文字", "Text")}
-                        icon={Type}
-                        disabled={!canEdit}
-                        onClick={() => canEdit && selectTool(tool === "text" ? "navigate" : "text")}
-                      />
-                      <PillIconButton
-                        active={tool === "shape"}
-                        label={tx("図形", "Shape")}
-                        icon={Square}
-                        disabled={!canEdit}
-                        onClick={() => {
-                          if (!canEdit) return;
-                          if (tool === "shape") {
-                            selectTool("navigate");
-                            setShapePickerOpen(false);
-                          } else {
-                            selectTool("shape");
-                            setShapePickerOpen(true);
-                          }
-                        }}
-                      />
-                      <PillIconButton
-                        active={false}
-                        label={uploading ? tx("追加中", "Adding") : tx("添付", "Attach")}
-                        icon={Paperclip}
-                        disabled={!canEdit || Boolean(uploading)}
-                        onClick={() => {
-                          if (!canEdit) return;
-                          selectTool("navigate");
-                          onRequestPhoto();
-                        }}
-                      />
-                      <PillIconButton
-                        active={tool === "pen"}
-                        label={tx("手書き", "Pen")}
-                        icon={PenLine}
-                        disabled={!canEdit}
-                        onClick={() => canEdit && selectTool(tool === "pen" ? "navigate" : "pen")}
-                      />
-                      <PillIconButton
-                        active={tool === "arrow"}
-                        label={tx("矢印", "Arrow")}
-                        icon={ArrowUpRight}
-                        disabled={!canEdit}
-                        onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
-                      />
+                      {insertFanOpen ? (
+                        <div className="flex items-center gap-0.5 origin-right transition-all duration-200 ease-out">
+                          <PillIconButton
+                            active={tool === "sheet"}
+                            label={tx("カード", "Card")}
+                            icon={StickyNote}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
+                          />
+                          <PillIconButton
+                            active={tool === "text"}
+                            label={tx("テキスト", "Text")}
+                            icon={Type}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && selectTool(tool === "text" ? "navigate" : "text")}
+                          />
+                          <button
+                            type="button"
+                            data-board-ui
+                            title={tx("図形", "Shape")}
+                            disabled={!canEdit}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              if (tool === "shape") {
+                                selectTool("navigate");
+                                setShapePickerOpen(false);
+                              } else {
+                                selectTool("shape");
+                                setShapePickerOpen(true);
+                              }
+                            }}
+                            className={`inline-flex h-12 w-12 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-40 ${
+                              tool === "shape" ? "bg-zinc-100 text-zinc-950" : "text-zinc-800 hover:bg-zinc-50"
+                            }`}
+                            aria-label={tx("図形", "Shape")}
+                          >
+                            <ShapesGlyph className="h-6 w-6" />
+                          </button>
+                          <PillIconButton
+                            active={tool === "arrow"}
+                            label={tx("矢印", "Arrow")}
+                            icon={ArrowUpRight}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
+                          />
+                          <PillIconButton
+                            active={false}
+                            label={uploading ? tx("追加中", "Adding") : tx("写真", "Photo")}
+                            icon={Paperclip}
+                            disabled={!canEdit || Boolean(uploading)}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              setPlusMenuOpen(false);
+                              selectTool("navigate");
+                              onRequestPhoto();
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <PillIconButton
+                            active={tool === "select"}
+                            label={tx("選択", "Select")}
+                            icon={MousePointer2}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && selectTool(tool === "select" ? "navigate" : "select")}
+                          />
+                          <PillIconButton
+                            active={tool === "pen"}
+                            label={tx("手書き", "Pen")}
+                            icon={PenLine}
+                            disabled={!canEdit}
+                            onClick={() => canEdit && selectTool(tool === "pen" ? "navigate" : "pen")}
+                          />
+                          <PillIconButton
+                            active={false}
+                            label={tx("挿入", "Insert")}
+                            icon={Plus}
+                            disabled={!canEdit}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              selectTool("navigate");
+                              setPlusMenuOpen(true);
+                            }}
+                          />
+                        </>
+                      )}
                     </div>
                   ) : selectedImage && canEdit ? (
                     <div
@@ -2330,7 +2447,7 @@ export function IssueWorkspaceCanvas({
                         label={tx("切り取り", "Crop")}
                         icon={Crop}
                         onClick={() => {
-                          const existing = selectedImage.crop ?? { x: 0.08, y: 0.08, w: 0.84, h: 0.84 };
+                          const existing = selectedImage.crop ?? FULL_CROP;
                           updateItem(selectedImage.id, { crop: existing });
                           cropDraftRef.current = existing;
                           setCropDraft(existing);
@@ -2386,7 +2503,7 @@ export function IssueWorkspaceCanvas({
   );
 }
 
-type SheetEditTool = "select" | "text" | "shape" | "pen" | "photo";
+type SheetEditTool = "text" | "shape" | "pen" | "photo";
 
 function SheetFullscreenEditor({
   sheet,
@@ -2414,10 +2531,11 @@ function SheetFullscreenEditor({
     return Math.min(2.4, Math.max(0.45, w / h));
   }, [sheet.w, sheet.h]);
   const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
-  const [editTool, setEditTool] = useState<SheetEditTool>("select");
+  const [editTool, setEditTool] = useState<SheetEditTool>("text");
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
   const [shapeColor, setShapeColor] = useState<string>(SHAPE_COLORS[0]!);
   const [penColor, setPenColor] = useState("#1A1A1A");
+  const [penEraser, setPenEraser] = useState(false);
   const [selectedOverlayIds, setSelectedOverlayIds] = useState<string[]>([]);
   const selectedOverlayId = selectedOverlayIds[0] ?? null;
   const [editingOverlayId, setEditingOverlayId] = useState<string | null>(null);
@@ -2425,7 +2543,6 @@ function SheetFullscreenEditor({
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
-    | { kind: "marquee"; startX: number; startY: number; curX: number; curY: number }
     | {
         kind: "move-overlay";
         id: string;
@@ -2519,39 +2636,12 @@ function SheetFullscreenEditor({
     setEditTool("text");
   }
 
-  function overlayBounds(ov: SheetOverlay): { x: number; y: number; w: number; h: number } | null {
-    if (ov.kind === "text" || ov.kind === "image" || ov.kind === "shape") {
-      return { x: ov.x, y: ov.y, w: ov.w, h: ov.h };
-    }
-    if (ov.kind === "pen" && ov.points.length > 0) {
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const p of ov.points) {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-      }
-      return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
-    }
-    return null;
-  }
-
   function onCardPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!canEdit || event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-overlay-node]") || target.closest("[data-overlay-handle]")) return;
 
     const pt = cardLocalPoint(event.clientX, event.clientY);
-
-    if (editTool === "select") {
-      overlayDrag.current = { kind: "marquee", startX: pt.x, startY: pt.y, curX: pt.x, curY: pt.y };
-      setOverlayTick((n) => n + 1);
-      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-      return;
-    }
 
     if (editTool === "text") {
       const now = Date.now();
@@ -2588,7 +2678,7 @@ function SheetFullscreenEditor({
     const drag = overlayDrag.current;
     if (!drag) return;
     const pt = cardLocalPoint(event.clientX, event.clientY);
-    if (drag.kind === "shape" || drag.kind === "marquee") {
+    if (drag.kind === "shape") {
       drag.curX = pt.x;
       drag.curY = pt.y;
       setOverlayTick((n) => n + 1);
@@ -2658,26 +2748,6 @@ function SheetFullscreenEditor({
       setOverlayTick((n) => n + 1);
       return;
     }
-    if (drag.kind === "marquee") {
-      const rect = normalizeRect(drag.startX, drag.startY, drag.curX, drag.curY);
-      if (rect.w < 1.2 && rect.h < 1.2) {
-        setSelectedOverlayIds([]);
-        setOverlayHandlesVisible(false);
-        setEditingOverlayId(null);
-        setOverlayTick((n) => n + 1);
-        return;
-      }
-      const hits: string[] = [];
-      for (const ov of overlays) {
-        const b = overlayBounds(ov);
-        if (b && rectsIntersect(rect, b)) hits.push(ov.id);
-      }
-      setSelectedOverlayIds(hits);
-      setOverlayHandlesVisible(hits.length === 1);
-      setEditingOverlayId(null);
-      setOverlayTick((n) => n + 1);
-      return;
-    }
     if (drag.kind === "move-overlay" || drag.kind === "resize-overlay") {
       setOverlayTick((n) => n + 1);
       return;
@@ -2702,16 +2772,25 @@ function SheetFullscreenEditor({
       setOverlays([...overlays, overlay]);
       setSelectedOverlayIds([id]);
       setOverlayHandlesVisible(true);
-      setEditTool("select");
+      setEditTool("text");
       setOverlayTick((n) => n + 1);
       return;
     }
     if (drag.kind === "pen" && drag.points.length >= 2) {
-      const id = newBoardId("ovp");
-      setOverlays([
-        ...overlays,
-        { id, kind: "pen", points: drag.points, color: penColor, width: 2.2 },
-      ]);
+      if (penEraser) {
+        setOverlays(
+          overlays.filter((o) => {
+            if (o.kind !== "pen") return true;
+            return !strokesNear(o.points, drag.points, 3.2);
+          }),
+        );
+      } else {
+        const id = newBoardId("ovp");
+        setOverlays([
+          ...overlays,
+          { id, kind: "pen", points: drag.points, color: penColor, width: 2.2 },
+        ]);
+      }
       // 描いた直後は選択しない（黄色フラッシュ防止）
     }
     setOverlayTick((n) => n + 1);
@@ -2720,7 +2799,6 @@ function SheetFullscreenEditor({
   void overlayTick;
   const shapePreview = overlayDrag.current?.kind === "shape" ? overlayDrag.current : null;
   const penPreview = overlayDrag.current?.kind === "pen" ? overlayDrag.current : null;
-  const marqueePreview = overlayDrag.current?.kind === "marquee" ? overlayDrag.current : null;
 
   function renderOverlayTextToolbar(ov: Extract<SheetOverlay, { kind: "text" }>) {
     return (
@@ -2779,18 +2857,6 @@ function SheetFullscreenEditor({
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="inline-flex h-8 items-center rounded-full px-2 text-[11px] font-semibold text-rose-600"
-          onClick={() => {
-            setOverlays(overlays.filter((o) => o.id !== ov.id));
-            setSelectedOverlayIds([]);
-            setOverlayHandlesVisible(false);
-            setEditingOverlayId(null);
-          }}
-        >
-          {tx("削除", "Delete")}
-        </button>
       </div>
     );
   }
@@ -2858,13 +2924,12 @@ function SheetFullscreenEditor({
           <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
             {(
               [
-                ["select", MousePointer2, tx("選択", "Select")],
-                ["text", Type, tx("文字", "Text")],
-                ["shape", Square, tx("図形", "Shape")],
-                ["photo", Paperclip, tx("写真", "Photo")],
-                ["pen", PenLine, tx("手書き", "Pen")],
-              ] as const
-            ).map(([id, Icon, label]) => (
+                { id: "text" as const, label: tx("文字", "Text") },
+                { id: "shape" as const, label: tx("図形", "Shape") },
+                { id: "photo" as const, label: tx("写真", "Photo") },
+                { id: "pen" as const, label: tx("手書き", "Pen") },
+              ]
+            ).map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -2877,17 +2942,19 @@ function SheetFullscreenEditor({
                     return;
                   }
                   setEditTool(id);
-                  if (id !== "select") {
-                    setSelectedOverlayIds([]);
-                    setOverlayHandlesVisible(false);
-                    setEditingOverlayId(null);
-                  }
+                  setPenEraser(false);
+                  setSelectedOverlayIds([]);
+                  setOverlayHandlesVisible(false);
+                  setEditingOverlayId(null);
                 }}
                 className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
                   editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
                 }`}
               >
-                <Icon className="h-4 w-4" strokeWidth={2.25} />
+                {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
+                {id === "shape" ? <ShapesGlyph className="h-4 w-4" /> : null}
+                {id === "photo" ? <Paperclip className="h-4 w-4" strokeWidth={2.25} /> : null}
+                {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
               </button>
             ))}
             <button
@@ -2917,24 +2984,31 @@ function SheetFullscreenEditor({
           reader.onload = () => {
             const url = typeof reader.result === "string" ? reader.result : "";
             if (!url) return;
-            const id = newBoardId("ovi");
-            setOverlays([
-              ...overlays,
-              { id, kind: "image", x: 20, y: 20, w: 40, h: 30, url },
-            ]);
-            setSelectedOverlayIds([id]);
-            setOverlayHandlesVisible(true);
-            setEditTool("select");
+            void measureImageDisplaySize(url).then((size) => {
+              const id = newBoardId("ovi");
+              // カード % 座標に元比率を載せる（幅基準）
+              const wPct = 42;
+              const hPct = Math.min(70, Math.max(12, (wPct * size.h) / Math.max(1, size.w)));
+              setOverlays([
+                ...overlays,
+                {
+                  id,
+                  kind: "image",
+                  x: Math.max(0, (100 - wPct) / 2),
+                  y: Math.max(0, (100 - hPct) / 2),
+                  w: wPct,
+                  h: hPct,
+                  url,
+                },
+              ]);
+              setSelectedOverlayIds([id]);
+              setOverlayHandlesVisible(true);
+              setEditTool("text");
+            });
           };
           reader.readAsDataURL(file);
         }}
       />
-
-      {canEdit && editTool === "select" ? (
-        <p className="relative z-10 px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
-          {tx("ドラッグで囲んで選択", "Drag to select")}
-        </p>
-      ) : null}
 
       {canEdit && editTool === "shape" ? (
         <div className="relative z-10 flex justify-center px-3 pb-1">
@@ -2977,11 +3051,28 @@ function SheetFullscreenEditor({
             <button
               key={color}
               type="button"
-              onClick={() => setPenColor(color)}
-              className={`h-6 w-6 rounded-full border-2 ${penColor === color ? "border-zinc-900" : "border-zinc-200"}`}
+              onClick={() => {
+                setPenEraser(false);
+                setPenColor(color);
+              }}
+              className={`h-6 w-6 rounded-full border-2 ${
+                !penEraser && penColor === color ? "border-zinc-900" : "border-zinc-200"
+              }`}
               style={{ backgroundColor: color }}
+              aria-label={tx("ペン色", "Pen color")}
             />
           ))}
+          <button
+            type="button"
+            onClick={() => setPenEraser(true)}
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${
+              penEraser ? "border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
+            }`}
+            aria-label={tx("消しゴム", "Eraser")}
+            title={tx("消しゴム", "Eraser")}
+          >
+            <Eraser className="h-3.5 w-3.5" strokeWidth={2.25} />
+          </button>
         </div>
       ) : null}
 
@@ -3129,35 +3220,13 @@ function SheetFullscreenEditor({
                     <path
                       d={penToPath(penPreview.points)}
                       fill="none"
-                      stroke={penColor}
-                      strokeWidth={2.2}
+                      stroke={penEraser ? "#F4F4F5" : penColor}
+                      strokeWidth={penEraser ? 4 : 2.2}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       vectorEffect="non-scaling-stroke"
+                      opacity={penEraser ? 0.55 : 1}
                     />
-                  ) : null}
-                  {marqueePreview ? (
-                    (() => {
-                      const rect = normalizeRect(
-                        marqueePreview.startX,
-                        marqueePreview.startY,
-                        marqueePreview.curX,
-                        marqueePreview.curY,
-                      );
-                      return (
-                        <rect
-                          x={rect.x}
-                          y={rect.y}
-                          width={rect.w}
-                          height={rect.h}
-                          fill="rgba(37,99,235,0.08)"
-                          stroke="#2563EB"
-                          strokeWidth={0.7}
-                          strokeDasharray="2.5 2"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      );
-                    })()
                   ) : null}
                 </svg>
 
@@ -3221,19 +3290,17 @@ function SheetFullscreenEditor({
                     );
                   }
                   const editing = editingOverlayId === ov.id;
-                  const showToolbar = canEdit && editing;
-                  const showSizeBar = canEdit && selected && !editing && overlayHandlesVisible;
                   const editFontPx = Math.max(16, ov.fontSize * 0.55);
                   return (
                     <div key={ov.id} className="pointer-events-none absolute inset-0 overflow-visible">
-                      {showToolbar || showSizeBar ? (
+                      {canEdit && editing ? (
                         <div
                           className="pointer-events-auto absolute z-30"
                           style={{
-                            left: `${Math.min(ov.x, 8)}%`,
-                            top: `${Math.max(0, ov.y)}%`,
-                            transform: "translateY(calc(-100% - 8px))",
-                            maxWidth: "92%",
+                            left: `${ov.x}%`,
+                            top: `${ov.y}%`,
+                            width: `${Math.max(ov.w, 36)}%`,
+                            transform: "translateY(calc(-100% - 10px))",
                           }}
                         >
                           {renderOverlayTextToolbar(ov)}
@@ -3361,19 +3428,20 @@ function PillIconButton({
   );
 }
 
-/** 写真アップロード後にキャンバスへ載せるヘルパー */
-export function appendImageToBoard(
+/** 写真アップロード後にキャンバスへ載せるヘルパー（元画像の縦横比を維持） */
+export async function appendImageToBoard(
   board: IssueWorkspaceBoard,
   url: string,
   at?: { x: number; y: number },
-): IssueWorkspaceBoard {
+): Promise<IssueWorkspaceBoard> {
+  const size = await measureImageDisplaySize(url);
   const image: BoardImage = {
     id: newBoardId("img"),
     kind: "image",
     x: at?.x ?? 120 + (board.items.length % 4) * 24,
     y: at?.y ?? 120 + (board.items.length % 4) * 24,
-    w: DEFAULT_IMAGE_W,
-    h: DEFAULT_IMAGE_H,
+    w: size.w,
+    h: size.h,
     url,
     z: nextZ(board.items),
   };

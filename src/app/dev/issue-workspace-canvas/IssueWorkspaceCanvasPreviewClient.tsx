@@ -102,15 +102,13 @@ export function IssueWorkspaceCanvasPreviewClient() {
           fullscreen
           onChange={setBoard}
           onRequestPhoto={() => {
-            setBoard((prev) =>
-              appendImageToBoard(
-                prev,
-                "data:image/svg+xml," +
-                  encodeURIComponent(
-                    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="100%" height="100%" fill="#fed7aa"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22" fill="#9a3412">photo</text></svg>`,
-                  ),
-              ),
-            );
+            void appendImageToBoard(
+              board,
+              "data:image/svg+xml," +
+                encodeURIComponent(
+                  `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#fed7aa"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22" fill="#9a3412">photo</text></svg>`,
+                ),
+            ).then(setBoard);
           }}
         />
       </div>

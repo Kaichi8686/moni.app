@@ -420,7 +420,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
       let nextBoard = canvasDraft;
       for (const file of Array.from(list)) {
         const result = await uploadProjectImage(supabase, uid, "dm-photo", conversationId, file);
-        nextBoard = appendImageToBoard(nextBoard, result.publicUrl);
+        nextBoard = await appendImageToBoard(nextBoard, result.publicUrl);
       }
       if (canvasSaveTimer.current) clearTimeout(canvasSaveTimer.current);
       setCanvasDraft(nextBoard);
