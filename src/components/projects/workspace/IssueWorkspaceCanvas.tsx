@@ -142,14 +142,29 @@ function useVisualKeyboard() {
   return {
     inset,
     open,
+    /** アニメなしでキーボード直上に固定（inset 追従のスライド演出を出さない） */
     dockStyle: {
       position: "fixed" as const,
       left: 0,
       right: 0,
       bottom: inset,
       zIndex: 720,
+      transition: "none",
     } satisfies CSSProperties,
   };
+}
+
+function useCoarsePointer() {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === "undefined" || !window.matchMedia) return () => {};
+      const mq = window.matchMedia("(pointer: coarse)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(pointer: coarse)").matches : false),
+    () => false,
+  );
 }
 
 const MIN_ZOOM = 0.25;
@@ -1558,8 +1573,13 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
+  const coarsePointer = useCoarsePointer();
   /** 書式バー操作中も編集を落とさないための最終操作時刻 */
   const textEditKeepAliveRef = useRef(0);
+  // タッチはキーボードが開いてからバーを出す（開く途中のスライド演出を避ける）。デスクトップはすぐ表示
+  const showWorkspaceFormatBar =
+    Boolean(editingTextBox && canEdit && !toolbarHidden && toolbarMounted) &&
+    (!coarsePointer || keyboard.open);
 
   function beginWorkspaceTextEdit(id: string) {
     textEditKeepAliveRef.current = Date.now();
@@ -2321,19 +2341,19 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
-              {/* 文字編集中は書式バーを表示（inset でキーボード直上へ。open 判定に依存しない） */}
-              {editingTextBox && canEdit && !toolbarHidden && toolbarMounted
+              {/* キーボードが開いた瞬間に直上へ（追従スライドなし） */}
+              {showWorkspaceFormatBar
                 ? createPortal(
                     <div className="pointer-events-none" style={keyboard.dockStyle}>
                       <SlidesTextFormatBar
-                        fontSize={editingTextBox.fontSize}
-                        textColor={editingTextBox.textColor}
-                        align={editingTextBox.align}
-                        bold={Boolean(editingTextBox.bold)}
-                        italic={Boolean(editingTextBox.italic)}
-                        underline={Boolean(editingTextBox.underline)}
+                        fontSize={editingTextBox!.fontSize}
+                        textColor={editingTextBox!.textColor}
+                        align={editingTextBox!.align}
+                        bold={Boolean(editingTextBox!.bold)}
+                        italic={Boolean(editingTextBox!.italic)}
+                        underline={Boolean(editingTextBox!.underline)}
                         tx={tx}
-                        onChange={(patch) => updateItem(editingTextBox.id, patch)}
+                        onChange={(patch) => updateItem(editingTextBox!.id, patch)}
                         onKeepFocus={keepWorkspaceTextFocus}
                       />
                     </div>,
@@ -2649,6 +2669,7 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
+  const coarsePointer = useCoarsePointer();
   const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
@@ -3606,8 +3627,12 @@ function SheetFullscreenEditor({
           )
         : null}
 
-      {/* 文字編集中は書式バー（inset でキーボード直上。open 判定に依存しない） */}
-      {canEdit && editingOverlayId && selectedOverlay && selectedOverlay.kind === "text"
+      {/* キーボードが開いた瞬間に直上へ（追従スライドなし） */}
+      {canEdit &&
+      editingOverlayId &&
+      selectedOverlay &&
+      selectedOverlay.kind === "text" &&
+      (!coarsePointer || keyboard.open)
         ? createPortal(
             <div className="pointer-events-none" style={keyboard.dockStyle}>
               <SlidesTextFormatBar
