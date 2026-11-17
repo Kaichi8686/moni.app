@@ -42,6 +42,46 @@ const PREVIEW_BOARD: IssueWorkspaceBoard = {
       color: "#52525B",
       z: 0,
     },
+    {
+      id: "preview_photo",
+      kind: "image",
+      x: 120,
+      y: 320,
+      w: 240,
+      h: 180,
+      url:
+        "data:image/svg+xml," +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">
+            <defs>
+              <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#38bdf8"/>
+                <stop offset="50%" stop-color="#a78bfa"/>
+                <stop offset="100%" stop-color="#fb7185"/>
+              </linearGradient>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#g)"/>
+            <rect x="40" y="40" width="200" height="140" fill="#fef08a" stroke="#854d0e" stroke-width="6"/>
+            <circle cx="480" cy="160" r="70" fill="#86efac" stroke="#166534" stroke-width="6"/>
+            <text x="50%" y="78%" text-anchor="middle" font-size="42" font-family="sans-serif" fill="#0f172a">CROP ME</text>
+            <text x="50%" y="90%" text-anchor="middle" font-size="24" font-family="sans-serif" fill="#1e293b">corners · edges · move</text>
+          </svg>`,
+        ),
+      z: 3,
+    },
+    {
+      id: "preview_text",
+      kind: "text",
+      x: 400,
+      y: 340,
+      w: 180,
+      h: 80,
+      text: "テキスト",
+      fontSize: 18,
+      textColor: "#1A1A1A",
+      align: "left",
+      z: 4,
+    },
   ],
 };
 
