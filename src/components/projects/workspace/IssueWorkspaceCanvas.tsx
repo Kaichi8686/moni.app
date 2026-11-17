@@ -95,22 +95,44 @@ type Props = {
 };
 
 /** iOS などでキーボードが開いているとみなす閾値（px） */
-const KEYBOARD_OPEN_PX = 100;
+const KEYBOARD_OPEN_PX = 120;
+/** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
+const KEYBOARD_CLOSE_DEBOUNCE_MS = 480;
 
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let closeTimer: ReturnType<typeof setTimeout> | null = null;
     const update = () => {
       const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
       setInset(next);
+      const isOpen = next >= KEYBOARD_OPEN_PX;
+      if (isOpen) {
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+        setOpen(true);
+        return;
+      }
+      // 閉じはデバウンス（フォーカス直後の inset 揺れで編集終了しない）
+      if (closeTimer) return;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        const still =
+          Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) >= KEYBOARD_OPEN_PX;
+        if (!still) setOpen(false);
+      }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     return () => {
+      if (closeTimer) clearTimeout(closeTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -118,7 +140,7 @@ function useVisualKeyboard() {
   }, []);
   return {
     inset,
-    open: inset >= KEYBOARD_OPEN_PX,
+    open,
     /** レイアウトviewport基準でキーボード直上に fixed 配置（absolute のズレ防止） */
     dockStyle: {
       position: "fixed" as const,
@@ -900,7 +922,7 @@ export function IssueWorkspaceCanvas({
       };
       commit([...board.items, box]);
       setSelectedIds([box.id]);
-      setEditingTextId(box.id);
+      beginWorkspaceTextEdit(box.id);
       setHandlesVisible(true);
       selectTool("navigate");
       return;
@@ -1428,7 +1450,7 @@ export function IssueWorkspaceCanvas({
       if (node.kind === "text") {
         setSelectedIds([node.id]);
         setHandlesVisible(false);
-        setEditingTextId(node.id);
+        beginWorkspaceTextEdit(node.id);
         resetScrollParents();
         return;
       }
@@ -1485,6 +1507,13 @@ export function IssueWorkspaceCanvas({
 
   const keyboard = useVisualKeyboard();
   const wasKeyboardOpenRef = useRef(false);
+  const textEditStartedAtRef = useRef(0);
+
+  function beginWorkspaceTextEdit(id: string) {
+    textEditStartedAtRef.current = Date.now();
+    wasKeyboardOpenRef.current = false;
+    setEditingTextId(id);
+  }
 
   function finishWorkspaceTextEdit() {
     const id = editingTextId;
@@ -1498,7 +1527,7 @@ export function IssueWorkspaceCanvas({
     }
   }
 
-  // キーボードが閉じたら編集終了（iOS のキーボード閉じボタン対策）＋空テキスト削除
+  // キーボードが閉じたら編集終了（デバウンス済み open）。開始直後は無視
   useEffect(() => {
     if (keyboard.open) {
       wasKeyboardOpenRef.current = true;
@@ -1506,7 +1535,9 @@ export function IssueWorkspaceCanvas({
     }
     if (!wasKeyboardOpenRef.current) return;
     wasKeyboardOpenRef.current = false;
-    if (editingTextId) finishWorkspaceTextEdit();
+    if (!editingTextId) return;
+    if (Date.now() - textEditStartedAtRef.current < 700) return;
+    finishWorkspaceTextEdit();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: react to keyboard close
   }, [keyboard.open, editingTextId]);
 
@@ -1936,7 +1967,7 @@ export function IssueWorkspaceCanvas({
                     if (!canEdit) return;
                     setSelectedIds([node.id]);
                     setHandlesVisible(false);
-                    setEditingTextId(node.id);
+                    beginWorkspaceTextEdit(node.id);
                     resetScrollParents();
                   }}
                 >
@@ -2587,6 +2618,14 @@ function SheetFullscreenEditor({
   overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
+  const overlayEditStartedAtRef = useRef(0);
+
+  function beginOverlayTextEdit(id: string) {
+    overlayEditStartedAtRef.current = Date.now();
+    wasKeyboardOpenRef.current = false;
+    setEditingOverlayId(id);
+  }
+
   function finishOverlayTextEdit() {
     const id = editingOverlayId;
     setEditingOverlayId(null);
@@ -2600,7 +2639,7 @@ function SheetFullscreenEditor({
     }
   }
 
-  // キーボード閉じ → 編集終了＆挿入バー復帰（iOS キーボード閉じボタン）
+  // キーボード閉じ → 編集終了（デバウンス済み）。開始直後は無視
   useEffect(() => {
     if (keyboard.open) {
       wasKeyboardOpenRef.current = true;
@@ -2608,7 +2647,9 @@ function SheetFullscreenEditor({
     }
     if (!wasKeyboardOpenRef.current) return;
     wasKeyboardOpenRef.current = false;
-    if (editingOverlayId) finishOverlayTextEdit();
+    if (!editingOverlayId) return;
+    if (Date.now() - overlayEditStartedAtRef.current < 700) return;
+    finishOverlayTextEdit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyboard.open, editingOverlayId]);
 
@@ -2673,7 +2714,7 @@ function SheetFullscreenEditor({
     setOverlays([...overlays, overlay]);
     setSelectedOverlayIds([id]);
     setOverlayHandlesVisible(false);
-    setEditingOverlayId(id);
+    beginOverlayTextEdit(id);
     setEditTool("text");
   }
 
@@ -3311,7 +3352,7 @@ function SheetFullscreenEditor({
                           e.stopPropagation();
                           setSelectedOverlayIds([ov.id]);
                           setOverlayHandlesVisible(false);
-                          setEditingOverlayId(ov.id);
+                          beginOverlayTextEdit(ov.id);
                         }}
                       >
                         {editing && canEdit ? (
