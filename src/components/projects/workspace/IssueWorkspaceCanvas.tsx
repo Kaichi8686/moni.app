@@ -99,31 +99,42 @@ type Props = {
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
-/** inset が止まったとみなして書式バーをパッと出すまでの待ち */
-const KEYBOARD_SETTLE_MS = 140;
+/** キーボードが開いてから書式バーをパッと出すまでの短い待ち（上昇追従を見せない） */
+const KEYBOARD_SETTLE_MS = 160;
 
-/** inset + open + settled（閉じはデバウンス。書式バーは settled 後に一瞬表示） */
+function isIOSLikeUa() {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+/**
+ * inset + open + settled。
+ * iOS の fixed は visualViewport 基準 → bottom:0 がキーボード直上。
+ * bottom:inset や layout 座標の translate は二重オフセット／画面外飛ばしになる。
+ */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
-  /** visualViewport 下端（レイアウト座標）。fixed の基準が VV / layout どちらでも直上に載る */
-  const [vvBottom, setVvBottom] = useState(() =>
-    typeof window !== "undefined" ? Math.round(window.innerHeight) : 0,
+  const iosLike = useSyncExternalStore(
+    () => () => {},
+    () => isIOSLikeUa(),
+    () => false,
   );
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
     let closeTimer: ReturnType<typeof setTimeout> | null = null;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastInset = -1;
+    /** 開いているあいだ一度 settled したら、inset 揺れで戻さない */
+    let settledOnce = false;
     const measureInset = () => Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-    const measureBottom = () => Math.round(vv.offsetTop + vv.height);
     const update = () => {
       const next = measureInset();
-      const bottom = measureBottom();
       setInset(next);
-      setVvBottom(bottom);
       const isOpen = next >= KEYBOARD_OPEN_PX;
       if (isOpen) {
         if (closeTimer) {
@@ -131,19 +142,18 @@ function useVisualKeyboard() {
           closeTimer = null;
         }
         setOpen(true);
-        // 上昇中に bottom:inset で追従するとバーが画面中腹へ滑る。止まってから出す。
-        if (next !== lastInset) {
-          lastInset = next;
-          setSettled(false);
-          if (settleTimer) clearTimeout(settleTimer);
-          settleTimer = setTimeout(() => {
-            settleTimer = null;
-            if (measureInset() >= KEYBOARD_OPEN_PX) setSettled(true);
-          }, KEYBOARD_SETTLE_MS);
-        }
+        if (settledOnce) return;
+        if (settleTimer) return;
+        settleTimer = setTimeout(() => {
+          settleTimer = null;
+          if (measureInset() >= KEYBOARD_OPEN_PX) {
+            settledOnce = true;
+            setSettled(true);
+          }
+        }, KEYBOARD_SETTLE_MS);
         return;
       }
-      lastInset = next;
+      settledOnce = false;
       setSettled(false);
       if (settleTimer) {
         clearTimeout(settleTimer);
@@ -170,19 +180,20 @@ function useVisualKeyboard() {
   return {
     inset,
     open,
-    /** キーボード開閉アニメが落ち着いた（書式バーをパッと出す合図） */
+    /** 開いてから短い待ちのあと true（一度立ったら閉じるまで維持） */
     settled,
     /**
-     * VV 下端にスナップ。bottom:inset は iOS（fixed が VV 基準）で二重オフセットになり
-     * カード中央へ滑って見える原因になる。
+     * キーボード直上。
+     * - iOS: fixed が VV 基準なので bottom:0
+     * - その他: layout 基準なので inset で持ち上げる
+     * transition なし＝上昇アニメを書式バーに付けない
      */
     dockStyle: {
       position: "fixed" as const,
       left: 0,
       right: 0,
-      top: 0,
-      bottom: "auto" as const,
-      transform: `translate3d(0, ${vvBottom}px, 0) translateY(-100%)`,
+      top: "auto" as const,
+      bottom: iosLike ? 0 : inset,
       zIndex: 720,
       transition: "none",
     } satisfies CSSProperties,
@@ -1634,8 +1645,8 @@ export function IssueWorkspaceCanvas({
   /** 入力・書式バー操作の最終時刻。VV 揺れで編集が落ちるのを防ぐ */
   const textEditKeepAliveRef = useRef(0);
   /**
-   * タッチではキーボードが落ち着いてから書式バーをパッと出す。
-   * 一度出したら VV チラつきで外さない（外すとフォーカス喪失→キーボード閉じになる）。
+   * タッチ: settled 後にキーボード直上へパッと出す（上昇追従＝上から来る演出を避ける）。
+   * open 後しばらく経っても出なければフォールバック表示。一度出したら外さない。
    */
   const [workspaceFormatBarLatched, setWorkspaceFormatBarLatched] = useState(false);
   useEffect(() => {
@@ -1643,8 +1654,14 @@ export function IssueWorkspaceCanvas({
       setWorkspaceFormatBarLatched(false);
       return;
     }
-    if (!coarsePointer || keyboard.settled) setWorkspaceFormatBarLatched(true);
-  }, [editingTextId, keyboard.settled, coarsePointer]);
+    if (!coarsePointer || keyboard.settled) {
+      setWorkspaceFormatBarLatched(true);
+      return;
+    }
+    if (!keyboard.open) return;
+    const fallback = window.setTimeout(() => setWorkspaceFormatBarLatched(true), 420);
+    return () => window.clearTimeout(fallback);
+  }, [editingTextId, keyboard.settled, keyboard.open, coarsePointer]);
   const showWorkspaceFormatBar =
     Boolean(editingTextBox && canEdit && !toolbarHidden && toolbarMounted) &&
     (!coarsePointer || workspaceFormatBarLatched);
@@ -2786,15 +2803,21 @@ function SheetFullscreenEditor({
   overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
-  /** キーボードが落ち着いてからパッと出し、以降は VV 揺れで外さない */
+  /** settled 後にキーボード直上へパッと出し。出なければフォールバック。以降は外さない */
   const [overlayFormatBarLatched, setOverlayFormatBarLatched] = useState(false);
   useEffect(() => {
     if (!editingOverlayId) {
       setOverlayFormatBarLatched(false);
       return;
     }
-    if (!coarsePointer || keyboard.settled) setOverlayFormatBarLatched(true);
-  }, [editingOverlayId, keyboard.settled, coarsePointer]);
+    if (!coarsePointer || keyboard.settled) {
+      setOverlayFormatBarLatched(true);
+      return;
+    }
+    if (!keyboard.open) return;
+    const fallback = window.setTimeout(() => setOverlayFormatBarLatched(true), 420);
+    return () => window.clearTimeout(fallback);
+  }, [editingOverlayId, keyboard.settled, keyboard.open, coarsePointer]);
   const editingOverlayText =
     editingOverlayId && selectedOverlay && selectedOverlay.kind === "text" && selectedOverlay.id === editingOverlayId
       ? selectedOverlay
