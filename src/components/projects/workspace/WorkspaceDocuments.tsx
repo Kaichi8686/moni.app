@@ -18,9 +18,14 @@ import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 
 const DOC_EDITOR_CLASS = "moni-doc-editor";
 
-/** キーボード直上にツールバーが来るよう visualViewport に合わせて全体を載せる */
+/** キーボード直上にツールバーが来るよう visualViewport に合わせつつ、背面は常に覆う */
 function DocEditorViewport({ children }: { children: ReactNode }) {
-  const [box, setBox] = useState({ top: 0, height: 0, left: 0, width: 0 });
+  const [box, setBox] = useState(() => ({
+    top: 0,
+    height: typeof window !== "undefined" ? window.innerHeight : 800,
+    left: 0,
+    width: typeof window !== "undefined" ? window.innerWidth : 400,
+  }));
 
   useEffect(() => {
     const sync = () => {
@@ -44,17 +49,20 @@ function DocEditorViewport({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div
-      className="fixed z-[200] flex flex-col bg-white"
-      style={{
-        top: box.top,
-        left: box.left,
-        width: box.width || "100%",
-        height: box.height || "100dvh",
-      }}
-    >
-      {children}
-    </div>
+    <>
+      <div className="fixed inset-0 z-[199] bg-white" aria-hidden />
+      <div
+        className="fixed z-[200] flex flex-col bg-white"
+        style={{
+          top: box.top,
+          left: box.left,
+          width: box.width || "100%",
+          height: box.height || "100dvh",
+        }}
+      >
+        {children}
+      </div>
+    </>
   );
 }
 

@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+function subscribeNever() {
+  return () => {};
+}
 import {
   ArrowLeft,
   ExternalLink,
@@ -134,7 +138,12 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
 }
 
 function DocEditorViewport({ children }: { children: ReactNode }) {
-  const [box, setBox] = useState({ top: 0, height: 0, left: 0, width: 0 });
+  const [box, setBox] = useState(() => ({
+    top: 0,
+    height: typeof window !== "undefined" ? window.innerHeight : 800,
+    left: 0,
+    width: typeof window !== "undefined" ? window.innerWidth : 400,
+  }));
   useEffect(() => {
     const sync = () => {
       const vv = window.visualViewport;
@@ -153,12 +162,15 @@ function DocEditorViewport({ children }: { children: ReactNode }) {
     };
   }, []);
   return (
-    <div
-      className="fixed z-[240] flex flex-col bg-white"
-      style={{ top: box.top, left: box.left, width: box.width || "100%", height: box.height || "100dvh" }}
-    >
-      {children}
-    </div>
+    <>
+      <div className="fixed inset-0 z-[239] bg-white" aria-hidden />
+      <div
+        className="fixed z-[240] flex flex-col bg-white"
+        style={{ top: box.top, left: box.left, width: box.width || "100%", height: box.height || "100dvh" }}
+      >
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -171,7 +183,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
   const [error, setError] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [openFileId, setOpenFileId] = useState<string | null>(null);
-  const [portalReady, setPortalReady] = useState(false);
+  const portalReady = useSyncExternalStore(subscribeNever, () => true, () => false);
   const [docTitle, setDocTitle] = useState("");
   const [docContent, setDocContent] = useState("");
   const [docSaving, setDocSaving] = useState(false);
@@ -185,10 +197,6 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
   const canvasSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openFile = files.find((file) => file.id === openFileId) ?? null;
   const userInitial = (peerName.trim().charAt(0) || "?").toUpperCase();
-
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
 
   useEffect(() => {
     return () => {
