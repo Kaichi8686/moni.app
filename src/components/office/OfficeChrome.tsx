@@ -49,6 +49,14 @@ export function OfficeChrome({
             <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-amber-900 ring-1 ring-amber-100">
               Lv {company.level}
             </span>
+            {(company.loginStreak ?? 0) > 0 ? (
+              <span
+                className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold tabular-nums text-[#FF9600] ring-1 ring-orange-100"
+                title="連続ログイン"
+              >
+                {company.loginStreak}日
+              </span>
+            ) : null}
             <span className="ml-auto shrink-0 text-xs font-bold tabular-nums text-zinc-600">
               {seasonRevenue.toLocaleString("ja-JP")}
               <span className="ml-0.5 font-medium text-zinc-400">コイン</span>

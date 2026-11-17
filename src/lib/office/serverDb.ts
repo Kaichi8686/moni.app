@@ -46,6 +46,7 @@ import {
 } from "@/lib/office/strategy";
 import { targetsPassValidation } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
+import { nextLoginStreak } from "@/lib/office/loginStreak";
 import { parseCastEmotion } from "@/lib/office/scenes";
 import type {
   IncidentStrategy,
@@ -88,6 +89,7 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     sfxMuted: row.sfx_muted == null ? true : Boolean(row.sfx_muted),
     secretaryGuideDone: Boolean(row.secretary_guide_done ?? false),
     loginStreak: Number(row.login_streak ?? 0),
+    loginLastDate: row.login_last_date == null ? null : String(row.login_last_date).slice(0, 10),
   };
 }
 
@@ -248,6 +250,21 @@ export async function dbGetCompany(admin: SupabaseClient, userId: string) {
   }
   const row = await backfillCastMeters(admin, data as Record<string, unknown>);
   const company = mapCompany(row);
+  const streak = nextLoginStreak(company.loginStreak ?? 0, company.loginLastDate);
+  if (streak.changed) {
+    company.loginStreak = streak.streak;
+    company.loginLastDate = streak.lastDate;
+    const streakPatch = await admin
+      .from("office_companies")
+      .update({
+        login_streak: streak.streak,
+        login_last_date: streak.lastDate,
+      })
+      .eq("user_id", userId);
+    if (streakPatch.error) {
+      // SQL未適用時はメモリ上のみ
+    }
+  }
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (
     stamina.value !== company.stamina ||
@@ -828,4 +845,15 @@ export async function dbMarkResultSeen(admin: SupabaseClient, userId: string, se
     .update({ result_seen: true })
     .eq("user_id", userId)
     .eq("season_key", seasonKey);
+}
+
+export async function dbMarkSecretaryGuideDone(admin: SupabaseClient, userId: string) {
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({ secretary_guide_done: true })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "guide update failed");
+  return mapCompany(data as Record<string, unknown>);
 }

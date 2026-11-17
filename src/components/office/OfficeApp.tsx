@@ -8,6 +8,7 @@ import { OfficeChrome } from "@/components/office/OfficeChrome";
 import { RankingPanel } from "@/components/office/RankingPanel";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
 import { StageView } from "@/components/office/stage/StageView";
+import { SecretaryTip } from "@/components/office/stage/SecretaryTip";
 import { IncidentStep } from "@/components/office/play/IncidentStep";
 import {
   PlayStepper,
@@ -24,6 +25,7 @@ import {
   fetchIncident,
   fetchRanking,
   markResultSeen,
+  markSecretaryGuideDone,
   rerollStrategies,
   setAbout,
   submitAnswer,
@@ -534,6 +536,34 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
           onClose={async () => {
             await markResultSeen(payload.pendingResult!.seasonKey);
             setPayload((p) => (p ? { ...p, pendingResult: null } : p));
+          }}
+        />
+      ) : null}
+      {company && !company.secretaryGuideDone && !needsSetup && !boot ? (
+        <SecretaryTip
+          secretary={
+            castMemberByRole(company.cast ?? [], "secretary") ??
+            company.cast?.[0] ?? {
+              id: "sec",
+              role: "secretary",
+              name: "秘書",
+              look: { skin: 1, hair: 1, accessory: 0, color: 0 },
+            }
+          }
+          loginStreak={company.loginStreak ?? 0}
+          onDone={() => {
+            void (async () => {
+              try {
+                const next = await markSecretaryGuideDone();
+                setPayload((p) => (p ? { ...p, company: next } : p));
+              } catch {
+                setPayload((p) =>
+                  p?.company
+                    ? { ...p, company: { ...p.company, secretaryGuideDone: true } }
+                    : p,
+                );
+              }
+            })();
           }}
         />
       ) : null}

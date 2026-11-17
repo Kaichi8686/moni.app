@@ -4,6 +4,7 @@ import {
   localCurrentIncident,
   localGetCompany,
   localMarkResultSeen,
+  localMarkSecretaryGuideDone,
   localRanking,
   localRerollStrategies,
   localSetAbout,
@@ -207,5 +208,18 @@ export async function markResultSeen(seasonKey: string): Promise<void> {
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
     localMarkResultSeen(GUEST_ID, seasonKey);
+  }
+}
+
+export async function markSecretaryGuideDone(): Promise<OfficeCompany> {
+  try {
+    const res = await api<{ company: OfficeCompany }>("/api/office/company", {
+      method: "POST",
+      body: JSON.stringify({ markSecretaryGuideDone: true }),
+    });
+    return res.company;
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localMarkSecretaryGuideDone(GUEST_ID);
   }
 }

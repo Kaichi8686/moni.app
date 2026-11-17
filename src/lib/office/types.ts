@@ -43,6 +43,8 @@ export type OfficeCompany = {
   sfxMuted?: boolean;
   secretaryGuideDone?: boolean;
   loginStreak?: number;
+  /** Asia/Tokyo YYYY-MM-DD */
+  loginLastDate?: string | null;
 };
 
 export type IncidentStrategy = {

@@ -19,6 +19,7 @@ import {
   offlineScores,
   offlineStrategies,
 } from "@/lib/office/offline";
+import { nextLoginStreak } from "@/lib/office/loginStreak";
 import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
@@ -140,6 +141,12 @@ export function localGetCompany(userId: string): {
     company.name = company.name.slice(0, OFFICE_NAME_MAX);
     write(store);
   }
+  const streak = nextLoginStreak(company.loginStreak ?? 0, company.loginLastDate);
+  if (streak.changed) {
+    company.loginStreak = streak.streak;
+    company.loginLastDate = streak.lastDate;
+    write(store);
+  }
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (stamina.value !== company.stamina || stamina.updatedAt.toISOString() !== company.staminaUpdatedAt) {
     company.stamina = stamina.value;
@@ -151,6 +158,14 @@ export function localGetCompany(userId: string): {
   const pendingResult =
     store.seasons.find((s) => s.userId === userId && s.result && !s.resultSeen) ?? null;
   return { company, stamina, seasonRevenue: season.revenue, pendingResult };
+}
+
+export function localMarkSecretaryGuideDone(userId: string): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  store.company.secretaryGuideDone = true;
+  write(store);
+  return store.company;
 }
 
 export function localCreateCompany(userId: string, name: string, aboutRaw: string): OfficeCompany {
@@ -182,6 +197,7 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
     secretaryGuideDone: false,
     shareOptOut: false,
     loginStreak: 0,
+    loginLastDate: null,
   };
   store.company = company;
   ensureSeason(store, userId, "rookie");

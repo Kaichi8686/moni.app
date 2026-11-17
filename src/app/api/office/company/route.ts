@@ -4,6 +4,7 @@ import {
   dbCreateCompany,
   dbGetCompany,
   dbMarkResultSeen,
+  dbMarkSecretaryGuideDone,
   dbSetAbout,
 } from "@/lib/office/serverDb";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
@@ -39,10 +40,15 @@ export async function POST(req: NextRequest) {
       name?: string;
       about?: string;
       markResultSeen?: string;
+      markSecretaryGuideDone?: boolean;
     };
     if (body.markResultSeen) {
       await dbMarkResultSeen(admin, auth.userId, body.markResultSeen);
       return NextResponse.json({ ok: true });
+    }
+    if (body.markSecretaryGuideDone) {
+      const company = await dbMarkSecretaryGuideDone(admin, auth.userId);
+      return NextResponse.json({ company });
     }
 
     const existing = await dbGetCompany(admin, auth.userId);
