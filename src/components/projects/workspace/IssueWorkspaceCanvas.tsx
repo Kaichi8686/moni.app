@@ -2860,6 +2860,10 @@ function SheetFullscreenEditor({
         return;
       }
       lastTap.current = { t: now, x: pt.x, y: pt.y };
+      // 文字ツールでも余白1タップでリサイズ／選択を解除（ダブルタップで配置）
+      setSelectedOverlayIds([]);
+      setOverlayHandlesVisible(false);
+      setEditingOverlayId(null);
       return;
     }
 
