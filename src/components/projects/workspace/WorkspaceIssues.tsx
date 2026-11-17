@@ -123,7 +123,7 @@ function IssuesSlidePanel({
 
   return (
     <div
-      className={`fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-br from-white to-[#E3F2FD] px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
+      className={`moni-issues-underlay fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-br from-white to-[#E3F2FD] px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
     >
       <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
     </div>
@@ -475,7 +475,12 @@ export default function WorkspaceIssues() {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+      {/*
+        In-flow step genre list. Kept mounted under task/canvas/doc overlays.
+        Marked so immersive editors can hide it — iOS otherwise flashes it
+        through the keyboard gap (fixed layers clip to visualViewport).
+      */}
+      <div className="moni-issues-underlay mx-auto flex w-full max-w-3xl flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"

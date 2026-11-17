@@ -15,6 +15,7 @@ import {
   wordCountFromDocContent,
 } from "@/lib/projects/documents";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
+import { useImmersiveWorkEditorLock } from "@/hooks/useImmersiveWorkEditorLock";
 
 const DOC_EDITOR_CLASS = "moni-doc-editor";
 
@@ -194,6 +195,8 @@ export default function WorkspaceDocuments() {
       document.body.style.overflow = prevOverflow;
     };
   }, [viewMode]);
+
+  useImmersiveWorkEditorLock(viewMode === "editor");
 
   async function createDocument() {
     setActionErr("");
