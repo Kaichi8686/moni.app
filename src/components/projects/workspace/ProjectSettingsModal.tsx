@@ -492,25 +492,14 @@ export function ProjectSettingsModal({
 
   const busy = saving || thumbUploading || bgUploading;
 
+  const showSave = canEdit && !textFieldFocused;
+
   return (
     <WorkspaceSlideShell
       title={tx("プロジェクト設定", "Project settings")}
       onClose={onClose}
       onBackRequest={handleBackRequest}
-      contentClassName="px-0 pt-0"
-      footerClassName="border-0 bg-transparent px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
-      footer={
-        canEdit && !textFieldFocused ? (
-          <button
-            type="button"
-            className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
-            disabled={busy}
-            onClick={() => void save()}
-          >
-            {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
-          </button>
-        ) : null
-      }
+      contentClassName={showSave ? "px-0 pt-0 pb-24" : "px-0 pt-0"}
     >
       <input
         ref={bgInputRef}
@@ -770,6 +759,19 @@ export function ProjectSettingsModal({
 
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
       </div>
+
+      {showSave ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[210] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            className="pointer-events-auto w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition active:opacity-90 disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
+          </button>
+        </div>
+      ) : null}
 
       {confirmDiscard ? (
         <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
