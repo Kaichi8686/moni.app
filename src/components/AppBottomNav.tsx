@@ -78,6 +78,10 @@ function isProjectIssuesPath(pathname: string): boolean {
   return /^\/projects\/[0-9a-f-]{36}\/issues(?:\/|$)/i.test(pathname);
 }
 
+function isProjectRecruitPath(pathname: string): boolean {
+  return /^\/projects\/[0-9a-f-]{36}\/recruit(?:\/|$)/i.test(pathname);
+}
+
 function isProjectCoachPath(pathname: string): boolean {
   return /^\/projects\/[0-9a-f-]{36}\/coach(?:\/|$)/i.test(pathname);
 }
