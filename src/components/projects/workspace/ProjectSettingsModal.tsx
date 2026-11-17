@@ -498,6 +498,19 @@ export function ProjectSettingsModal({
       onClose={onClose}
       onBackRequest={handleBackRequest}
       contentClassName="px-0 pt-0"
+      footerClassName="border-0 bg-transparent p-0"
+      footer={
+        canEdit && !textFieldFocused ? (
+          <button
+            type="button"
+            className="w-full rounded-none bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50 pb-[max(0.875rem,calc(0.875rem+env(safe-area-inset-bottom)))]"
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
+          </button>
+        ) : null
+      }
     >
       <input
         ref={bgInputRef}
@@ -757,19 +770,6 @@ export function ProjectSettingsModal({
 
         {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
       </div>
-
-      {canEdit && !textFieldFocused ? (
-        <div className="sticky bottom-0 mt-4 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm">
-          <button
-            type="button"
-            className="w-full rounded-full bg-[#FF9600] py-3.5 text-[15px] font-semibold text-white transition active:opacity-90 disabled:opacity-50"
-            disabled={busy}
-            onClick={() => void save()}
-          >
-            {saving ? tx("保存中…", "Saving…") : tx("保存", "Save")}
-          </button>
-        </div>
-      ) : null}
 
       {confirmDiscard ? (
         <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4">
