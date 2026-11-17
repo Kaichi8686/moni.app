@@ -117,8 +117,16 @@ function useVisualKeyboard() {
     let closeTimer: ReturnType<typeof setTimeout> | null = null;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     let lastInset = -1;
-    const measureInset = () => Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-    const measureBottom = () => Math.round(vv.offsetTop + vv.height);
+    /** dev プレビュー用: デスクトップでキーボード inset を模す */
+    let demoInset: number | null = null;
+    const measureInset = () => {
+      if (demoInset != null) return demoInset;
+      return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    };
+    const measureBottom = () => {
+      if (demoInset != null) return Math.round(window.innerHeight - demoInset);
+      return Math.round(vv.offsetTop + vv.height);
+    };
     const update = () => {
       const next = measureInset();
       const bottom = measureBottom();
@@ -159,12 +167,26 @@ function useVisualKeyboard() {
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
+    if (process.env.NODE_ENV !== "production") {
+      (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo = (inset) => {
+        demoInset = inset == null ? null : Math.max(0, Math.round(inset));
+        lastInset = -1;
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+        update();
+      };
+    }
     return () => {
       if (closeTimer) clearTimeout(closeTimer);
       if (settleTimer) clearTimeout(settleTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
+      if (process.env.NODE_ENV !== "production") {
+        delete (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo;
+      }
     };
   }, []);
   return {
@@ -3599,10 +3621,10 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入バーはカード上に重ねる。文字編集中は挿入バーと同じタイミングで隠す */}
+      {/* 完了・挿入バーはカード上に重ねる。キーボード／文字編集中は同じタイミングで隠す */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          {!editingOverlayId ? (
+          {!editingOverlayId && !keyboard.open ? (
             <button
               type="button"
               onClick={onClose}
@@ -3614,7 +3636,7 @@ function SheetFullscreenEditor({
           ) : (
             <span className="w-11" />
           )}
-          {canEdit && !editingOverlayId ? (
+          {canEdit && !editingOverlayId && !keyboard.open ? (
             <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
               {(
                 [
