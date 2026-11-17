@@ -24,6 +24,7 @@ import {
   Circle,
   Crop,
   Eraser,
+  Link2,
   Minus,
   MousePointer2,
   Paperclip,
@@ -1418,8 +1419,26 @@ export function IssueWorkspaceCanvas({
       : null;
   // 写真選択中は切り取りバーを出す（ハンドル表示前でも）
   const showInsertBar = !insertToolbarHidden && !selectedImage;
-  const insertFanOpen =
-    plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape" || tool === "arrow";
+  // リンク（矢印）はトップバー。プラス展開はカード/テキスト/図形/矢印のみ
+  const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
+
+  // ソフトキーボード分の下余白（文字編集バーをキーボード直上に置く）
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setKeyboardInset(inset);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1841,66 +1860,6 @@ export function IssueWorkspaceCanvas({
                   }}
                 >
                   {editing && canEdit ? (
-                    <>
-                      <div
-                        data-board-ui
-                        className="pointer-events-auto absolute left-1/2 z-30 flex -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-white px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
-                        style={{ bottom: "calc(100% + 8px)", maxWidth: "min(92vw, 22rem)" }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                          {FONT_SIZE_PRESETS.map((size) => (
-                            <button
-                              key={size}
-                              type="button"
-                              onClick={() => updateItem(node.id, { fontSize: size })}
-                              className={`min-w-[1.75rem] rounded-full px-1.5 py-1 text-[11px] font-bold ${
-                                node.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                              }`}
-                            >
-                              {size}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {TEXT_COLOR_ORDER.map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => updateItem(node.id, { textColor: color })}
-                              className={`h-6 w-6 rounded-full border-2 ${
-                                node.textColor.toLowerCase() === color.toLowerCase()
-                                  ? "scale-110 border-zinc-900"
-                                  : "border-zinc-200"
-                              }`}
-                              style={{ backgroundColor: color }}
-                              aria-label={tx("文字色", "Text color")}
-                            />
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-                          {(
-                            [
-                              ["left", AlignLeft, tx("左寄せ", "Left")],
-                              ["center", AlignCenter, tx("中央", "Center")],
-                              ["right", AlignRight, tx("右寄せ", "Right")],
-                            ] as const
-                          ).map(([value, Icon, label]) => (
-                            <button
-                              key={value}
-                              type="button"
-                              title={label}
-                              onClick={() => updateItem(node.id, { align: value })}
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                                node.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                              }`}
-                              aria-label={label}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
                       <textarea
                         data-board-ui
                         autoFocus
@@ -1939,7 +1898,6 @@ export function IssueWorkspaceCanvas({
                         enterKeyHint="done"
                         onPointerDown={(e) => e.stopPropagation()}
                       />
-                    </>
                   ) : (
                     <div
                       className="h-full w-full select-none whitespace-pre-wrap px-1 py-0.5"
@@ -2176,13 +2134,82 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
+              {/* 文字編集中：キーボード直上の書式バー */}
+              {editingTextId && selectedTextBox && canEdit && !toolbarHidden ? (
+                <div
+                  className="pointer-events-none fixed inset-x-0 z-[520] flex justify-center px-3"
+                  style={{
+                    bottom: `calc(${keyboardInset}px + max(0.35rem, env(safe-area-inset-bottom)))`,
+                  }}
+                >
+                  <div
+                    data-board-ui
+                    className="pointer-events-auto flex max-w-[min(100%,28rem)] flex-wrap items-center justify-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+                      {FONT_SIZE_PRESETS.map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => updateItem(selectedTextBox.id, { fontSize: size })}
+                          className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
+                            selectedTextBox.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {TEXT_COLOR_ORDER.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => updateItem(selectedTextBox.id, { textColor: color })}
+                          className={`h-7 w-7 rounded-full border-2 ${
+                            selectedTextBox.textColor.toLowerCase() === color.toLowerCase()
+                              ? "scale-110 border-zinc-900"
+                              : "border-zinc-200"
+                          }`}
+                          style={{ backgroundColor: color }}
+                          aria-label={tx("文字色", "Text color")}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+                      {(
+                        [
+                          ["left", AlignLeft, tx("左寄せ", "Left")],
+                          ["center", AlignCenter, tx("中央", "Center")],
+                          ["right", AlignRight, tx("右寄せ", "Right")],
+                        ] as const
+                      ).map(([value, Icon, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          title={label}
+                          onClick={() => updateItem(selectedTextBox.id, { align: value })}
+                          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                            selectedTextBox.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+                          }`}
+                          aria-label={label}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               {/* 下のフローティング操作バー */}
               <div
                 className={`pointer-events-none fixed inset-x-0 bottom-0 z-[500] flex flex-col items-center gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition-transform duration-200 ease-out ${
-                  toolbarHidden ? "translate-y-[120%]" : "translate-y-0"
+                  toolbarHidden || editingTextId ? "translate-y-[120%]" : "translate-y-0"
                 }`}
               >
-                {/* ワンタップ選択中（未編集）のみ下部に書式。編集中はテキスト直上に出す */}
+                {/* ワンタップ選択中（未編集）の書式 */}
                 {selectedTextBox && canEdit && !editingTextId && handlesVisible ? (
                   <div
                     data-board-ui
@@ -2392,7 +2419,11 @@ export function IssueWorkspaceCanvas({
                             label={tx("矢印", "Arrow")}
                             icon={ArrowUpRight}
                             disabled={!canEdit}
-                            onClick={() => canEdit && selectTool(tool === "arrow" ? "navigate" : "arrow")}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              setPlusMenuOpen(false);
+                              selectTool(tool === "arrow" ? "navigate" : "arrow");
+                            }}
                           />
                           <PillIconButton
                             active={false}
@@ -2422,6 +2453,17 @@ export function IssueWorkspaceCanvas({
                             icon={PenLine}
                             disabled={!canEdit}
                             onClick={() => canEdit && selectTool(tool === "pen" ? "navigate" : "pen")}
+                          />
+                          <PillIconButton
+                            active={tool === "arrow" && !plusMenuOpen}
+                            label={tx("リンク", "Link")}
+                            icon={Link2}
+                            disabled={!canEdit}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              setPlusMenuOpen(false);
+                              selectTool(tool === "arrow" ? "navigate" : "arrow");
+                            }}
                           />
                           <PillIconButton
                             active={false}
@@ -2540,6 +2582,22 @@ function SheetFullscreenEditor({
   const selectedOverlayId = selectedOverlayIds[0] ?? null;
   const [editingOverlayId, setEditingOverlayId] = useState<string | null>(null);
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setKeyboardInset(inset);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -3293,19 +3351,6 @@ function SheetFullscreenEditor({
                   const editFontPx = Math.max(16, ov.fontSize * 0.55);
                   return (
                     <div key={ov.id} className="pointer-events-none absolute inset-0 overflow-visible">
-                      {canEdit && editing ? (
-                        <div
-                          className="pointer-events-auto absolute z-30"
-                          style={{
-                            left: `${ov.x}%`,
-                            top: `${ov.y}%`,
-                            width: `${Math.max(ov.w, 36)}%`,
-                            transform: "translateY(calc(-100% - 10px))",
-                          }}
-                        >
-                          {renderOverlayTextToolbar(ov)}
-                        </div>
-                      ) : null}
                       <div
                         data-overlay-node
                         className={`pointer-events-auto absolute ${selected || editing ? "overflow-visible" : "overflow-hidden"}`}
@@ -3394,6 +3439,21 @@ function SheetFullscreenEditor({
           </div>
         </div>
       </div>
+
+      {/* カード内テキスト編集：キーボード直上の書式バー */}
+      {canEdit &&
+      editingOverlayId &&
+      selectedOverlay &&
+      selectedOverlay.kind === "text" ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-40 flex justify-center px-3"
+          style={{
+            bottom: `calc(${keyboardInset}px + max(0.35rem, env(safe-area-inset-bottom)))`,
+          }}
+        >
+          {renderOverlayTextToolbar(selectedOverlay)}
+        </div>
+      ) : null}
     </div>
   );
 }
