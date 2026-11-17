@@ -16,7 +16,7 @@ import {
 import { AssigneeMultiSelect } from "@/components/issues/AssigneeMultiSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
-import { createProjectBoard, deleteProjectBoard } from "@/lib/projects/whiteboard/boardApi";
+import { deleteProjectBoard } from "@/lib/projects/whiteboard/boardApi";
 import { supabase } from "@/lib/supabase";
 import {
   clearIssueCreateDraft,
@@ -361,15 +361,6 @@ export function IssueCreateWizard({
           title: data.title || name,
           refId: data.id,
           updatedAt: data.updated_at || new Date().toISOString(),
-        };
-      } else if (namePrompt === "board") {
-        const board = await createProjectBoard(projectId, uid, name);
-        next = {
-          id: createWorkFileId(),
-          kind: "board",
-          title: board.title || name,
-          refId: board.id,
-          updatedAt: board.updated_at || new Date().toISOString(),
         };
       } else if (namePrompt === "canvas") {
         next = newCanvasWorkFile(name);
@@ -907,7 +898,6 @@ export function IssueCreateWizard({
                 {(
                   [
                     ["doc", tx("ドキュメント", "Document"), <FileText key="d" className="h-5 w-5 text-[#4285F4]" />],
-                    ["board", tx("ホワイトボード", "Whiteboard"), <StickyNote key="b" className="h-5 w-5 text-[#7C3AED]" />],
                     ["canvas", tx("作業スペース", "Workspace"), <PenTool key="c" className="h-5 w-5 text-[#E65100]" />],
                     ["photo", tx("写真依頼", "Photo request"), <ImageIcon key="p" className="h-5 w-5 text-[#2E7D32]" />],
                     ["link", tx("リンク依頼", "Link request"), <Link2 key="l" className="h-5 w-5 text-[#1565C0]" />],

@@ -15,12 +15,10 @@ import {
   X,
 } from "lucide-react";
 import { ProjectGoogleDocsShell } from "@/components/projects/ProjectGoogleDocsShell";
-import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { StackSkeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
-  createDmBoard,
   createDmDocument,
   deleteDmBoard,
   deleteDmDocument,
@@ -273,7 +271,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
     setOpenFileId(file.id);
   }
 
-  async function createFile(kind: Exclude<IssueWorkFileKind, "photo" | "link">) {
+  async function createFile(kind: "doc" | "canvas") {
     setCreating(true);
     setError("");
     setFabOpen(false);
@@ -290,19 +288,6 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
         await persistFiles(upsertWorkFile(files, next));
         setDocTitle(next.title);
         setDocContent("");
-        setOpenFileId(next.id);
-        return;
-      }
-      if (kind === "board") {
-        const board = await createDmBoard(conversationId, uid, defaultTitle("board"));
-        const next: IssueWorkFile = {
-          id: createWorkFileId(),
-          kind: "board",
-          title: board.title || defaultTitle("board"),
-          refId: board.id,
-          updatedAt: board.updated_at || new Date().toISOString(),
-        };
-        await persistFiles(upsertWorkFile(files, next));
         setOpenFileId(next.id);
         return;
       }
@@ -484,14 +469,20 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
             </button>
             <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{openFile.title}</p>
           </div>
-          <div className="min-h-0 flex-1">
-            <ProjectWhiteboard
-              projectId={conversationId}
-              boardId={openFile.refId}
-              uid={uid}
-              canEdit
-              boardElementsScope="conversation"
-            />
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="text-sm text-zinc-600">
+              {tx(
+                "ホワイトボードは終了しました。このファイルは削除できます。",
+                "Whiteboard is no longer available. You can delete this file.",
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => void deleteFile(openFile)}
+              className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              {tx("削除", "Delete")}
+            </button>
           </div>
         </div>,
         document.body,
@@ -676,15 +667,6 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
               >
                 <DocIcon />
                 {tx("ドキュメント", "Document")}
-              </button>
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => void createFile("board")}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-              >
-                <BoardIcon />
-                {tx("ホワイトボード", "Whiteboard")}
               </button>
               <button
                 type="button"

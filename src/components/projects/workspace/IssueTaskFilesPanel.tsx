@@ -20,16 +20,12 @@ import {
   ProjectGoogleDocsShell,
   type ProjectGoogleDocsShellHandle,
 } from "@/components/projects/ProjectGoogleDocsShell";
-import { ProjectWhiteboard } from "@/components/projects/whiteboard/ProjectWhiteboard";
 import { IssuePhotoViewer } from "@/components/projects/workspace/IssuePhotoViewer";
 import { appendImageToBoard, IssueWorkspaceCanvas } from "@/components/projects/workspace/IssueWorkspaceCanvas";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { wordCountFromDocContent } from "@/lib/projects/documents";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
-import {
-  createProjectBoard,
-  deleteProjectBoard,
-} from "@/lib/projects/whiteboard/boardApi";
+import { deleteProjectBoard } from "@/lib/projects/whiteboard/boardApi";
 import { supabase } from "@/lib/supabase";
 import { assigneeNames } from "@/lib/workspace/issueAssignees";
 import { daysUntilDue, isoToDateInput, isIssueSubmitted, type IssueWork } from "@/lib/workspace/issueWork";
@@ -517,17 +513,6 @@ export function IssueTaskFilesPanel({
         setDocTitle(next.title);
         setDocContent("");
         setOpenFileId(next.id);
-      } else if (namePrompt === "board") {
-        const board = await createProjectBoard(issue.projectId, uid, name);
-        next = {
-          id: createWorkFileId(),
-          kind: "board",
-          title: board.title || name,
-          refId: board.id,
-          updatedAt: board.updated_at || new Date().toISOString(),
-        };
-        await persistFiles(upsertWorkFile(files, next));
-        setOpenFileId(next.id);
       } else if (namePrompt === "canvas") {
         next = newCanvasWorkFile(name);
         await persistFiles(upsertWorkFile(files, next), next.canvasBoard ?? createEmptyBoard());
@@ -863,8 +848,22 @@ export function IssueTaskFilesPanel({
             </button>
             <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{openFile.title}</p>
           </div>
-          <div className="min-h-0 flex-1">
-            <ProjectWhiteboard projectId={issue.projectId} boardId={openFile.refId} uid={uid} canEdit={canEdit} />
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="text-sm text-zinc-600">
+              {tx(
+                "ホワイトボードは終了しました。このファイルは削除できます。",
+                "Whiteboard is no longer available. You can delete this file.",
+              )}
+            </p>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => void deleteFile(openFile)}
+                className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
+              >
+                {tx("削除", "Delete")}
+              </button>
+            ) : null}
           </div>
         </div>,
         document.body,
@@ -1333,15 +1332,6 @@ export function IssueTaskFilesPanel({
                       >
                         <DocIcon />
                         {tx("ドキュメント", "Document")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={creating}
-                        onClick={() => openNamePrompt("board")}
-                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
-                      >
-                        <BoardIcon />
-                        {tx("ホワイトボード", "Whiteboard")}
                       </button>
                       <button
                         type="button"

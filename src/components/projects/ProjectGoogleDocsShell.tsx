@@ -188,7 +188,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const dirtyRef = useRef(false);
   const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
-  const lastTapRef = useRef(0);
   const suppressEditUntilRef = useRef(0);
   const pinchRef = useRef<{
     startDist: number;
@@ -201,8 +200,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
-  /** 最初は閲覧（戻る）モード。ダブルタップで編集 → チェックで閲覧＋ズーム解禁 */
-  const [editMode, setEditMode] = useState(false);
+  /** 編集可なら最初から入力できる。チェックで閲覧＋ズーム解禁、タップで再編集 */
+  const [editMode, setEditMode] = useState(() => Boolean(autoSave));
   const [zoomUnlocked, setZoomUnlocked] = useState(false);
   const [docZoom, setDocZoom] = useState(1);
   const [docPan, setDocPan] = useState({ x: 0, y: 0 });
@@ -619,7 +618,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
-    setEditMode(false);
+    setEditMode(Boolean(autoSave));
     setZoomUnlocked(false);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
@@ -627,6 +626,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     queueMicrotask(() => {
       setSaveHint("保存済み");
       refreshHistoryState();
+      if (autoSave) {
+        el.focus();
+      }
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
 
@@ -665,7 +667,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     refreshHistoryState();
   }, [flushToParent, refreshHistoryState, rememberSelection]);
 
-  const onEditorDoubleActivate = useCallback(() => {
+  const onEditorActivate = useCallback(() => {
     if (editMode) return;
     if (Date.now() < suppressEditUntilRef.current) return;
     if (docZoom > 1.02) return;
@@ -677,13 +679,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     if (Date.now() < suppressEditUntilRef.current) return;
     if (docZoom > 1.02) return;
     if (pointersRef.current.size > 0) return;
-    const now = Date.now();
-    if (now - lastTapRef.current < 320) {
-      enterEditMode();
-      lastTapRef.current = 0;
-      return;
-    }
-    lastTapRef.current = now;
+    // シングルタップで編集開始（iOS のダブルタップズームと競合しにくい）
+    enterEditMode();
   }, [docZoom, editMode, enterEditMode]);
 
   const applyBlockStyle = (v: string) => {
@@ -821,8 +818,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   ? saveHint
                   : canEditDoc
                     ? zoomUnlocked
-                      ? "ピンチで拡大 · ダブルタップで編集"
-                      : "ダブルタップで編集"
+                      ? "ピンチで拡大 · タップで編集"
+                      : "タップで編集"
                     : saveHint}
             </p>
           </div>
@@ -952,7 +949,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   refreshHistoryState();
                 }}
-                onDoubleClick={onEditorDoubleActivate}
+                onClick={onEditorActivate}
+                onDoubleClick={onEditorActivate}
                 onTouchEnd={onEditorTouchEnd}
                 className={`gdocs-editor-body w-full flex-1 outline-none ${editing ? "" : "cursor-text"}`}
                 style={{
@@ -961,6 +959,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     ? "1rem 1.25rem 1.5rem"
                     : "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
                   boxSizing: "border-box",
+                  // iOS のダブルタップズームを抑え、すぐ入力できるようにする
+                  touchAction: canBrowseZoom ? "none" : "manipulation",
                 }}
               />
             </div>
