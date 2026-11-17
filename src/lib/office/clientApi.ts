@@ -2,6 +2,7 @@ import { supabase, supabaseEnabled } from "@/lib/supabase";
 import {
   localCreateCompany,
   localCurrentIncident,
+  localGetCodex,
   localGetCompany,
   localMarkResultSeen,
   localMarkSecretaryGuideDone,
@@ -11,6 +12,7 @@ import {
   localSubmit,
   localToggleRanking,
 } from "@/lib/office/localStore";
+import type { CodexCell } from "@/lib/office/codex";
 import type {
   OfficeCompany,
   OfficeIncident,
@@ -132,6 +134,7 @@ export async function submitAnswer(input: OfficeSubmitInput): Promise<{
   company: OfficeCompany;
   seasonRevenue: number;
   stamina: { value: number; nextRecoverAt: string | null };
+  codexBonus: number;
 }> {
   try {
     return await api("/api/office/submit", {
@@ -154,7 +157,18 @@ export async function submitAnswer(input: OfficeSubmitInput): Promise<{
         value: r.stamina.value,
         nextRecoverAt: r.stamina.nextRecoverAt?.toISOString() ?? null,
       },
+      codexBonus: r.codexBonus,
     };
+  }
+}
+
+export async function fetchCodex(): Promise<CodexCell[]> {
+  try {
+    const res = await api<{ cells: CodexCell[] }>("/api/office/codex");
+    return res.cells ?? [];
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localGetCodex(GUEST_ID);
   }
 }
 

@@ -13,6 +13,7 @@ import {
 } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { ensureCompanyCast } from "@/lib/office/cast";
+import { unlockCodexCell, type CodexCell } from "@/lib/office/codex";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
 import {
   defaultStageForType,
@@ -47,10 +48,11 @@ import {
 import { targetsPassValidation } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
 import { nextLoginStreak } from "@/lib/office/loginStreak";
-import { parseCastEmotion } from "@/lib/office/scenes";
+import { parseCastEmotion, parseOfficeScene } from "@/lib/office/scenes";
 import type {
   IncidentStrategy,
   IncidentTargetInternal,
+  IncidentType,
   OfficeCompany,
   OfficeIncident,
   OfficeSeasonScore,
@@ -655,7 +657,22 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     wasSimilar,
     meters: company.meters,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
+  let codexBonus = 0;
+  if (incident.scene) {
+    try {
+      codexBonus = await dbUnlockCodex(
+        admin,
+        userId,
+        incident.scene,
+        incident.type,
+        scored.scores.total,
+      );
+    } catch {
+      codexBonus = 0;
+    }
+  }
+  const totalGain = rev.revenue + codexBonus;
+  const growth = applyRevenueGrowth(company.totalRevenue, totalGain);
   const season = await ensureSeasonRow(admin, userId, company.leagueId);
 
   const metersDelta = computeMetersDelta({
@@ -763,7 +780,7 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
   await admin
     .from("office_season_scores")
     .update({
-      revenue: season.revenue + rev.revenue,
+      revenue: season.revenue + totalGain,
       league_id: company.leagueId,
     })
     .eq("id", season.id);
@@ -781,6 +798,7 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     company: refreshed.company!,
     seasonRevenue: refreshed.seasonRevenue,
     stamina: refreshed.stamina,
+    codexBonus,
   };
 }
 
@@ -856,4 +874,49 @@ export async function dbMarkSecretaryGuideDone(admin: SupabaseClient, userId: st
     .single();
   if (error || !data) throw new Error(error?.message ?? "guide update failed");
   return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbGetCodex(admin: SupabaseClient, userId: string): Promise<CodexCell[]> {
+  const { data, error } = await admin
+    .from("office_codex")
+    .select("scene, type, first_solved_at, best_score")
+    .eq("user_id", userId);
+  if (error || !data) return [];
+  const cells: CodexCell[] = [];
+  for (const row of data as Record<string, unknown>[]) {
+    const scene = parseOfficeScene(row.scene);
+    const type = String(row.type ?? "") as IncidentType;
+    if (!scene) continue;
+    if (!["pinch", "chance", "people", "rival"].includes(type)) continue;
+    cells.push({
+      scene,
+      type,
+      firstSolvedAt: String(row.first_solved_at ?? new Date().toISOString()),
+      bestScore: Math.max(0, Math.min(100, Number(row.best_score ?? 0))),
+    });
+  }
+  return cells;
+}
+
+async function dbUnlockCodex(
+  admin: SupabaseClient,
+  userId: string,
+  scene: NonNullable<OfficeIncident["scene"]>,
+  type: IncidentType,
+  scoreTotal: number,
+): Promise<number> {
+  const existing = await dbGetCodex(admin, userId);
+  const unlocked = unlockCodexCell(existing, scene, type, scoreTotal);
+  const { error } = await admin.from("office_codex").upsert(
+    {
+      user_id: userId,
+      scene: unlocked.cell.scene,
+      type: unlocked.cell.type,
+      first_solved_at: unlocked.cell.firstSolvedAt,
+      best_score: unlocked.cell.bestScore,
+    },
+    { onConflict: "user_id,scene,type" },
+  );
+  if (error) return 0;
+  return unlocked.bonus;
 }

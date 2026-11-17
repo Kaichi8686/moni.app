@@ -13,6 +13,7 @@ import type { OfficeCompany, OfficeSubmission } from "@/lib/office/types";
 type Props = {
   submission: OfficeSubmission;
   company: OfficeCompany | null;
+  codexBonus?: number;
   busy: boolean;
   onNext: () => void;
 };
@@ -94,7 +95,7 @@ function metersBeforeFrom(
   return before;
 }
 
-export function ResultStep({ submission, company, busy, onNext }: Props) {
+export function ResultStep({ submission, company, codexBonus = 0, busy, onNext }: Props) {
   const reduce = useReducedMotion();
   const reaction = useMemo(
     () =>
@@ -214,6 +215,11 @@ export function ResultStep({ submission, company, busy, onNext }: Props) {
         ) : null}
         {submission.isOriginal ? (
           <p className="mt-1 text-xs font-semibold text-[#FF9600]">自分の作戦ボーナス +10%</p>
+        ) : null}
+        {codexBonus > 0 ? (
+          <p className="mt-1 text-xs font-semibold text-amber-800">
+            図鑑ボーナス +{codexBonus.toLocaleString("ja-JP")}
+          </p>
         ) : null}
       </div>
 

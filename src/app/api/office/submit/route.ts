@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
         value: result.stamina.value,
         nextRecoverAt: result.stamina.nextRecoverAt?.toISOString() ?? null,
       },
+      codexBonus: result.codexBonus ?? 0,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 400 });

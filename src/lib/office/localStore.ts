@@ -19,6 +19,7 @@ import {
   offlineScores,
   offlineStrategies,
 } from "@/lib/office/offline";
+import { parseCodex, unlockCodexCell, type CodexCell } from "@/lib/office/codex";
 import { nextLoginStreak } from "@/lib/office/loginStreak";
 import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
@@ -46,10 +47,11 @@ type Store = {
   incidents: OfficeIncident[];
   submissions: OfficeSubmission[];
   seasons: OfficeSeasonScore[];
+  codex: CodexCell[];
 };
 
 function empty(): Store {
-  return { company: null, incidents: [], submissions: [], seasons: [] };
+  return { company: null, incidents: [], submissions: [], seasons: [], codex: [] };
 }
 
 function read(): Store {
@@ -57,7 +59,12 @@ function read(): Store {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return empty();
-    return { ...empty(), ...(JSON.parse(raw) as Store) };
+    const parsed = JSON.parse(raw) as Partial<Store>;
+    return {
+      ...empty(),
+      ...parsed,
+      codex: parseCodex(parsed.codex),
+    };
   } catch {
     return empty();
   }
@@ -309,6 +316,12 @@ export function localRerollStrategies(userId: string): OfficeIncident {
   return incident;
 }
 
+export function localGetCodex(userId: string): CodexCell[] {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) return [];
+  return store.codex ?? [];
+}
+
 export async function localSubmit(
   userId: string,
   input: OfficeSubmitInput,
@@ -317,6 +330,7 @@ export async function localSubmit(
   company: OfficeCompany;
   seasonRevenue: number;
   stamina: ReturnType<typeof computeStamina>;
+  codexBonus: number;
 }> {
   const store = read();
   const company = store.company;
@@ -378,7 +392,19 @@ export async function localSubmit(
     wasSimilar,
     meters: metersBefore,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
+  let codexBonus = 0;
+  if (incident.scene) {
+    const unlocked = unlockCodexCell(
+      store.codex ?? [],
+      incident.scene,
+      incident.type,
+      scores.total,
+    );
+    store.codex = unlocked.cells;
+    codexBonus = unlocked.bonus;
+  }
+  const totalGain = rev.revenue + codexBonus;
+  const growth = applyRevenueGrowth(company.totalRevenue, totalGain);
   company.totalRevenue = growth.totalRevenue;
   company.level = growth.level;
 
@@ -410,7 +436,7 @@ export async function localSubmit(
 
   incident.status = "solved";
   const season = ensureSeason(store, userId, company.leagueId);
-  season.revenue += rev.revenue;
+  season.revenue += totalGain;
   season.leagueId = company.leagueId;
 
   const submission: OfficeSubmission = {
@@ -454,6 +480,7 @@ export async function localSubmit(
     company,
     seasonRevenue: season.revenue,
     stamina: computeStamina(company.stamina, new Date(company.staminaUpdatedAt)),
+    codexBonus,
   };
 }
 

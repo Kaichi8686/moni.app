@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
+import { CodexPanel } from "@/components/office/CodexPanel";
 import { NameSetup } from "@/components/office/NameSetup";
 import { OfficeChrome } from "@/components/office/OfficeChrome";
 import { RankingPanel } from "@/components/office/RankingPanel";
@@ -21,6 +22,7 @@ import { TargetStep } from "@/components/office/play/TargetStep";
 import { WriteStep } from "@/components/office/play/WriteStep";
 import {
   createCompany,
+  fetchCodex,
   fetchCompany,
   fetchIncident,
   fetchRanking,
@@ -37,6 +39,7 @@ import {
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
 import { castMemberByRole } from "@/lib/office/cast";
+import type { CodexCell } from "@/lib/office/codex";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
 import { formatRemainMmSs, msUntil } from "@/lib/office/stamina";
 import type {
@@ -52,7 +55,7 @@ type Props = {
   active?: boolean;
 };
 
-type Panel = "play" | "rank";
+type Panel = "play" | "rank" | "codex";
 
 function preferReducedMotion(): boolean {
   return (
@@ -79,6 +82,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [answer, setAnswer] = useState("");
   const [rerolling, setRerolling] = useState(false);
   const [lastSubmit, setLastSubmit] = useState<OfficeSubmission | null>(null);
+  const [codexBonus, setCodexBonus] = useState(0);
+  const [codexCells, setCodexCells] = useState<CodexCell[]>([]);
   const [rankRows, setRankRows] = useState<RankingRow[]>([]);
   const [rankMeta, setRankMeta] = useState<{
     seasonKey: string;
@@ -196,6 +201,17 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     })();
   }, [active, panel, payload?.company?.id, payload?.seasonRevenue]);
 
+  useEffect(() => {
+    if (!active || panel !== "codex") return;
+    void (async () => {
+      try {
+        setCodexCells(await fetchCodex());
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "図鑑の取得に失敗");
+      }
+    })();
+  }, [active, panel, payload?.company?.id, lastSubmit?.id]);
+
   async function onSetup(input: { name: string; about: string }) {
     setBusy(true);
     setErr("");
@@ -228,6 +244,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       };
       const res = await submitAnswer(input);
       setLastSubmit(res.submission);
+      setCodexBonus(res.codexBonus ?? 0);
       setPayload({
         company: res.company,
         stamina: res.stamina,
@@ -346,6 +363,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       <ResultStep
         submission={lastSubmit}
         company={company}
+        codexBonus={codexBonus}
         busy={busy}
         onNext={() => void onNextIncident()}
       />
@@ -476,6 +494,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             />
           </div>
         </div>
+      ) : panel === "codex" ? (
+        <CodexPanel cells={codexCells} onClose={() => setPanel("play")} />
       ) : (
         <div className="space-y-3">
           <OfficeChrome
@@ -484,6 +504,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             staminaValue={payload!.stamina.value}
             nextRecoverAt={payload!.stamina.nextRecoverAt}
             onOpenRank={() => setPanel("rank")}
+            onOpenCodex={() => setPanel("codex")}
           />
 
           <StageView
