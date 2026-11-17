@@ -2864,12 +2864,17 @@ function SheetFullscreenEditor({
     finishOverlayTextEdit();
   }, [keyboard.open, editingOverlayId]);
 
+  const [stageBox, setStageBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const update = () => {
-      const maxW = Math.max(0, stage.clientWidth - 2);
-      const maxH = Math.max(0, stage.clientHeight - 2);
+      const boxW = stage.clientWidth;
+      const boxH = stage.clientHeight;
+      setStageBox((prev) => (prev.w === boxW && prev.h === boxH ? prev : { w: boxW, h: boxH }));
+      // 左右余白 + 上下に少し呼吸できる余白（画面中央配置用）
+      const maxW = Math.max(0, boxW - 24);
+      const maxH = Math.max(0, boxH - 48);
       if (maxW < 2 || maxH < 2) return;
       let nextW = maxW;
       let nextH = nextW / sheetRatio;
@@ -2890,6 +2895,15 @@ function SheetFullscreenEditor({
       window.removeEventListener("orientationchange", update);
     };
   }, [sheetRatio]);
+
+  /** キーボード上にカード全体が収まるよう上へ持ち上げる量 */
+  const cardKeyboardLiftPx = useMemo(() => {
+    if (!keyboard.open || cardSize.h <= 0 || stageBox.h < 2) return 0;
+    const formatReserve = editingOverlayId ? 56 : 16;
+    const usableBottom = stageBox.h - keyboard.inset - formatReserve;
+    const cardBottom = stageBox.h / 2 + cardSize.h / 2;
+    return Math.max(0, Math.ceil(cardBottom - usableBottom));
+  }, [keyboard.open, keyboard.inset, cardSize.h, stageBox.h, editingOverlayId]);
 
   function setOverlays(next: SheetOverlay[]) {
     onPatch({ overlays: next.length > 0 ? next : undefined });
@@ -3255,177 +3269,15 @@ function SheetFullscreenEditor({
       >
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
-      <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-          {tx("完了", "Done")}
-        </button>
-        {/* テキスト入力中は上の挿入ボタンを隠す */}
-        {canEdit && !editingOverlayId ? (
-          <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-            {(
-              [
-                { id: "text" as const, label: tx("文字", "Text") },
-                { id: "shape" as const, label: tx("図形", "Shape") },
-                { id: "photo" as const, label: tx("写真", "Photo") },
-                { id: "pen" as const, label: tx("手書き", "Pen") },
-              ]
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                title={label}
-                aria-label={label}
-                disabled={id === "photo" && Boolean(uploading)}
-                onClick={() => {
-                  if (id === "photo") {
-                    photoInputRef.current?.click();
-                    return;
-                  }
-                  setEditTool(id);
-                  setPenEraser(false);
-                  setSelectedOverlayIds([]);
-                  setOverlayHandlesVisible(false);
-                  setEditingOverlayId(null);
-                }}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
-                  editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
-                }`}
-              >
-                {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
-                {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
-                {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
-                {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <span className="w-11" />
-        )}
-      </div>
-
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file || !canEdit) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            const url = typeof reader.result === "string" ? reader.result : "";
-            if (!url) return;
-            void measureImageDisplaySize(url).then((size) => {
-              const id = newBoardId("ovi");
-              // カード % 座標に元比率を載せる（幅基準）
-              const wPct = 42;
-              const hPct = Math.min(70, Math.max(12, (wPct * size.h) / Math.max(1, size.w)));
-              setOverlays([
-                ...overlays,
-                {
-                  id,
-                  kind: "image",
-                  x: Math.max(0, (100 - wPct) / 2),
-                  y: Math.max(0, (100 - hPct) / 2),
-                  w: wPct,
-                  h: hPct,
-                  url,
-                },
-              ]);
-              setSelectedOverlayIds([id]);
-              setOverlayHandlesVisible(true);
-              setEditTool("text");
-            });
-          };
-          reader.readAsDataURL(file);
-        }}
-      />
-
-      {canEdit && editTool === "shape" && !editingOverlayId ? (
-        <div className="relative z-10 flex justify-center px-3 pb-1">
-          <div className="flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
-            {(
-              [
-                ["rect", Square],
-                ["circle", Circle],
-                ["triangle", Triangle],
-                ["line", Minus],
-              ] as const
-            ).map(([kind, Icon]) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => setShapeKind(kind)}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                  shapeKind === kind ? "bg-zinc-100" : ""
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-            {SHAPE_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setShapeColor(color)}
-                className={`h-5 w-5 rounded-full border ${shapeColor === color ? "border-zinc-900" : "border-zinc-200"}`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {canEdit && editTool === "pen" && !editingOverlayId ? (
-        <div className="relative z-10 flex justify-center gap-1.5 px-3 pb-1">
-          {SHAPE_COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              onClick={() => {
-                setPenEraser(false);
-                setPenColor(color);
-              }}
-              className={`h-6 w-6 rounded-full border-2 ${
-                !penEraser && penColor === color ? "border-zinc-900" : "border-zinc-200"
-              }`}
-              style={{ backgroundColor: color }}
-              aria-label={tx("ペン色", "Pen color")}
-            />
-          ))}
-          <button
-            type="button"
-            onClick={() => setPenEraser(true)}
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${
-              penEraser ? "border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
-            }`}
-            aria-label={tx("消しゴム", "Eraser")}
-            title={tx("消しゴム", "Eraser")}
-          >
-            <Eraser className="h-3.5 w-3.5" strokeWidth={2.25} />
-          </button>
-        </div>
-      ) : null}
-
-      {canEdit && editTool === "text" ? (
-        <p className="relative z-10 px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
-          {tx("カード内をダブルタップして文字を置く", "Double-tap on the card to place text")}
-        </p>
-      ) : null}
-
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2">
-          <div ref={stageRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
+      {/* 画面全体で中央配置（ヘッダー分で下に寄らない） */}
+      <div
+        ref={stageRef}
+        className="absolute inset-0 z-10 flex items-center justify-center px-3"
+      >
             <div
               ref={cardRef}
               data-sheet-card
-              className="relative touch-none select-none overflow-visible rounded-2xl"
+              className="relative touch-none select-none overflow-visible rounded-2xl will-change-transform"
               style={{
                 width: cardSize.w > 0 ? cardSize.w : undefined,
                 height: cardSize.h > 0 ? cardSize.h : undefined,
@@ -3434,6 +3286,8 @@ function SheetFullscreenEditor({
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
                 userSelect: "none",
+                transform: cardKeyboardLiftPx > 0 ? `translateY(-${cardKeyboardLiftPx}px)` : "translateY(0)",
+                transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
               }}
               onPointerDown={onCardPointerDown}
               onPointerMove={onCardPointerMove}
@@ -3705,8 +3559,175 @@ function SheetFullscreenEditor({
                 })}
               </div>
             </div>
-          </div>
+      </div>
+
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file || !canEdit) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const url = typeof reader.result === "string" ? reader.result : "";
+            if (!url) return;
+            void measureImageDisplaySize(url).then((size) => {
+              const id = newBoardId("ovi");
+              const wPct = 42;
+              const hPct = Math.min(70, Math.max(12, (wPct * size.h) / Math.max(1, size.w)));
+              setOverlays([
+                ...overlays,
+                {
+                  id,
+                  kind: "image",
+                  x: Math.max(0, (100 - wPct) / 2),
+                  y: Math.max(0, (100 - hPct) / 2),
+                  w: wPct,
+                  h: hPct,
+                  url,
+                },
+              ]);
+              setSelectedOverlayIds([id]);
+              setOverlayHandlesVisible(true);
+              setEditTool("text");
+            });
+          };
+          reader.readAsDataURL(file);
+        }}
+      />
+
+      {/* 完了・挿入バーはカード上に重ねる。文字編集中は挿入バーと同じタイミングで隠す */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex items-center justify-between gap-2 px-3 pb-1">
+          {!editingOverlayId ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+              {tx("完了", "Done")}
+            </button>
+          ) : (
+            <span className="w-11" />
+          )}
+          {canEdit && !editingOverlayId ? (
+            <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+              {(
+                [
+                  { id: "text" as const, label: tx("文字", "Text") },
+                  { id: "shape" as const, label: tx("図形", "Shape") },
+                  { id: "photo" as const, label: tx("写真", "Photo") },
+                  { id: "pen" as const, label: tx("手書き", "Pen") },
+                ]
+              ).map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  disabled={id === "photo" && Boolean(uploading)}
+                  onClick={() => {
+                    if (id === "photo") {
+                      photoInputRef.current?.click();
+                      return;
+                    }
+                    setEditTool(id);
+                    setPenEraser(false);
+                    setSelectedOverlayIds([]);
+                    setOverlayHandlesVisible(false);
+                    setEditingOverlayId(null);
+                  }}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
+                    editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
+                  }`}
+                >
+                  {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
+                  {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
+                  {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
+                  {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="w-11" />
+          )}
         </div>
+
+        {canEdit && editTool === "shape" && !editingOverlayId ? (
+          <div className="flex justify-center px-3 pb-1">
+            <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
+              {(
+                [
+                  ["rect", Square],
+                  ["circle", Circle],
+                  ["triangle", Triangle],
+                  ["line", Minus],
+                ] as const
+              ).map(([kind, Icon]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setShapeKind(kind)}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                    shapeKind === kind ? "bg-zinc-100" : ""
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+              {SHAPE_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setShapeColor(color)}
+                  className={`h-5 w-5 rounded-full border ${shapeColor === color ? "border-zinc-900" : "border-zinc-200"}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {canEdit && editTool === "pen" && !editingOverlayId ? (
+          <div className="flex justify-center gap-1.5 px-3 pb-1">
+            {SHAPE_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => {
+                  setPenEraser(false);
+                  setPenColor(color);
+                }}
+                className={`pointer-events-auto h-6 w-6 rounded-full border-2 ${
+                  !penEraser && penColor === color ? "border-zinc-900" : "border-zinc-200"
+                }`}
+                style={{ backgroundColor: color }}
+                aria-label={tx("ペン色", "Pen color")}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => setPenEraser(true)}
+              className={`pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${
+                penEraser ? "border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
+              }`}
+              aria-label={tx("消しゴム", "Eraser")}
+              title={tx("消しゴム", "Eraser")}
+            >
+              <Eraser className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </button>
+          </div>
+        ) : null}
+
+        {canEdit && editTool === "text" && !editingOverlayId ? (
+          <p className="px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
+            {tx("カード内をダブルタップして文字を置く", "Double-tap on the card to place text")}
+          </p>
+        ) : null}
       </div>
 
       {/* 選択中パーツの削除（カード全体削除ボタンの代わり） */}
