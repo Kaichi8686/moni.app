@@ -75,7 +75,10 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
   const about = aboutRaw && aboutRaw.trim() ? aboutRaw.trim() : null;
   const industry =
     parseOfficeIndustry(row.industry) ?? guessIndustryFromAbout(about);
-  const cast = ensureCompanyCast(row.cast, String(row.id ?? row.user_id ?? "x"));
+  const cast = ensureCompanyCast(
+    row.cast_members ?? row.cast,
+    String(row.id ?? row.user_id ?? "x"),
+  );
   const metersUpdatedAt = row.meters_updated_at ? String(row.meters_updated_at) : null;
   const meters = applyMeterDecay(ensureMeters(row.meters), metersUpdatedAt);
   return {
@@ -107,13 +110,13 @@ async function backfillCastMeters(
   admin: SupabaseClient,
   row: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const needsCast = row.cast == null;
+  const needsCast = row.cast_members == null && row.cast == null;
   const needsMeters = row.meters == null;
   if (!needsCast && !needsMeters) return row;
-  const cast = ensureCompanyCast(row.cast, String(row.id ?? "x"));
+  const cast = ensureCompanyCast(row.cast_members ?? row.cast, String(row.id ?? "x"));
   const meters = ensureMeters(row.meters);
   const patch: Record<string, unknown> = {};
-  if (needsCast) patch.cast = cast;
+  if (needsCast) patch.cast_members = cast;
   if (needsMeters) {
     patch.meters = meters;
     patch.meters_updated_at = new Date().toISOString();
@@ -339,7 +342,7 @@ export async function dbCreateCompany(
       league_id: "rookie",
       stamina: 5,
       stamina_updated_at: now,
-      cast,
+      cast_members: cast,
       meters,
       meters_updated_at: now,
       sfx_muted: true,

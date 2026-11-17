@@ -1,9 +1,10 @@
--- オフィス：場面ステージ体験（cast / meters / 事件拡張 / 連鎖 / 図鑑 / 投票 / 通報）
+-- オフィス：場面ステージ体験（cast_members / meters / 事件拡張 / 連鎖 / 図鑑 / 投票 / 通報）
 -- 冪等
+-- 注意: カラム名 cast は PostgreSQL 予約語のため使わない（cast_members）
 
 -- ========== office_companies ==========
 alter table public.office_companies
-  add column if not exists cast jsonb;
+  add column if not exists cast_members jsonb;
 
 alter table public.office_companies
   add column if not exists meters jsonb;
