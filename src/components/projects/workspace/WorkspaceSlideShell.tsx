@@ -25,6 +25,8 @@ type Props = {
   onBindClose?: (close: () => void) => void;
   /** スクロール外に固定するフッター（招待ボタンなど） */
   footer?: ReactNode;
+  /** フッター枠の class（省略時は白帯＋余白） */
+  footerClassName?: string;
   className?: string;
   contentClassName?: string;
 };
@@ -42,6 +44,7 @@ export function WorkspaceSlideShell({
   hideHeader = false,
   onBindClose,
   footer,
+  footerClassName = "border-t border-zinc-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3",
   className = "",
   contentClassName = "",
 }: Props) {
@@ -135,11 +138,7 @@ export function WorkspaceSlideShell({
       >
         {children}
       </div>
-      {footer ? (
-        <div className="shrink-0 border-t border-zinc-100 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-          {footer}
-        </div>
-      ) : null}
+      {footer ? <div className={`shrink-0 ${footerClassName}`}>{footer}</div> : null}
     </div>
   );
 }
