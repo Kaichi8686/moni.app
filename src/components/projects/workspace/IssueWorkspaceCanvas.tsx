@@ -95,20 +95,45 @@ type Props = {
   storageKey?: string;
 };
 
-/** 書式バーをキーボード直上に置くための inset のみ追跡（開閉で編集終了はしない） */
+/** iOS などでキーボードが開いているとみなす閾値（px） */
+const KEYBOARD_OPEN_PX = 120;
+/** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
+const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
+
+/** inset + open（閉じはデバウンス。サイズ矢印操作中は呼び出し側で無視する） */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let closeTimer: ReturnType<typeof setTimeout> | null = null;
     const update = () => {
-      setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setInset(next);
+      const isOpen = next >= KEYBOARD_OPEN_PX;
+      if (isOpen) {
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+        setOpen(true);
+        return;
+      }
+      if (closeTimer) return;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        const still =
+          Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) >= KEYBOARD_OPEN_PX;
+        if (!still) setOpen(false);
+      }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     return () => {
+      if (closeTimer) clearTimeout(closeTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -116,6 +141,7 @@ function useVisualKeyboard() {
   }, []);
   return {
     inset,
+    open,
     dockStyle: {
       position: "fixed" as const,
       left: 0,
@@ -1497,8 +1523,22 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }, [editingTextId]);
 
-  // キーボード開閉検知で編集を終わらせない（iOS の inset 揺れでキーボードが即閉じるため）。
-  // 終了は blur / 明示操作に任せる。
+  // キーボード閉じボタン等で inset が下がったら編集終了（書式バーを消し、挿入バーを戻す）
+  const workspaceKeyboardWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (!editingTextId) {
+      workspaceKeyboardWasOpenRef.current = false;
+      return;
+    }
+    if (keyboard.open) {
+      workspaceKeyboardWasOpenRef.current = true;
+      return;
+    }
+    if (!workspaceKeyboardWasOpenRef.current) return;
+    if (Date.now() - textEditKeepAliveRef.current < 1200) return;
+    workspaceKeyboardWasOpenRef.current = false;
+    finishWorkspaceTextEdit();
+  }, [keyboard.open, editingTextId]);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1939,7 +1979,9 @@ export function IssueWorkspaceCanvas({
                               return;
                             }
                             const active = document.activeElement as HTMLElement | null;
-                            if (active?.closest("[data-board-ui]")) return;
+                            if (active === textEditRef.current) return;
+                            // シート全体の data-board-ui ではなく、書式バー操作だけ維持
+                            if (active?.closest("[data-text-format-bar]")) return;
                             finishWorkspaceTextEdit();
                           }, 40);
                         }}
@@ -2601,7 +2643,22 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // キーボード開閉検知では編集終了しない（inset 揺れでキーボードが即閉じるため）
+  // キーボード閉じ → 書式バーを消し、上のパーツ挿入バーを戻す
+  const overlayKeyboardWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (!editingOverlayId) {
+      overlayKeyboardWasOpenRef.current = false;
+      return;
+    }
+    if (keyboard.open) {
+      overlayKeyboardWasOpenRef.current = true;
+      return;
+    }
+    if (!overlayKeyboardWasOpenRef.current) return;
+    if (Date.now() - overlayEditKeepAliveRef.current < 1200) return;
+    overlayKeyboardWasOpenRef.current = false;
+    finishOverlayTextEdit();
+  }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -3310,7 +3367,8 @@ function SheetFullscreenEditor({
                                   return;
                                 }
                                 const active = document.activeElement as HTMLElement | null;
-                                if (active?.closest("[data-board-ui]")) return;
+                                if (active === overlayTextRef.current) return;
+                                if (active?.closest("[data-text-format-bar]")) return;
                                 finishOverlayTextEdit();
                               }, 40);
                             }}
@@ -3499,11 +3557,13 @@ function SlidesTextFormatBar({
   return (
     <div
       data-board-ui
+      data-text-format-bar
       className="pointer-events-auto w-full border-t border-zinc-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)]"
       onPointerDown={(e) => {
         e.stopPropagation();
         const tag = (e.target as HTMLElement).tagName;
         if (tag !== "INPUT" && tag !== "TEXTAREA") e.preventDefault();
+        onKeepFocus?.();
       }}
     >
       {colorOpen ? (
