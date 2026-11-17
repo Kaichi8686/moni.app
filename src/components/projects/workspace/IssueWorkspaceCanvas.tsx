@@ -798,20 +798,6 @@ export function IssueWorkspaceCanvas({
     setCropImageId(null);
   }
 
-  function deleteItemById(id: string) {
-    if (!canEdit) return;
-    commit(
-      board.items.filter((item) => {
-        if (item.id === id) return false;
-        if (item.kind === "arrow" && (item.fromId === id || item.toId === id)) return false;
-        return true;
-      }),
-    );
-    if (selectedIds.includes(id)) setSelectedIds((ids) => ids.filter((x) => x !== id));
-    if (openSheetId === id) setOpenSheetId(null);
-    if (cropImageId === id) setCropImageId(null);
-  }
-
   function bringToFront(id: string) {
     updateItem(id, { z: nextZ(board.items) } as Partial<BoardItem>);
   }
@@ -1478,11 +1464,17 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
-  const textEditStartedAtRef = useRef(0);
+  /** 書式バー操作中も編集を落とさないための最終操作時刻 */
+  const textEditKeepAliveRef = useRef(0);
 
   function beginWorkspaceTextEdit(id: string) {
-    textEditStartedAtRef.current = Date.now();
+    textEditKeepAliveRef.current = Date.now();
     setEditingTextId(id);
+  }
+
+  function keepWorkspaceTextFocus() {
+    textEditKeepAliveRef.current = Date.now();
+    textEditRef.current?.focus({ preventScroll: true });
   }
 
   function finishWorkspaceTextEdit() {
@@ -1806,13 +1798,9 @@ export function IssueWorkspaceCanvas({
                     }}
                   >
                     <span className="w-full shrink-0 select-none">
-                      {(node.overlays?.some((o) => o.kind === "text" && o.text.trim())
+                      {node.overlays?.some((o) => o.kind === "text" && o.text.trim())
                         ? ""
-                        : node.text.trim()) || (
-                        <span className="text-zinc-400" style={{ fontSize: 12 }}>
-                          {tx("タップして開く", "Tap to open")}
-                        </span>
-                      )}
+                        : node.text.trim()}
                     </span>
                     {(node.overlays?.length ?? 0) > 0 ? (
                       <div className="pointer-events-none absolute inset-0">
@@ -1945,15 +1933,15 @@ export function IssueWorkspaceCanvas({
                         onChange={(e) => updateItem(node.id, { text: e.target.value })}
                         onBlur={() => {
                           window.setTimeout(() => {
-                            // フォーカス直後のレイアウト揺れで blur しても編集を維持
-                            if (Date.now() - textEditStartedAtRef.current < 600) {
-                              textEditRef.current?.focus({ preventScroll: true });
+                            // 書式バー連続操作・フォーカス直後の揺れでは編集を維持
+                            if (Date.now() - textEditKeepAliveRef.current < 1200) {
+                              keepWorkspaceTextFocus();
                               return;
                             }
                             const active = document.activeElement as HTMLElement | null;
                             if (active?.closest("[data-board-ui]")) return;
                             finishWorkspaceTextEdit();
-                          }, 0);
+                          }, 40);
                         }}
                         className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
                         style={{
@@ -2223,7 +2211,7 @@ export function IssueWorkspaceCanvas({
                         underline={Boolean(editingTextBox.underline)}
                         tx={tx}
                         onChange={(patch) => updateItem(editingTextBox.id, patch)}
-                        onKeepFocus={() => textEditRef.current?.focus({ preventScroll: true })}
+                        onKeepFocus={keepWorkspaceTextFocus}
                       />
                     </div>,
                     document.body,
@@ -2493,9 +2481,6 @@ export function IssueWorkspaceCanvas({
               tx={tx}
               onClose={closeOpenSheet}
               onPatch={patchOpenSheet}
-              onDelete={() => {
-                deleteItemById(openSheet.id);
-              }}
             />,
             document.body,
           )
@@ -2514,7 +2499,6 @@ function SheetFullscreenEditor({
   tx,
   onClose,
   onPatch,
-  onDelete,
 }: {
   sheet: BoardSheet;
   canEdit: boolean;
@@ -2522,7 +2506,6 @@ function SheetFullscreenEditor({
   tx: (ja: string, en: string) => string;
   onClose: () => void;
   onPatch: (patch: Partial<BoardSheet>) => void;
-  onDelete: () => void;
 }) {
   const colors = SHEET_COLORS[sheet.color];
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -2544,7 +2527,7 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
-  const overlayEditStartedAtRef = useRef(0);
+  const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -2579,8 +2562,13 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   function beginOverlayTextEdit(id: string) {
-    overlayEditStartedAtRef.current = Date.now();
+    overlayEditKeepAliveRef.current = Date.now();
     setEditingOverlayId(id);
+  }
+
+  function keepOverlayTextFocus() {
+    overlayEditKeepAliveRef.current = Date.now();
+    overlayTextRef.current?.focus({ preventScroll: true });
   }
 
   useLayoutEffect(() => {
@@ -2601,6 +2589,16 @@ function SheetFullscreenEditor({
       setSelectedOverlayIds((ids) => ids.filter((x) => x !== id));
       setOverlayHandlesVisible(false);
     }
+  }
+
+  function deleteSelectedOverlays() {
+    if (!canEdit || selectedOverlayIds.length === 0) return;
+    const drop = new Set(selectedOverlayIds);
+    const next = overlaysRef.current.filter((o) => !drop.has(o.id));
+    setOverlays(next);
+    setSelectedOverlayIds([]);
+    setOverlayHandlesVisible(false);
+    if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
   // キーボード開閉検知では編集終了しない（inset 揺れでキーボードが即閉じるため）
@@ -2932,14 +2930,6 @@ function SheetFullscreenEditor({
                 {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={onDelete}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-rose-600 active:scale-95"
-              aria-label={tx("削除", "Delete")}
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={2.25} />
-            </button>
           </div>
         ) : (
           <span className="w-11" />
@@ -3315,14 +3305,14 @@ function SheetFullscreenEditor({
                             onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
                             onBlur={() => {
                               window.setTimeout(() => {
-                                if (Date.now() - overlayEditStartedAtRef.current < 600) {
-                                  overlayTextRef.current?.focus({ preventScroll: true });
+                                if (Date.now() - overlayEditKeepAliveRef.current < 1200) {
+                                  keepOverlayTextFocus();
                                   return;
                                 }
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active?.closest("[data-board-ui]")) return;
                                 finishOverlayTextEdit();
-                              }, 0);
+                              }, 40);
                             }}
                             className="h-full w-full resize-none bg-transparent px-1 outline-none"
                             style={{
@@ -3373,6 +3363,24 @@ function SheetFullscreenEditor({
         </div>
       </div>
 
+      {/* 選択中パーツの削除（カード全体削除ボタンの代わり） */}
+      {canEdit && selectedOverlayIds.length > 0 && !editingOverlayId
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[720] flex justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                data-board-ui
+                onClick={deleteSelectedOverlays}
+                className="pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_28px_rgba(0,0,0,0.14)] active:scale-95"
+                aria-label={tx("削除", "Delete")}
+              >
+                <Trash2 className="h-6 w-6" strokeWidth={2.25} />
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
       {/* 文字編集中は書式バー（inset でキーボード直上。open 判定に依存しない） */}
       {canEdit && editingOverlayId && selectedOverlay && selectedOverlay.kind === "text"
         ? createPortal(
@@ -3386,7 +3394,7 @@ function SheetFullscreenEditor({
                 underline={Boolean(selectedOverlay.underline)}
                 tx={tx}
                 onChange={(patch) => patchOverlay(selectedOverlay.id, patch)}
-                onKeepFocus={() => overlayTextRef.current?.focus({ preventScroll: true })}
+                onKeepFocus={keepOverlayTextFocus}
               />
             </div>,
             document.body,
@@ -3431,20 +3439,48 @@ function SlidesTextFormatBar({
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
   const [colorOpen, setColorOpen] = useState(false);
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
+  const sizeRepeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!sizeEditing) setSizeDraft(String(fontSize));
   }, [fontSize, sizeEditing]);
 
+  useEffect(
+    () => () => {
+      if (sizeRepeatRef.current) clearInterval(sizeRepeatRef.current);
+    },
+    [],
+  );
+
   /** ボタンがフォーカスを奪ってキーボードが閉じるのを防ぐ */
   function keepEditingPointerDown(e: ReactPointerEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
+    onKeepFocus?.();
   }
 
   function bumpSize(delta: number) {
-    onChange({ fontSize: Math.min(96, Math.max(8, fontSize + delta)) });
+    const next = Math.min(96, Math.max(8, fontSizeRef.current + delta));
+    fontSizeRef.current = next;
+    onChange({ fontSize: next });
+    onKeepFocus?.();
     window.requestAnimationFrame(() => onKeepFocus?.());
+  }
+
+  function startSizeRepeat(delta: number) {
+    if (sizeRepeatRef.current) clearInterval(sizeRepeatRef.current);
+    bumpSize(delta);
+    sizeRepeatRef.current = setInterval(() => bumpSize(delta), 90);
+  }
+
+  function stopSizeRepeat() {
+    if (sizeRepeatRef.current) {
+      clearInterval(sizeRepeatRef.current);
+      sizeRepeatRef.current = null;
+    }
+    onKeepFocus?.();
   }
 
   function commitSize(raw: string) {
@@ -3452,12 +3488,12 @@ function SlidesTextFormatBar({
     if (!Number.isFinite(n)) {
       setSizeDraft(String(fontSize));
       setSizeEditing(false);
-      window.requestAnimationFrame(() => onKeepFocus?.());
+      onKeepFocus?.();
       return;
     }
     onChange({ fontSize: Math.min(96, Math.max(8, n)) });
     setSizeEditing(false);
-    window.requestAnimationFrame(() => onKeepFocus?.());
+    onKeepFocus?.();
   }
 
   return (
@@ -3498,8 +3534,15 @@ function SlidesTextFormatBar({
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("大きく", "Larger")}
-              onPointerDown={keepEditingPointerDown}
-              onClick={() => bumpSize(1)}
+              onPointerDown={(e) => {
+                keepEditingPointerDown(e);
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                startSizeRepeat(1);
+              }}
+              onPointerUp={stopSizeRepeat}
+              onPointerCancel={stopSizeRepeat}
+              onLostPointerCapture={stopSizeRepeat}
+              onClick={(e) => e.preventDefault()}
             >
               <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
@@ -3507,8 +3550,15 @@ function SlidesTextFormatBar({
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("小さく", "Smaller")}
-              onPointerDown={keepEditingPointerDown}
-              onClick={() => bumpSize(-1)}
+              onPointerDown={(e) => {
+                keepEditingPointerDown(e);
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                startSizeRepeat(-1);
+              }}
+              onPointerUp={stopSizeRepeat}
+              onPointerCancel={stopSizeRepeat}
+              onLostPointerCapture={stopSizeRepeat}
+              onClick={(e) => e.preventDefault()}
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
