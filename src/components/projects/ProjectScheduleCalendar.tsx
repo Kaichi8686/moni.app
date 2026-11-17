@@ -794,6 +794,9 @@ export function ProjectScheduleCalendar({
                     );
                   }
                   const list = eventsByDay.get(key) ?? [];
+                  const overflow = list.length >= 4;
+                  const visible = overflow ? list.slice(0, 2) : list;
+                  const moreCount = overflow ? list.length - 2 : 0;
                   const isToday = key === todayKey;
                   const isSelected = key === selectedKey;
                   const showMark = selectedKey ? isSelected : isToday;
@@ -802,7 +805,7 @@ export function ProjectScheduleCalendar({
                       key={key}
                       type="button"
                       onClick={() => onPickDay(key)}
-                      className={`flex h-full flex-col items-center gap-0.5 px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
+                      className={`flex h-full flex-col items-center gap-0.5 overflow-hidden px-0.5 py-1.5 text-center transition active:bg-zinc-50 ${
                         fullBleed ? "min-h-[96px]" : "min-h-[88px]"
                       }`}
                     >
@@ -813,8 +816,8 @@ export function ProjectScheduleCalendar({
                       >
                         {cell.getDate()}
                       </span>
-                      <div className="flex w-full flex-1 flex-col gap-[2px] px-[1px]">
-                        {list.slice(0, fullBleed ? 4 : 3).map((item) =>
+                      <div className="flex w-full min-h-0 flex-1 flex-col gap-[2px] overflow-hidden px-[1px]">
+                        {visible.map((item) =>
                           item.kind === "schedule" ? (
                             <span
                               key={`s-${item.schedule.id}`}
@@ -833,6 +836,11 @@ export function ProjectScheduleCalendar({
                             </span>
                           ),
                         )}
+                        {moreCount > 0 ? (
+                          <span className="truncate px-0.5 text-left text-[8px] font-medium leading-tight text-zinc-400">
+                            他{moreCount}件
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   );
