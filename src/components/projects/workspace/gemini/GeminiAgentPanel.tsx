@@ -13,8 +13,6 @@ import {
   PanelBottomClose,
   X,
 } from "lucide-react";
-
-const AI_CHAT_IMMERSIVE_CLASS = "moni-ai-chat-immersive";
 import type {
   GeminiAgentMode,
   IdeasAgentPayload,
@@ -35,7 +33,10 @@ import { applyAgentRoadmapToProject, type ApplyRoadmapMode } from "@/lib/project
 import { AiChatCopyButton } from "@/components/ai/AiChatCopyButton";
 import { AiChatHistoryRail } from "@/components/ai/AiChatHistoryRail";
 import { AiChatStreamingRichText } from "@/components/ai/AiChatStreamingRichText";
+import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+
+const AI_CHAT_IMMERSIVE_CLASS = "moni-ai-chat-immersive";
 
 function conversationsKey(projectId: string, mode: GeminiAgentMode) {
   return `moni-gemini-conversations.v1:${projectId}:${mode}`;
@@ -132,8 +133,11 @@ export function GeminiAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   /** Fullscreen coach: bottom tab bar visible (false → slide off-screen). */
   const [tabBarVisible, setTabBarVisible] = useState(true);
+  /** Lift composer above the soft keyboard (overlays-content does not shrink layout). */
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fullscreen = variant === "fullscreen";
+  const keyboardOpen = useVirtualKeyboardOpen();
   const handoffAppliedRef = useRef(false);
   /** Only persist to the store key that this panel instance last hydrated for (per project). */
   const persistKeyRef = useRef("");
@@ -226,11 +230,35 @@ export function GeminiAgentPanel({
   useEffect(() => {
     if (!fullscreen) return;
     const root = document.documentElement;
-    root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, !tabBarVisible);
+    // Hide clearance while typing so the composer can sit flush above the keyboard.
+    const hideBar = !tabBarVisible || keyboardOpen || keyboardInset > 8;
+    root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, hideBar);
     return () => {
       root.classList.remove(AI_CHAT_IMMERSIVE_CLASS);
     };
-  }, [fullscreen, tabBarVisible]);
+  }, [fullscreen, tabBarVisible, keyboardOpen, keyboardInset]);
+
+  useEffect(() => {
+    if (!fullscreen || typeof window === "undefined") return;
+    const sync = () => {
+      const vv = window.visualViewport;
+      if (!vv) {
+        setKeyboardInset(0);
+        return;
+      }
+      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    };
+    sync();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      vv?.removeEventListener("resize", sync);
+      vv?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, [fullscreen]);
 
   useEffect(() => {
     if (!hydrated || !initialUserMessage?.trim() || handoffAppliedRef.current) return;
@@ -469,7 +497,10 @@ export function GeminiAgentPanel({
         <div className="hidden w-[240px] shrink-0 border-r border-[#E5E7EB] md:block">{historyRail}</div>
       ) : null}
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+        style={fullscreen && keyboardInset > 0 ? { paddingBottom: keyboardInset } : undefined}
+      >
         {fullscreen ? (
           <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
             <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -780,7 +811,11 @@ export function GeminiAgentPanel({
           onSubmit={(e) => void onSubmit(e)}
           className={
             fullscreen
-              ? "sticky bottom-0 z-20 shrink-0 border-t border-zinc-100 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
+              ? `sticky bottom-0 z-20 shrink-0 border-t border-zinc-100 bg-white px-3 pt-2 ${
+                  keyboardInset > 0 || keyboardOpen
+                    ? "pb-2"
+                    : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                }`
               : "shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           }
         >
@@ -828,7 +863,7 @@ export function GeminiAgentPanel({
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
             </div>
-            {fullscreen ? (
+            {fullscreen && !keyboardOpen && keyboardInset < 8 ? (
               <button
                 type="button"
                 onClick={() => setTabBarVisible((v) => !v)}
