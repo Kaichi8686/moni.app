@@ -6,6 +6,7 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { CompanyCard } from "@/components/office/CompanyCard";
 import { IncidentPanel } from "@/components/office/IncidentPanel";
 import { NameSetup } from "@/components/office/NameSetup";
+import { OfficeScene } from "@/components/office/OfficeScene";
 import { RankingPanel } from "@/components/office/RankingPanel";
 import { ScoreReveal } from "@/components/office/ScoreReveal";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
@@ -190,99 +191,133 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }
 
   const needsSetup = !payload?.company || !payload.company.about;
+  const company = payload?.company ?? null;
+  const playReady = Boolean(company?.about);
 
   const body = boot ? (
-    <div className="mx-auto max-w-3xl space-y-3 px-4 pt-6 sm:px-6">
+    <div className="mx-auto max-w-5xl space-y-3 px-4 pt-6 sm:px-6">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-100" />
+        <div key={i} className="h-28 animate-pulse rounded-3xl bg-white/70" />
       ))}
     </div>
   ) : needsSetup ? (
-    <NameSetup
-      busy={busy}
-      error={err}
-      existingName={
-        payload?.company && !payload.company.about ? payload.company.name : null
-      }
-      onSubmit={onSetup}
-    />
+    <div className="relative mx-auto max-w-xl px-4 pb-28 pt-6 sm:px-6">
+      <NameSetup
+        busy={busy}
+        error={err}
+        existingName={
+          payload?.company && !payload.company.about ? payload.company.name : null
+        }
+        onSubmit={onSetup}
+      />
+    </div>
   ) : (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 pb-28 pt-3 sm:px-6">
-      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
-        <button
-          type="button"
-          onClick={() => setTab("play")}
-          className={`rounded-xl py-2.5 text-sm font-extrabold ${
-            tab === "play" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-          }`}
-        >
-          オフィス
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("rank")}
-          className={`rounded-xl py-2.5 text-sm font-extrabold ${
-            tab === "rank" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-          }`}
-        >
-          順位
-        </button>
-      </div>
-
-      {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
-
-      {tab === "play" ? (
-        <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-          <CompanyCard
-            company={payload.company!}
-            seasonRevenue={payload.seasonRevenue}
-            staminaValue={payload.stamina.value}
-            nextRecoverAt={payload.stamina.nextRecoverAt}
-            sceneFx={sceneFx}
+    <div
+      className={`relative ${
+        tab === "play" ? "min-h-[calc(100dvh-7.5rem)]" : "min-h-[calc(100dvh-7.5rem)]"
+      }`}
+    >
+      {tab === "play" && playReady ? (
+        <>
+          <OfficeScene
+            level={company!.level}
+            industry={company!.industry}
+            fx={sceneFx}
+            variant="backdrop"
           />
-          {lastSubmit ? (
-            <ScoreReveal
-              submission={lastSubmit}
-              onNext={() => void onNextIncident()}
-              busy={busy}
-            />
-          ) : (
-            <IncidentPanel
-              key={incident?.id ?? "empty"}
-              incident={incident}
-              company={payload.company!}
-              stamina={payload.stamina.value}
-              nextRecoverAt={payload.stamina.nextRecoverAt}
-              busy={busy}
-              playEnter={playEnter}
-              onSubmit={(a) => void onSubmit(a)}
-              onRerollStrategies={async () => {
-                const next = await rerollStrategies();
-                setIncident(next);
-                return next;
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.55)_0%,rgba(255,247,237,0.28)_28%,rgba(255,247,237,0.12)_55%,rgba(255,255,255,0.62)_100%)]"
+            aria-hidden
+          />
+        </>
+      ) : null}
+
+      <div className="relative z-10 mx-auto max-w-5xl space-y-4 px-4 pb-28 pt-3 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-white/70 bg-white/80 p-1 shadow-sm backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setTab("play")}
+            className={`rounded-xl py-3 text-sm font-extrabold sm:text-base ${
+              tab === "play" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+            }`}
+          >
+            オフィス
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("rank")}
+            className={`rounded-xl py-3 text-sm font-extrabold sm:text-base ${
+              tab === "rank" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+            }`}
+          >
+            順位
+          </button>
+        </div>
+
+        {err ? (
+          <p className="rounded-2xl bg-rose-50/90 px-3 py-2 text-sm font-semibold text-rose-600 backdrop-blur">
+            {err}
+          </p>
+        ) : null}
+
+        {tab === "play" ? (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] lg:items-start lg:gap-5">
+            <div className="lg:sticky lg:top-24">
+              <CompanyCard
+                company={company!}
+                seasonRevenue={payload!.seasonRevenue}
+                staminaValue={payload!.stamina.value}
+                nextRecoverAt={payload!.stamina.nextRecoverAt}
+              />
+            </div>
+            <div className="min-w-0">
+              {lastSubmit ? (
+                <ScoreReveal
+                  submission={lastSubmit}
+                  onNext={() => void onNextIncident()}
+                  busy={busy}
+                />
+              ) : (
+                <IncidentPanel
+                  key={incident?.id ?? "empty"}
+                  incident={incident}
+                  company={company!}
+                  stamina={payload!.stamina.value}
+                  nextRecoverAt={payload!.stamina.nextRecoverAt}
+                  busy={busy}
+                  playEnter={playEnter}
+                  onSubmit={(a) => void onSubmit(a)}
+                  onRerollStrategies={async () => {
+                    const next = await rerollStrategies();
+                    setIncident(next);
+                    return next;
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-white/80 bg-white/90 p-1 shadow-[0_12px_40px_rgba(28,25,23,0.06)] backdrop-blur-md">
+            <RankingPanel
+              rows={rankRows}
+              meta={rankMeta}
+              onToggle={async (enabled) => {
+                const c = await toggleRanking(enabled);
+                setPayload((p) => (p ? { ...p, company: c } : p));
+                setRankMeta((m) => (m ? { ...m, rankingEnabled: enabled } : m));
               }}
             />
-          )}
-        </div>
-      ) : (
-        <RankingPanel
-          rows={rankRows}
-          meta={rankMeta}
-          onToggle={async (enabled) => {
-            const c = await toggleRanking(enabled);
-            setPayload((p) => (p ? { ...p, company: c } : p));
-            setRankMeta((m) => (m ? { ...m, rankingEnabled: enabled } : m));
-          }}
-        />
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
   const shell = (
     <>
       {!hideChrome ? (
-        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white">
-          <div className="mx-auto max-w-3xl px-4 pb-2 pt-1 sm:px-6">
+        <header className="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-md">
+          <div className="mx-auto max-w-5xl px-4 pb-2 pt-1 sm:px-6 lg:px-8">
             <AppBrandHeader bare />
             <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-500">
               オフィス
@@ -305,6 +340,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   );
 
   return (
-    <div className={embedded ? undefined : "min-h-[100dvh] bg-white pb-bottom-nav"}>{shell}</div>
+    <div className={embedded ? undefined : "min-h-[100dvh] bg-[#FFF7ED] pb-bottom-nav"}>
+      {shell}
+    </div>
   );
 }

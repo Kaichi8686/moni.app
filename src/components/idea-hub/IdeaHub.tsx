@@ -176,17 +176,25 @@ function IdeaHubInner() {
 
   return (
     <div
-      className={`relative bg-white ${
+      className={`relative ${
+        view === "mine" && sparkMode === "office" ? "bg-[#FFF7ED]" : "bg-white"
+      } ${
         inAiChat
           ? "flex h-[100dvh] flex-col overflow-hidden"
           : `min-h-[100dvh] ${hideBottomNav ? "" : "pb-bottom-nav"}`
       }`}
     >
       {(view === "mine" && sparkMode === "office") || inAiChat ? (
-        <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur">
+        <header
+          className={`sticky top-0 z-30 shrink-0 border-b ${
+            view === "mine" && sparkMode === "office"
+              ? "border-white/60 bg-white/75 backdrop-blur-md"
+              : "border-zinc-100 bg-white md:bg-white/95 md:backdrop-blur"
+          }`}
+        >
           <div
             className={`mx-auto px-4 pb-2 pt-1 sm:px-6 lg:px-8 ${
-              view === "mine" && sparkMode === "office" ? "max-w-3xl" : "max-w-lg"
+              view === "mine" && sparkMode === "office" ? "max-w-5xl" : "max-w-lg"
             }`}
           >
             {inAiChat ? null : <AppBrandHeader bare />}
