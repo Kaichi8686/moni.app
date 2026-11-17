@@ -188,7 +188,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const dirtyRef = useRef(false);
   const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
-  const lastTapRef = useRef(0);
   const suppressEditUntilRef = useRef(0);
   const pinchRef = useRef<{
     startDist: number;
@@ -201,8 +200,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
-  /** 最初は閲覧（戻る）モード。ダブルタップで編集 → チェックで閲覧＋ズーム解禁 */
-  const [editMode, setEditMode] = useState(false);
+  /** 編集可なら最初から入力できる。チェックで閲覧＋ズーム解禁、タップで再編集 */
+  const [editMode, setEditMode] = useState(() => Boolean(autoSave));
   const [zoomUnlocked, setZoomUnlocked] = useState(false);
   const [docZoom, setDocZoom] = useState(1);
   const [docPan, setDocPan] = useState({ x: 0, y: 0 });
@@ -619,7 +618,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
-    setEditMode(false);
+    setEditMode(Boolean(autoSave));
     setZoomUnlocked(false);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
@@ -627,6 +626,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     queueMicrotask(() => {
       setSaveHint("保存済み");
       refreshHistoryState();
+      if (autoSave) {
+        el.focus();
+      }
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
 
@@ -665,7 +667,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     refreshHistoryState();
   }, [flushToParent, refreshHistoryState, rememberSelection]);
 
-  const onEditorDoubleActivate = useCallback(() => {
+  const onEditorActivate = useCallback(() => {
     if (editMode) return;
     if (Date.now() < suppressEditUntilRef.current) return;
     if (docZoom > 1.02) return;
@@ -677,13 +679,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     if (Date.now() < suppressEditUntilRef.current) return;
     if (docZoom > 1.02) return;
     if (pointersRef.current.size > 0) return;
-    const now = Date.now();
-    if (now - lastTapRef.current < 320) {
-      enterEditMode();
-      lastTapRef.current = 0;
-      return;
-    }
-    lastTapRef.current = now;
+    // シングルタップで編集開始（iOS のダブルタップズームと競合しにくい）
+    enterEditMode();
   }, [docZoom, editMode, enterEditMode]);
 
   const applyBlockStyle = (v: string) => {
@@ -821,8 +818,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   ? saveHint
                   : canEditDoc
                     ? zoomUnlocked
-                      ? "ピンチで拡大 · ダブルタップで編集"
-                      : "ダブルタップで編集"
+                      ? "ピンチで拡大 · タップで編集"
+                      : "タップで編集"
                     : saveHint}
             </p>
           </div>
@@ -898,7 +895,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
         ) : null}
 
         <div
-          className={`min-h-0 flex-1 bg-white ${
+          className={`relative z-0 min-h-0 flex-1 bg-white ${
             canBrowseZoom && docZoom > 1.01 ? "overflow-auto" : "overflow-y-auto overflow-x-hidden"
           } ${fullscreen ? "" : "bg-[#F3F4F6] px-3 py-4 sm:px-6 sm:py-6"}`}
           style={{ touchAction: canBrowseZoom ? "none" : "pan-y" }}
@@ -952,7 +949,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   refreshHistoryState();
                 }}
-                onDoubleClick={onEditorDoubleActivate}
+                onClick={onEditorActivate}
+                onDoubleClick={onEditorActivate}
                 onTouchEnd={onEditorTouchEnd}
                 className={`gdocs-editor-body w-full flex-1 outline-none ${editing ? "" : "cursor-text"}`}
                 style={{
@@ -961,58 +959,186 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     ? "1rem 1.25rem 1.5rem"
                     : "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
                   boxSizing: "border-box",
+                  // iOS のダブルタップズームを抑え、すぐ入力できるようにする
+                  touchAction: canBrowseZoom ? "none" : "manipulation",
                 }}
               />
             </div>
           )}
         </div>
 
-        {/* 入力欄の直上（キーボードのすぐ上）に文字設定バー */}
+        {/* 入力欄の直上（キーボードのすぐ上）に文字設定バー。
+            色などは上方向 absolute だとドキュメント面の下に回るので、バー内の行で開く */}
         {editing ? (
-        <div
-          className={`relative z-10 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.06)] ${
-            fullscreen && viewportBox.height >= (typeof window !== "undefined" ? window.innerHeight - 8 : 9999)
-              ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
-              : "pb-1"
-          }`}
-          role="toolbar"
-          aria-label="文字の書式"
-        >
-          <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <ToolBtn
-              title="太字"
-              onClick={() => {
-                exec("bold");
-                scheduleAutoSave();
-              }}
-              disabled={!editing}
-            >
-              <Bold className="h-4 w-4" strokeWidth={2.75} />
-            </ToolBtn>
-            <ToolBtn
-              title="斜体"
-              onClick={() => {
-                exec("italic");
-                scheduleAutoSave();
-              }}
-              disabled={!editing}
-            >
-              <Italic className="h-4 w-4" />
-            </ToolBtn>
-            <ToolBtn
-              title="下線"
-              onClick={() => {
-                exec("underline");
-                scheduleAutoSave();
-              }}
-              disabled={!editing}
-            >
-              <Underline className="h-4 w-4" />
-            </ToolBtn>
+          <div
+            className={`relative z-50 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)] ${
+              fullscreen && viewportBox.height >= (typeof window !== "undefined" ? window.innerHeight - 8 : 9999)
+                ? "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+                : "pb-1"
+            }`}
+            role="toolbar"
+            aria-label="文字の書式"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {colorOpen ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[#e8eaed] px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {TEXT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`文字色 ${c}`}
+                    className="h-8 w-8 shrink-0 rounded-full border border-[#dadce0]"
+                    style={{ background: c }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      exec("foreColor", c);
+                      setColorOpen(false);
+                      scheduleAutoSave();
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {highlightOpen ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[#e8eaed] px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {HIGHLIGHT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={c === "transparent" ? "ハイライトなし" : `ハイライト ${c}`}
+                    className="h-8 w-8 shrink-0 rounded-md border border-[#dadce0]"
+                    style={{
+                      background:
+                        c === "transparent"
+                          ? "linear-gradient(to bottom right, transparent calc(50% - 1px), #d93025 calc(50% - 1px), #d93025 calc(50% + 1px), transparent calc(50% + 1px)), #fff"
+                          : c,
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      exec("hiliteColor", c === "transparent" ? "transparent" : c);
+                      setHighlightOpen(false);
+                      scheduleAutoSave();
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {alignOpen ? (
+              <div className="flex items-center gap-0.5 border-b border-[#e8eaed] px-1.5 py-1">
+                <ToolBtn
+                  title="左揃え"
+                  onClick={() => {
+                    exec("justifyLeft");
+                    setAlignOpen(false);
+                    scheduleAutoSave();
+                  }}
+                >
+                  <AlignLeft className="h-4 w-4" />
+                </ToolBtn>
+                <ToolBtn
+                  title="中央揃え"
+                  onClick={() => {
+                    exec("justifyCenter");
+                    setAlignOpen(false);
+                    scheduleAutoSave();
+                  }}
+                >
+                  <AlignCenter className="h-4 w-4" />
+                </ToolBtn>
+                <ToolBtn
+                  title="右揃え"
+                  onClick={() => {
+                    exec("justifyRight");
+                    setAlignOpen(false);
+                    scheduleAutoSave();
+                  }}
+                >
+                  <AlignRight className="h-4 w-4" />
+                </ToolBtn>
+              </div>
+            ) : null}
+            {styleOpen ? (
+              <div className="border-b border-[#e8eaed] px-2 py-1.5">
+                <p className="pb-1 text-[11px] font-semibold text-[#80868b]">文字サイズ</p>
+                <div className="flex flex-wrap gap-1 pb-2">
+                  {[12, 14, 16, 18, 24, 32].map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      className="min-w-[2.25rem] rounded-md border border-[#dadce0] px-2 py-1.5 text-[12px] font-semibold text-[#202124] hover:bg-[#f1f3f4]"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        applyFontSizePx(size);
+                        setStyleOpen(false);
+                        scheduleAutoSave();
+                      }}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+                <p className="pb-1 text-[11px] font-semibold text-[#80868b]">スタイル</p>
+                <div className="flex flex-wrap gap-1">
+                  {(
+                    [
+                      ["p", "本文"],
+                      ["h1", "見出し1"],
+                      ["h2", "見出し2"],
+                      ["h3", "見出し3"],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className="rounded-md border border-[#dadce0] px-3 py-1.5 text-[13px] text-[#202124] hover:bg-[#f1f3f4]"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={() => applyBlockStyle(v)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
-            <span className="mx-0.5 h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+            <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <ToolBtn
+                title="太字"
+                onClick={() => {
+                  exec("bold");
+                  scheduleAutoSave();
+                }}
+                disabled={!editing}
+              >
+                <Bold className="h-4 w-4" strokeWidth={2.75} />
+              </ToolBtn>
+              <ToolBtn
+                title="斜体"
+                onClick={() => {
+                  exec("italic");
+                  scheduleAutoSave();
+                }}
+                disabled={!editing}
+              >
+                <Italic className="h-4 w-4" />
+              </ToolBtn>
+              <ToolBtn
+                title="下線"
+                onClick={() => {
+                  exec("underline");
+                  scheduleAutoSave();
+                }}
+                disabled={!editing}
+              >
+                <Underline className="h-4 w-4" />
+              </ToolBtn>
 
-            <div className="relative">
+              <span className="mx-0.5 h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+
               <ToolBtn
                 title="文字色"
                 active={colorOpen}
@@ -1030,31 +1156,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   <span className="mt-0.5 h-[3px] w-4 rounded-sm bg-[#d93025]" aria-hidden />
                 </span>
               </ToolBtn>
-              {colorOpen ? (
-                <>
-                  <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setColorOpen(false)} />
-                  <div className="absolute bottom-full left-0 z-50 mb-1 flex gap-1 rounded-lg border border-[#dadce0] bg-white p-2 shadow-lg">
-                    {TEXT_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        aria-label={`文字色 ${c}`}
-                        className="h-7 w-7 rounded-full border border-[#dadce0]"
-                        style={{ background: c }}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          exec("foreColor", c);
-                          setColorOpen(false);
-                          scheduleAutoSave();
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            <div className="relative">
               <ToolBtn
                 title="ハイライト"
                 active={highlightOpen}
@@ -1069,36 +1170,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               >
                 <Highlighter className="h-4 w-4" />
               </ToolBtn>
-              {highlightOpen ? (
-                <>
-                  <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setHighlightOpen(false)} />
-                  <div className="absolute bottom-full left-0 z-50 mb-1 flex gap-1 rounded-lg border border-[#dadce0] bg-white p-2 shadow-lg">
-                    {HIGHLIGHT_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        aria-label={c === "transparent" ? "ハイライトなし" : `ハイライト ${c}`}
-                        className="h-7 w-7 rounded-md border border-[#dadce0]"
-                        style={{
-                          background:
-                            c === "transparent"
-                              ? "linear-gradient(to bottom right, transparent calc(50% - 1px), #d93025 calc(50% - 1px), #d93025 calc(50% + 1px), transparent calc(50% + 1px)), #fff"
-                              : c,
-                        }}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => {
-                          exec("hiliteColor", c === "transparent" ? "transparent" : c);
-                          setHighlightOpen(false);
-                          scheduleAutoSave();
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            <div className="relative">
               <ToolBtn
                 title="配置"
                 active={alignOpen}
@@ -1113,67 +1184,28 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               >
                 <AlignLeft className="h-4 w-4" />
               </ToolBtn>
-              {alignOpen ? (
-                <>
-                  <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setAlignOpen(false)} />
-                  <div className="absolute bottom-full left-0 z-50 mb-1 flex gap-0.5 rounded-lg border border-[#dadce0] bg-white p-1 shadow-lg">
-                    <ToolBtn
-                      title="左揃え"
-                      onClick={() => {
-                        exec("justifyLeft");
-                        setAlignOpen(false);
-                        scheduleAutoSave();
-                      }}
-                    >
-                      <AlignLeft className="h-4 w-4" />
-                    </ToolBtn>
-                    <ToolBtn
-                      title="中央揃え"
-                      onClick={() => {
-                        exec("justifyCenter");
-                        setAlignOpen(false);
-                        scheduleAutoSave();
-                      }}
-                    >
-                      <AlignCenter className="h-4 w-4" />
-                    </ToolBtn>
-                    <ToolBtn
-                      title="右揃え"
-                      onClick={() => {
-                        exec("justifyRight");
-                        setAlignOpen(false);
-                        scheduleAutoSave();
-                      }}
-                    >
-                      <AlignRight className="h-4 w-4" />
-                    </ToolBtn>
-                  </div>
-                </>
-              ) : null}
-            </div>
 
-            <ToolBtn
-              title="箇条書き"
-              onClick={() => {
-                exec("insertUnorderedList");
-                scheduleAutoSave();
-              }}
-              disabled={!editing}
-            >
-              <List className="h-4 w-4" />
-            </ToolBtn>
-            <ToolBtn
-              title="番号付き"
-              onClick={() => {
-                exec("insertOrderedList");
-                scheduleAutoSave();
-              }}
-              disabled={!editing}
-            >
-              <ListOrdered className="h-4 w-4" />
-            </ToolBtn>
+              <ToolBtn
+                title="箇条書き"
+                onClick={() => {
+                  exec("insertUnorderedList");
+                  scheduleAutoSave();
+                }}
+                disabled={!editing}
+              >
+                <List className="h-4 w-4" />
+              </ToolBtn>
+              <ToolBtn
+                title="番号付き"
+                onClick={() => {
+                  exec("insertOrderedList");
+                  scheduleAutoSave();
+                }}
+                disabled={!editing}
+              >
+                <ListOrdered className="h-4 w-4" />
+              </ToolBtn>
 
-            <div className="relative">
               <ToolBtn
                 title="スタイル"
                 active={styleOpen}
@@ -1195,56 +1227,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   </span>
                 </span>
               </ToolBtn>
-              {styleOpen ? (
-                <>
-                  <button type="button" className="fixed inset-0 z-40" aria-label="閉じる" onClick={() => setStyleOpen(false)} />
-                  <div className="absolute bottom-full right-0 z-50 mb-1 min-w-[160px] rounded-lg border border-[#dadce0] bg-white py-1 shadow-lg">
-                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-[#80868b]">文字サイズ</p>
-                    <div className="flex flex-wrap gap-1 px-3 pb-2">
-                      {[12, 14, 16, 18, 24, 32].map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          className="min-w-[2.25rem] rounded-md border border-[#dadce0] px-2 py-1.5 text-[12px] font-semibold text-[#202124] hover:bg-[#f1f3f4]"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onPointerDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            applyFontSizePx(size);
-                            setStyleOpen(false);
-                            scheduleAutoSave();
-                          }}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mx-2 border-t border-[#dadce0]" />
-                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold text-[#80868b]">スタイル</p>
-                    {(
-                      [
-                        ["p", "本文"],
-                        ["h1", "見出し1"],
-                        ["h2", "見出し2"],
-                        ["h3", "見出し3"],
-                      ] as const
-                    ).map(([v, label]) => (
-                      <button
-                        key={v}
-                        type="button"
-                        className="block w-full px-4 py-2.5 text-left text-[14px] text-[#202124] hover:bg-[#f1f3f4]"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onPointerDown={(e) => e.preventDefault()}
-                        onClick={() => applyBlockStyle(v)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : null}
             </div>
           </div>
-        </div>
         ) : null}
 
         {fullscreen ? null : (

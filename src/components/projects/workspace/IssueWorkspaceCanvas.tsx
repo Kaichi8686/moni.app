@@ -28,14 +28,14 @@ import {
   Crop,
   Eraser,
   Highlighter,
+  Image as ImageIcon,
   Italic,
-  Link2,
   Minus,
   MousePointer2,
-  Paperclip,
   PenLine,
   Plus,
   Redo2,
+  Shapes,
   Square,
   StickyNote,
   Triangle,
@@ -90,7 +90,45 @@ type Props = {
   fullscreen?: boolean;
   /** ツールバー左端（戻るボタンなど） */
   toolbarStart?: ReactNode;
+  /** カード編集中のシートIDを sessionStorage に覚えるキー */
+  storageKey?: string;
 };
+
+/** iOS などでキーボードが開いているとみなす閾値（px） */
+const KEYBOARD_OPEN_PX = 100;
+
+function useVisualKeyboard() {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setInset(next);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  return {
+    inset,
+    open: inset >= KEYBOARD_OPEN_PX,
+    /** レイアウトviewport基準でキーボード直上に fixed 配置（absolute のズレ防止） */
+    dockStyle: {
+      position: "fixed" as const,
+      left: 0,
+      right: 0,
+      bottom: inset,
+      zIndex: 720,
+    } satisfies CSSProperties,
+  };
+}
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 8;
@@ -136,17 +174,6 @@ function strokesNear(
     }
   }
   return false;
-}
-
-/** 図形ツール用：複数図形が見えるアイコン */
-function ShapesGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="9" height="9" rx="1.5" />
-      <circle cx="17.5" cy="7.5" r="3.5" />
-      <path d="M8 21 L12 13 L16 21 Z" />
-    </svg>
-  );
 }
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
@@ -460,10 +487,12 @@ export function IssueWorkspaceCanvas({
   onRequestPhoto,
   fullscreen = false,
   toolbarStart,
+  storageKey,
 }: Props) {
   const { tx, locale } = useI18n();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const textEditRef = useRef<HTMLTextAreaElement | null>(null);
   const [tool, setTool] = useState<Tool>("navigate");
   const [sheetColor, setSheetColor] = useState<SheetColor>("yellow");
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
@@ -476,7 +505,15 @@ export function IssueWorkspaceCanvas({
   const selectedId = selectedIds[0] ?? null;
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
   /** ロイロノート風：紙をタップで全画面編集 */
-  const [openSheetId, setOpenSheetId] = useState<string | null>(null);
+  const [openSheetId, setOpenSheetId] = useState<string | null>(() => {
+    if (!storageKey || typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem(`moni:ws-open-sheet:${storageKey}`);
+      return raw && raw.trim() ? raw.trim() : null;
+    } catch {
+      return null;
+    }
+  });
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [cropImageId, setCropImageId] = useState<string | null>(null);
   /** 切り取りドラッグ中の仮枠（毎フレーム board を書き換えない） */
@@ -552,6 +589,25 @@ export function IssueWorkspaceCanvas({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // カード編集中のシートを記憶（他タブ／他画面から戻ったとき復元）
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    try {
+      const key = `moni:ws-open-sheet:${storageKey}`;
+      if (openSheetId) window.sessionStorage.setItem(key, openSheetId);
+      else window.sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }, [openSheetId, storageKey]);
+
+  // 記憶したシートがボードから消えていたらクリア
+  useEffect(() => {
+    if (!openSheetId) return;
+    const exists = board.items.some((item) => item.kind === "sheet" && item.id === openSheetId);
+    if (!exists) setOpenSheetId(null);
+  }, [board.items, openSheetId]);
 
   // キーボード閉じたあと操作バーが画面外に残らないようスクロールを戻す
   useEffect(() => {
@@ -1424,26 +1480,35 @@ export function IssueWorkspaceCanvas({
       : null;
   // 写真選択中は切り取りバーを出す（ハンドル表示前でも）
   const showInsertBar = !insertToolbarHidden && !selectedImage;
-  // リンク（矢印）はトップバー。プラス展開はカード/テキスト/図形/矢印のみ
+  // プラス展開：カード / テキスト / 図形 / 矢印（写真はトップバー）
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
-  // ソフトキーボード分の下余白（文字編集バーをキーボード直上に置く）
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const keyboard = useVisualKeyboard();
+  const wasKeyboardOpenRef = useRef(false);
+
+  function finishWorkspaceTextEdit() {
+    const id = editingTextId;
+    setEditingTextId(null);
+    if (!id) return;
+    const box = boardRef.current.items.find((item): item is BoardTextBox => item.kind === "text" && item.id === id);
+    if (box && !box.text.trim()) {
+      commit(boardRef.current.items.filter((item) => item.id !== id));
+      setSelectedIds((ids) => ids.filter((x) => x !== id));
+      setHandlesVisible(false);
+    }
+  }
+
+  // キーボードが閉じたら編集終了（iOS のキーボード閉じボタン対策）＋空テキスト削除
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-      setKeyboardInset(inset);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
+    if (keyboard.open) {
+      wasKeyboardOpenRef.current = true;
+      return;
+    }
+    if (!wasKeyboardOpenRef.current) return;
+    wasKeyboardOpenRef.current = false;
+    if (editingTextId) finishWorkspaceTextEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: react to keyboard close
+  }, [keyboard.open, editingTextId]);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1877,6 +1942,7 @@ export function IssueWorkspaceCanvas({
                 >
                   {editing && canEdit ? (
                       <textarea
+                        ref={textEditRef}
                         data-board-ui
                         autoFocus
                         value={node.text}
@@ -1889,7 +1955,7 @@ export function IssueWorkspaceCanvas({
                           window.setTimeout(() => {
                             const active = document.activeElement as HTMLElement | null;
                             if (active?.closest("[data-board-ui]")) return;
-                            setEditingTextId(null);
+                            finishWorkspaceTextEdit();
                             resetScrollParents();
                           }, 0);
                         }}
@@ -2148,26 +2214,30 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
-              {/* 文字編集中：キーボード直上のスライド風書式バー（横スワイプ） */}
-              {editingTextId && selectedTextBox && canEdit && !toolbarHidden ? (
-                <div
-                  className="pointer-events-none fixed inset-x-0 z-[520]"
-                  style={{
-                    bottom: `calc(${keyboardInset}px + env(safe-area-inset-bottom, 0px))`,
-                  }}
-                >
-                  <SlidesTextFormatBar
-                    fontSize={selectedTextBox.fontSize}
-                    textColor={selectedTextBox.textColor}
-                    align={selectedTextBox.align}
-                    bold={Boolean(selectedTextBox.bold)}
-                    italic={Boolean(selectedTextBox.italic)}
-                    underline={Boolean(selectedTextBox.underline)}
-                    tx={tx}
-                    onChange={(patch) => updateItem(selectedTextBox.id, patch)}
-                  />
-                </div>
-              ) : null}
+              {/* 文字編集中かつキーボード表示時のみ：キーボード直上の書式バー */}
+              {editingTextId &&
+              selectedTextBox &&
+              canEdit &&
+              !toolbarHidden &&
+              keyboard.open &&
+              toolbarMounted
+                ? createPortal(
+                    <div className="pointer-events-none" style={keyboard.dockStyle}>
+                      <SlidesTextFormatBar
+                        fontSize={selectedTextBox.fontSize}
+                        textColor={selectedTextBox.textColor}
+                        align={selectedTextBox.align}
+                        bold={Boolean(selectedTextBox.bold)}
+                        italic={Boolean(selectedTextBox.italic)}
+                        underline={Boolean(selectedTextBox.underline)}
+                        tx={tx}
+                        onChange={(patch) => updateItem(selectedTextBox.id, patch)}
+                        onKeepFocus={() => textEditRef.current?.focus({ preventScroll: true })}
+                      />
+                    </div>,
+                    document.body,
+                  )
+                : null}
 
               {/* 下のフローティング操作バー */}
               <div
@@ -2175,22 +2245,6 @@ export function IssueWorkspaceCanvas({
                   toolbarHidden || editingTextId ? "translate-y-[120%]" : "translate-y-0"
                 }`}
               >
-                {/* ワンタップ選択中（未編集）の書式 */}
-                {selectedTextBox && canEdit && !editingTextId && handlesVisible ? (
-                  <div className="pointer-events-auto w-full max-w-[min(100%,28rem)] overflow-hidden rounded-2xl shadow-[0_8px_28px_rgba(0,0,0,0.12)]">
-                    <SlidesTextFormatBar
-                      fontSize={selectedTextBox.fontSize}
-                      textColor={selectedTextBox.textColor}
-                      align={selectedTextBox.align}
-                      bold={Boolean(selectedTextBox.bold)}
-                      italic={Boolean(selectedTextBox.italic)}
-                      underline={Boolean(selectedTextBox.underline)}
-                      tx={tx}
-                      onChange={(patch) => updateItem(selectedTextBox.id, patch)}
-                    />
-                  </div>
-                ) : null}
-
                 {tool === "sheet" && canEdit ? (
                   <div
                     data-board-ui
@@ -2300,6 +2354,17 @@ export function IssueWorkspaceCanvas({
                       {insertFanOpen ? (
                         <div className="flex items-center gap-0.5 origin-right transition-all duration-200 ease-out">
                           <PillIconButton
+                            active={false}
+                            label={tx("戻る", "Back")}
+                            icon={ChevronLeft}
+                            disabled={!canEdit}
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              setShapePickerOpen(false);
+                              selectTool("navigate");
+                            }}
+                          />
+                          <PillIconButton
                             active={tool === "sheet"}
                             label={tx("カード", "Card")}
                             icon={StickyNote}
@@ -2313,10 +2378,10 @@ export function IssueWorkspaceCanvas({
                             disabled={!canEdit}
                             onClick={() => canEdit && selectTool(tool === "text" ? "navigate" : "text")}
                           />
-                          <button
-                            type="button"
-                            data-board-ui
-                            title={tx("図形", "Shape")}
+                          <PillIconButton
+                            active={tool === "shape"}
+                            label={tx("図形", "Shape")}
+                            icon={Shapes}
                             disabled={!canEdit}
                             onClick={() => {
                               if (!canEdit) return;
@@ -2328,13 +2393,7 @@ export function IssueWorkspaceCanvas({
                                 setShapePickerOpen(true);
                               }
                             }}
-                            className={`inline-flex h-12 w-12 items-center justify-center rounded-full transition active:scale-95 disabled:opacity-40 ${
-                              tool === "shape" ? "bg-zinc-100 text-zinc-950" : "text-zinc-800 hover:bg-zinc-50"
-                            }`}
-                            aria-label={tx("図形", "Shape")}
-                          >
-                            <ShapesGlyph className="h-6 w-6" />
-                          </button>
+                          />
                           <PillIconButton
                             active={tool === "arrow"}
                             label={tx("矢印", "Arrow")}
@@ -2344,18 +2403,6 @@ export function IssueWorkspaceCanvas({
                               if (!canEdit) return;
                               setPlusMenuOpen(false);
                               selectTool(tool === "arrow" ? "navigate" : "arrow");
-                            }}
-                          />
-                          <PillIconButton
-                            active={false}
-                            label={uploading ? tx("追加中", "Adding") : tx("写真", "Photo")}
-                            icon={Paperclip}
-                            disabled={!canEdit || Boolean(uploading)}
-                            onClick={() => {
-                              if (!canEdit) return;
-                              setPlusMenuOpen(false);
-                              selectTool("navigate");
-                              onRequestPhoto();
                             }}
                           />
                         </div>
@@ -2376,14 +2423,15 @@ export function IssueWorkspaceCanvas({
                             onClick={() => canEdit && selectTool(tool === "pen" ? "navigate" : "pen")}
                           />
                           <PillIconButton
-                            active={tool === "arrow" && !plusMenuOpen}
-                            label={tx("リンク", "Link")}
-                            icon={Link2}
-                            disabled={!canEdit}
+                            active={false}
+                            label={uploading ? tx("追加中", "Adding") : tx("写真", "Photo")}
+                            icon={ImageIcon}
+                            disabled={!canEdit || Boolean(uploading)}
                             onClick={() => {
                               if (!canEdit) return;
                               setPlusMenuOpen(false);
-                              selectTool(tool === "arrow" ? "navigate" : "arrow");
+                              selectTool("navigate");
+                              onRequestPhoto();
                             }}
                           />
                           <PillIconButton
@@ -2503,22 +2551,9 @@ function SheetFullscreenEditor({
   const selectedOverlayId = selectedOverlayIds[0] ?? null;
   const [editingOverlayId, setEditingOverlayId] = useState<string | null>(null);
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
-  const [keyboardInset, setKeyboardInset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-      setKeyboardInset(inset);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
+  const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const keyboard = useVisualKeyboard();
+  const wasKeyboardOpenRef = useRef(false);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -2548,7 +2583,34 @@ function SheetFullscreenEditor({
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const overlays = sheet.overlays ?? [];
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
+
+  function finishOverlayTextEdit() {
+    const id = editingOverlayId;
+    setEditingOverlayId(null);
+    if (!id) return;
+    const ov = overlaysRef.current.find((o) => o.id === id);
+    if (ov?.kind === "text" && !ov.text.trim()) {
+      const next = overlaysRef.current.filter((o) => o.id !== id);
+      onPatch({ overlays: next.length > 0 ? next : undefined });
+      setSelectedOverlayIds((ids) => ids.filter((x) => x !== id));
+      setOverlayHandlesVisible(false);
+    }
+  }
+
+  // キーボード閉じ → 編集終了＆挿入バー復帰（iOS キーボード閉じボタン）
+  useEffect(() => {
+    if (keyboard.open) {
+      wasKeyboardOpenRef.current = true;
+      return;
+    }
+    if (!wasKeyboardOpenRef.current) return;
+    wasKeyboardOpenRef.current = false;
+    if (editingOverlayId) finishOverlayTextEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -2779,21 +2841,6 @@ function SheetFullscreenEditor({
   const shapePreview = overlayDrag.current?.kind === "shape" ? overlayDrag.current : null;
   const penPreview = overlayDrag.current?.kind === "pen" ? overlayDrag.current : null;
 
-  function renderOverlayTextToolbar(ov: Extract<SheetOverlay, { kind: "text" }>) {
-    return (
-      <SlidesTextFormatBar
-        fontSize={ov.fontSize}
-        textColor={ov.textColor}
-        align={ov.align}
-        bold={Boolean(ov.bold)}
-        italic={Boolean(ov.italic)}
-        underline={Boolean(ov.underline)}
-        tx={tx}
-        onChange={(patch) => patchOverlay(ov.id, patch)}
-      />
-    );
-  }
-
   function renderOverlayResizeHandles(ov: Extract<SheetOverlay, { kind: "text" | "image" | "shape" }>) {
     if (!canEdit || !overlayHandlesVisible || selectedOverlayIds.length !== 1 || selectedOverlayId !== ov.id) {
       return null;
@@ -2886,8 +2933,8 @@ function SheetFullscreenEditor({
                 }`}
               >
                 {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
-                {id === "shape" ? <ShapesGlyph className="h-4 w-4" /> : null}
-                {id === "photo" ? <Paperclip className="h-4 w-4" strokeWidth={2.25} /> : null}
+                {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
+                {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
                 {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
               </button>
             ))}
@@ -3269,6 +3316,7 @@ function SheetFullscreenEditor({
                       >
                         {editing && canEdit ? (
                           <textarea
+                            ref={overlayTextRef}
                             autoFocus
                             value={ov.text}
                             onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
@@ -3276,7 +3324,7 @@ function SheetFullscreenEditor({
                               window.setTimeout(() => {
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active?.closest("[data-board-ui]")) return;
-                                setEditingOverlayId(null);
+                                finishOverlayTextEdit();
                               }, 0);
                             }}
                             className="h-full w-full resize-none bg-transparent px-1 outline-none"
@@ -3328,20 +3376,29 @@ function SheetFullscreenEditor({
         </div>
       </div>
 
-      {/* カード内テキスト編集：キーボード直上の書式バー（横スワイプ） */}
+      {/* キーボード表示中のみ：書式バーを visualViewport 直上に fixed 配置 */}
       {canEdit &&
       editingOverlayId &&
       selectedOverlay &&
-      selectedOverlay.kind === "text" ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-40"
-          style={{
-            bottom: `calc(${keyboardInset}px + env(safe-area-inset-bottom, 0px))`,
-          }}
-        >
-          {renderOverlayTextToolbar(selectedOverlay)}
-        </div>
-      ) : null}
+      selectedOverlay.kind === "text" &&
+      keyboard.open
+        ? createPortal(
+            <div className="pointer-events-none" style={keyboard.dockStyle}>
+              <SlidesTextFormatBar
+                fontSize={selectedOverlay.fontSize}
+                textColor={selectedOverlay.textColor}
+                align={selectedOverlay.align}
+                bold={Boolean(selectedOverlay.bold)}
+                italic={Boolean(selectedOverlay.italic)}
+                underline={Boolean(selectedOverlay.underline)}
+                tx={tx}
+                onChange={(patch) => patchOverlay(selectedOverlay.id, patch)}
+                onKeepFocus={() => overlayTextRef.current?.focus({ preventScroll: true })}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -3356,6 +3413,7 @@ function SlidesTextFormatBar({
   underline,
   tx,
   onChange,
+  onKeepFocus,
 }: {
   fontSize: number;
   textColor: string;
@@ -3374,6 +3432,8 @@ function SlidesTextFormatBar({
       underline: boolean;
     }>,
   ) => void;
+  /** サイズ矢印など操作後にテキストエリアへフォーカスを戻す */
+  onKeepFocus?: () => void;
 }) {
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
@@ -3383,22 +3443,39 @@ function SlidesTextFormatBar({
     if (!sizeEditing) setSizeDraft(String(fontSize));
   }, [fontSize, sizeEditing]);
 
+  /** ボタンがフォーカスを奪ってキーボードが閉じるのを防ぐ */
+  function keepEditingPointerDown(e: ReactPointerEvent<HTMLElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function bumpSize(delta: number) {
+    onChange({ fontSize: Math.min(96, Math.max(8, fontSize + delta)) });
+    window.requestAnimationFrame(() => onKeepFocus?.());
+  }
+
   function commitSize(raw: string) {
     const n = Math.round(Number(raw));
     if (!Number.isFinite(n)) {
       setSizeDraft(String(fontSize));
       setSizeEditing(false);
+      window.requestAnimationFrame(() => onKeepFocus?.());
       return;
     }
     onChange({ fontSize: Math.min(96, Math.max(8, n)) });
     setSizeEditing(false);
+    window.requestAnimationFrame(() => onKeepFocus?.());
   }
 
   return (
     <div
       data-board-ui
-      className="pointer-events-auto w-full border-t border-zinc-200 bg-white"
-      onPointerDown={(e) => e.stopPropagation()}
+      className="pointer-events-auto w-full border-t border-zinc-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)]"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag !== "INPUT" && tag !== "TEXTAREA") e.preventDefault();
+      }}
     >
       {colorOpen ? (
         <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -3406,9 +3483,11 @@ function SlidesTextFormatBar({
             <button
               key={color}
               type="button"
+              onPointerDown={keepEditingPointerDown}
               onClick={() => {
                 onChange({ textColor: color });
                 setColorOpen(false);
+                window.requestAnimationFrame(() => onKeepFocus?.());
               }}
               className={`h-7 w-7 shrink-0 rounded-full border-2 ${
                 textColor.toLowerCase() === color.toLowerCase() ? "border-zinc-900" : "border-zinc-200"
@@ -3420,14 +3499,14 @@ function SlidesTextFormatBar({
         </div>
       ) : null}
       <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {/* サイズ：左に上下V、右に数字（タップで入力） */}
         <div className="flex shrink-0 items-center gap-0.5 pr-1">
           <div className="flex flex-col">
             <button
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("大きく", "Larger")}
-              onClick={() => onChange({ fontSize: Math.min(96, fontSize + 1) })}
+              onPointerDown={keepEditingPointerDown}
+              onClick={() => bumpSize(1)}
             >
               <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
@@ -3435,7 +3514,8 @@ function SlidesTextFormatBar({
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("小さく", "Smaller")}
-              onClick={() => onChange({ fontSize: Math.max(8, fontSize - 1) })}
+              onPointerDown={keepEditingPointerDown}
+              onClick={() => bumpSize(-1)}
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
@@ -3452,6 +3532,7 @@ function SlidesTextFormatBar({
                 if (e.key === "Escape") {
                   setSizeDraft(String(fontSize));
                   setSizeEditing(false);
+                  window.requestAnimationFrame(() => onKeepFocus?.());
                 }
               }}
               className="h-8 w-10 rounded bg-zinc-100 text-center text-[14px] font-semibold text-zinc-900 outline-none"
@@ -3459,6 +3540,7 @@ function SlidesTextFormatBar({
           ) : (
             <button
               type="button"
+              onPointerDown={keepEditingPointerDown}
               onClick={() => {
                 setSizeDraft(String(fontSize));
                 setSizeEditing(true);
@@ -3474,7 +3556,11 @@ function SlidesTextFormatBar({
 
         <button
           type="button"
-          onClick={() => onChange({ bold: !bold })}
+          onPointerDown={keepEditingPointerDown}
+          onClick={() => {
+            onChange({ bold: !bold });
+            window.requestAnimationFrame(() => onKeepFocus?.());
+          }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
             bold ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
           }`}
@@ -3484,7 +3570,11 @@ function SlidesTextFormatBar({
         </button>
         <button
           type="button"
-          onClick={() => onChange({ italic: !italic })}
+          onPointerDown={keepEditingPointerDown}
+          onClick={() => {
+            onChange({ italic: !italic });
+            window.requestAnimationFrame(() => onKeepFocus?.());
+          }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
             italic ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
           }`}
@@ -3494,7 +3584,11 @@ function SlidesTextFormatBar({
         </button>
         <button
           type="button"
-          onClick={() => onChange({ underline: !underline })}
+          onPointerDown={keepEditingPointerDown}
+          onClick={() => {
+            onChange({ underline: !underline });
+            window.requestAnimationFrame(() => onKeepFocus?.());
+          }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
             underline ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
           }`}
@@ -3505,6 +3599,7 @@ function SlidesTextFormatBar({
 
         <button
           type="button"
+          onPointerDown={keepEditingPointerDown}
           onClick={() => setColorOpen((v) => !v)}
           className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded text-zinc-700"
           aria-label={tx("文字色", "Text color")}
@@ -3535,7 +3630,11 @@ function SlidesTextFormatBar({
             key={value}
             type="button"
             title={label}
-            onClick={() => onChange({ align: value })}
+            onPointerDown={keepEditingPointerDown}
+            onClick={() => {
+              onChange({ align: value });
+              window.requestAnimationFrame(() => onKeepFocus?.());
+            }}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
               align === value ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
             }`}
