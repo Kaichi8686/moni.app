@@ -15,8 +15,6 @@ function isGuestAllowedPath(pathname: string): boolean {
   if (pathname.startsWith("/dev")) return true;
   if (pathname.startsWith("/shift")) return true;
   if (pathname.startsWith("/bunkasai")) return true;
-  // 学習用・個人投資シミュレーター（ログイン不要）
-  if (pathname === "/invest-sim" || pathname.startsWith("/invest-sim/")) return true;
   return false;
 }
 
