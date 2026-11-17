@@ -261,6 +261,8 @@ function ShapeGeometry({
   w,
   h,
   dashed,
+  /** カード内 % viewBox 向け。点線を細く一定幅で描く */
+  hairline,
 }: {
   shape: BoardShapeKind;
   color: string;
@@ -268,9 +270,11 @@ function ShapeGeometry({
   w: number;
   h: number;
   dashed?: boolean;
+  hairline?: boolean;
 }) {
-  const strokeDasharray = dashed ? "6 4" : undefined;
-  const strokeWidth = dashed ? 2 : 2.5;
+  const strokeDasharray = dashed ? (hairline ? "3 2.5" : "6 4") : undefined;
+  const strokeWidth = hairline ? (dashed ? 0.9 : 1.25) : dashed ? 1.25 : 2.5;
+  const nonScaling = hairline ? ("non-scaling-stroke" as const) : undefined;
   if (shape === "circle") {
     return (
       <ellipse
@@ -282,6 +286,7 @@ function ShapeGeometry({
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray={strokeDasharray}
+        vectorEffect={nonScaling}
       />
     );
   }
@@ -294,6 +299,7 @@ function ShapeGeometry({
         stroke={color}
         strokeWidth={strokeWidth}
         strokeDasharray={strokeDasharray}
+        vectorEffect={nonScaling}
       />
     );
   }
@@ -305,9 +311,10 @@ function ShapeGeometry({
         x2={Math.max(2, w - 2)}
         y2={h / 2}
         stroke={color}
-        strokeWidth={strokeWidth + 0.5}
+        strokeWidth={strokeWidth + (hairline ? 0.2 : 0.5)}
         strokeDasharray={strokeDasharray}
         strokeLinecap="round"
+        vectorEffect={nonScaling}
       />
     );
   }
@@ -322,6 +329,7 @@ function ShapeGeometry({
       stroke={color}
       strokeWidth={strokeWidth}
       strokeDasharray={strokeDasharray}
+      vectorEffect={nonScaling}
     />
   );
 }
@@ -1448,7 +1456,14 @@ export function IssueWorkspaceCanvas({
                             if (ov.kind === "shape") {
                               return (
                                 <g key={ov.id} transform={`translate(${ov.x}, ${ov.y})`}>
-                                  <ShapeGeometry shape={ov.shape} color={ov.color} fill={ov.fill} w={ov.w} h={ov.h} />
+                                  <ShapeGeometry
+                                    shape={ov.shape}
+                                    color={ov.color}
+                                    fill={ov.fill}
+                                    w={ov.w}
+                                    h={ov.h}
+                                    hairline
+                                  />
                                 </g>
                               );
                             }
@@ -2222,42 +2237,42 @@ function SheetFullscreenEditor({
   const shapePreview = overlayDrag.current?.kind === "shape" ? overlayDrag.current : null;
   const penPreview = overlayDrag.current?.kind === "pen" ? overlayDrag.current : null;
 
-  const overlayTextPanel =
-    canEdit && selectedOverlay?.kind === "text" ? (
-      <div className="flex w-full flex-col gap-2.5 rounded-2xl bg-white px-3 py-3 shadow-[0_8px_28px_rgba(0,0,0,0.12)]">
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
-            {FONT_SIZE_PRESETS.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => patchOverlay(selectedOverlay.id, { fontSize: size })}
-                className={`min-w-[2rem] rounded-full px-2 py-1.5 text-[12px] font-bold ${
-                  selectedOverlay.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-                }`}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {TEXT_COLOR_ORDER.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => patchOverlay(selectedOverlay.id, { textColor: color })}
-                className={`h-7 w-7 rounded-full border-2 ${
-                  selectedOverlay.textColor.toLowerCase() === color.toLowerCase()
-                    ? "scale-110 border-zinc-900"
-                    : "border-zinc-200"
-                }`}
-                style={{ backgroundColor: color }}
-                aria-label={tx("文字色", "Text color")}
-              />
-            ))}
-          </div>
+  function renderOverlayTextToolbar(ov: Extract<SheetOverlay, { kind: "text" }>) {
+    return (
+      <div
+        data-board-ui
+        className="pointer-events-auto flex max-w-[min(92vw,22rem)] flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-white/95 px-2.5 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-sm"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+          {FONT_SIZE_PRESETS.map((size) => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => patchOverlay(ov.id, { fontSize: size })}
+              className={`min-w-[1.75rem] rounded-full px-1.5 py-1 text-[11px] font-bold ${
+                ov.fontSize === size ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+              }`}
+            >
+              {size}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center justify-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
+        <div className="flex items-center gap-1">
+          {TEXT_COLOR_ORDER.map((color) => (
+            <button
+              key={color}
+              type="button"
+              onClick={() => patchOverlay(ov.id, { textColor: color })}
+              className={`h-6 w-6 rounded-full border-2 ${
+                ov.textColor.toLowerCase() === color.toLowerCase() ? "scale-110 border-zinc-900" : "border-zinc-200"
+              }`}
+              style={{ backgroundColor: color }}
+              aria-label={tx("文字色", "Text color")}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-0.5 rounded-full bg-zinc-100 p-0.5">
           {(
             [
               ["left", AlignLeft, tx("左寄せ", "Left")],
@@ -2269,18 +2284,30 @@ function SheetFullscreenEditor({
               key={value}
               type="button"
               title={label}
-              onClick={() => patchOverlay(selectedOverlay.id, { align: value })}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
-                selectedOverlay.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+              onClick={() => patchOverlay(ov.id, { align: value })}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                ov.align === value ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
               }`}
               aria-label={label}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5" />
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center rounded-full px-2 text-[11px] font-semibold text-rose-600"
+          onClick={() => {
+            setOverlays(overlays.filter((o) => o.id !== ov.id));
+            setSelectedOverlayId(null);
+            setEditingOverlayId(null);
+          }}
+        >
+          {tx("削除", "Delete")}
+        </button>
       </div>
-    ) : null;
+    );
+  }
 
   return (
     <div
@@ -2433,33 +2460,15 @@ function SheetFullscreenEditor({
         </p>
       ) : null}
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col landscape:flex-row">
-        {canEdit ? (
-          <div className="shrink-0 px-3 pb-1 pt-1 landscape:order-2 landscape:flex landscape:w-[min(42%,20rem)] landscape:items-center landscape:pb-3 landscape:pl-1 landscape:pr-[max(0.75rem,env(safe-area-inset-right))] landscape:pt-2">
-            {overlayTextPanel}
-            {selectedOverlay && canEdit ? (
-              <div className="mt-2 flex justify-center">
-                <button
-                  type="button"
-                  className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm"
-                  onClick={() => {
-                    setOverlays(overlays.filter((o) => o.id !== selectedOverlay.id));
-                    setSelectedOverlayId(null);
-                    setEditingOverlayId(null);
-                  }}
-                >
-                  {tx("選択を削除", "Delete selection")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2 landscape:order-1">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 px-3 py-2">
           <div ref={stageRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
             <div
               ref={cardRef}
               data-sheet-card
-              className="relative flex flex-col overflow-hidden rounded-sm touch-none select-none"
+              className={`relative flex flex-col rounded-sm touch-none select-none ${
+                editingOverlayId ? "overflow-visible" : "overflow-hidden"
+              }`}
               style={{
                 width: cardSize.w > 0 ? cardSize.w : undefined,
                 height: cardSize.h > 0 ? cardSize.h : undefined,
@@ -2533,6 +2542,7 @@ function SheetFullscreenEditor({
                               w={ov.w}
                               h={ov.h}
                               dashed
+                              hairline
                             />
                           ) : null}
                           <ShapeGeometry
@@ -2541,6 +2551,7 @@ function SheetFullscreenEditor({
                             fill={ov.fill}
                             w={ov.w}
                             h={ov.h}
+                            hairline
                           />
                         </g>
                       );
@@ -2557,6 +2568,7 @@ function SheetFullscreenEditor({
                         w={Math.max(0.5, Math.abs(shapePreview.curX - shapePreview.startX))}
                         h={Math.max(0.5, Math.abs(shapePreview.curY - shapePreview.startY))}
                         dashed
+                        hairline
                       />
                     </g>
                   ) : null}
@@ -2600,46 +2612,75 @@ function SheetFullscreenEditor({
                     );
                   }
                   const editing = editingOverlayId === ov.id;
+                  const showToolbar = canEdit && (editing || selected);
                   return (
-                    <div
-                      key={ov.id}
-                      data-overlay-node
-                      className="pointer-events-auto absolute"
-                      style={{
-                        left: `${ov.x}%`,
-                        top: `${ov.y}%`,
-                        width: `${ov.w}%`,
-                        height: `${ov.h}%`,
-                        border: selected ? `1.5px solid ${SELECTION_YELLOW}` : "1px dashed rgba(0,0,0,0.2)",
-                        background: editing ? "rgba(255,255,255,0.85)" : "transparent",
-                      }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setSelectedOverlayId(ov.id);
-                      }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        setEditingOverlayId(ov.id);
-                      }}
-                    >
-                      {editing && canEdit ? (
-                        <textarea
-                          autoFocus
-                          value={ov.text}
-                          onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
-                          onBlur={() => setEditingOverlayId(null)}
-                          className="h-full w-full resize-none bg-transparent px-1 text-[12px] outline-none"
-                          style={{ color: ov.textColor, textAlign: ov.align, fontSize: ov.fontSize * 0.55 }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        />
-                      ) : (
+                    <div key={ov.id} className="pointer-events-none absolute inset-0">
+                      {showToolbar ? (
                         <div
-                          className="h-full w-full overflow-hidden whitespace-pre-wrap px-1 text-[12px]"
-                          style={{ color: ov.textColor, textAlign: ov.align, fontSize: ov.fontSize * 0.55 }}
+                          className="pointer-events-auto absolute z-30"
+                          style={{
+                            left: `${Math.min(ov.x, 8)}%`,
+                            top: `${Math.max(0, ov.y - 2)}%`,
+                            transform: "translateY(calc(-100% - 6px))",
+                            maxWidth: "92%",
+                          }}
                         >
-                          {ov.text || tx("テキスト", "Text")}
+                          {renderOverlayTextToolbar(ov)}
                         </div>
-                      )}
+                      ) : null}
+                      <div
+                        data-overlay-node
+                        className="pointer-events-auto absolute"
+                        style={{
+                          left: `${ov.x}%`,
+                          top: `${ov.y}%`,
+                          width: `${ov.w}%`,
+                          height: `${ov.h}%`,
+                          border: selected ? `1.5px solid ${SELECTION_YELLOW}` : "1px dashed rgba(0,0,0,0.2)",
+                          background: editing ? "rgba(255,255,255,0.85)" : "transparent",
+                        }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setSelectedOverlayId(ov.id);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setEditingOverlayId(ov.id);
+                        }}
+                      >
+                        {editing && canEdit ? (
+                          <textarea
+                            autoFocus
+                            value={ov.text}
+                            onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
+                            onBlur={() => {
+                              // ツールバー操作中はフォーカスを維持
+                              window.setTimeout(() => {
+                                const active = document.activeElement as HTMLElement | null;
+                                if (active?.closest("[data-board-ui]")) return;
+                                setEditingOverlayId(null);
+                              }, 0);
+                            }}
+                            className="h-full w-full resize-none bg-transparent px-1 text-[12px] outline-none"
+                            style={{ color: ov.textColor, textAlign: ov.align, fontSize: ov.fontSize * 0.55 }}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-form-type="other"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            onPointerDown={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <div
+                            className="h-full w-full overflow-hidden whitespace-pre-wrap px-1 text-[12px]"
+                            style={{ color: ov.textColor, textAlign: ov.align, fontSize: ov.fontSize * 0.55 }}
+                          >
+                            {ov.text || tx("テキスト", "Text")}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
