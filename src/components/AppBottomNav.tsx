@@ -693,6 +693,16 @@ function AppBottomNavInner({ className }: { className?: string }) {
     locale === "ja" ? "メッセージ・課題・AIを隠す" : "Hide messages, issues, and AI";
 
   const keyboardOpen = useVirtualKeyboardOpen();
+  const [aiChatImmersive, setAiChatImmersive] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setAiChatImmersive(root.classList.contains("moni-ai-chat-immersive"));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
 
   const renderTab = (item: NavItem, className: string, side: "open" | "closed") => {
     const isMail = isMailTabId(item.id);
@@ -734,7 +744,7 @@ function AppBottomNavInner({ className }: { className?: string }) {
   return (
     <nav
       className={`app-bottom-nav ${keyboardOpen ? "is-keyboard-open" : ""} ${className ?? ""}`.trim()}
-      aria-hidden={keyboardOpen || undefined}
+      aria-hidden={keyboardOpen || aiChatImmersive || undefined}
       aria-label={locale === "ja" ? "メイン機能の切り替え" : "Main navigation"}
     >
       <div className={`app-bottom-nav-inner ${clusterOpen ? "is-cluster-open" : "is-cluster-closed"}`}>

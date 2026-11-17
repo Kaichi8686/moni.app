@@ -385,6 +385,16 @@ html.moni-recruit-drill .app-bottom-nav {
   display: none !important;
 }
 
+/* AIチャット没入: 下タブを下方向に退避（DOMは残してアニメーション） */
+html.moni-ai-chat-immersive {
+  --bottom-nav-clearance: 0px;
+}
+
+html.moni-ai-chat-immersive .app-bottom-nav {
+  transform: translateY(calc(100% + var(--bottom-nav-float-inset) + env(safe-area-inset-bottom, 0px)));
+  pointer-events: none;
+}
+
 /* Floating tab bar: CSS-only bottom:0 + safe-area float. Portaled to body.
    Do not JS-offset bottom — visualViewport insets on iOS falsely lift it ~100px.
    Keyboard: hide only (opacity/visibility) — never move bottom. */
@@ -400,7 +410,9 @@ html.moni-recruit-drill .app-bottom-nav {
   padding-bottom: max(var(--bottom-nav-float-inset), env(safe-area-inset-bottom, 0px));
   transition:
     opacity 160ms ease,
-    visibility 160ms ease;
+    visibility 160ms ease,
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
 .app-bottom-nav.is-keyboard-open {
