@@ -1213,6 +1213,66 @@ html.moni-goal-stuck .project-workspace-header {
   animation: calendar-day-panel-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes calendar-pane-exit-left {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-36%);
+    opacity: 0;
+  }
+}
+
+@keyframes calendar-pane-exit-right {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(36%);
+    opacity: 0;
+  }
+}
+
+@keyframes calendar-pane-enter-right {
+  from {
+    transform: translateX(36%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes calendar-pane-enter-left {
+  from {
+    transform: translateX(-36%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.calendar-pane-exit-left {
+  animation: calendar-pane-exit-left 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.calendar-pane-exit-right {
+  animation: calendar-pane-exit-right 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.calendar-pane-enter-right {
+  animation: calendar-pane-enter-right 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.calendar-pane-enter-left {
+  animation: calendar-pane-enter-left 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes issue-create-step-from-right {
   from {
     transform: translateX(100%);
@@ -1247,7 +1307,12 @@ html.moni-goal-stuck .project-workspace-header {
   .issue-create-wizard-in,
   .issue-create-wizard-out,
   .issue-create-step-from-right,
-  .issue-create-step-from-left {
+  .issue-create-step-from-left,
+  .calendar-day-panel-in,
+  .calendar-pane-exit-left,
+  .calendar-pane-exit-right,
+  .calendar-pane-enter-right,
+  .calendar-pane-enter-left {
     animation: none;
   }
 }

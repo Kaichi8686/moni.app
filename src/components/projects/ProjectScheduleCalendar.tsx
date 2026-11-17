@@ -96,6 +96,19 @@ function buildMonthGrid(view: Date): Date[] {
   return cells;
 }
 
+/** 指定日を含む日曜始まりの1週間 */
+function weekContaining(key: string): Date[] {
+  const d = parseDateKey(key);
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(start);
+    x.setDate(start.getDate() + i);
+    return x;
+  });
+}
+
+const SWIPE_THRESHOLD_PX = 48;
+
 function hashColor(id: string): (typeof EVENT_PILL_CLASS)[number] {
   let h = 0;
   for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
@@ -172,8 +185,16 @@ export function ProjectScheduleCalendar({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchInternal, setSearchInternal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [monthSlideClass, setMonthSlideClass] = useState("");
+  const [weekSlideClass, setWeekSlideClass] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const timetableScrollRef = useRef<HTMLDivElement | null>(null);
+  const monthPendingDelta = useRef<-1 | 1 | null>(null);
+  const monthBusyRef = useRef(false);
+  const weekPendingDelta = useRef<-1 | 1 | null>(null);
+  const weekBusyRef = useRef(false);
+  const monthTouchRef = useRef<{ x: number; y: number; locked: "h" | "v" | null } | null>(null);
+  const weekTouchRef = useRef<{ x: number; y: number; locked: "h" | "v" | null } | null>(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -254,10 +275,10 @@ export function ProjectScheduleCalendar({
     return rows;
   }, [monthCells]);
 
-  const selectedWeekIndex = useMemo(() => {
-    if (!selectedKey) return -1;
-    return weeks.findIndex((week) => week.some((d) => dateKeyLocal(d) === selectedKey));
-  }, [selectedKey, weeks]);
+  const focusWeekDays = useMemo(() => {
+    if (!selectedKey) return null;
+    return weekContaining(selectedKey);
+  }, [selectedKey]);
 
   const titleMonth = useMemo(
     () => viewDate.toLocaleDateString("ja-JP", { month: "long" }),
@@ -298,17 +319,90 @@ export function ProjectScheduleCalendar({
     return out.slice(0, 8);
   }, [searchQuery, schedules, issues]);
 
-  const goPrevMonth = useCallback(() => {
-    setDayFocus(false);
-    setSelectedKey(null);
-    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const applyMonthDelta = useCallback((delta: -1 | 1) => {
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
   }, []);
 
-  const goNextMonth = useCallback(() => {
+  const requestMonthChange = useCallback((delta: -1 | 1) => {
+    if (monthBusyRef.current) return;
+    monthBusyRef.current = true;
+    monthPendingDelta.current = delta;
+    // 日フォーカス中でも月グリッド側でスライドできるよう一旦月表示へ戻す
     setDayFocus(false);
     setSelectedKey(null);
-    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+    setMonthSlideClass(delta > 0 ? "calendar-pane-exit-left" : "calendar-pane-exit-right");
   }, []);
+
+  const goPrevMonth = useCallback(() => {
+    requestMonthChange(-1);
+  }, [requestMonthChange]);
+
+  const goNextMonth = useCallback(() => {
+    requestMonthChange(1);
+  }, [requestMonthChange]);
+
+  const applyWeekDelta = useCallback(
+    (delta: -1 | 1) => {
+      if (!selectedKey) return;
+      const d = parseDateKey(selectedKey);
+      d.setDate(d.getDate() + 7 * delta);
+      const key = dateKeyLocal(d);
+      setSelectedKey(key);
+      if (d.getMonth() !== viewDate.getMonth() || d.getFullYear() !== viewDate.getFullYear()) {
+        setViewDate(new Date(d.getFullYear(), d.getMonth(), 1));
+      }
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setForm((f) => ({
+        ...f,
+        startsAt: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00`,
+        endsAt: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T11:00`,
+      }));
+    },
+    [selectedKey, viewDate],
+  );
+
+  const requestWeekChange = useCallback((delta: -1 | 1) => {
+    if (weekBusyRef.current || !selectedKey) return;
+    weekBusyRef.current = true;
+    weekPendingDelta.current = delta;
+    setWeekSlideClass(delta > 0 ? "calendar-pane-exit-left" : "calendar-pane-exit-right");
+  }, [selectedKey]);
+
+  useEffect(() => {
+    if (!monthSlideClass) return;
+    const isExit = monthSlideClass.includes("exit");
+    const t = window.setTimeout(() => {
+      const delta = monthPendingDelta.current;
+      if (delta == null) return;
+      if (isExit) {
+        applyMonthDelta(delta);
+        setMonthSlideClass(delta > 0 ? "calendar-pane-enter-right" : "calendar-pane-enter-left");
+        return;
+      }
+      monthPendingDelta.current = null;
+      monthBusyRef.current = false;
+      setMonthSlideClass("");
+    }, isExit ? 230 : 290);
+    return () => window.clearTimeout(t);
+  }, [monthSlideClass, applyMonthDelta]);
+
+  useEffect(() => {
+    if (!weekSlideClass) return;
+    const isExit = weekSlideClass.includes("exit");
+    const t = window.setTimeout(() => {
+      const delta = weekPendingDelta.current;
+      if (delta == null) return;
+      if (isExit) {
+        applyWeekDelta(delta);
+        setWeekSlideClass(delta > 0 ? "calendar-pane-enter-right" : "calendar-pane-enter-left");
+        return;
+      }
+      weekPendingDelta.current = null;
+      weekBusyRef.current = false;
+      setWeekSlideClass("");
+    }, isExit ? 230 : 290);
+    return () => window.clearTimeout(t);
+  }, [weekSlideClass, applyWeekDelta]);
 
   const goToday = useCallback(() => {
     const n = new Date();
@@ -321,7 +415,7 @@ export function ProjectScheduleCalendar({
   const onPickDay = useCallback(
     (key: string) => {
       const base = parseDateKey(key);
-      // 別月のグレー日付を押したらその月へ
+      // 表示月外の日付を押したらその月へ
       if (base.getMonth() !== viewDate.getMonth() || base.getFullYear() !== viewDate.getFullYear()) {
         setViewDate(new Date(base.getFullYear(), base.getMonth(), 1));
       }
@@ -386,8 +480,6 @@ export function ProjectScheduleCalendar({
   }
 
   const todayKey = dateKeyLocal(new Date());
-  const viewMonth = viewDate.getMonth();
-  const viewYear = viewDate.getFullYear();
 
   const timedEvents = useMemo(() => {
     const rangeStart = HOUR_START * 60;
@@ -583,21 +675,46 @@ export function ProjectScheduleCalendar({
       <div
         className={`relative ${
           dayFocus
-            ? "shrink-0 overflow-visible"
+            ? "shrink-0 overflow-hidden"
             : `overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                 fullBleed ? "flex min-h-0 flex-1 flex-col" : ""
               }`
         }`}
         style={dayFocus ? { height: DAY_FOCUS_WEEK_PX } : undefined}
       >
-        {dayFocus && selectedWeekIndex >= 0 ? (
+        {dayFocus && focusWeekDays ? (
           <div
-            className="grid h-full grid-cols-7 border-t border-zinc-100 px-2"
+            className={`grid h-full touch-pan-y grid-cols-7 border-t border-zinc-100 px-2 ${weekSlideClass}`}
             style={{ height: DAY_FOCUS_WEEK_PX }}
+            onTouchStart={(e) => {
+              const t = e.changedTouches[0];
+              if (!t) return;
+              weekTouchRef.current = { x: t.clientX, y: t.clientY, locked: null };
+            }}
+            onTouchMove={(e) => {
+              const st = weekTouchRef.current;
+              const t = e.changedTouches[0];
+              if (!st || !t) return;
+              const dx = t.clientX - st.x;
+              const dy = t.clientY - st.y;
+              if (!st.locked) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                st.locked = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+              }
+              if (st.locked === "h") e.preventDefault();
+            }}
+            onTouchEnd={(e) => {
+              const st = weekTouchRef.current;
+              weekTouchRef.current = null;
+              const t = e.changedTouches[0];
+              if (!st || !t || st.locked === "v") return;
+              const dx = t.clientX - st.x;
+              if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return;
+              requestWeekChange(dx < 0 ? 1 : -1);
+            }}
           >
-            {weeks[selectedWeekIndex]?.map((cell) => {
+            {focusWeekDays.map((cell) => {
               const key = dateKeyLocal(cell);
-              const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
               const isToday = key === todayKey;
               const isSelected = key === selectedKey;
               const showMark = selectedKey ? isSelected : isToday;
@@ -610,11 +727,7 @@ export function ProjectScheduleCalendar({
                 >
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums leading-none transition-colors duration-300 ${
-                      showMark
-                        ? "bg-[#FF9600] text-white"
-                        : inMonth
-                          ? "text-zinc-900"
-                          : "text-zinc-300"
+                      showMark ? "bg-[#FF9600] text-white" : "text-zinc-900"
                     }`}
                   >
                     {cell.getDate()}
@@ -625,7 +738,35 @@ export function ProjectScheduleCalendar({
           </div>
         ) : (
           <div
-            className={`w-full ${dayFocus || !fullBleed ? "" : "flex min-h-0 flex-1 flex-col"}`}
+            className={`w-full touch-pan-y ${monthSlideClass} ${
+              dayFocus || !fullBleed ? "" : "flex min-h-0 flex-1 flex-col"
+            }`}
+            onTouchStart={(e) => {
+              const t = e.changedTouches[0];
+              if (!t) return;
+              monthTouchRef.current = { x: t.clientX, y: t.clientY, locked: null };
+            }}
+            onTouchMove={(e) => {
+              const st = monthTouchRef.current;
+              const t = e.changedTouches[0];
+              if (!st || !t) return;
+              const dx = t.clientX - st.x;
+              const dy = t.clientY - st.y;
+              if (!st.locked) {
+                if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+                st.locked = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+              }
+              if (st.locked === "h") e.preventDefault();
+            }}
+            onTouchEnd={(e) => {
+              const st = monthTouchRef.current;
+              monthTouchRef.current = null;
+              const t = e.changedTouches[0];
+              if (!st || !t || st.locked === "v") return;
+              const dx = t.clientX - st.x;
+              if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return;
+              requestMonthChange(dx < 0 ? 1 : -1);
+            }}
           >
             {weeks.map((week, weekIdx) => (
               <div
@@ -636,7 +777,6 @@ export function ProjectScheduleCalendar({
               >
                 {week.map((cell) => {
                   const key = dateKeyLocal(cell);
-                  const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
                   const list = eventsByDay.get(key) ?? [];
                   const isToday = key === todayKey;
                   const isSelected = key === selectedKey;
@@ -652,11 +792,7 @@ export function ProjectScheduleCalendar({
                     >
                       <span
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums leading-none transition-colors duration-300 ${
-                          showMark
-                            ? "bg-[#FF9600] text-white"
-                            : inMonth
-                              ? "text-zinc-900"
-                              : "text-zinc-300"
+                          showMark ? "bg-[#FF9600] text-white" : "text-zinc-900"
                         }`}
                       >
                         {cell.getDate()}
