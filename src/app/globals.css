@@ -2826,6 +2826,10 @@ html.moni-goal-stuck .project-workspace-header {
   animation: office-card-in 0.45s ease-out both;
 }
 
+.office-speech {
+  animation: office-fade-pop 0.55s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .office-arms,
   .office-head,
@@ -2843,7 +2847,8 @@ html.moni-goal-stuck .project-workspace-header {
   .office-fx--chance .office-bang-gold,
   .office-fx--chance .office-worker--jump,
   .office-fx--people .office-think,
-  .office-fx--rival .office-rival-shadow {
+  .office-fx--rival .office-rival-shadow,
+  .office-speech {
     animation: none !important;
   }
   .office-incident-enter {

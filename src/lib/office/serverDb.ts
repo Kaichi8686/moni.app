@@ -25,6 +25,7 @@ import {
   parseTargets,
   stripTargetFit,
 } from "@/lib/office/strategy";
+import { targetsPassValidation } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
 import type {
   IncidentStrategy,
@@ -270,15 +271,17 @@ async function ensureIncidentStrategies(
 ): Promise<Record<string, unknown>> {
   const strategies = readStrategies(row);
   const targets = readTargetsInternal(row);
-  if (strategies.length === 3 && targets.length === 4) return row;
+  const about = company.about ?? "";
+  const targetsOk = targets.length === 4 && targetsPassValidation(targets, about);
+  if (strategies.length === 3 && targetsOk) return row;
   const fallback = offlineIncident({
     companyName: company.name,
-    companyAbout: company.about ?? "",
+    companyAbout: about,
     recentTitles: [],
     industryLabel: industryLabelJa(company.industry),
   });
   const nextStrategies = strategies.length === 3 ? strategies : fallback.strategies;
-  const nextTargets = targets.length === 4 ? targets : fallback.targets;
+  const nextTargets = targetsOk ? targets : fallback.targets;
   const { data, error } = await admin
     .from("office_incidents")
     .update({ strategies: nextStrategies, targets: nextTargets })

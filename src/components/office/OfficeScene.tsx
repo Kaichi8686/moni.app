@@ -9,8 +9,10 @@ type Props = {
   industry: OfficeIndustry | null;
   /** pinch | chance | people | rival | null */
   fx?: string | null;
-  /** card: 埋め込み / backdrop: 全画面背景 */
+  /** card: 埋め込み / backdrop: 全画面背景（非推奨） */
   variant?: "card" | "backdrop";
+  /** 社員の頭上吹き出し */
+  speech?: string | null;
 };
 
 function workerCount(level: number): number {
@@ -178,19 +180,18 @@ function Worker({
   );
 }
 
-export function OfficeScene({ level, industry, fx, variant = "card" }: Props) {
+export function OfficeScene({ level, industry, fx, variant = "card", speech }: Props) {
   const uid = useId().replace(/:/g, "");
   const n = workerCount(level);
   const xs = n === 2 ? [120, 260] : n === 3 ? [90, 200, 310] : [70, 160, 250, 340];
   const delays = ["0s", "0.35s", "0.7s", "1.1s"];
   const backdrop = variant === "backdrop";
+  const bubbleX = xs[0] ?? 120;
 
   return (
     <div
-      className={`office-scene overflow-hidden ${
-        backdrop
-          ? "absolute inset-0 h-full w-full rounded-none ring-0"
-          : "relative h-[168px] min-h-[168px] w-full rounded-2xl ring-1 ring-amber-100 md:h-full md:min-h-[200px]"
+      className={`office-scene h-full w-full max-w-full overflow-hidden ${
+        backdrop ? "absolute inset-0 rounded-none ring-0" : "relative"
       } ${fx ? `office-fx--${fx}` : ""}`}
       aria-hidden={backdrop || undefined}
     >
@@ -290,6 +291,32 @@ export function OfficeScene({ level, industry, fx, variant = "card" }: Props) {
             think={fx === "people" && i === 0}
           />
         ))}
+        {speech ? (
+          <g className="office-speech" transform={`translate(${bubbleX} 20)`}>
+            <rect
+              x={-70}
+              y={0}
+              width={140}
+              height={36}
+              rx={12}
+              fill="#fff"
+              stroke="#E4E4E7"
+              strokeWidth={2}
+            />
+            <path d="M-6 36 L0 46 L10 36" fill="#fff" stroke="#E4E4E7" strokeWidth={2} />
+            <path d="M-4 35 L8 35 L0 44 Z" fill="#fff" />
+            <text
+              x={0}
+              y={22}
+              textAnchor="middle"
+              fontSize={11}
+              fontWeight={700}
+              fill="#3F3F46"
+            >
+              {speech.length > 14 ? `${speech.slice(0, 13)}…` : speech}
+            </text>
+          </g>
+        ) : null}
       </svg>
     </div>
   );
