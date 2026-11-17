@@ -95,20 +95,45 @@ type Props = {
   storageKey?: string;
 };
 
-/** 書式バーをキーボード直上に置くための inset のみ追跡（開閉で編集終了はしない） */
+/** iOS などでキーボードが開いているとみなす閾値（px） */
+const KEYBOARD_OPEN_PX = 120;
+/** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
+const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
+
+/** inset + open（閉じはデバウンス。サイズ矢印操作中は呼び出し側で無視する） */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let closeTimer: ReturnType<typeof setTimeout> | null = null;
     const update = () => {
-      setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setInset(next);
+      const isOpen = next >= KEYBOARD_OPEN_PX;
+      if (isOpen) {
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+          closeTimer = null;
+        }
+        setOpen(true);
+        return;
+      }
+      if (closeTimer) return;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        const still =
+          Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) >= KEYBOARD_OPEN_PX;
+        if (!still) setOpen(false);
+      }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     return () => {
+      if (closeTimer) clearTimeout(closeTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -116,6 +141,7 @@ function useVisualKeyboard() {
   }, []);
   return {
     inset,
+    open,
     dockStyle: {
       position: "fixed" as const,
       left: 0,
@@ -719,6 +745,35 @@ export function IssueWorkspaceCanvas({
     );
   }
 
+  /** 切り取り確定：見える領域の形に枠を合わせ、crop を合成する */
+  function commitImageCrop(imageId: string, draft: BoardImageCrop) {
+    const image = boardRef.current.items.find((item): item is BoardImage => item.kind === "image" && item.id === imageId);
+    if (!image) {
+      setCropImageId(null);
+      setCropDraft(null);
+      cropDraftRef.current = null;
+      return;
+    }
+    const prev = image.crop ?? FULL_CROP;
+    const nextCrop: BoardImageCrop = {
+      x: prev.x + draft.x * prev.w,
+      y: prev.y + draft.y * prev.h,
+      w: Math.min(prev.w, Math.max(0.08, draft.w * prev.w)),
+      h: Math.min(prev.h, Math.max(0.08, draft.h * prev.h)),
+    };
+    updateItem(imageId, {
+      crop: nextCrop,
+      x: image.x + image.w * draft.x,
+      y: image.y + image.h * draft.y,
+      w: Math.max(16, image.w * draft.w),
+      h: Math.max(16, image.h * draft.h),
+    });
+    setCropImageId(null);
+    setCropDraft(null);
+    cropDraftRef.current = null;
+    setHandlesVisible(false);
+  }
+
   const canUndo = historyRef.current.past.length > 0;
   const canRedo = historyRef.current.future.length > 0;
 
@@ -798,20 +853,6 @@ export function IssueWorkspaceCanvas({
     setCropImageId(null);
   }
 
-  function deleteItemById(id: string) {
-    if (!canEdit) return;
-    commit(
-      board.items.filter((item) => {
-        if (item.id === id) return false;
-        if (item.kind === "arrow" && (item.fromId === id || item.toId === id)) return false;
-        return true;
-      }),
-    );
-    if (selectedIds.includes(id)) setSelectedIds((ids) => ids.filter((x) => x !== id));
-    if (openSheetId === id) setOpenSheetId(null);
-    if (cropImageId === id) setCropImageId(null);
-  }
-
   function bringToFront(id: string) {
     updateItem(id, { z: nextZ(board.items) } as Partial<BoardItem>);
   }
@@ -869,15 +910,22 @@ export function IssueWorkspaceCanvas({
 
     const world = clientToWorld(event.clientX, event.clientY);
 
-    // 切り取り中に写真以外をタップ → 確定
+    // 切り取り中に写真以外をタップ → 確定（枠を切り取り形に合わせる）
     if (cropImageId) {
-      const draft = cropDraftRef.current;
-      if (draft) updateItem(cropImageId, { crop: draft });
-      setCropImageId(null);
-      setCropDraft(null);
-      cropDraftRef.current = null;
-      setHandlesVisible(false);
+      commitImageCrop(cropImageId, cropDraftRef.current ?? FULL_CROP);
       return;
+    }
+
+    // プラス展開中（ツール未選択）にキャンバスをタップ → 最初の挿入バーに戻す
+    if (plusMenuOpen) {
+      setPlusMenuOpen(false);
+      if (tool === "navigate" || tool === "select") {
+        selectTool("navigate");
+        setSelectedId(null);
+        setEditingTextId(null);
+        return;
+      }
+      // カード/テキスト/図形ツール選択済みなら配置処理へ続く
     }
 
     if (canEdit && tool === "text") {
@@ -1015,6 +1063,7 @@ export function IssueWorkspaceCanvas({
     if (tool === "sheet" || tool === "text" || tool === "shape" || tool === "pen" || tool === "select") {
       selectTool("navigate");
     }
+    setPlusMenuOpen(false);
 
     const inGroup = selectedIds.includes(node.id) && selectedIds.length > 1;
     const ids = inGroup ? selectedIds : [node.id];
@@ -1478,11 +1527,17 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
-  const textEditStartedAtRef = useRef(0);
+  /** 書式バー操作中も編集を落とさないための最終操作時刻 */
+  const textEditKeepAliveRef = useRef(0);
 
   function beginWorkspaceTextEdit(id: string) {
-    textEditStartedAtRef.current = Date.now();
+    textEditKeepAliveRef.current = Date.now();
     setEditingTextId(id);
+  }
+
+  function keepWorkspaceTextFocus() {
+    textEditKeepAliveRef.current = Date.now();
+    textEditRef.current?.focus({ preventScroll: true });
   }
 
   function finishWorkspaceTextEdit() {
@@ -1505,8 +1560,22 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }, [editingTextId]);
 
-  // キーボード開閉検知で編集を終わらせない（iOS の inset 揺れでキーボードが即閉じるため）。
-  // 終了は blur / 明示操作に任せる。
+  // キーボード閉じボタン等で inset が下がったら編集終了（書式バーを消し、挿入バーを戻す）
+  const workspaceKeyboardWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (!editingTextId) {
+      workspaceKeyboardWasOpenRef.current = false;
+      return;
+    }
+    if (keyboard.open) {
+      workspaceKeyboardWasOpenRef.current = true;
+      return;
+    }
+    if (!workspaceKeyboardWasOpenRef.current) return;
+    if (Date.now() - textEditKeepAliveRef.current < 1200) return;
+    workspaceKeyboardWasOpenRef.current = false;
+    finishWorkspaceTextEdit();
+  }, [keyboard.open, editingTextId]);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1806,13 +1875,9 @@ export function IssueWorkspaceCanvas({
                     }}
                   >
                     <span className="w-full shrink-0 select-none">
-                      {(node.overlays?.some((o) => o.kind === "text" && o.text.trim())
+                      {node.overlays?.some((o) => o.kind === "text" && o.text.trim())
                         ? ""
-                        : node.text.trim()) || (
-                        <span className="text-zinc-400" style={{ fontSize: 12 }}>
-                          {tx("タップして開く", "Tap to open")}
-                        </span>
-                      )}
+                        : node.text.trim()}
                     </span>
                     {(node.overlays?.length ?? 0) > 0 ? (
                       <div className="pointer-events-none absolute inset-0">
@@ -1945,15 +2010,17 @@ export function IssueWorkspaceCanvas({
                         onChange={(e) => updateItem(node.id, { text: e.target.value })}
                         onBlur={() => {
                           window.setTimeout(() => {
-                            // フォーカス直後のレイアウト揺れで blur しても編集を維持
-                            if (Date.now() - textEditStartedAtRef.current < 600) {
-                              textEditRef.current?.focus({ preventScroll: true });
+                            // 書式バー連続操作・フォーカス直後の揺れでは編集を維持
+                            if (Date.now() - textEditKeepAliveRef.current < 1200) {
+                              keepWorkspaceTextFocus();
                               return;
                             }
                             const active = document.activeElement as HTMLElement | null;
-                            if (active?.closest("[data-board-ui]")) return;
+                            if (active === textEditRef.current) return;
+                            // シート全体の data-board-ui ではなく、書式バー操作だけ維持
+                            if (active?.closest("[data-text-format-bar]")) return;
                             finishWorkspaceTextEdit();
-                          }, 0);
+                          }, 40);
                         }}
                         className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
                         style={{
@@ -2028,10 +2095,15 @@ export function IssueWorkspaceCanvas({
 
             const image = node as BoardImage;
             const cropping = cropImageId === node.id;
-            const crop =
-              cropping && cropDraft
-                ? cropDraft
-                : (image.crop ?? { x: 0, y: 0, w: 1, h: 1 });
+            const sourceCrop = image.crop ?? FULL_CROP;
+            const draft = cropping && cropDraft ? cropDraft : FULL_CROP;
+            const sourceImgStyle: CSSProperties = {
+              width: `${100 / Math.max(0.08, sourceCrop.w)}%`,
+              height: `${100 / Math.max(0.08, sourceCrop.h)}%`,
+              left: `${(-sourceCrop.x / Math.max(0.08, sourceCrop.w)) * 100}%`,
+              top: `${(-sourceCrop.y / Math.max(0.08, sourceCrop.h)) * 100}%`,
+              maxWidth: "none",
+            };
             return (
               <div
                 key={node.id}
@@ -2068,39 +2140,40 @@ export function IssueWorkspaceCanvas({
                 <div className={`relative h-full w-full ${cropping ? "overflow-visible" : "overflow-hidden rounded-sm"}`}>
                   {cropping ? (
                     <>
-                      {/* 画像だけクリップ。ハンドルは外に出して欠けないようにする */}
+                      {/* いま見えている写真を基準に切り取り。確定後は枠もこの形になる */}
                       <div className="absolute inset-0 overflow-hidden rounded-sm">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={image.url}
                           alt=""
-                          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover opacity-35"
+                          className="pointer-events-none absolute select-none opacity-35"
                           draggable={false}
+                          style={sourceImgStyle}
                         />
                         <div
                           className="absolute overflow-hidden"
                           style={{
-                            left: `${crop.x * 100}%`,
-                            top: `${crop.y * 100}%`,
-                            width: `${crop.w * 100}%`,
-                            height: `${crop.h * 100}%`,
+                            left: `${draft.x * 100}%`,
+                            top: `${draft.y * 100}%`,
+                            width: `${draft.w * 100}%`,
+                            height: `${draft.h * 100}%`,
                             boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
                             outline: "1.5px dashed #2563EB",
                             outlineOffset: 0,
                           }}
-                          onPointerDown={(event) => beginCropAdjust(event, node.id, "move", crop)}
+                          onPointerDown={(event) => beginCropAdjust(event, node.id, "move", draft)}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={image.url}
                             alt=""
-                            className="pointer-events-none absolute select-none object-cover"
+                            className="pointer-events-none absolute select-none"
                             draggable={false}
                             style={{
-                              width: `${100 / Math.max(0.08, crop.w)}%`,
-                              height: `${100 / Math.max(0.08, crop.h)}%`,
-                              left: `${(-crop.x / Math.max(0.08, crop.w)) * 100}%`,
-                              top: `${(-crop.y / Math.max(0.08, crop.h)) * 100}%`,
+                              width: `${100 / Math.max(0.08, sourceCrop.w * draft.w)}%`,
+                              height: `${100 / Math.max(0.08, sourceCrop.h * draft.h)}%`,
+                              left: `${(-(sourceCrop.x + draft.x * sourceCrop.w) / Math.max(0.08, sourceCrop.w * draft.w)) * 100}%`,
+                              top: `${(-(sourceCrop.y + draft.y * sourceCrop.h) / Math.max(0.08, sourceCrop.h * draft.h)) * 100}%`,
                               maxWidth: "none",
                             }}
                           />
@@ -2108,15 +2181,15 @@ export function IssueWorkspaceCanvas({
                       </div>
                       {RESIZE_HANDLES.map((handle) => {
                         const left = handle.includes("w")
-                          ? crop.x
+                          ? draft.x
                           : handle.includes("e")
-                            ? crop.x + crop.w
-                            : crop.x + crop.w / 2;
+                            ? draft.x + draft.w
+                            : draft.x + draft.w / 2;
                         const top = handle.includes("n")
-                          ? crop.y
+                          ? draft.y
                           : handle.includes("s")
-                            ? crop.y + crop.h
-                            : crop.y + crop.h / 2;
+                            ? draft.y + draft.h
+                            : draft.y + draft.h / 2;
                         return (
                           <div
                             key={handle}
@@ -2126,7 +2199,7 @@ export function IssueWorkspaceCanvas({
                             aria-label={tx("切り取り枠", "Crop frame")}
                             className="absolute z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-[#2563EB] bg-white shadow-sm"
                             style={{ left: `${left * 100}%`, top: `${top * 100}%`, cursor: handleCursor(handle) }}
-                            onPointerDown={(event) => beginCropAdjust(event, node.id, handle, crop)}
+                            onPointerDown={(event) => beginCropAdjust(event, node.id, handle, draft)}
                           />
                         );
                       })}
@@ -2140,13 +2213,7 @@ export function IssueWorkspaceCanvas({
                       draggable={false}
                       style={
                         image.crop
-                          ? {
-                              width: `${100 / image.crop.w}%`,
-                              height: `${100 / image.crop.h}%`,
-                              left: `${(-image.crop.x / image.crop.w) * 100}%`,
-                              top: `${(-image.crop.y / image.crop.h) * 100}%`,
-                              maxWidth: "none",
-                            }
+                          ? sourceImgStyle
                           : { inset: 0, width: "100%", height: "100%", objectFit: "cover" }
                       }
                     />
@@ -2223,7 +2290,7 @@ export function IssueWorkspaceCanvas({
                         underline={Boolean(editingTextBox.underline)}
                         tx={tx}
                         onChange={(patch) => updateItem(editingTextBox.id, patch)}
-                        onKeepFocus={() => textEditRef.current?.focus({ preventScroll: true })}
+                        onKeepFocus={keepWorkspaceTextFocus}
                       />
                     </div>,
                     document.body,
@@ -2449,10 +2516,9 @@ export function IssueWorkspaceCanvas({
                         label={tx("切り取り", "Crop")}
                         icon={Crop}
                         onClick={() => {
-                          const existing = selectedImage.crop ?? FULL_CROP;
-                          updateItem(selectedImage.id, { crop: existing });
-                          cropDraftRef.current = existing;
-                          setCropDraft(existing);
+                          // いま見えている写真全体を基準に切り取り（確定時に枠も合わせる）
+                          cropDraftRef.current = FULL_CROP;
+                          setCropDraft(FULL_CROP);
                           setCropImageId(selectedImage.id);
                           setHandlesVisible(false);
                         }}
@@ -2493,9 +2559,6 @@ export function IssueWorkspaceCanvas({
               tx={tx}
               onClose={closeOpenSheet}
               onPatch={patchOpenSheet}
-              onDelete={() => {
-                deleteItemById(openSheet.id);
-              }}
             />,
             document.body,
           )
@@ -2514,7 +2577,6 @@ function SheetFullscreenEditor({
   tx,
   onClose,
   onPatch,
-  onDelete,
 }: {
   sheet: BoardSheet;
   canEdit: boolean;
@@ -2522,7 +2584,6 @@ function SheetFullscreenEditor({
   tx: (ja: string, en: string) => string;
   onClose: () => void;
   onPatch: (patch: Partial<BoardSheet>) => void;
-  onDelete: () => void;
 }) {
   const colors = SHEET_COLORS[sheet.color];
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -2544,7 +2605,7 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
-  const overlayEditStartedAtRef = useRef(0);
+  const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -2572,6 +2633,9 @@ function SheetFullscreenEditor({
   >(null);
   const [overlayTick, setOverlayTick] = useState(0);
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  const lastOverlayTap = useRef<{ id: string; t: number; x: number; y: number } | null>(null);
+  const overlayLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayLongPressFiredRef = useRef(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const overlays = sheet.overlays ?? [];
   const overlaysRef = useRef(overlays);
@@ -2579,8 +2643,13 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   function beginOverlayTextEdit(id: string) {
-    overlayEditStartedAtRef.current = Date.now();
+    overlayEditKeepAliveRef.current = Date.now();
     setEditingOverlayId(id);
+  }
+
+  function keepOverlayTextFocus() {
+    overlayEditKeepAliveRef.current = Date.now();
+    overlayTextRef.current?.focus({ preventScroll: true });
   }
 
   useLayoutEffect(() => {
@@ -2603,7 +2672,32 @@ function SheetFullscreenEditor({
     }
   }
 
-  // キーボード開閉検知では編集終了しない（inset 揺れでキーボードが即閉じるため）
+  function deleteSelectedOverlays() {
+    if (!canEdit || selectedOverlayIds.length === 0) return;
+    const drop = new Set(selectedOverlayIds);
+    const next = overlaysRef.current.filter((o) => !drop.has(o.id));
+    setOverlays(next);
+    setSelectedOverlayIds([]);
+    setOverlayHandlesVisible(false);
+    if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
+  }
+
+  // キーボード閉じ → 書式バーを消し、上のパーツ挿入バーを戻す
+  const overlayKeyboardWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (!editingOverlayId) {
+      overlayKeyboardWasOpenRef.current = false;
+      return;
+    }
+    if (keyboard.open) {
+      overlayKeyboardWasOpenRef.current = true;
+      return;
+    }
+    if (!overlayKeyboardWasOpenRef.current) return;
+    if (Date.now() - overlayEditKeepAliveRef.current < 1200) return;
+    overlayKeyboardWasOpenRef.current = false;
+    finishOverlayTextEdit();
+  }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -2670,12 +2764,92 @@ function SheetFullscreenEditor({
     setEditTool("text");
   }
 
+  function clearOverlayLongPress() {
+    if (overlayLongPressTimer.current) {
+      clearTimeout(overlayLongPressTimer.current);
+      overlayLongPressTimer.current = null;
+    }
+  }
+
+  type MovableSheetOverlay = Exclude<SheetOverlay, { kind: "pen" }>;
+
+  /** 作業スペースと同じ：1タップ / ダブルタップ / 長押し */
+  function beginOverlayPartPointer(
+    event: ReactPointerEvent<Element>,
+    ov: MovableSheetOverlay,
+    clientX: number,
+    clientY: number,
+  ) {
+    const pt = cardLocalPoint(clientX, clientY);
+    setSelectedOverlayIds([ov.id]);
+    setEditingOverlayId(null);
+    overlayLongPressFiredRef.current = false;
+    clearOverlayLongPress();
+    overlayLongPressTimer.current = setTimeout(() => {
+      overlayLongPressFiredRef.current = true;
+      setOverlayHandlesVisible(true);
+    }, 420);
+    overlayDrag.current = {
+      kind: "move-overlay",
+      id: ov.id,
+      startX: pt.x,
+      startY: pt.y,
+      origX: ov.x,
+      origY: ov.y,
+      moved: false,
+    };
+    (event.currentTarget as HTMLElement | SVGElement).setPointerCapture?.(event.pointerId);
+  }
+
+  function finishOverlayPartTap(ov: SheetOverlay, clientX: number, clientY: number) {
+    if (overlayLongPressFiredRef.current) {
+      setSelectedOverlayIds([ov.id]);
+      setOverlayHandlesVisible(ov.kind !== "pen");
+      overlayLongPressFiredRef.current = false;
+      return;
+    }
+    const now = Date.now();
+    const prev = lastOverlayTap.current;
+    const isDouble =
+      prev &&
+      prev.id === ov.id &&
+      now - prev.t < 380 &&
+      Math.hypot(clientX - prev.x, clientY - prev.y) < 28;
+    lastOverlayTap.current = { id: ov.id, t: now, x: clientX, y: clientY };
+
+    if (isDouble) {
+      if (ov.kind === "text") {
+        setSelectedOverlayIds([ov.id]);
+        setOverlayHandlesVisible(false);
+        beginOverlayTextEdit(ov.id);
+        return;
+      }
+      setSelectedOverlayIds([ov.id]);
+      setOverlayHandlesVisible(ov.kind !== "pen");
+      return;
+    }
+
+    setSelectedOverlayIds([ov.id]);
+    if (ov.kind === "text") {
+      // ワンタップはサイズ編集。文字入力はダブルタップ
+      setOverlayHandlesVisible(true);
+      setEditingOverlayId(null);
+      return;
+    }
+    // 画像・図形・手書き：ワンタップは選択のみ。ハンドルは長押し / ダブルタップ
+    setOverlayHandlesVisible(false);
+  }
+
   function onCardPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!canEdit || event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-overlay-node]") || target.closest("[data-overlay-handle]")) return;
 
     const pt = cardLocalPoint(event.clientX, event.clientY);
+
+    // 余白タップでリサイズモード解除
+    clearOverlayLongPress();
+    overlayLongPressFiredRef.current = false;
 
     if (editTool === "text") {
       const now = Date.now();
@@ -2686,6 +2860,10 @@ function SheetFullscreenEditor({
         return;
       }
       lastTap.current = { t: now, x: pt.x, y: pt.y };
+      // 文字ツールでも余白1タップでリサイズ／選択を解除（ダブルタップで配置）
+      setSelectedOverlayIds([]);
+      setOverlayHandlesVisible(false);
+      setEditingOverlayId(null);
       return;
     }
 
@@ -2721,7 +2899,10 @@ function SheetFullscreenEditor({
     if (drag.kind === "move-overlay") {
       const dx = pt.x - drag.startX;
       const dy = pt.y - drag.startY;
-      if (Math.abs(dx) > 0.4 || Math.abs(dy) > 0.4) drag.moved = true;
+      if (Math.abs(dx) > 0.4 || Math.abs(dy) > 0.4) {
+        drag.moved = true;
+        clearOverlayLongPress();
+      }
       const ov = overlays.find((o) => o.id === drag.id);
       if (!ov || ov.kind === "pen") return;
       patchOverlay(drag.id, {
@@ -2775,14 +2956,25 @@ function SheetFullscreenEditor({
     }
   }
 
-  function onCardPointerUp() {
+  function onCardPointerUp(event?: ReactPointerEvent<HTMLDivElement>) {
     const drag = overlayDrag.current;
     overlayDrag.current = null;
+    clearOverlayLongPress();
     if (!drag) {
       setOverlayTick((n) => n + 1);
       return;
     }
-    if (drag.kind === "move-overlay" || drag.kind === "resize-overlay") {
+    if (drag.kind === "move-overlay") {
+      if (!drag.moved) {
+        const ov = overlaysRef.current.find((o) => o.id === drag.id);
+        if (ov) {
+          finishOverlayPartTap(ov, event?.clientX ?? 0, event?.clientY ?? 0);
+        }
+      }
+      setOverlayTick((n) => n + 1);
+      return;
+    }
+    if (drag.kind === "resize-overlay") {
       setOverlayTick((n) => n + 1);
       return;
     }
@@ -2867,23 +3059,34 @@ function SheetFullscreenEditor({
     ));
   }
 
+  // iOS は fixed + bottom:0 が visualViewport に追従して縮み、キーボード下にジャンルが透ける。
+  // bottom は使わず lvh で覆い、さらに下へ伸ばした作業スペース影で隙間を塞ぐ。
+  const workspaceCoverStyle = {
+    bottom: "auto" as const,
+    height: "100lvh",
+    minHeight: "100lvh",
+  };
+  const workspaceDots = {
+    backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
+    backgroundSize: "18px 18px",
+  };
+
   return (
-    <div
-      data-board-ui
-      className="fixed inset-0 z-[600] flex flex-col bg-zinc-200"
-      style={{ height: "100lvh", minHeight: "100%" }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={tx("用紙を編集", "Edit sheet")}
-    >
+    <>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{
-          backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
-          backgroundSize: "18px 18px",
-        }}
+        className="pointer-events-none fixed left-0 right-0 top-0 z-[599] bg-zinc-200"
+        style={{ ...workspaceCoverStyle, height: "160lvh", minHeight: "160lvh", ...workspaceDots }}
       />
+      <div
+        data-board-ui
+        className="fixed left-0 right-0 top-0 z-[600] flex flex-col bg-zinc-200"
+        style={workspaceCoverStyle}
+        role="dialog"
+        aria-modal="true"
+        aria-label={tx("用紙を編集", "Edit sheet")}
+      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button
@@ -2932,14 +3135,6 @@ function SheetFullscreenEditor({
                 {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={onDelete}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-rose-600 active:scale-95"
-              aria-label={tx("削除", "Delete")}
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={2.25} />
-            </button>
           </div>
         ) : (
           <span className="w-11" />
@@ -3075,8 +3270,8 @@ function SheetFullscreenEditor({
               }}
               onPointerDown={onCardPointerDown}
               onPointerMove={onCardPointerMove}
-              onPointerUp={onCardPointerUp}
-              onPointerCancel={onCardPointerUp}
+              onPointerUp={(e) => onCardPointerUp(e)}
+              onPointerCancel={(e) => onCardPointerUp(e)}
               onContextMenu={(e) => e.preventDefault()}
             >
               {/* 角丸は内側クリップで常に効かせる（編集中 overflow-visible でも角が消えない） */}
@@ -3138,20 +3333,7 @@ function SheetFullscreenEditor({
                           data-overlay-node
                           onPointerDown={(e) => {
                             e.stopPropagation();
-                            const pt = cardLocalPoint(e.clientX, e.clientY);
-                            setSelectedOverlayIds([ov.id]);
-                            setOverlayHandlesVisible(true);
-                            setEditingOverlayId(null);
-                            overlayDrag.current = {
-                              kind: "move-overlay",
-                              id: ov.id,
-                              startX: pt.x,
-                              startY: pt.y,
-                              origX: ov.x,
-                              origY: ov.y,
-                              moved: false,
-                            };
-                            (e.currentTarget as SVGElement).setPointerCapture?.(e.pointerId);
+                            beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
                           }}
                         >
                           {selected ? (
@@ -3240,20 +3422,7 @@ function SheetFullscreenEditor({
                         }}
                         onPointerDown={(e) => {
                           e.stopPropagation();
-                          const pt = cardLocalPoint(e.clientX, e.clientY);
-                          setSelectedOverlayIds([ov.id]);
-                          setOverlayHandlesVisible(true);
-                          setEditingOverlayId(null);
-                          overlayDrag.current = {
-                            kind: "move-overlay",
-                            id: ov.id,
-                            startX: pt.x,
-                            startY: pt.y,
-                            origX: ov.x,
-                            origY: ov.y,
-                            moved: false,
-                          };
-                          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                          beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
                         }}
                       >
                         <div className="h-full w-full overflow-hidden rounded">
@@ -3286,20 +3455,8 @@ function SheetFullscreenEditor({
                         }}
                         onPointerDown={(e) => {
                           e.stopPropagation();
-                          const pt = cardLocalPoint(e.clientX, e.clientY);
-                          setSelectedOverlayIds([ov.id]);
-                          setOverlayHandlesVisible(true);
-                          if (!editing) setEditingOverlayId(null);
-                          overlayDrag.current = {
-                            kind: "move-overlay",
-                            id: ov.id,
-                            startX: pt.x,
-                            startY: pt.y,
-                            origX: ov.x,
-                            origY: ov.y,
-                            moved: false,
-                          };
-                          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                          if (editing) return;
+                          beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
                         }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
@@ -3315,14 +3472,15 @@ function SheetFullscreenEditor({
                             onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
                             onBlur={() => {
                               window.setTimeout(() => {
-                                if (Date.now() - overlayEditStartedAtRef.current < 600) {
-                                  overlayTextRef.current?.focus({ preventScroll: true });
+                                if (Date.now() - overlayEditKeepAliveRef.current < 1200) {
+                                  keepOverlayTextFocus();
                                   return;
                                 }
                                 const active = document.activeElement as HTMLElement | null;
-                                if (active?.closest("[data-board-ui]")) return;
+                                if (active === overlayTextRef.current) return;
+                                if (active?.closest("[data-text-format-bar]")) return;
                                 finishOverlayTextEdit();
-                              }, 0);
+                              }, 40);
                             }}
                             className="h-full w-full resize-none bg-transparent px-1 outline-none"
                             style={{
@@ -3373,6 +3531,24 @@ function SheetFullscreenEditor({
         </div>
       </div>
 
+      {/* 選択中パーツの削除（カード全体削除ボタンの代わり） */}
+      {canEdit && selectedOverlayIds.length > 0 && !editingOverlayId
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[720] flex justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                data-board-ui
+                onClick={deleteSelectedOverlays}
+                className="pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_28px_rgba(0,0,0,0.14)] active:scale-95"
+                aria-label={tx("削除", "Delete")}
+              >
+                <Trash2 className="h-6 w-6" strokeWidth={2.25} />
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
       {/* 文字編集中は書式バー（inset でキーボード直上。open 判定に依存しない） */}
       {canEdit && editingOverlayId && selectedOverlay && selectedOverlay.kind === "text"
         ? createPortal(
@@ -3386,13 +3562,14 @@ function SheetFullscreenEditor({
                 underline={Boolean(selectedOverlay.underline)}
                 tx={tx}
                 onChange={(patch) => patchOverlay(selectedOverlay.id, patch)}
-                onKeepFocus={() => overlayTextRef.current?.focus({ preventScroll: true })}
+                onKeepFocus={keepOverlayTextFocus}
               />
             </div>,
             document.body,
           )
         : null}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -3431,20 +3608,48 @@ function SlidesTextFormatBar({
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
   const [colorOpen, setColorOpen] = useState(false);
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
+  const sizeRepeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!sizeEditing) setSizeDraft(String(fontSize));
   }, [fontSize, sizeEditing]);
 
+  useEffect(
+    () => () => {
+      if (sizeRepeatRef.current) clearInterval(sizeRepeatRef.current);
+    },
+    [],
+  );
+
   /** ボタンがフォーカスを奪ってキーボードが閉じるのを防ぐ */
   function keepEditingPointerDown(e: ReactPointerEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
+    onKeepFocus?.();
   }
 
   function bumpSize(delta: number) {
-    onChange({ fontSize: Math.min(96, Math.max(8, fontSize + delta)) });
+    const next = Math.min(96, Math.max(8, fontSizeRef.current + delta));
+    fontSizeRef.current = next;
+    onChange({ fontSize: next });
+    onKeepFocus?.();
     window.requestAnimationFrame(() => onKeepFocus?.());
+  }
+
+  function startSizeRepeat(delta: number) {
+    if (sizeRepeatRef.current) clearInterval(sizeRepeatRef.current);
+    bumpSize(delta);
+    sizeRepeatRef.current = setInterval(() => bumpSize(delta), 90);
+  }
+
+  function stopSizeRepeat() {
+    if (sizeRepeatRef.current) {
+      clearInterval(sizeRepeatRef.current);
+      sizeRepeatRef.current = null;
+    }
+    onKeepFocus?.();
   }
 
   function commitSize(raw: string) {
@@ -3452,22 +3657,24 @@ function SlidesTextFormatBar({
     if (!Number.isFinite(n)) {
       setSizeDraft(String(fontSize));
       setSizeEditing(false);
-      window.requestAnimationFrame(() => onKeepFocus?.());
+      onKeepFocus?.();
       return;
     }
     onChange({ fontSize: Math.min(96, Math.max(8, n)) });
     setSizeEditing(false);
-    window.requestAnimationFrame(() => onKeepFocus?.());
+    onKeepFocus?.();
   }
 
   return (
     <div
       data-board-ui
+      data-text-format-bar
       className="pointer-events-auto w-full border-t border-zinc-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)]"
       onPointerDown={(e) => {
         e.stopPropagation();
         const tag = (e.target as HTMLElement).tagName;
         if (tag !== "INPUT" && tag !== "TEXTAREA") e.preventDefault();
+        onKeepFocus?.();
       }}
     >
       {colorOpen ? (
@@ -3498,8 +3705,15 @@ function SlidesTextFormatBar({
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("大きく", "Larger")}
-              onPointerDown={keepEditingPointerDown}
-              onClick={() => bumpSize(1)}
+              onPointerDown={(e) => {
+                keepEditingPointerDown(e);
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                startSizeRepeat(1);
+              }}
+              onPointerUp={stopSizeRepeat}
+              onPointerCancel={stopSizeRepeat}
+              onLostPointerCapture={stopSizeRepeat}
+              onClick={(e) => e.preventDefault()}
             >
               <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
@@ -3507,8 +3721,15 @@ function SlidesTextFormatBar({
               type="button"
               className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
               aria-label={tx("小さく", "Smaller")}
-              onPointerDown={keepEditingPointerDown}
-              onClick={() => bumpSize(-1)}
+              onPointerDown={(e) => {
+                keepEditingPointerDown(e);
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                startSizeRepeat(-1);
+              }}
+              onPointerUp={stopSizeRepeat}
+              onPointerCancel={stopSizeRepeat}
+              onLostPointerCapture={stopSizeRepeat}
+              onClick={(e) => e.preventDefault()}
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
