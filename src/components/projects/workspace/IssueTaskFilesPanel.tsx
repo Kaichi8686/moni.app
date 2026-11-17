@@ -700,7 +700,7 @@ export function IssueTaskFilesPanel({
       let nextBoard = canvasDraft;
       for (const file of Array.from(list)) {
         const result = await uploadProjectImage(supabase, uid, "issue-photo", issue.id, file);
-        nextBoard = appendImageToBoard(nextBoard, result.publicUrl);
+        nextBoard = await appendImageToBoard(nextBoard, result.publicUrl);
       }
       if (canvasSaveTimer.current) clearTimeout(canvasSaveTimer.current);
       setCanvasDraft(nextBoard);

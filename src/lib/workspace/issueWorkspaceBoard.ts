@@ -51,6 +51,9 @@ export type SheetOverlay =
       fontSize: number;
       textColor: string;
       align: TextAlign;
+      bold?: boolean;
+      italic?: boolean;
+      underline?: boolean;
     }
   | {
       id: string;
@@ -125,6 +128,9 @@ export type BoardTextBox = {
   fontSize: number;
   textColor: string;
   align: TextAlign;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
   z: number;
 };
 
@@ -265,6 +271,9 @@ function parseOverlay(raw: unknown): SheetOverlay | null {
           : DEFAULT_FONT_SIZE,
       textColor: isHexColor(row.textColor) ? row.textColor : DEFAULT_TEXT_COLOR,
       align: isTextAlign(row.align) ? row.align : "left",
+      bold: row.bold === true,
+      italic: row.italic === true,
+      underline: row.underline === true,
     };
   }
   if (row.kind === "shape") {
@@ -387,6 +396,9 @@ function parseTextBox(raw: Record<string, unknown>): BoardTextBox | null {
         : 18,
     textColor: isHexColor(raw.textColor) ? raw.textColor : DEFAULT_TEXT_COLOR,
     align: isTextAlign(raw.align) ? raw.align : "left",
+    bold: raw.bold === true,
+    italic: raw.italic === true,
+    underline: raw.underline === true,
     z: isFiniteNumber(raw.z) ? raw.z : 1,
   };
 }
