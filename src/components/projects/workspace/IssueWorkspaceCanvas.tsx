@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -94,45 +95,20 @@ type Props = {
   storageKey?: string;
 };
 
-/** iOS などでキーボードが開いているとみなす閾値（px） */
-const KEYBOARD_OPEN_PX = 120;
-/** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
-const KEYBOARD_CLOSE_DEBOUNCE_MS = 480;
-
+/** 書式バーをキーボード直上に置くための inset のみ追跡（開閉で編集終了はしない） */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
-  const [open, setOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    let closeTimer: ReturnType<typeof setTimeout> | null = null;
     const update = () => {
-      const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-      setInset(next);
-      const isOpen = next >= KEYBOARD_OPEN_PX;
-      if (isOpen) {
-        if (closeTimer) {
-          clearTimeout(closeTimer);
-          closeTimer = null;
-        }
-        setOpen(true);
-        return;
-      }
-      // 閉じはデバウンス（フォーカス直後の inset 揺れで編集終了しない）
-      if (closeTimer) return;
-      closeTimer = setTimeout(() => {
-        closeTimer = null;
-        const still =
-          Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) >= KEYBOARD_OPEN_PX;
-        if (!still) setOpen(false);
-      }, KEYBOARD_CLOSE_DEBOUNCE_MS);
+      setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     return () => {
-      if (closeTimer) clearTimeout(closeTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -140,8 +116,6 @@ function useVisualKeyboard() {
   }, []);
   return {
     inset,
-    open,
-    /** レイアウトviewport基準でキーボード直上に fixed 配置（absolute のズレ防止） */
     dockStyle: {
       position: "fixed" as const,
       left: 0,
@@ -1446,12 +1420,11 @@ export function IssueWorkspaceCanvas({
       Math.hypot(event.clientX - prev.x, event.clientY - prev.y) < 28;
     lastNodeTap.current = { id: node.id, t: now, x: event.clientX, y: event.clientY };
 
-    if (isDouble) {
+                if (isDouble) {
       if (node.kind === "text") {
         setSelectedIds([node.id]);
         setHandlesVisible(false);
         beginWorkspaceTextEdit(node.id);
-        resetScrollParents();
         return;
       }
       // その他パーツ：ダブルタップでサイズ編集ハンドル
@@ -1496,22 +1469,19 @@ export function IssueWorkspaceCanvas({
 
   const selectedImage =
     selectedIds.length === 1 ? board.items.find((item): item is BoardImage => item.kind === "image" && item.id === selectedId) : null;
-  const selectedTextBox =
-    selectedIds.length === 1
-      ? board.items.find((item): item is BoardTextBox => item.kind === "text" && item.id === selectedId)
-      : null;
+  const editingTextBox = editingTextId
+    ? board.items.find((item): item is BoardTextBox => item.kind === "text" && item.id === editingTextId) ?? null
+    : null;
   // 写真選択中は切り取りバーを出す（ハンドル表示前でも）
   const showInsertBar = !insertToolbarHidden && !selectedImage;
   // プラス展開：カード / テキスト / 図形 / 矢印（写真はトップバー）
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
-  const wasKeyboardOpenRef = useRef(false);
   const textEditStartedAtRef = useRef(0);
 
   function beginWorkspaceTextEdit(id: string) {
     textEditStartedAtRef.current = Date.now();
-    wasKeyboardOpenRef.current = false;
     setEditingTextId(id);
   }
 
@@ -1527,19 +1497,16 @@ export function IssueWorkspaceCanvas({
     }
   }
 
-  // キーボードが閉じたら編集終了（デバウンス済み open）。開始直後は無視
-  useEffect(() => {
-    if (keyboard.open) {
-      wasKeyboardOpenRef.current = true;
-      return;
-    }
-    if (!wasKeyboardOpenRef.current) return;
-    wasKeyboardOpenRef.current = false;
+  // autoFocus は iOS で scrollIntoView → キーボード即閉じの原因になるので preventScroll で当てる
+  useLayoutEffect(() => {
     if (!editingTextId) return;
-    if (Date.now() - textEditStartedAtRef.current < 700) return;
-    finishWorkspaceTextEdit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: react to keyboard close
-  }, [keyboard.open, editingTextId]);
+    const el = textEditRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+  }, [editingTextId]);
+
+  // キーボード開閉検知で編集を終わらせない（iOS の inset 揺れでキーボードが即閉じるため）。
+  // 終了は blur / 明示操作に任せる。
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
@@ -1968,26 +1935,24 @@ export function IssueWorkspaceCanvas({
                     setSelectedIds([node.id]);
                     setHandlesVisible(false);
                     beginWorkspaceTextEdit(node.id);
-                    resetScrollParents();
                   }}
                 >
                   {editing && canEdit ? (
                       <textarea
                         ref={textEditRef}
                         data-board-ui
-                        autoFocus
                         value={node.text}
                         onChange={(e) => updateItem(node.id, { text: e.target.value })}
-                        onFocus={() => {
-                          resetScrollParents();
-                          window.setTimeout(resetScrollParents, 80);
-                        }}
                         onBlur={() => {
                           window.setTimeout(() => {
+                            // フォーカス直後のレイアウト揺れで blur しても編集を維持
+                            if (Date.now() - textEditStartedAtRef.current < 600) {
+                              textEditRef.current?.focus({ preventScroll: true });
+                              return;
+                            }
                             const active = document.activeElement as HTMLElement | null;
                             if (active?.closest("[data-board-ui]")) return;
                             finishWorkspaceTextEdit();
-                            resetScrollParents();
                           }, 0);
                         }}
                         className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
@@ -2245,24 +2210,19 @@ export function IssueWorkspaceCanvas({
                 </div>
               ) : null}
 
-              {/* 文字編集中かつキーボード表示時のみ：キーボード直上の書式バー */}
-              {editingTextId &&
-              selectedTextBox &&
-              canEdit &&
-              !toolbarHidden &&
-              keyboard.open &&
-              toolbarMounted
+              {/* 文字編集中は書式バーを表示（inset でキーボード直上へ。open 判定に依存しない） */}
+              {editingTextBox && canEdit && !toolbarHidden && toolbarMounted
                 ? createPortal(
                     <div className="pointer-events-none" style={keyboard.dockStyle}>
                       <SlidesTextFormatBar
-                        fontSize={selectedTextBox.fontSize}
-                        textColor={selectedTextBox.textColor}
-                        align={selectedTextBox.align}
-                        bold={Boolean(selectedTextBox.bold)}
-                        italic={Boolean(selectedTextBox.italic)}
-                        underline={Boolean(selectedTextBox.underline)}
+                        fontSize={editingTextBox.fontSize}
+                        textColor={editingTextBox.textColor}
+                        align={editingTextBox.align}
+                        bold={Boolean(editingTextBox.bold)}
+                        italic={Boolean(editingTextBox.italic)}
+                        underline={Boolean(editingTextBox.underline)}
                         tx={tx}
-                        onChange={(patch) => updateItem(selectedTextBox.id, patch)}
+                        onChange={(patch) => updateItem(editingTextBox.id, patch)}
                         onKeepFocus={() => textEditRef.current?.focus({ preventScroll: true })}
                       />
                     </div>,
@@ -2584,7 +2544,7 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
-  const wasKeyboardOpenRef = useRef(false);
+  const overlayEditStartedAtRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -2618,13 +2578,17 @@ function SheetFullscreenEditor({
   overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
-  const overlayEditStartedAtRef = useRef(0);
-
   function beginOverlayTextEdit(id: string) {
     overlayEditStartedAtRef.current = Date.now();
-    wasKeyboardOpenRef.current = false;
     setEditingOverlayId(id);
   }
+
+  useLayoutEffect(() => {
+    if (!editingOverlayId) return;
+    const el = overlayTextRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+  }, [editingOverlayId]);
 
   function finishOverlayTextEdit() {
     const id = editingOverlayId;
@@ -2639,19 +2603,7 @@ function SheetFullscreenEditor({
     }
   }
 
-  // キーボード閉じ → 編集終了（デバウンス済み）。開始直後は無視
-  useEffect(() => {
-    if (keyboard.open) {
-      wasKeyboardOpenRef.current = true;
-      return;
-    }
-    if (!wasKeyboardOpenRef.current) return;
-    wasKeyboardOpenRef.current = false;
-    if (!editingOverlayId) return;
-    if (Date.now() - overlayEditStartedAtRef.current < 700) return;
-    finishOverlayTextEdit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyboard.open, editingOverlayId]);
+  // キーボード開閉検知では編集終了しない（inset 揺れでキーボードが即閉じるため）
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -2919,6 +2871,7 @@ function SheetFullscreenEditor({
     <div
       data-board-ui
       className="fixed inset-0 z-[600] flex flex-col bg-zinc-200"
+      style={{ height: "100lvh", minHeight: "100%" }}
       role="dialog"
       aria-modal="true"
       aria-label={tx("用紙を編集", "Edit sheet")}
@@ -3358,11 +3311,14 @@ function SheetFullscreenEditor({
                         {editing && canEdit ? (
                           <textarea
                             ref={overlayTextRef}
-                            autoFocus
                             value={ov.text}
                             onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
                             onBlur={() => {
                               window.setTimeout(() => {
+                                if (Date.now() - overlayEditStartedAtRef.current < 600) {
+                                  overlayTextRef.current?.focus({ preventScroll: true });
+                                  return;
+                                }
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active?.closest("[data-board-ui]")) return;
                                 finishOverlayTextEdit();
@@ -3417,12 +3373,8 @@ function SheetFullscreenEditor({
         </div>
       </div>
 
-      {/* キーボード表示中のみ：書式バーを visualViewport 直上に fixed 配置 */}
-      {canEdit &&
-      editingOverlayId &&
-      selectedOverlay &&
-      selectedOverlay.kind === "text" &&
-      keyboard.open
+      {/* 文字編集中は書式バー（inset でキーボード直上。open 判定に依存しない） */}
+      {canEdit && editingOverlayId && selectedOverlay && selectedOverlay.kind === "text"
         ? createPortal(
             <div className="pointer-events-none" style={keyboard.dockStyle}>
               <SlidesTextFormatBar
