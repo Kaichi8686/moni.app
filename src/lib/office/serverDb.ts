@@ -12,7 +12,12 @@ import {
   scoreAnswerWithClaude,
 } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { ensureCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import {
+  applyMeterDecay,
+  ensureMeters,
+} from "@/lib/office/meters";
 import { isMangledOfflineDescription, offlineIncident } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
@@ -45,6 +50,9 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
   const about = aboutRaw && aboutRaw.trim() ? aboutRaw.trim() : null;
   const industry =
     parseOfficeIndustry(row.industry) ?? guessIndustryFromAbout(about);
+  const cast = ensureCompanyCast(row.cast, String(row.id ?? row.user_id ?? "x"));
+  const metersUpdatedAt = row.meters_updated_at ? String(row.meters_updated_at) : null;
+  const meters = applyMeterDecay(ensureMeters(row.meters), metersUpdatedAt);
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -58,7 +66,40 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     staminaUpdatedAt: String(row.stamina_updated_at),
     leagueId: parseOfficeLeagueId(row.league_id),
     createdAt: String(row.created_at),
+    cast,
+    meters,
+    metersUpdatedAt,
+    shareOptOut: Boolean(row.share_opt_out ?? false),
+    sfxMuted: row.sfx_muted == null ? true : Boolean(row.sfx_muted),
+    secretaryGuideDone: Boolean(row.secretary_guide_done ?? false),
+    loginStreak: Number(row.login_streak ?? 0),
   };
+}
+
+/** cast/meters 未設定の既存会社を埋める（失敗しても読み取りは続行） */
+async function backfillCastMeters(
+  admin: SupabaseClient,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const needsCast = row.cast == null;
+  const needsMeters = row.meters == null;
+  if (!needsCast && !needsMeters) return row;
+  const cast = ensureCompanyCast(row.cast, String(row.id ?? "x"));
+  const meters = ensureMeters(row.meters);
+  const patch: Record<string, unknown> = {};
+  if (needsCast) patch.cast = cast;
+  if (needsMeters) {
+    patch.meters = meters;
+    patch.meters_updated_at = new Date().toISOString();
+  }
+  const { data, error } = await admin
+    .from("office_companies")
+    .update(patch)
+    .eq("id", String(row.id))
+    .select("*")
+    .single();
+  if (error || !data) return { ...row, ...patch };
+  return data as Record<string, unknown>;
 }
 
 function readTargetsInternal(row: Record<string, unknown>): IncidentTargetInternal[] {
@@ -168,7 +209,8 @@ export async function dbGetCompany(admin: SupabaseClient, userId: string) {
       pendingResult: null as OfficeSeasonScore | null,
     };
   }
-  const company = mapCompany(data as Record<string, unknown>);
+  const row = await backfillCastMeters(admin, data as Record<string, unknown>);
+  const company = mapCompany(row);
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (
     stamina.value !== company.stamina ||
@@ -221,6 +263,9 @@ export async function dbCreateCompany(
     .maybeSingle();
   if (existing) throw new Error("すでに会社があるよ");
 
+  const now = new Date().toISOString();
+  const cast = ensureCompanyCast(null, userId);
+  const meters = ensureMeters(null);
   const { data, error } = await admin
     .from("office_companies")
     .insert({
@@ -230,7 +275,11 @@ export async function dbCreateCompany(
       industry,
       league_id: "rookie",
       stamina: 5,
-      stamina_updated_at: new Date().toISOString(),
+      stamina_updated_at: now,
+      cast,
+      meters,
+      meters_updated_at: now,
+      sfx_muted: true,
     })
     .select("*")
     .single();
@@ -505,6 +554,7 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     strategyKind,
     strategyId,
     wasSimilar,
+    meters: company.meters,
   });
   const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   const season = await ensureSeasonRow(admin, userId, company.leagueId);

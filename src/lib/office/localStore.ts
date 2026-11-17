@@ -4,7 +4,9 @@ import {
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { ensureCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import { applyMeterDecay, defaultMeters, ensureMeters } from "@/lib/office/meters";
 import {
   isMangledOfflineDescription,
   offlineIncident,
@@ -116,6 +118,17 @@ export function localGetCompany(userId: string): {
     company.industry = guessIndustryFromAbout(company.about);
     write(store);
   }
+  if (!company.cast?.length) {
+    company.cast = ensureCompanyCast(null, company.id);
+    write(store);
+  }
+  if (!company.meters) {
+    company.meters = defaultMeters();
+    company.metersUpdatedAt = new Date().toISOString();
+    write(store);
+  } else {
+    company.meters = applyMeterDecay(ensureMeters(company.meters), company.metersUpdatedAt);
+  }
   if (company.name.length > OFFICE_NAME_MAX) {
     company.name = company.name.slice(0, OFFICE_NAME_MAX);
     write(store);
@@ -141,8 +154,9 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
   if (!about) throw new Error("会社の説明を書いてね");
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
+  const id = uid();
   const company: OfficeCompany = {
-    id: uid(),
+    id,
     userId,
     name: trimmed,
     about,
@@ -154,6 +168,13 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
     staminaUpdatedAt: now,
     leagueId: "rookie",
     createdAt: now,
+    cast: ensureCompanyCast(null, id),
+    meters: defaultMeters(),
+    metersUpdatedAt: now,
+    sfxMuted: true,
+    secretaryGuideDone: false,
+    shareOptOut: false,
+    loginStreak: 0,
   };
   store.company = company;
   ensureSeason(store, userId, "rookie");
@@ -325,6 +346,7 @@ export async function localSubmit(
     strategyKind,
     strategyId,
     wasSimilar,
+    meters: company.meters ?? defaultMeters(),
   });
   const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   company.totalRevenue = growth.totalRevenue;

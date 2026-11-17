@@ -1,4 +1,12 @@
+import type { CastMember } from "@/lib/office/cast";
 import type { OfficeIndustry } from "@/lib/office/industries";
+import type { OfficeMeters } from "@/lib/office/meters";
+import type {
+  CastEmotion,
+  CastRole,
+  MeterKey,
+  OfficeSceneId,
+} from "@/lib/office/scenes";
 
 export type OfficeLeagueId = "rookie" | "bronze" | "silver" | "gold" | "platinum" | "diamond";
 
@@ -10,7 +18,7 @@ export type StrategyKind = "safe" | "standard" | "bold" | "custom";
 export type TargetFit = "good" | "ok" | "mismatch";
 export type StoryTone = "great" | "ok" | "bitter";
 
-export type { OfficeIndustry };
+export type { OfficeIndustry, CastMember, OfficeMeters, MeterKey, OfficeSceneId, CastRole, CastEmotion };
 
 export type OfficeCompany = {
   id: string;
@@ -27,6 +35,13 @@ export type OfficeCompany = {
   staminaUpdatedAt: string;
   leagueId: OfficeLeagueId;
   createdAt: string;
+  cast: CastMember[];
+  meters: OfficeMeters;
+  metersUpdatedAt: string | null;
+  shareOptOut?: boolean;
+  sfxMuted?: boolean;
+  secretaryGuideDone?: boolean;
+  loginStreak?: number;
 };
 
 export type IncidentStrategy = {
@@ -49,6 +64,11 @@ export type IncidentTargetPublic = {
   label: string;
 };
 
+export type IncidentSpeaker = {
+  castRole: CastRole;
+  emotion: CastEmotion;
+};
+
 export type OfficeIncident = {
   id: string;
   userId: string;
@@ -63,6 +83,12 @@ export type OfficeIncident = {
   targets: IncidentTargetPublic[] | IncidentTargetInternal[];
   strategyRerolls: number;
   createdAt: string;
+  scene?: OfficeSceneId | null;
+  speaker?: IncidentSpeaker | null;
+  line?: string | null;
+  stakes?: string | null;
+  metersAtRisk?: MeterKey[];
+  followupOf?: string | null;
 };
 
 export type OfficeScores = {
