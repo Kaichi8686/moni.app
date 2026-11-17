@@ -2,7 +2,19 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { History, Lightbulb, Loader2, Menu, MessageCircle, MessageSquarePlus, X } from "lucide-react";
+import {
+  History,
+  Lightbulb,
+  Loader2,
+  Menu,
+  MessageCircle,
+  MessageSquarePlus,
+  PanelBottom,
+  PanelBottomClose,
+  X,
+} from "lucide-react";
+
+const AI_CHAT_IMMERSIVE_CLASS = "moni-ai-chat-immersive";
 import type {
   GeminiAgentMode,
   IdeasAgentPayload,
@@ -118,7 +130,10 @@ export function GeminiAgentPanel({
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  /** Fullscreen coach: bottom tab bar visible (false → slide off-screen). */
+  const [tabBarVisible, setTabBarVisible] = useState(true);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const fullscreen = variant === "fullscreen";
   const handoffAppliedRef = useRef(false);
   /** Only persist to the store key that this panel instance last hydrated for (per project). */
   const persistKeyRef = useRef("");
@@ -207,6 +222,15 @@ export function GeminiAgentPanel({
     if (!hydrated) return;
     touchIdleActivity(projectId, mode);
   }, [hydrated, messages, projectId, mode]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const root = document.documentElement;
+    root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, !tabBarVisible);
+    return () => {
+      root.classList.remove(AI_CHAT_IMMERSIVE_CLASS);
+    };
+  }, [fullscreen, tabBarVisible]);
 
   useEffect(() => {
     if (!hydrated || !initialUserMessage?.trim() || handoffAppliedRef.current) return;
@@ -309,6 +333,8 @@ export function GeminiAgentPanel({
       setLoading(true);
       setRoadmap(null);
       setIdeas(null);
+      // First send immerses the chat: slide the project tab bar off-screen.
+      if (fullscreen) setTabBarVisible(false);
 
       try {
         const res = await fetch("/api/projects/gemini", {
@@ -350,7 +376,18 @@ export function GeminiAgentPanel({
         setLoading(false);
       }
     },
-    [loading, messages, mode, phaseSummary, issueSummary, userSituationLabel, projectDescription, projectName, tx],
+    [
+      loading,
+      messages,
+      mode,
+      phaseSummary,
+      issueSummary,
+      userSituationLabel,
+      projectDescription,
+      projectName,
+      tx,
+      fullscreen,
+    ],
   );
 
   async function onSubmit(e: FormEvent) {
@@ -415,7 +452,6 @@ export function GeminiAgentPanel({
     />
   );
 
-  const fullscreen = variant === "fullscreen";
   const activeTitle = conversations.find((c) => c.id === activeId)?.title || newTitle;
   const circleBtn =
     "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]";
@@ -748,48 +784,74 @@ export function GeminiAgentPanel({
               : "shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           }
         >
-          <div
-            className={
-              fullscreen
-                ? "flex items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F7F7F8] px-2 py-1.5 focus-within:border-zinc-300 focus-within:bg-white"
-                : "flex gap-2"
-            }
-          >
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              disabled={loading}
-              placeholder={
-                fullscreen
-                  ? mode === "ideas"
-                    ? tx("アイデアの相談を入力…", "Type an idea prompt…")
-                    : tx("相談内容を入力…", "Type your question…")
-                  : tx(
-                      meta.placeholder,
-                      mode === "roadmap"
-                        ? "e.g. Make a 3-month plan to ship an MVP"
-                        : mode === "general"
-                          ? "e.g. The team can’t agree"
-                          : "e.g. 10 feature ideas users would love",
-                    )
-              }
+          <div className={fullscreen ? "flex items-center gap-2" : undefined}>
+            <div
               className={
                 fullscreen
-                  ? "min-h-[40px] flex-1 bg-transparent px-3 text-[16px] text-[#0D0D0D] outline-none placeholder:text-[#9CA3AF] disabled:opacity-60"
-                  : "min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
-              }
-            />
-            <button
-              type="submit"
-              disabled={loading || !draft.trim()}
-              className={
-                fullscreen
-                  ? "inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-violet-600 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
-                  : "min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+                  ? "flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F7F7F8] px-2 py-1.5 focus-within:border-zinc-300 focus-within:bg-white"
+                  : "flex gap-2"
               }
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
-            </button>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={loading}
+                placeholder={
+                  fullscreen
+                    ? mode === "ideas"
+                      ? tx("アイデアの相談を入力…", "Type an idea prompt…")
+                      : tx("相談内容を入力…", "Type your question…")
+                    : tx(
+                        meta.placeholder,
+                        mode === "roadmap"
+                          ? "e.g. Make a 3-month plan to ship an MVP"
+                          : mode === "general"
+                            ? "e.g. The team can’t agree"
+                            : "e.g. 10 feature ideas users would love",
+                      )
+                }
+                className={
+                  fullscreen
+                    ? "min-h-[40px] flex-1 bg-transparent px-3 text-[16px] text-[#0D0D0D] outline-none placeholder:text-[#9CA3AF] disabled:opacity-60"
+                    : "min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
+                }
+              />
+              <button
+                type="submit"
+                disabled={loading || !draft.trim()}
+                className={
+                  fullscreen
+                    ? "inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-violet-600 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
+                    : "min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+                }
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
+              </button>
+            </div>
+            {fullscreen ? (
+              <button
+                type="button"
+                onClick={() => setTabBarVisible((v) => !v)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]"
+                aria-pressed={tabBarVisible}
+                aria-label={
+                  tabBarVisible
+                    ? tx("タブバーをしまう", "Hide tab bar")
+                    : tx("タブバーを出す", "Show tab bar")
+                }
+                title={
+                  tabBarVisible
+                    ? tx("タブバーをしまう", "Hide tab bar")
+                    : tx("タブバーを出す", "Show tab bar")
+                }
+              >
+                {tabBarVisible ? (
+                  <PanelBottomClose className="h-[18px] w-[18px]" aria-hidden />
+                ) : (
+                  <PanelBottom className="h-[18px] w-[18px]" aria-hidden />
+                )}
+              </button>
+            ) : null}
           </div>
         </form>
       </div>
