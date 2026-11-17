@@ -18,15 +18,22 @@ import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
 
 const DOC_EDITOR_CLASS = "moni-doc-editor";
 
-/** レイアウト全面を覆う（lvh＝キーボードで縮まない） */
+/** レイアウト全面を覆う（bottom:0 禁止＝VV追従で下層が透けない） */
 function DocEditorViewport({ children }: { children: ReactNode }) {
   return (
-    <div
-      className="fixed inset-0 z-[200] flex flex-col overscroll-none bg-white"
-      style={{ height: "100lvh", minHeight: "100%" }}
-    >
-      {children}
-    </div>
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed left-0 right-0 top-0 z-[199] bg-white"
+        style={{ bottom: "auto", height: "160lvh", minHeight: "160lvh" }}
+      />
+      <div
+        className="fixed left-0 right-0 top-0 z-[200] flex flex-col overscroll-none bg-white"
+        style={{ bottom: "auto", height: "100lvh", minHeight: "100lvh" }}
+      >
+        {children}
+      </div>
+    </>
   );
 }
 

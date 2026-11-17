@@ -3059,23 +3059,34 @@ function SheetFullscreenEditor({
     ));
   }
 
+  // iOS は fixed + bottom:0 が visualViewport に追従して縮み、キーボード下にジャンルが透ける。
+  // bottom は使わず lvh で覆い、さらに下へ伸ばした作業スペース影で隙間を塞ぐ。
+  const workspaceCoverStyle = {
+    bottom: "auto" as const,
+    height: "100lvh",
+    minHeight: "100lvh",
+  };
+  const workspaceDots = {
+    backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
+    backgroundSize: "18px 18px",
+  };
+
   return (
-    <div
-      data-board-ui
-      className="fixed inset-0 z-[600] flex flex-col bg-zinc-200"
-      style={{ height: "100lvh", minHeight: "100%" }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={tx("用紙を編集", "Edit sheet")}
-    >
+    <>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{
-          backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
-          backgroundSize: "18px 18px",
-        }}
+        className="pointer-events-none fixed left-0 right-0 top-0 z-[599] bg-zinc-200"
+        style={{ ...workspaceCoverStyle, height: "160lvh", minHeight: "160lvh", ...workspaceDots }}
       />
+      <div
+        data-board-ui
+        className="fixed left-0 right-0 top-0 z-[600] flex flex-col bg-zinc-200"
+        style={workspaceCoverStyle}
+        role="dialog"
+        aria-modal="true"
+        aria-label={tx("用紙を編集", "Edit sheet")}
+      >
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 pb-1 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button
@@ -3557,7 +3568,8 @@ function SheetFullscreenEditor({
             document.body,
           )
         : null}
-    </div>
+      </div>
+    </>
   );
 }
 
