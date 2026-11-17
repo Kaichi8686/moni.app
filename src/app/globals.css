@@ -2830,6 +2830,20 @@ html.moni-goal-stuck .project-workspace-header {
   animation: office-fade-pop 0.55s ease-out both;
 }
 
+.office-meter-risk {
+  animation: office-meter-blink 0.45s ease-in-out 2;
+}
+
+@keyframes office-meter-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .office-arms,
   .office-head,
@@ -2848,7 +2862,8 @@ html.moni-goal-stuck .project-workspace-header {
   .office-fx--chance .office-worker--jump,
   .office-fx--people .office-think,
   .office-fx--rival .office-rival-shadow,
-  .office-speech {
+  .office-speech,
+  .office-meter-risk {
     animation: none !important;
   }
   .office-incident-enter {

@@ -3,6 +3,7 @@
 import { DuoButton } from "@/components/idea-garden/DuoButton";
 import { INCIDENT_TYPE_UI } from "@/lib/office/constants";
 import { industryMeta } from "@/lib/office/industries";
+import { METER_LABEL_JA } from "@/lib/office/scenes";
 import type { OfficeCompany, OfficeIncident } from "@/lib/office/types";
 
 type Props = {
@@ -51,6 +52,17 @@ export function IncidentStep({ incident, company, playEnter, onNext }: Props) {
         </p>
         <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900">{incident.title}</h3>
         <p className="mt-2 text-[15px] leading-relaxed text-zinc-600">{incident.description}</p>
+        {incident.stakes ? (
+          <p className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
+            放置すると… {incident.stakes}
+          </p>
+        ) : null}
+        {incident.metersAtRisk?.length ? (
+          <p className="office-meter-risk mt-2 text-xs font-bold text-amber-800">
+            危険メーター:{" "}
+            {incident.metersAtRisk.map((k) => METER_LABEL_JA[k] ?? k).join("・")}
+          </p>
+        ) : null}
       </div>
       <div className="p-4">
         <DuoButton type="button" tone="orange" size="lg" fullWidth onClick={onNext}>

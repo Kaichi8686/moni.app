@@ -261,6 +261,12 @@ export async function localCurrentIncident(
     targets: stripTargetFit(gen.targets),
     strategyRerolls: 0,
     createdAt: new Date().toISOString(),
+    scene: gen.scene,
+    speaker: gen.speaker,
+    line: gen.line,
+    stakes: gen.stakes,
+    metersAtRisk: gen.metersAtRisk,
+    followupOf: null,
   };
   store.incidents.push(incident);
   write(store);

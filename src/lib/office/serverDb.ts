@@ -15,12 +15,18 @@ import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
 import { ensureCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
 import {
+  defaultStageForType,
+  parseIncidentStageFields,
+} from "@/lib/office/incidentValidate";
+import {
   applyMeterDecay,
   ensureMeters,
+  lowestMeterKey,
 } from "@/lib/office/meters";
 import { isMangledOfflineDescription, offlineIncident } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
+import { seasonThemeFor } from "@/lib/office/seasonTheme";
 import { isTooSimilar } from "@/lib/office/similarity";
 import { pickIncidentSize } from "@/lib/office/sizePick";
 import { computeStamina } from "@/lib/office/stamina";
@@ -113,19 +119,34 @@ function readStrategies(row: Record<string, unknown>): IncidentStrategy[] {
 function mapIncident(row: Record<string, unknown>): OfficeIncident {
   const strategies = readStrategies(row);
   const targetsInternal = readTargetsInternal(row);
+  const type = row.type as OfficeIncident["type"];
+  const stage =
+    parseIncidentStageFields({
+      scene: row.scene,
+      speaker: row.speaker,
+      line: row.line,
+      stakes: row.stakes,
+      meters_at_risk: row.meters_at_risk,
+    }) ?? defaultStageForType(type);
   return {
     id: String(row.id),
     userId: String(row.user_id),
     companyId: String(row.company_id),
     title: String(row.title),
     description: String(row.description),
-    type: row.type as OfficeIncident["type"],
+    type,
     size: Number(row.size) as 1 | 2 | 3,
     status: row.status as OfficeIncident["status"],
     strategies,
     targets: stripTargetFit(targetsInternal),
     strategyRerolls: Math.max(0, Math.min(1, Number(row.strategy_rerolls ?? 0))),
     createdAt: String(row.created_at),
+    scene: stage.scene,
+    speaker: stage.speaker,
+    line: stage.line,
+    stakes: stage.stakes,
+    metersAtRisk: stage.metersAtRisk,
+    followupOf: row.followup_of ? String(row.followup_of) : null,
   };
 }
 
@@ -378,11 +399,50 @@ export async function dbCurrentIncident(
     .limit(5);
   const recentTitles = (recentRows ?? []).map((r) => String((r as { title: string }).title));
 
+  const theme = seasonThemeFor();
+  const castSummary = company.cast.map((c) => `${c.role}:${c.name}`).join(" / ");
+  let followup: { title: string; strategyTitle: string; storyTone: string; id: string } | null =
+    null;
+  if (Math.random() < 0.2) {
+    const { data: recentSubs } = await admin
+      .from("office_submissions")
+      .select("incident_id, strategy_title, story_tone")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    const pick = (recentSubs ?? [])[Math.floor(Math.random() * (recentSubs?.length || 1))];
+    if (pick) {
+      const { data: prevInc } = await admin
+        .from("office_incidents")
+        .select("id, title")
+        .eq("id", String((pick as { incident_id: string }).incident_id))
+        .maybeSingle();
+      if (prevInc) {
+        followup = {
+          id: String((prevInc as { id: string }).id),
+          title: String((prevInc as { title: string }).title),
+          strategyTitle: String((pick as { strategy_title?: string }).strategy_title ?? "作戦"),
+          storyTone: String((pick as { story_tone?: string }).story_tone ?? "ok"),
+        };
+      }
+    }
+  }
+
   const gen = await generateIncidentWithClaude({
     companyName: company.name,
     companyAbout: company.about,
     recentTitles,
     industryLabel: industryLabelJa(company.industry),
+    castSummary,
+    lowestMeter: lowestMeterKey(company.meters),
+    seasonTheme: `${theme.labelJa}（${theme.promptHint}）`,
+    followup: followup
+      ? {
+          title: followup.title,
+          strategyTitle: followup.strategyTitle,
+          storyTone: followup.storyTone,
+        }
+      : null,
   });
   if (!gen.ok) throw new Error(gen.message);
 
@@ -399,6 +459,12 @@ export async function dbCurrentIncident(
       strategies: gen.strategies,
       targets: gen.targets,
       strategy_rerolls: 0,
+      scene: gen.scene,
+      speaker: { cast_role: gen.speaker.castRole, emotion: gen.speaker.emotion },
+      line: gen.line,
+      stakes: gen.stakes,
+      meters_at_risk: gen.metersAtRisk,
+      followup_of: followup?.id ?? null,
     })
     .select("*")
     .single();

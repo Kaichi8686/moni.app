@@ -281,7 +281,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }
 
   const speech = useMemo(() => {
-    if (!incident || step !== "incident") return null;
+    if (!incident || (step !== "incident" && step !== "strategy")) return null;
+    if (incident.line) return incident.line;
     return pickIncidentSpeech(incident.type, incident.id);
   }, [incident, step]);
 

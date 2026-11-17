@@ -1,5 +1,8 @@
+import { defaultStageForType } from "@/lib/office/incidentValidate";
 import { clampScore, scoreTotal, storyToneFromTotal } from "@/lib/office/scoring";
+import type { MeterKey, OfficeSceneId } from "@/lib/office/scenes";
 import type {
+  IncidentSpeaker,
   IncidentStrategy,
   IncidentTargetInternal,
   IncidentType,
@@ -12,6 +15,14 @@ export type OfflineIncidentCtx = {
   companyAbout: string;
   recentTitles: string[];
   industryLabel?: string;
+  castSummary?: string;
+  lowestMeter?: MeterKey;
+  seasonTheme?: string;
+  followup?: {
+    title: string;
+    strategyTitle: string;
+    storyTone: string;
+  } | null;
 };
 
 export type OfflineIncidentResult = {
@@ -20,6 +31,11 @@ export type OfflineIncidentResult = {
   type: IncidentType;
   strategies: IncidentStrategy[];
   targets: IncidentTargetInternal[];
+  scene: OfficeSceneId;
+  speaker: IncidentSpeaker;
+  line: string;
+  stakes: string;
+  metersAtRisk: MeterKey[];
 };
 
 /** 旧オフライン案で説明を途中切断して混ぜた文（サー…らしい など） */
@@ -90,10 +106,16 @@ export function offlineIncident(ctx?: OfflineIncidentCtx): OfflineIncidentResult
   const filtered = pool.filter((p) => !recent.has(p.title));
   const list = filtered.length > 0 ? filtered : pool;
   const picked = list[Math.floor(Math.random() * list.length)]!;
+  const stage = defaultStageForType(picked.type);
   return {
     ...picked,
     strategies: offlineStrategies(),
     targets: offlineTargets(ctx?.companyAbout ?? ""),
+    scene: stage.scene,
+    speaker: stage.speaker,
+    line: stage.line,
+    stakes: stage.stakes,
+    metersAtRisk: stage.metersAtRisk,
   };
 }
 

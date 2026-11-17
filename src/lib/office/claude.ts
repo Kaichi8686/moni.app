@@ -13,9 +13,15 @@ import {
   type OfflineIncidentCtx,
 } from "@/lib/office/offline";
 import { clampScore, scoreTotal, storyToneFromTotal } from "@/lib/office/scoring";
+import {
+  defaultStageForType,
+  parseIncidentStageFields,
+} from "@/lib/office/incidentValidate";
+import type { MeterKey, OfficeSceneId } from "@/lib/office/scenes";
 import { parseStrategies, parseTargets } from "@/lib/office/strategy";
 import { filterValidTargetsOrNull } from "@/lib/office/targetValidate";
 import type {
+  IncidentSpeaker,
   IncidentStrategy,
   IncidentTargetInternal,
   IncidentType,
@@ -39,6 +45,11 @@ export type GeneratedIncident = {
   type: IncidentType;
   strategies: IncidentStrategy[];
   targets: IncidentTargetInternal[];
+  scene: OfficeSceneId;
+  speaker: IncidentSpeaker;
+  line: string;
+  stakes: string;
+  metersAtRisk: MeterKey[];
 };
 
 function normalizeIncidentFields(
@@ -48,6 +59,12 @@ function normalizeIncidentFields(
     type?: unknown;
     strategies?: unknown;
     targets?: unknown;
+    scene?: unknown;
+    speaker?: unknown;
+    line?: unknown;
+    stakes?: unknown;
+    meters_at_risk?: unknown;
+    metersAtRisk?: unknown;
   },
   companyName: string,
   companyAbout: string,
@@ -64,7 +81,21 @@ function normalizeIncidentFields(
   const parsedTargets = parseTargets(parsed.targets);
   const targets = filterValidTargetsOrNull(parsedTargets, companyAbout);
   if (!targets) return null;
-  return { title, description, type, strategies, targets };
+  const stage = parseIncidentStageFields(parsed) ?? defaultStageForType(type);
+  // scene 等の許可値チェック：parse 失敗時は default。明示不正は再生成させる
+  if (parsed.scene != null && !parseIncidentStageFields(parsed)) return null;
+  return {
+    title,
+    description,
+    type,
+    strategies,
+    targets,
+    scene: stage.scene,
+    speaker: stage.speaker,
+    line: stage.line,
+    stakes: stage.stakes,
+    metersAtRisk: stage.metersAtRisk,
+  };
 }
 
 export async function generateIncidentWithClaude(
@@ -75,19 +106,26 @@ export async function generateIncidentWithClaude(
       ? ctx.recentTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")
       : "（なし）";
   const industry = ctx.industryLabel ? `\n業種ラベル: ${ctx.industryLabel}` : "";
+  const castLine = ctx.castSummary ? `\nキャスト: ${ctx.castSummary}` : "";
+  const meterLine = ctx.lowestMeter ? `\nいちばん低いメーター: ${ctx.lowestMeter}` : "";
+  const seasonLine = ctx.seasonTheme ? `\n今月の季節テーマ: ${ctx.seasonTheme}` : "";
+  const follow =
+    ctx.followup != null
+      ? `\nこれは「その後」事件です。前回タイトル: ${ctx.followup.title} / 作戦: ${ctx.followup.strategyTitle} / 結果トーン: ${ctx.followup.storyTone}\n良かった場合は予想外の副作用、悪かった場合は挽回のチャンスとして書いてください。`
+      : "";
 
-  const user = `会社名: ${ctx.companyName}${industry}
+  const user = `会社名: ${ctx.companyName}${industry}${castLine}${meterLine}${seasonLine}
 会社の説明: ${ctx.companyAbout}
 直近の事件タイトル（似せないで）:
-${recent}
+${recent}${follow}
 
-上の会社に合った事件と、作戦3枚・ターゲット4個をJSONだけで出力してください。`;
+上の会社に合った事件と、作戦3枚・ターゲット4個・場面情報をJSONだけで出力してください。`;
 
   const run = async () => {
     const ai = await anthropicTextMessage({
       system: OFFICE_INCIDENT_SYSTEM_PROMPT,
       user,
-      maxTokens: 700,
+      maxTokens: 900,
       model: officeModel(),
       temperature: 0.95,
     });
@@ -101,6 +139,11 @@ ${recent}
       type?: unknown;
       strategies?: unknown;
       targets?: unknown;
+      scene?: unknown;
+      speaker?: unknown;
+      line?: unknown;
+      stakes?: unknown;
+      meters_at_risk?: unknown;
     }>(ai.text);
     if (!parsed) return { message: "JSONパース失敗" };
     const normalized = normalizeIncidentFields(parsed, ctx.companyName, ctx.companyAbout);
@@ -108,13 +151,11 @@ ${recent}
     return normalized;
   };
 
-  // ターゲット検証失敗時も含め、最大2回リトライ（計3試行）→だめならオフライン
-  let lastMessage = "事件の生成に失敗しました";
+  // 検証失敗時も含め、最大2回リトライ（計3試行）→だめならオフライン
   for (let attempt = 0; attempt < 3; attempt++) {
     const result = await run();
     if ("title" in result) return { ok: true, ...result };
     if ("offline" in result && result.offline) return { ok: true, ...offlineIncident(ctx) };
-    lastMessage = result.message || lastMessage;
   }
   return { ok: true, ...offlineIncident(ctx) };
 }
