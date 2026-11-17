@@ -480,6 +480,8 @@ export function ProjectScheduleCalendar({
   }
 
   const todayKey = dateKeyLocal(new Date());
+  const viewMonth = viewDate.getMonth();
+  const viewYear = viewDate.getFullYear();
 
   const timedEvents = useMemo(() => {
     const rangeStart = HOUR_START * 60;
@@ -715,6 +717,10 @@ export function ProjectScheduleCalendar({
           >
             {focusWeekDays.map((cell) => {
               const key = dateKeyLocal(cell);
+              const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
+              if (!inMonth) {
+                return <div key={key} className="h-full" aria-hidden />;
+              }
               const isToday = key === todayKey;
               const isSelected = key === selectedKey;
               const showMark = selectedKey ? isSelected : isToday;
@@ -777,6 +783,16 @@ export function ProjectScheduleCalendar({
               >
                 {week.map((cell) => {
                   const key = dateKeyLocal(cell);
+                  const inMonth = cell.getMonth() === viewMonth && cell.getFullYear() === viewYear;
+                  if (!inMonth) {
+                    return (
+                      <div
+                        key={key}
+                        className={fullBleed ? "min-h-[96px]" : "min-h-[88px]"}
+                        aria-hidden
+                      />
+                    );
+                  }
                   const list = eventsByDay.get(key) ?? [];
                   const isToday = key === todayKey;
                   const isSelected = key === selectedKey;
