@@ -650,7 +650,7 @@ export function IssueWorkspaceCanvas({
     };
   }, []);
 
-  // カード編集中のシートを記憶（他タブ／他画面から戻ったとき復元）
+  // カード編集中のシートを記憶（他サイト／他画面から戻ったとき復元）
   useEffect(() => {
     if (!storageKey || typeof window === "undefined") return;
     try {
@@ -663,11 +663,40 @@ export function IssueWorkspaceCanvas({
   }, [openSheetId, storageKey]);
 
   // 記憶したシートがボードから消えていたらクリア
+  // ※ボード未ロード（items 空）の瞬間に消すと、復帰時にカード編集が復元できない
   useEffect(() => {
     if (!openSheetId) return;
+    if (board.items.length === 0) return;
     const exists = board.items.some((item) => item.kind === "sheet" && item.id === openSheetId);
     if (!exists) setOpenSheetId(null);
   }, [board.items, openSheetId]);
+
+  // 他サイトから戻ったとき・ボードが後から載ったときにカード編集を再開
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    const key = `moni:ws-open-sheet:${storageKey}`;
+    const restore = () => {
+      if (openSheetId) return;
+      try {
+        const raw = window.sessionStorage.getItem(key)?.trim();
+        if (!raw) return;
+        if (!boardRef.current.items.some((item) => item.kind === "sheet" && item.id === raw)) return;
+        setOpenSheetId(raw);
+      } catch {
+        /* ignore */
+      }
+    };
+    restore();
+    const onShow = () => {
+      if (document.visibilityState === "visible") restore();
+    };
+    window.addEventListener("pageshow", restore);
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      window.removeEventListener("pageshow", restore);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [storageKey, openSheetId, board.items]);
 
   // キーボード閉じたあと操作バーが画面外に残らないようスクロールを戻す
   useEffect(() => {
