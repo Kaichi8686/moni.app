@@ -136,8 +136,11 @@ export function GeminiAgentPanel({
   /** Lift composer above the soft keyboard (overlays-content does not shrink layout). */
   const [keyboardInset, setKeyboardInset] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   /** Peak inset while the keyboard is open — ignore downward settle so the composer only moves up. */
   const keyboardInsetPeakRef = useRef(0);
+  /** Last stable keyboard height — restored immediately on the 2nd+ focus so we don't climb then bounce. */
+  const lastKeyboardHeightRef = useRef(0);
   const composerFocusedRef = useRef(false);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
@@ -150,7 +153,11 @@ export function GeminiAgentPanel({
   onFreshConsumedRef.current = onFreshConsumed;
 
   const scrollToEnd = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the messages pane — scrollIntoView can move the window/visualViewport
+    // and make the composer bounce on the next keyboard open.
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, []);
 
   const resetPanels = useCallback(() => {
@@ -263,16 +270,22 @@ export function GeminiAgentPanel({
     const sync = () => {
       if (composerFocusedRef.current) lockScrollTop();
       const inset = readInset();
-      const open = composerFocusedRef.current && inset >= 8;
-      if (!open) {
-        keyboardInsetPeakRef.current = 0;
-        setKeyboardInset(0);
+
+      if (composerFocusedRef.current) {
+        // Focused: only ratchet up. Do NOT clear when inset is still small — that
+        // wiped the restored last-height on reopen and caused climb-then-bounce.
+        if (inset >= 8 && inset > keyboardInsetPeakRef.current) {
+          keyboardInsetPeakRef.current = inset;
+          lastKeyboardHeightRef.current = inset;
+          setKeyboardInset(inset);
+        }
         return;
       }
-      // Only move up while the keyboard is opening / open — never settle downward.
-      if (inset > keyboardInsetPeakRef.current) {
-        keyboardInsetPeakRef.current = inset;
-        setKeyboardInset(inset);
+
+      // Blurred: drop only after the keyboard is actually gone.
+      if (inset < 8) {
+        keyboardInsetPeakRef.current = 0;
+        setKeyboardInset((prev) => (prev === 0 ? prev : 0));
       }
     };
 
@@ -587,6 +600,7 @@ export function GeminiAgentPanel({
         )}
 
         <div
+          ref={messagesRef}
           className={`min-h-0 flex-1 space-y-5 overflow-y-auto ${
             fullscreen ? "px-4 pb-4 pt-3" : "space-y-3 p-4"
           }`}
@@ -868,18 +882,34 @@ export function GeminiAgentPanel({
                 onFocus={() => {
                   if (!fullscreen) return;
                   composerFocusedRef.current = true;
-                  keyboardInsetPeakRef.current = 0;
                   if (typeof window !== "undefined") {
                     window.scrollTo(0, 0);
                     document.documentElement.scrollTop = 0;
                     document.body.scrollTop = 0;
                   }
+                  // Re-open: jump once to the last known keyboard height (no climb-from-zero).
+                  const last = lastKeyboardHeightRef.current;
+                  if (last > 8) {
+                    keyboardInsetPeakRef.current = last;
+                    setKeyboardInset(last);
+                  } else {
+                    keyboardInsetPeakRef.current = 0;
+                  }
                 }}
                 onBlur={() => {
                   if (!fullscreen) return;
                   composerFocusedRef.current = false;
-                  keyboardInsetPeakRef.current = 0;
-                  setKeyboardInset(0);
+                  // Don't zero inset here — a blur→focus race (or mid-close vv frames)
+                  // was dropping the composer before the next open finished.
+                  window.setTimeout(() => {
+                    if (composerFocusedRef.current) return;
+                    const vv = window.visualViewport;
+                    const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
+                    if (inset < 8) {
+                      keyboardInsetPeakRef.current = 0;
+                      setKeyboardInset(0);
+                    }
+                  }, 280);
                 }}
                 placeholder={
                   fullscreen
