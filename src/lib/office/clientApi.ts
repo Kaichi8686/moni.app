@@ -5,6 +5,7 @@ import {
   localGetCompany,
   localMarkResultSeen,
   localRanking,
+  localRerollStrategies,
   localSetAbout,
   localSubmit,
   localToggleRanking,
@@ -14,6 +15,7 @@ import type {
   OfficeIncident,
   OfficeSeasonScore,
   OfficeSubmission,
+  OfficeSubmitInput,
   RankingRow,
 } from "@/lib/office/types";
 
@@ -124,7 +126,7 @@ export async function fetchIncident(): Promise<{ incident: OfficeIncident; creat
   }
 }
 
-export async function submitAnswer(answer: string): Promise<{
+export async function submitAnswer(input: OfficeSubmitInput): Promise<{
   submission: OfficeSubmission;
   company: OfficeCompany;
   seasonRevenue: number;
@@ -133,11 +135,16 @@ export async function submitAnswer(answer: string): Promise<{
   try {
     return await api("/api/office/submit", {
       method: "POST",
-      body: JSON.stringify({ answer }),
+      body: JSON.stringify({
+        answer: input.answer,
+        strategy_id: input.strategyId,
+        target_ids: input.targetIds,
+        target_other_text: input.targetOtherText ?? null,
+      }),
     });
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
-    const r = await localSubmit(GUEST_ID, answer);
+    const r = await localSubmit(GUEST_ID, input);
     return {
       submission: r.submission,
       company: r.company,
@@ -147,6 +154,19 @@ export async function submitAnswer(answer: string): Promise<{
         nextRecoverAt: r.stamina.nextRecoverAt?.toISOString() ?? null,
       },
     };
+  }
+}
+
+export async function rerollStrategies(): Promise<OfficeIncident> {
+  try {
+    const res = await api<{ incident: OfficeIncident }>("/api/office/incident/reroll", {
+      method: "POST",
+      body: "{}",
+    });
+    return res.incident;
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localRerollStrategies(GUEST_ID);
   }
 }
 

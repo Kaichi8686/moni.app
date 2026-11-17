@@ -4,24 +4,39 @@ import {
   OFFICE_ANSWER_MIN,
   OFFICE_NAME_MAX,
   OFFICE_SIMILARITY_THRESHOLD,
+  OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
-import { generateIncidentWithClaude, scoreAnswerWithClaude } from "@/lib/office/claude";
+import {
+  generateIncidentWithClaude,
+  regenerateStrategiesWithClaude,
+  scoreAnswerWithClaude,
+} from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
-import { parseOfficeIndustry } from "@/lib/office/industries";
-import { isMangledOfflineDescription } from "@/lib/office/offline";
+import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import { isMangledOfflineDescription, offlineIncident } from "@/lib/office/offline";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
 import { pickIncidentSize } from "@/lib/office/sizePick";
 import { computeStamina } from "@/lib/office/stamina";
 import { levelFromRevenue } from "@/lib/office/scoring";
+import {
+  parseStrategies,
+  parseTargets,
+  stripTargetFit,
+} from "@/lib/office/strategy";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
 import type {
+  IncidentStrategy,
+  IncidentTargetInternal,
   OfficeCompany,
   OfficeIncident,
   OfficeSeasonScore,
   OfficeSubmission,
+  OfficeSubmitInput,
   RankingRow,
+  StrategyKind,
+  StoryTone,
 } from "@/lib/office/types";
 
 function mapCompany(row: Record<string, unknown>): OfficeCompany {
@@ -45,7 +60,17 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
   };
 }
 
+function readTargetsInternal(row: Record<string, unknown>): IncidentTargetInternal[] {
+  return parseTargets(row.targets) ?? [];
+}
+
+function readStrategies(row: Record<string, unknown>): IncidentStrategy[] {
+  return parseStrategies(row.strategies) ?? [];
+}
+
 function mapIncident(row: Record<string, unknown>): OfficeIncident {
+  const strategies = readStrategies(row);
+  const targetsInternal = readTargetsInternal(row);
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -55,22 +80,39 @@ function mapIncident(row: Record<string, unknown>): OfficeIncident {
     type: row.type as OfficeIncident["type"],
     size: Number(row.size) as 1 | 2 | 3,
     status: row.status as OfficeIncident["status"],
+    strategies,
+    targets: stripTargetFit(targetsInternal),
+    strategyRerolls: Math.max(0, Math.min(1, Number(row.strategy_rerolls ?? 0))),
     createdAt: String(row.created_at),
   };
 }
 
 function mapSubmission(row: Record<string, unknown>): OfficeSubmission {
+  const targetIdsRaw = row.target_ids;
+  const targetIds = Array.isArray(targetIdsRaw)
+    ? targetIdsRaw.map((x) => String(x))
+    : [];
   return {
     id: String(row.id),
     userId: String(row.user_id),
     companyId: String(row.company_id),
     incidentId: String(row.incident_id),
     answer: String(row.answer),
+    strategyId: String(row.strategy_id ?? "custom"),
+    strategyKind: (String(row.strategy_kind ?? "custom") as StrategyKind) || "custom",
+    targetIds,
+    targetOtherText: row.target_other_text == null ? null : String(row.target_other_text),
     scoreSolve: Number(row.score_solve),
     scoreFun: Number(row.score_fun),
     scoreFeasible: Number(row.score_feasible),
+    scoreFit: Number(row.score_fit ?? 0),
     scoreTotal: Number(row.score_total),
     comment: String(row.comment),
+    story: String(row.story ?? ""),
+    storyTone: (String(row.story_tone ?? "ok") as StoryTone) || "ok",
+    nextHint: String(row.next_hint ?? ""),
+    multiplier: Number(row.multiplier ?? 1),
+    isOriginal: Boolean(row.is_original),
     revenue: Number(row.revenue),
     wasSimilar: Boolean(row.was_similar),
     seasonKey: String(row.season_key),
@@ -221,6 +263,32 @@ export async function dbSetAbout(admin: SupabaseClient, userId: string, aboutRaw
   return mapCompany(data as Record<string, unknown>);
 }
 
+async function ensureIncidentStrategies(
+  admin: SupabaseClient,
+  company: OfficeCompany,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const strategies = readStrategies(row);
+  const targets = readTargetsInternal(row);
+  if (strategies.length === 3 && targets.length === 4) return row;
+  const fallback = offlineIncident({
+    companyName: company.name,
+    companyAbout: company.about ?? "",
+    recentTitles: [],
+    industryLabel: industryLabelJa(company.industry),
+  });
+  const nextStrategies = strategies.length === 3 ? strategies : fallback.strategies;
+  const nextTargets = targets.length === 4 ? targets : fallback.targets;
+  const { data, error } = await admin
+    .from("office_incidents")
+    .update({ strategies: nextStrategies, targets: nextTargets })
+    .eq("id", String(row.id))
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "strategy backfill failed");
+  return data as Record<string, unknown>;
+}
+
 export async function dbCurrentIncident(
   admin: SupabaseClient,
   userId: string,
@@ -241,9 +309,11 @@ export async function dbCurrentIncident(
     .eq("status", "open")
     .maybeSingle();
   if (open) {
-    const mapped = mapIncident(open as Record<string, unknown>);
+    let row = open as Record<string, unknown>;
+    const mapped = mapIncident(row);
     if (!isMangledOfflineDescription(mapped.description)) {
-      return { incident: mapped, created: false };
+      row = await ensureIncidentStrategies(admin, company, row);
+      return { incident: mapIncident(row), created: false };
     }
     await admin.from("office_incidents").delete().eq("id", mapped.id);
   }
@@ -260,6 +330,7 @@ export async function dbCurrentIncident(
     companyName: company.name,
     companyAbout: company.about,
     recentTitles,
+    industryLabel: industryLabelJa(company.industry),
   });
   if (!gen.ok) throw new Error(gen.message);
 
@@ -273,6 +344,9 @@ export async function dbCurrentIncident(
       type: gen.type,
       size: pickIncidentSize(),
       status: "open",
+      strategies: gen.strategies,
+      targets: gen.targets,
+      strategy_rerolls: 0,
     })
     .select("*")
     .single();
@@ -280,8 +354,50 @@ export async function dbCurrentIncident(
   return { incident: mapIncident(data as Record<string, unknown>), created: true };
 }
 
-export async function dbSubmit(admin: SupabaseClient, userId: string, answer: string) {
-  const text = answer.trim();
+export async function dbRerollStrategies(admin: SupabaseClient, userId: string) {
+  const { data: companyRow } = await admin
+    .from("office_companies")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!companyRow) throw new Error("先に会社を作ってね");
+  const company = mapCompany(companyRow as Record<string, unknown>);
+  if (!company.about) throw new Error("先に会社の説明を書いてね");
+
+  const { data: incidentRow } = await admin
+    .from("office_incidents")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .maybeSingle();
+  if (!incidentRow) throw new Error("事件がないよ");
+  const row = incidentRow as Record<string, unknown>;
+  const rerolls = Number(row.strategy_rerolls ?? 0);
+  if (rerolls >= 1) throw new Error("引き直しは1回までだよ");
+
+  const previous = readStrategies(row).map((s) => s.title);
+  const gen = await regenerateStrategiesWithClaude({
+    companyName: company.name,
+    companyAbout: company.about,
+    title: String(row.title),
+    description: String(row.description),
+    previousTitles: previous,
+  });
+  if (!gen.ok) throw new Error(gen.message);
+
+  const { data, error } = await admin
+    .from("office_incidents")
+    .update({ strategies: gen.strategies, strategy_rerolls: 1 })
+    .eq("id", String(row.id))
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "reroll failed");
+  return mapIncident(data as Record<string, unknown>);
+}
+
+export async function dbSubmit(admin: SupabaseClient, userId: string, input: OfficeSubmitInput) {
+  const text = input.answer.trim();
   if (text.length < OFFICE_ANSWER_MIN || text.length > OFFICE_ANSWER_MAX) {
     throw new Error(`回答は${OFFICE_ANSWER_MIN}〜${OFFICE_ANSWER_MAX}文字だよ`);
   }
@@ -301,7 +417,52 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, answer: st
     .eq("status", "open")
     .maybeSingle();
   if (!incidentRow) throw new Error("事件がないよ");
-  const incident = mapIncident(incidentRow as Record<string, unknown>);
+  let row = await ensureIncidentStrategies(
+    admin,
+    company,
+    incidentRow as Record<string, unknown>,
+  );
+  const incident = mapIncident(row);
+  const strategies = readStrategies(row);
+  const targetsInternal = readTargetsInternal(row);
+
+  const strategyId = String(input.strategyId ?? "").trim();
+  if (!strategyId) throw new Error("作戦を選んでね");
+  let strategyKind: StrategyKind = "custom";
+  let strategyTitle = "自分の作戦";
+  let strategySummary = "プレイヤー独自の作戦";
+  if (strategyId === "custom") {
+    strategyKind = "custom";
+  } else {
+    const found = strategies.find((s) => s.id === strategyId);
+    if (!found) throw new Error("その作戦は選べないよ");
+    strategyKind = found.kind;
+    strategyTitle = found.title;
+    strategySummary = found.summary;
+  }
+
+  const targetIds = Array.from(
+    new Set((input.targetIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  ).slice(0, 2);
+  if (targetIds.length < 1) throw new Error("ターゲットを選んでね");
+  const hasOther = targetIds.includes("other");
+  const otherText = String(input.targetOtherText ?? "").trim();
+  if (hasOther) {
+    if (otherText.length < 1 || otherText.length > OFFICE_TARGET_OTHER_MAX) {
+      throw new Error(`その他は1〜${OFFICE_TARGET_OTHER_MAX}文字で書いてね`);
+    }
+  }
+  for (const tid of targetIds) {
+    if (tid === "other") continue;
+    if (!targetsInternal.some((t) => t.id === tid)) {
+      throw new Error("そのターゲットは選べないよ");
+    }
+  }
+
+  const targetLabels = targetIds.map((tid) => {
+    if (tid === "other") return otherText || "その他";
+    return targetsInternal.find((t) => t.id === tid)?.label ?? tid;
+  });
 
   const { data: consumeRows, error: consumeErr } = await admin.rpc("office_consume_stamina", {
     p_user_id: userId,
@@ -311,9 +472,16 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, answer: st
   if (!consume?.ok) throw new Error("スタミナが足りないよ");
 
   const scored = await scoreAnswerWithClaude({
+    companyName: company.name,
+    industryLabel: industryLabelJa(company.industry),
     title: incident.title,
     description: incident.description,
     answer: text,
+    strategyId,
+    strategyKind,
+    strategyTitle,
+    strategySummary,
+    targetLabels,
   });
   if (!scored.ok) {
     await admin.rpc("office_restore_stamina", { p_user_id: userId });
@@ -328,12 +496,14 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, answer: st
     .limit(10);
   const recent = (recentRows ?? []).map((r) => String((r as { answer: string }).answer));
   const wasSimilar = isTooSimilar(text, recent, OFFICE_SIMILARITY_THRESHOLD);
-  const revenue = calcRevenue({
+  const rev = calcRevenue({
     scoreTotal: scored.scores.total,
     size: incident.size,
+    strategyKind,
+    strategyId,
     wasSimilar,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, revenue);
+  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
   const season = await ensureSeasonRow(admin, userId, company.leagueId);
 
   const { error: incErr } = await admin
@@ -353,12 +523,22 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, answer: st
       company_id: company.id,
       incident_id: incident.id,
       answer: text,
+      strategy_id: strategyId,
+      strategy_kind: strategyKind,
+      target_ids: targetIds,
+      target_other_text: hasOther ? otherText : null,
       score_solve: scored.scores.solve,
       score_fun: scored.scores.fun,
       score_feasible: scored.scores.feasible,
+      score_fit: scored.scores.fit,
       score_total: scored.scores.total,
       comment: scored.scores.comment,
-      revenue,
+      story: scored.scores.story,
+      story_tone: scored.scores.storyTone,
+      next_hint: scored.scores.nextHint,
+      multiplier: rev.multiplier,
+      is_original: rev.isOriginal,
+      revenue: rev.revenue,
       was_similar: wasSimilar,
       season_key: season.seasonKey,
     })
@@ -381,7 +561,7 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, answer: st
   await admin
     .from("office_season_scores")
     .update({
-      revenue: season.revenue + revenue,
+      revenue: season.revenue + rev.revenue,
       league_id: company.leagueId,
     })
     .eq("id", season.id);
