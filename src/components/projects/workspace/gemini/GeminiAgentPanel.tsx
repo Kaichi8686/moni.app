@@ -139,9 +139,10 @@ export function GeminiAgentPanel({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   /** Peak inset while the keyboard is open — ignore downward settle so the composer only moves up. */
   const keyboardInsetPeakRef = useRef(0);
-  /** Last stable keyboard height — restored immediately on the 2nd+ focus so we don't climb then bounce. */
+  /** Last stable keyboard height — applied on the first open frame of a session (not on focus alone). */
   const lastKeyboardHeightRef = useRef(0);
   const composerFocusedRef = useRef(false);
+  const keyboardCloseTimerRef = useRef<number | null>(null);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
   const handoffAppliedRef = useRef(false);
@@ -251,6 +252,18 @@ export function GeminiAgentPanel({
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
 
+    const clearCloseTimer = () => {
+      if (keyboardCloseTimerRef.current != null) {
+        window.clearTimeout(keyboardCloseTimerRef.current);
+        keyboardCloseTimerRef.current = null;
+      }
+    };
+
+    const dropInset = () => {
+      keyboardInsetPeakRef.current = 0;
+      setKeyboardInset((prev) => (prev === 0 ? prev : 0));
+    };
+
     const lockScrollTop = () => {
       // iOS pans visualViewport / document to reveal the focused field; that then
       // shrinks our inset and makes the composer bounce down. Keep scroll at 0.
@@ -271,10 +284,18 @@ export function GeminiAgentPanel({
       if (composerFocusedRef.current) lockScrollTop();
       const inset = readInset();
 
-      if (composerFocusedRef.current) {
-        // Focused: only ratchet up. Do NOT clear when inset is still small — that
-        // wiped the restored last-height on reopen and caused climb-then-bounce.
-        if (inset >= 8 && inset > keyboardInsetPeakRef.current) {
+      if (inset >= 8) {
+        clearCloseTimer();
+        // First frame of this open: jump to last known height so reopen doesn't climb.
+        if (keyboardInsetPeakRef.current < 8) {
+          const next = Math.max(inset, lastKeyboardHeightRef.current);
+          keyboardInsetPeakRef.current = next;
+          lastKeyboardHeightRef.current = next;
+          setKeyboardInset(next);
+          return;
+        }
+        // After that: only move up (ignore settle-down overshoot).
+        if (inset > keyboardInsetPeakRef.current) {
           keyboardInsetPeakRef.current = inset;
           lastKeyboardHeightRef.current = inset;
           setKeyboardInset(inset);
@@ -282,10 +303,13 @@ export function GeminiAgentPanel({
         return;
       }
 
-      // Blurred: drop only after the keyboard is actually gone.
-      if (inset < 8) {
-        keyboardInsetPeakRef.current = 0;
-        setKeyboardInset((prev) => (prev === 0 ? prev : 0));
+      // Keyboard gone (including iOS dismiss-while-focused). Debounce so brief
+      // mid-animation 0 frames don't drop the composer during open.
+      if (keyboardInsetPeakRef.current > 0 || inset < 8) {
+        clearCloseTimer();
+        keyboardCloseTimerRef.current = window.setTimeout(() => {
+          if (readInset() < 8) dropInset();
+        }, 120);
       }
     };
 
@@ -296,12 +320,21 @@ export function GeminiAgentPanel({
     window.addEventListener("resize", sync);
     window.addEventListener("scroll", lockScrollTop, { passive: true });
     return () => {
+      clearCloseTimer();
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
       window.removeEventListener("scroll", lockScrollTop);
     };
   }, [fullscreen]);
+
+  // useVirtualKeyboardOpen already detects "focus remains after keyboard closes".
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (keyboardOpen) return;
+    keyboardInsetPeakRef.current = 0;
+    setKeyboardInset((prev) => (prev === 0 ? prev : 0));
+  }, [fullscreen, keyboardOpen]);
 
   useEffect(() => {
     if (!hydrated || !initialUserMessage?.trim() || handoffAppliedRef.current) return;
@@ -882,34 +915,17 @@ export function GeminiAgentPanel({
                 onFocus={() => {
                   if (!fullscreen) return;
                   composerFocusedRef.current = true;
+                  // Do not lift until the keyboard is actually open — restoring height
+                  // on focus alone left the composer stuck mid-screen after dismiss.
                   if (typeof window !== "undefined") {
                     window.scrollTo(0, 0);
                     document.documentElement.scrollTop = 0;
                     document.body.scrollTop = 0;
                   }
-                  // Re-open: jump once to the last known keyboard height (no climb-from-zero).
-                  const last = lastKeyboardHeightRef.current;
-                  if (last > 8) {
-                    keyboardInsetPeakRef.current = last;
-                    setKeyboardInset(last);
-                  } else {
-                    keyboardInsetPeakRef.current = 0;
-                  }
                 }}
                 onBlur={() => {
                   if (!fullscreen) return;
                   composerFocusedRef.current = false;
-                  // Don't zero inset here — a blur→focus race (or mid-close vv frames)
-                  // was dropping the composer before the next open finished.
-                  window.setTimeout(() => {
-                    if (composerFocusedRef.current) return;
-                    const vv = window.visualViewport;
-                    const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
-                    if (inset < 8) {
-                      keyboardInsetPeakRef.current = 0;
-                      setKeyboardInset(0);
-                    }
-                  }, 280);
                 }}
                 placeholder={
                   fullscreen
