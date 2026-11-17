@@ -5,6 +5,7 @@ import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { CompanyCard } from "@/components/office/CompanyCard";
 import { NameSetup } from "@/components/office/NameSetup";
+import { OfficeScene } from "@/components/office/OfficeScene";
 import { RankingPanel } from "@/components/office/RankingPanel";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
 import { IncidentStep } from "@/components/office/play/IncidentStep";
@@ -332,172 +333,209 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const company = payload?.company ?? null;
   const backStep = previousPlayStep(step);
 
+  const glass = "rounded-3xl border border-white/70 bg-white/90 p-4 shadow-[0_16px_48px_rgba(28,25,23,0.1)] backdrop-blur-md sm:p-5";
+
+  const stepPanel =
+    lastSubmit && step === "result" ? (
+      <ResultStep
+        submission={lastSubmit}
+        busy={busy}
+        onNext={() => void onNextIncident()}
+      />
+    ) : !incident ? (
+      <section className={`${glass} text-center text-sm text-zinc-500`}>
+        事件を用意してるよ…
+      </section>
+    ) : step === "incident" ? (
+      <IncidentStep
+        incident={incident}
+        company={company!}
+        playEnter={playEnter}
+        onNext={() => setStep("strategy")}
+      />
+    ) : step === "strategy" ? (
+      <div className={glass}>
+        <StrategyStep
+          strategies={incident.strategies}
+          selectedId={strategyId}
+          canReroll={(incident.strategyRerolls ?? 0) < 1}
+          rerolling={rerolling}
+          onSelect={onSelectStrategy}
+          onReroll={() => {
+            void (async () => {
+              setRerolling(true);
+              try {
+                const next = await rerollStrategies();
+                setIncident(next);
+                if (
+                  strategyId &&
+                  strategyId !== "custom" &&
+                  !next.strategies.some((s) => s.id === strategyId)
+                ) {
+                  setStrategyId(null);
+                }
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "引き直し失敗");
+              } finally {
+                setRerolling(false);
+              }
+            })();
+          }}
+        />
+      </div>
+    ) : step === "target" ? (
+      <div className={glass}>
+        <TargetStep
+          targets={incident.targets}
+          selectedIds={targetIds}
+          otherText={otherText}
+          onToggle={toggleTarget}
+          onOtherText={(t) => {
+            setOtherText(t);
+            if (
+              targetIds.length === 2 &&
+              targetIds.includes("other") &&
+              t.trim().length >= 1
+            ) {
+              scheduleAdvance("write");
+            }
+          }}
+          onConfirm={() => {
+            clearAdvance();
+            setStep("write");
+          }}
+        />
+      </div>
+    ) : (
+      <div className={glass}>
+        <WriteStep
+          strategyTitle={strategyTitle}
+          targetLabels={targetLabels}
+          answer={answer}
+          onAnswer={setAnswer}
+          placeholder={writePlaceholder}
+          canSubmit={canSubmit}
+          busy={busy}
+          stamina={stamina}
+          staminaHint={
+            stamina <= 0
+              ? `スタミナ切れ… 回復まで ${remain != null ? formatRemainMmSs(remain) : "しばらく"}`
+              : null
+          }
+          onSubmit={() => void onSubmit()}
+        />
+      </div>
+    );
+
   const body = boot ? (
     <div className="mx-auto max-w-xl space-y-3 px-4 pt-6 sm:px-6">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-100" />
+        <div key={i} className="h-28 animate-pulse rounded-3xl bg-white/70" />
       ))}
     </div>
   ) : needsSetup ? (
-    <NameSetup
-      busy={busy}
-      error={err}
-      existingName={
-        payload?.company && !payload.company.about ? payload.company.name : null
-      }
-      onSubmit={onSetup}
-    />
+    <div className="relative mx-auto max-w-xl px-4 pb-28 pt-6 sm:px-6">
+      <NameSetup
+        busy={busy}
+        error={err}
+        existingName={
+          payload?.company && !payload.company.about ? payload.company.name : null
+        }
+        onSubmit={onSetup}
+      />
+    </div>
   ) : (
-    <div className="mx-auto max-w-xl space-y-4 px-4 pb-28 pt-3 sm:px-6">
-      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
-        <button
-          type="button"
-          onClick={() => setTab("play")}
-          className={`rounded-xl py-2.5 text-sm font-extrabold ${
-            tab === "play" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-          }`}
-        >
-          オフィス
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("rank")}
-          className={`rounded-xl py-2.5 text-sm font-extrabold ${
-            tab === "rank" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-          }`}
-        >
-          順位
-        </button>
-      </div>
-
-      {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
-
-      {tab === "play" ? (
-        <div className="space-y-4">
-          <CompanyCard
-            company={company!}
-            seasonRevenue={payload!.seasonRevenue}
-            staminaValue={payload!.stamina.value}
-            nextRecoverAt={payload!.stamina.nextRecoverAt}
-            sceneFx={sceneFx}
+    <div className="relative min-h-[calc(100dvh-7.5rem)] overflow-x-hidden">
+      {tab === "play" && company ? (
+        <>
+          <OfficeScene
+            level={company.level}
+            industry={company.industry}
+            fx={sceneFx}
+            variant="backdrop"
             speech={speech}
           />
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(255,247,237,0.22)_30%,rgba(255,247,237,0.1)_55%,rgba(255,255,255,0.55)_100%)]"
+            aria-hidden
+          />
+        </>
+      ) : null}
 
-          {step !== "result" ? (
-            <PlayStepper
-              step={step}
-              canBack={Boolean(backStep)}
-              onBack={() => {
-                if (!backStep) return;
-                clearAdvance();
-                setStep(backStep);
-              }}
-            />
-          ) : null}
-
-          {lastSubmit && step === "result" ? (
-            <ResultStep
-              submission={lastSubmit}
-              busy={busy}
-              onNext={() => void onNextIncident()}
-            />
-          ) : !incident ? (
-            <section className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 p-6 text-center text-sm text-zinc-500">
-              事件を用意してるよ…
-            </section>
-          ) : step === "incident" ? (
-            <IncidentStep
-              incident={incident}
-              company={company!}
-              playEnter={playEnter}
-              onNext={() => setStep("strategy")}
-            />
-          ) : step === "strategy" ? (
-            <StrategyStep
-              strategies={incident.strategies}
-              selectedId={strategyId}
-              canReroll={(incident.strategyRerolls ?? 0) < 1}
-              rerolling={rerolling}
-              onSelect={onSelectStrategy}
-              onReroll={() => {
-                void (async () => {
-                  setRerolling(true);
-                  try {
-                    const next = await rerollStrategies();
-                    setIncident(next);
-                    if (
-                      strategyId &&
-                      strategyId !== "custom" &&
-                      !next.strategies.some((s) => s.id === strategyId)
-                    ) {
-                      setStrategyId(null);
-                    }
-                  } catch (e) {
-                    setErr(e instanceof Error ? e.message : "引き直し失敗");
-                  } finally {
-                    setRerolling(false);
-                  }
-                })();
-              }}
-            />
-          ) : step === "target" ? (
-            <TargetStep
-              targets={incident.targets}
-              selectedIds={targetIds}
-              otherText={otherText}
-              onToggle={toggleTarget}
-              onOtherText={(t) => {
-                setOtherText(t);
-                if (
-                  targetIds.length === 2 &&
-                  targetIds.includes("other") &&
-                  t.trim().length >= 1
-                ) {
-                  scheduleAdvance("write");
-                }
-              }}
-              onConfirm={() => {
-                clearAdvance();
-                setStep("write");
-              }}
-            />
-          ) : (
-            <WriteStep
-              strategyTitle={strategyTitle}
-              targetLabels={targetLabels}
-              answer={answer}
-              onAnswer={setAnswer}
-              placeholder={writePlaceholder}
-              canSubmit={canSubmit}
-              busy={busy}
-              stamina={stamina}
-              staminaHint={
-                stamina <= 0
-                  ? `スタミナ切れ… 回復まで ${remain != null ? formatRemainMmSs(remain) : "しばらく"}`
-                  : null
-              }
-              onSubmit={() => void onSubmit()}
-            />
-          )}
+      <div className="relative z-10 mx-auto max-w-xl space-y-4 px-4 pb-28 pt-3 sm:px-6">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-white/70 bg-white/80 p-1 shadow-sm backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setTab("play")}
+            className={`rounded-xl py-2.5 text-sm font-extrabold ${
+              tab === "play" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+            }`}
+          >
+            オフィス
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("rank")}
+            className={`rounded-xl py-2.5 text-sm font-extrabold ${
+              tab === "rank" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
+            }`}
+          >
+            順位
+          </button>
         </div>
-      ) : (
-        <RankingPanel
-          rows={rankRows}
-          meta={rankMeta}
-          onToggle={async (enabled) => {
-            const c = await toggleRanking(enabled);
-            setPayload((p) => (p ? { ...p, company: c } : p));
-            setRankMeta((m) => (m ? { ...m, rankingEnabled: enabled } : m));
-          }}
-        />
-      )}
+
+        {err ? (
+          <p className="rounded-2xl bg-rose-50/90 px-3 py-2 text-sm font-semibold text-rose-600 backdrop-blur">
+            {err}
+          </p>
+        ) : null}
+
+        {tab === "play" ? (
+          <div className="space-y-4">
+            <CompanyCard
+              company={company!}
+              seasonRevenue={payload!.seasonRevenue}
+              staminaValue={payload!.stamina.value}
+              nextRecoverAt={payload!.stamina.nextRecoverAt}
+            />
+
+            {step !== "result" ? (
+              <div className="rounded-2xl border border-white/70 bg-white/75 px-2 py-1 backdrop-blur-md">
+                <PlayStepper
+                  step={step}
+                  canBack={Boolean(backStep)}
+                  onBack={() => {
+                    if (!backStep) return;
+                    clearAdvance();
+                    setStep(backStep);
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {stepPanel}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-white/80 bg-white/90 p-1 shadow-[0_12px_40px_rgba(28,25,23,0.06)] backdrop-blur-md">
+            <RankingPanel
+              rows={rankRows}
+              meta={rankMeta}
+              onToggle={async (enabled) => {
+                const c = await toggleRanking(enabled);
+                setPayload((p) => (p ? { ...p, company: c } : p));
+                setRankMeta((m) => (m ? { ...m, rankingEnabled: enabled } : m));
+              }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 
   const shell = (
     <>
       {!hideChrome ? (
-        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white">
+        <header className="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-md">
           <div className="mx-auto max-w-xl px-4 pb-2 pt-1 sm:px-6">
             <AppBrandHeader bare />
             <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-500">
@@ -521,6 +559,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   );
 
   return (
-    <div className={embedded ? undefined : "min-h-[100dvh] bg-white pb-bottom-nav"}>{shell}</div>
+    <div className={embedded ? undefined : "min-h-[100dvh] overflow-x-hidden bg-[#FFF7ED] pb-bottom-nav"}>
+      {shell}
+    </div>
   );
 }
