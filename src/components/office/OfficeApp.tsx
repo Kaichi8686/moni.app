@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { CodexPanel } from "@/components/office/CodexPanel";
+import {
+  CastSetup,
+  castSetupValid,
+  type CastSetupValue,
+} from "@/components/office/CastSetup";
 import { NameSetup } from "@/components/office/NameSetup";
 import { OfficeChrome } from "@/components/office/OfficeChrome";
 import { RankingPanel } from "@/components/office/RankingPanel";
@@ -22,6 +27,7 @@ import { StrategyStep } from "@/components/office/play/StrategyStep";
 import { TargetStep } from "@/components/office/play/TargetStep";
 import { WriteStep } from "@/components/office/play/WriteStep";
 import { DialoguePlayer } from "@/components/office/stage/DialoguePlayer";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   createCompany,
   fetchCodex,
@@ -37,14 +43,15 @@ import {
   setSfxMuted,
   submitAnswer,
   toggleRanking,
+  updateCast,
   votePeer,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
+import { castMemberByRole, ensureCompanyCast, type CastMember } from "@/lib/office/cast";
 import {
   OFFICE_ANSWER_MIN,
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
-import { castMemberByRole } from "@/lib/office/cast";
 import type { CodexCell } from "@/lib/office/codex";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
 import { playOfficeSfx, setOfficeSfxMuted } from "@/lib/office/sfx";
@@ -64,7 +71,7 @@ type Props = {
   active?: boolean;
 };
 
-type Panel = "play" | "rank" | "codex";
+type Panel = "play" | "rank" | "codex" | "cast";
 
 function preferReducedMotion(): boolean {
   return (
@@ -105,6 +112,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     myRank: number | null;
     rankingEnabled: boolean;
   } | null>(null);
+  const [castDraft, setCastDraft] = useState<CastSetupValue | null>(null);
   const advanceTimer = useRef<number | null>(null);
 
   const clearAdvance = useCallback(() => {
@@ -240,20 +248,59 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     })();
   }, [active, panel, payload?.company?.id, lastSubmit?.id]);
 
-  async function onSetup(input: { name: string; about: string }) {
+  async function onSetup(input: {
+    name: string;
+    about: string;
+    ownerName?: string;
+    cast?: CastMember[];
+  }) {
     setBusy(true);
     setErr("");
     try {
       if (payload?.company && !payload.company.about) {
         await setAbout(input.about);
       } else {
-        await createCompany(input.name, input.about);
+        await createCompany(input.name, input.about, {
+          ownerName: input.ownerName,
+          cast: input.cast,
+        });
       }
       const data = await fetchCompany();
       setPayload(data);
       await loadIncident({ allowFx: true });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "作成失敗");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openCastPanel() {
+    const c = payload?.company;
+    if (!c) return;
+    setCastDraft({
+      ownerName: c.ownerName ?? "",
+      members: ensureCompanyCast(c.cast, c.id),
+    });
+    setPanel("cast");
+    setErr("");
+  }
+
+  async function onSaveCast() {
+    if (!castDraft || !castSetupValid(castDraft)) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const c = await updateCast({
+        ownerName: castDraft.ownerName.trim(),
+        cast: castDraft.members,
+      });
+      setPayload((p) => (p ? { ...p, company: c } : p));
+      setPanel("play");
+      setCastDraft(null);
+      playOfficeSfx("tap");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "キャラ保存に失敗");
     } finally {
       setBusy(false);
     }
@@ -561,6 +608,34 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         </div>
       ) : panel === "codex" ? (
         <CodexPanel cells={codexCells} onClose={() => setPanel("play")} />
+      ) : panel === "cast" && castDraft ? (
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => {
+              setPanel("play");
+              setCastDraft(null);
+            }}
+            className="text-sm font-bold text-zinc-600 hover:text-zinc-900"
+          >
+            ← オフィスに戻る
+          </button>
+          <div className="rounded-3xl border border-zinc-200 bg-white px-3.5 py-4 shadow-sm">
+            <CastSetup value={castDraft} onChange={setCastDraft} />
+            <div className="mt-4">
+              <DuoButton
+                type="button"
+                tone="orange"
+                size="lg"
+                fullWidth
+                disabled={busy || !castSetupValid(castDraft)}
+                onClick={() => void onSaveCast()}
+              >
+                {busy ? "保存中…" : "キャラを保存"}
+              </DuoButton>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           <OfficeChrome
@@ -570,6 +645,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             nextRecoverAt={payload!.stamina.nextRecoverAt}
             onOpenRank={() => setPanel("rank")}
             onOpenCodex={() => setPanel("codex")}
+            onOpenCast={openCastPanel}
             onToggleSfx={() => {
               void (async () => {
                 const nextMuted = company!.sfxMuted === false;

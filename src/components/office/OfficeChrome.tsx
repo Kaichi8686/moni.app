@@ -12,6 +12,7 @@ type Props = {
   nextRecoverAt: string | null;
   onOpenRank: () => void;
   onOpenCodex?: () => void;
+  onOpenCast?: () => void;
   onToggleSfx?: () => void;
 };
 
@@ -23,6 +24,7 @@ export function OfficeChrome({
   nextRecoverAt,
   onOpenRank,
   onOpenCodex,
+  onOpenCast,
   onToggleSfx,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -129,6 +131,15 @@ export function OfficeChrome({
               <p className="text-xs font-medium text-zinc-400">満タン</p>
             )}
           </div>
+          {onOpenCast ? (
+            <button
+              type="button"
+              onClick={onOpenCast}
+              className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-xs font-bold text-zinc-600"
+            >
+              キャラ設定を開く
+            </button>
+          ) : null}
           {onToggleSfx ? (
             <button
               type="button"

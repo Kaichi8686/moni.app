@@ -12,6 +12,7 @@ import {
   localSetSfxMuted,
   localSubmit,
   localToggleRanking,
+  localUpdateCast,
 } from "@/lib/office/localStore";
 import type { CodexCell } from "@/lib/office/codex";
 import type { PeerSolution } from "@/lib/office/peers";
@@ -100,16 +101,25 @@ export async function fetchCompany(): Promise<CompanyPayload> {
   }
 }
 
-export async function createCompany(name: string, about: string): Promise<OfficeCompany> {
+export async function createCompany(
+  name: string,
+  about: string,
+  opts?: { ownerName?: string; cast?: OfficeCompany["cast"] },
+): Promise<OfficeCompany> {
   try {
     const res = await api<{ company: OfficeCompany }>("/api/office/company", {
       method: "POST",
-      body: JSON.stringify({ name, about }),
+      body: JSON.stringify({
+        name,
+        about,
+        owner_name: opts?.ownerName,
+        cast: opts?.cast,
+      }),
     });
     return res.company;
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
-    return localCreateCompany(GUEST_ID, name, about);
+    return localCreateCompany(GUEST_ID, name, about, opts);
   }
 }
 
@@ -233,6 +243,25 @@ export async function setSfxMuted(muted: boolean): Promise<OfficeCompany> {
   } catch (e) {
     if (!shouldUseLocalFallback(e)) throw e;
     return localSetSfxMuted(GUEST_ID, muted);
+  }
+}
+
+export async function updateCast(input: {
+  ownerName: string;
+  cast: OfficeCompany["cast"];
+}): Promise<OfficeCompany> {
+  try {
+    const res = await api<{ company: OfficeCompany }>("/api/office/cast", {
+      method: "PATCH",
+      body: JSON.stringify({
+        owner_name: input.ownerName,
+        cast: input.cast,
+      }),
+    });
+    return res.company;
+  } catch (e) {
+    if (!shouldUseLocalFallback(e)) throw e;
+    return localUpdateCast(GUEST_ID, input);
   }
 }
 

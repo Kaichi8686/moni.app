@@ -12,7 +12,12 @@ import {
   scoreAnswerWithClaude,
 } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
-import { ensureCompanyCast } from "@/lib/office/cast";
+import { ensureCompanyCast, parseCompanyCast } from "@/lib/office/cast";
+import {
+  EDITABLE_CAST_ROLES,
+  validateCastName,
+  validateOwnerName,
+} from "@/lib/office/castValidate";
 import { unlockCodexCell, type CodexCell } from "@/lib/office/codex";
 import {
   clipPeerAnswer,
@@ -337,6 +342,7 @@ export async function dbCreateCompany(
   userId: string,
   name: string,
   aboutRaw: string,
+  opts?: { ownerName?: string; cast?: unknown },
 ) {
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
@@ -351,7 +357,17 @@ export async function dbCreateCompany(
   if (existing) throw new Error("すでに会社があるよ");
 
   const now = new Date().toISOString();
-  const cast = ensureCompanyCast(null, userId);
+  const cast = ensureCompanyCast(opts?.cast ?? null, userId);
+  const ownerNameRaw = opts?.ownerName?.trim() ?? "";
+  if (ownerNameRaw) {
+    const ownerErr = validateOwnerName(ownerNameRaw);
+    if (ownerErr) throw new Error(ownerErr);
+  }
+  for (const m of cast) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
   const meters = ensureMeters(null);
   const { data, error } = await admin
     .from("office_companies")
@@ -364,6 +380,7 @@ export async function dbCreateCompany(
       stamina: 5,
       stamina_updated_at: now,
       cast_members: cast,
+      owner_name: ownerNameRaw ? ownerNameRaw.slice(0, 12) : null,
       meters,
       meters_updated_at: now,
       sfx_muted: true,
@@ -939,6 +956,33 @@ export async function dbSetSfxMuted(admin: SupabaseClient, userId: string, muted
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message ?? "sfx update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbUpdateCast(
+  admin: SupabaseClient,
+  userId: string,
+  input: { ownerName: string; cast: ReturnType<typeof mapCompany>["cast"] },
+) {
+  const ownerErr = validateOwnerName(input.ownerName);
+  if (ownerErr) throw new Error(ownerErr);
+  const parsed = parseCompanyCast(input.cast);
+  if (!parsed) throw new Error("キャストが不正だよ");
+  for (const m of parsed) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({
+      owner_name: input.ownerName.trim().slice(0, 12),
+      cast_members: parsed,
+    })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "cast update failed");
   return mapCompany(data as Record<string, unknown>);
 }
 
