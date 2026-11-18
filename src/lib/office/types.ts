@@ -6,13 +6,17 @@ export type IncidentType = "pinch" | "chance" | "people" | "rival";
 export type IncidentStatus = "open" | "solved";
 export type SeasonResult = "promoted" | "demoted" | "stayed";
 
+export type StrategyKind = "safe" | "standard" | "bold" | "custom";
+export type TargetFit = "good" | "ok" | "mismatch";
+export type StoryTone = "great" | "ok" | "bitter";
+
 export type { OfficeIndustry };
 
 export type OfficeCompany = {
   id: string;
   userId: string;
-  name: string;
   /** プレイヤーが書いた会社の説明（事件生成の主コンテキスト） */
+  name: string;
   about: string | null;
   /** 演出用。説明から推定、または旧データの系統 */
   industry: OfficeIndustry | null;
@@ -25,6 +29,26 @@ export type OfficeCompany = {
   createdAt: string;
 };
 
+export type IncidentStrategy = {
+  id: string;
+  kind: Exclude<StrategyKind, "custom">;
+  title: string;
+  summary: string;
+};
+
+/** サーバー内部（fit 付き） */
+export type IncidentTargetInternal = {
+  id: string;
+  label: string;
+  fit: TargetFit;
+};
+
+/** クライアント向け（fit なし） */
+export type IncidentTargetPublic = {
+  id: string;
+  label: string;
+};
+
 export type OfficeIncident = {
   id: string;
   userId: string;
@@ -34,6 +58,10 @@ export type OfficeIncident = {
   type: IncidentType;
   size: 1 | 2 | 3;
   status: IncidentStatus;
+  strategies: IncidentStrategy[];
+  /** API では fit を落とす。ローカル内部では fit を持ち得る */
+  targets: IncidentTargetPublic[] | IncidentTargetInternal[];
+  strategyRerolls: number;
   createdAt: string;
 };
 
@@ -41,8 +69,12 @@ export type OfficeScores = {
   solve: number;
   fun: number;
   feasible: number;
+  fit: number;
   total: number;
   comment: string;
+  story: string;
+  storyTone: StoryTone;
+  nextHint: string;
 };
 
 export type OfficeSubmission = {
@@ -51,11 +83,21 @@ export type OfficeSubmission = {
   companyId: string;
   incidentId: string;
   answer: string;
+  strategyId: string;
+  strategyKind: StrategyKind;
+  targetIds: string[];
+  targetOtherText: string | null;
   scoreSolve: number;
   scoreFun: number;
   scoreFeasible: number;
+  scoreFit: number;
   scoreTotal: number;
   comment: string;
+  story: string;
+  storyTone: StoryTone;
+  nextHint: string;
+  multiplier: number;
+  isOriginal: boolean;
   revenue: number;
   wasSimilar: boolean;
   seasonKey: string;
@@ -86,4 +128,11 @@ export type RankingRow = {
   revenue: number;
   userId: string;
   isMe?: boolean;
+};
+
+export type OfficeSubmitInput = {
+  answer: string;
+  strategyId: string;
+  targetIds: string[];
+  targetOtherText?: string | null;
 };

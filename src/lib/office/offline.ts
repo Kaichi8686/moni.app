@@ -1,11 +1,25 @@
-import { clampScore, scoreTotal } from "@/lib/office/scoring";
-import type { IncidentType, OfficeScores } from "@/lib/office/types";
+import { clampScore, scoreTotal, storyToneFromTotal } from "@/lib/office/scoring";
+import type {
+  IncidentStrategy,
+  IncidentTargetInternal,
+  IncidentType,
+  OfficeScores,
+  StrategyKind,
+} from "@/lib/office/types";
 
 export type OfflineIncidentCtx = {
   companyName: string;
-  /** 会社の説明（自由記述） */
   companyAbout: string;
   recentTitles: string[];
+  industryLabel?: string;
+};
+
+export type OfflineIncidentResult = {
+  title: string;
+  description: string;
+  type: IncidentType;
+  strategies: IncidentStrategy[];
+  targets: IncidentTargetInternal[];
 };
 
 /** 旧オフライン案で説明を途中切断して混ぜた文（サー…らしい など） */
@@ -14,11 +28,42 @@ export function isMangledOfflineDescription(description: string): boolean {
   return /…(らしい|としての|の現場)/.test(d) || /（[^）]{0,40}…[^）]{0,20}）/.test(d);
 }
 
-export function offlineIncident(
-  ctx?: OfflineIncidentCtx,
-): { title: string; description: string; type: IncidentType } {
+export function offlineStrategies(): IncidentStrategy[] {
+  return [
+    {
+      id: "s1",
+      kind: "safe",
+      title: "小さく試す",
+      summary: "リスクを抑えて効果を確かめてから広げる",
+    },
+    {
+      id: "s2",
+      kind: "standard",
+      title: "巻き込み作戦",
+      summary: "仲間や利用者と一緒に進め、バランスよく伸ばす",
+    },
+    {
+      id: "s3",
+      kind: "bold",
+      title: "一発勝負",
+      summary: "話題になる一手を打つ。外すと痛い",
+    },
+  ];
+}
+
+export function offlineTargets(companyAbout?: string): IncidentTargetInternal[] {
+  void companyAbout;
+  // 会社説明文をラベルに使わない（名詞句のみ）
+  return [
+    { id: "t1", label: "熱心なファン", fit: "good" },
+    { id: "t2", label: "初めて来た人", fit: "good" },
+    { id: "t3", label: "近所の人", fit: "ok" },
+    { id: "t4", label: "無関心の人", fit: "mismatch" },
+  ];
+}
+
+export function offlineIncident(ctx?: OfflineIncidentCtx): OfflineIncidentResult {
   const name = ctx?.companyName?.trim() || "きみの会社";
-  // 説明文は文中に埋め込まない（途中切断で文字が崩れるのを防ぐ）
   const pool: Array<{ title: string; description: string; type: IncidentType }> = [
     {
       title: "やる気が急降下！",
@@ -44,20 +89,44 @@ export function offlineIncident(
   const recent = new Set(ctx?.recentTitles ?? []);
   const filtered = pool.filter((p) => !recent.has(p.title));
   const list = filtered.length > 0 ? filtered : pool;
-  return list[Math.floor(Math.random() * list.length)]!;
+  const picked = list[Math.floor(Math.random() * list.length)]!;
+  return {
+    ...picked,
+    strategies: offlineStrategies(),
+    targets: offlineTargets(ctx?.companyAbout ?? ""),
+  };
 }
 
-export function offlineScores(answer: string): OfficeScores {
+export function offlineScores(
+  answer: string,
+  opts?: { strategyKind?: StrategyKind; strategyTitle?: string },
+): OfficeScores {
   const len = answer.trim().length;
   const base = Math.min(78, 38 + Math.floor(len / 8));
   const solve = clampScore(base + (answer.includes("！") ? 4 : 0));
   const fun = clampScore(base - 4 + (len % 7));
   const feasible = clampScore(base - 2);
+  const fit = clampScore(base - (opts?.strategyKind === "custom" ? 0 : 2));
+  const total = scoreTotal(solve, fun, feasible, fit);
+  const tone = storyToneFromTotal(total);
+  const kind = opts?.strategyKind ?? "standard";
+  const plan = opts?.strategyTitle ?? "作戦";
+  const story =
+    tone === "great"
+      ? `きみの案どおりに動いたら反応が熱かった。「${plan}」がハマり、新人のアヤが「これ、伸びる！」と叫んだ。ターゲットも前のめりで、次が楽しみな空気になった。`
+      : tone === "bitter"
+        ? `やってみたけど手応えは薄め。ベテランのケンが「方向は悪くない、角度を変えよう」と笑った。ほろ苦いけど、次の一手の材料は残った。`
+        : `案を形にしたら、そこそこ良い反応が返ってきた。経理のミキが「数字も悪くないよ」とうなずいた。作戦「${plan}」は堅実に効いた感じ。`;
+
   return {
     solve,
     fun,
     feasible,
-    total: scoreTotal(solve, fun, feasible),
+    fit,
+    total,
     comment: "いい着眼点！もう一段具体にすると伸びそう。",
+    story: story.slice(0, 180),
+    storyTone: tone,
+    nextHint: "次はターゲットの反応を一文で想像して書いてみよう",
   };
 }

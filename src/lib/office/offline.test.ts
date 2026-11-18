@@ -23,8 +23,14 @@ describe("office offline incident text", () => {
       companyAbout: about,
       recentTitles: [],
     });
-    assert.ok(!gen.description.includes("…"));
-    assert.ok(!gen.description.includes(about.slice(0, 20)));
+    assert.ok(!gen.description.includes("…らしい"));
     assert.ok(gen.description.includes("『moni』"));
+    assert.equal(gen.strategies.length, 3);
+    assert.equal(gen.targets.length, 4);
+    assert.equal(gen.targets.filter((t) => t.fit === "mismatch").length, 1);
+    for (const t of gen.targets) {
+      assert.ok(!about.includes(t.label) || t.label.length < 4);
+      assert.ok(!t.label.startsWith(about.slice(0, 4)));
+    }
   });
 });

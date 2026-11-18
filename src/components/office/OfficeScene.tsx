@@ -9,6 +9,10 @@ type Props = {
   industry: OfficeIndustry | null;
   /** pinch | chance | people | rival | null */
   fx?: string | null;
+  /** card: 埋め込み / backdrop: 全画面背景（非推奨） */
+  variant?: "card" | "backdrop";
+  /** 社員の頭上吹き出し */
+  speech?: string | null;
 };
 
 function workerCount(level: number): number {
@@ -138,33 +142,33 @@ function Worker({
   think?: boolean;
 }) {
   return (
-    <g transform={`translate(${x} 0)`}>
+    <g transform={`translate(${x} 48)`}>
       <g
         className={`office-worker ${panic ? "office-worker--panic" : ""} ${jump ? "office-worker--jump" : ""}`}
         style={{ ["--office-delay" as string]: delay }}
       >
-        <ellipse cx="0" cy="118" rx="14" ry="4" fill="#00000014" />
-        <rect className="office-desk" x="-22" y="96" width="44" height="10" rx="2" fill="#E7E5E4" />
-        <rect className="office-monitor" x="-10" y="78" width="20" height="14" rx="2" fill="#94A3B8" />
-        <rect x="-8" y="78" width="16" height="20" rx="4" fill="#FB923C" />
+        <ellipse cx="0" cy="118" rx="18" ry="5" fill="#00000014" />
+        <rect className="office-desk" x="-28" y="96" width="56" height="12" rx="2" fill="#E7E5E4" />
+        <rect className="office-monitor" x="-12" y="76" width="24" height="16" rx="2" fill="#94A3B8" />
+        <rect x="-10" y="78" width="20" height="24" rx="5" fill="#FB923C" />
         <g className="office-head">
-          <circle cx="0" cy="66" r="9" fill="#FED7AA" />
+          <circle cx="0" cy="64" r="11" fill="#FED7AA" />
           {think ? (
             <g className="office-think">
-              <circle cx="12" cy="52" r="2.2" fill="#A1A1AA" />
-              <circle cx="16" cy="46" r="2.8" fill="#A1A1AA" />
-              <circle cx="20" cy="38" r="3.5" fill="#A1A1AA" />
+              <circle cx="14" cy="48" r="2.6" fill="#A1A1AA" />
+              <circle cx="19" cy="40" r="3.2" fill="#A1A1AA" />
+              <circle cx="24" cy="30" r="4" fill="#A1A1AA" />
             </g>
           ) : null}
         </g>
         <g className="office-arms">
-          <rect x="-14" y="88" width="10" height="4" rx="2" fill="#FED7AA" />
-          <rect x="4" y="88" width="10" height="4" rx="2" fill="#FED7AA" />
+          <rect x="-18" y="90" width="12" height="5" rx="2" fill="#FED7AA" />
+          <rect x="6" y="90" width="12" height="5" rx="2" fill="#FED7AA" />
         </g>
         <g className="office-mug">
-          <rect x="14" y="90" width="8" height="8" rx="1.5" fill="#fff" stroke="#D6D3D1" />
+          <rect x="18" y="92" width="10" height="10" rx="2" fill="#fff" stroke="#D6D3D1" />
           <path
-            d="M18 88 c4 -6 8 -6 8 0"
+            d="M23 90 c5 -7 10 -7 10 0"
             fill="none"
             stroke="#A8A29E"
             strokeWidth="1.5"
@@ -176,23 +180,28 @@ function Worker({
   );
 }
 
-export function OfficeScene({ level, industry, fx }: Props) {
+export function OfficeScene({ level, industry, fx, variant = "card", speech }: Props) {
   const uid = useId().replace(/:/g, "");
   const n = workerCount(level);
-  const xs = n === 2 ? [88, 188] : n === 3 ? [70, 150, 230] : [58, 120, 182, 244];
+  const xs = n === 2 ? [120, 260] : n === 3 ? [90, 200, 310] : [70, 160, 250, 340];
   const delays = ["0s", "0.35s", "0.7s", "1.1s"];
+  const backdrop = variant === "backdrop";
+  const bubbleX = xs[0] ?? 120;
 
   return (
     <div
-      className={`office-scene relative h-[168px] min-h-[168px] w-full overflow-hidden rounded-2xl ring-1 ring-amber-100 md:h-full md:min-h-[200px] ${
-        fx ? `office-fx--${fx}` : ""
-      }`}
+      className={`office-scene overflow-hidden ${
+        backdrop
+          ? "pointer-events-none absolute inset-0 h-full w-full max-w-[100vw] rounded-none ring-0"
+          : "relative h-full w-full max-w-full"
+      } ${fx ? `office-fx--${fx}` : ""}`}
+      aria-hidden={backdrop || undefined}
     >
       <svg
-        viewBox="0 0 400 160"
+        viewBox="0 0 480 220"
         className="absolute inset-0 h-full w-full"
-        role="img"
-        aria-label="オフィスの様子"
+        role={backdrop ? "presentation" : "img"}
+        aria-label={backdrop ? undefined : "オフィスの様子"}
         preserveAspectRatio="xMidYMid slice"
       >
         <defs>
@@ -209,68 +218,68 @@ export function OfficeScene({ level, industry, fx }: Props) {
             <stop offset="100%" stopColor="#FDE68A" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <rect width="400" height="160" fill={`url(#${uid}-wall)`} />
-        <rect x="0" y="120" width="400" height="40" fill="#F5F5F4" />
+        <rect width="480" height="220" fill={`url(#${uid}-wall)`} />
+        <rect x="0" y="168" width="480" height="52" fill="#F5F5F4" />
 
         {/* ambient background motion */}
         <g aria-hidden>
           <path
             className="office-light-shaft"
-            d="M18 22 L78 120 L118 120 L58 22 Z"
+            d="M28 28 L110 168 L170 168 L78 28 Z"
             fill={`url(#${uid}-shaft)`}
           />
           <rect
             className="office-window-glow"
-            x="18"
-            y="18"
-            width="44"
-            height="36"
-            rx="3"
+            x="28"
+            y="24"
+            width="64"
+            height="52"
+            rx="4"
             fill="#FEF3C7"
             stroke="#FDE68A"
           />
-          <path d="M40 18 v36 M18 36 h44" stroke="#FCD34D" strokeWidth="1.5" opacity="0.7" />
+          <path d="M60 24 v52 M28 50 h64" stroke="#FCD34D" strokeWidth="2" opacity="0.7" />
           <rect
             className="office-paper"
-            x="210"
-            y="34"
-            width="16"
-            height="12"
-            rx="1.5"
+            x="250"
+            y="48"
+            width="22"
+            height="16"
+            rx="2"
             fill="#FFFBEB"
             stroke="#FDE68A"
             opacity="0.9"
           />
-          <circle className="office-mote office-mote--a" cx="96" cy="48" r="1.6" fill="#F59E0B" />
-          <circle className="office-mote office-mote--b" cx="160" cy="30" r="1.3" fill="#FB923C" />
-          <circle className="office-mote office-mote--c" cx="280" cy="42" r="1.8" fill="#FBBF24" />
-          <circle className="office-mote office-mote--d" cx="340" cy="58" r="1.2" fill="#F59E0B" />
-          <circle className="office-mote office-mote--e" cx="120" cy="70" r="1.4" fill="#FDE68A" />
+          <circle className="office-mote office-mote--a" cx="120" cy="70" r="2.2" fill="#F59E0B" />
+          <circle className="office-mote office-mote--b" cx="200" cy="42" r="1.8" fill="#FB923C" />
+          <circle className="office-mote office-mote--c" cx="340" cy="60" r="2.4" fill="#FBBF24" />
+          <circle className="office-mote office-mote--d" cx="410" cy="88" r="1.6" fill="#F59E0B" />
+          <circle className="office-mote office-mote--e" cx="160" cy="100" r="2" fill="#FDE68A" />
         </g>
 
-        <g transform="translate(40 0)">
+        <g transform="translate(80 20) scale(1.15)">
           <IndustryProps industry={industry} uid={uid} />
         </g>
 
         <g className="office-rival-shadow" opacity="0">
-          <ellipse cx="24" cy="125" rx="18" ry="6" fill="#00000055" />
-          <path d="M12 125 L24 70 L36 125 Z" fill="#18181B" opacity="0.55" />
+          <ellipse cx="36" cy="180" rx="24" ry="8" fill="#00000055" />
+          <path d="M18 180 L36 100 L54 180 Z" fill="#18181B" opacity="0.55" />
         </g>
         <g className="office-sparkles" opacity="0">
-          <circle cx="50" cy="40" r="3" fill="#FBBF24" />
-          <circle cx="110" cy="28" r="2.5" fill="#FDE68A" />
-          <circle cx="250" cy="36" r="3" fill="#F59E0B" />
-          <circle cx="320" cy="48" r="2" fill="#FBBF24" />
+          <circle cx="70" cy="50" r="4" fill="#FBBF24" />
+          <circle cx="140" cy="36" r="3.2" fill="#FDE68A" />
+          <circle cx="300" cy="48" r="4" fill="#F59E0B" />
+          <circle cx="390" cy="64" r="2.8" fill="#FBBF24" />
         </g>
         <g className="office-bang" opacity="0">
-          <circle cx="200" cy="36" r="16" fill="#FEE2E2" />
-          <text x="200" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#E11D48">
+          <circle cx="240" cy="50" r="22" fill="#FEE2E2" />
+          <text x="240" y="58" textAnchor="middle" fontSize="24" fontWeight="800" fill="#E11D48">
             ！
           </text>
         </g>
         <g className="office-bang-gold" opacity="0">
-          <circle cx="200" cy="36" r="16" fill="#FEF3C7" />
-          <text x="200" y="42" textAnchor="middle" fontSize="18" fontWeight="800" fill="#D97706">
+          <circle cx="240" cy="50" r="22" fill="#FEF3C7" />
+          <text x="240" y="58" textAnchor="middle" fontSize="24" fontWeight="800" fill="#D97706">
             ！
           </text>
         </g>
@@ -284,6 +293,32 @@ export function OfficeScene({ level, industry, fx }: Props) {
             think={fx === "people" && i === 0}
           />
         ))}
+        {speech ? (
+          <g className="office-speech" transform={`translate(${bubbleX} 20)`}>
+            <rect
+              x={-70}
+              y={0}
+              width={140}
+              height={36}
+              rx={12}
+              fill="#fff"
+              stroke="#E4E4E7"
+              strokeWidth={2}
+            />
+            <path d="M-6 36 L0 46 L10 36" fill="#fff" stroke="#E4E4E7" strokeWidth={2} />
+            <path d="M-4 35 L8 35 L0 44 Z" fill="#fff" />
+            <text
+              x={0}
+              y={22}
+              textAnchor="middle"
+              fontSize={11}
+              fontWeight={700}
+              fill="#3F3F46"
+            >
+              {speech.length > 14 ? `${speech.slice(0, 13)}…` : speech}
+            </text>
+          </g>
+        ) : null}
       </svg>
     </div>
   );
