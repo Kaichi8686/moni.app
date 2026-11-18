@@ -131,8 +131,18 @@ function useVisualKeyboard() {
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     /** 開いているあいだ一度 settled したら、inset 揺れで戻さない */
     let settledOnce = false;
+    /** iOS で inset が取れないとき、編集フォーカスを open の補助信号にする */
+    let editableFocused = false;
     /** dev プレビュー用: デスクトップでキーボード inset を模す */
     let demoInset: number | null = null;
+    const isEditable = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === "TEXTAREA" || el.isContentEditable) return true;
+      if (tag !== "INPUT") return false;
+      const type = (el as HTMLInputElement).type || "text";
+      return !["button", "checkbox", "radio", "file", "submit", "reset", "range", "color", "hidden"].includes(type);
+    };
     const measureInset = () => {
       if (demoInset != null) return demoInset;
       return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
@@ -140,7 +150,8 @@ function useVisualKeyboard() {
     const update = () => {
       const next = measureInset();
       setInset(next);
-      const isOpen = next >= KEYBOARD_OPEN_PX;
+      // iOS + overlays-content では inset が閾値未満のままの端末がある
+      const isOpen = next >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || next >= 40));
       if (isOpen) {
         if (closeTimer) {
           clearTimeout(closeTimer);
@@ -151,7 +162,9 @@ function useVisualKeyboard() {
         if (settleTimer) return;
         settleTimer = setTimeout(() => {
           settleTimer = null;
-          if (measureInset() >= KEYBOARD_OPEN_PX) {
+          const still =
+            measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
+          if (still) {
             settledOnce = true;
             setSettled(true);
           }
@@ -167,13 +180,28 @@ function useVisualKeyboard() {
       if (closeTimer) return;
       closeTimer = setTimeout(() => {
         closeTimer = null;
-        if (measureInset() < KEYBOARD_OPEN_PX) setOpen(false);
+        const stillOpen =
+          measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
+        if (!stillOpen) setOpen(false);
       }, KEYBOARD_CLOSE_DEBOUNCE_MS);
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (!isEditable(event.target)) return;
+      editableFocused = true;
+      update();
+    };
+    const onFocusOut = () => {
+      window.setTimeout(() => {
+        editableFocused = isEditable(document.activeElement);
+        update();
+      }, 0);
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
     if (process.env.NODE_ENV !== "production") {
       (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo = (inset) => {
         demoInset = inset == null ? null : Math.max(0, Math.round(inset));
@@ -196,11 +224,13 @@ function useVisualKeyboard() {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
       if (process.env.NODE_ENV !== "production") {
         delete (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo;
       }
     };
-  }, []);
+  }, [iosLike]);
   return {
     inset,
     open,
@@ -208,9 +238,8 @@ function useVisualKeyboard() {
     settled,
     /**
      * キーボード直上。
-     * - iOS: fixed が VV 基準なので bottom:0
+     * - iOS: fixed が VV 基準なので bottom:0（inset 二重加算で上に飛ぶのを防ぐ）
      * - その他: layout 基準なので inset で持ち上げる
-     * transition なし＝上昇アニメを書式バーに付けない
      */
     dockStyle: {
       position: "fixed" as const,
@@ -222,19 +251,6 @@ function useVisualKeyboard() {
       transition: "none",
     } satisfies CSSProperties,
   };
-}
-
-function useCoarsePointer() {
-  return useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined" || !window.matchMedia) return () => {};
-      const mq = window.matchMedia("(pointer: coarse)");
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(pointer: coarse)").matches : false),
-    () => false,
-  );
 }
 
 const MIN_ZOOM = 0.25;
@@ -1665,30 +1681,17 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
-  const coarsePointer = useCoarsePointer();
   /** 入力・書式バー操作の最終時刻。VV 揺れで編集が落ちるのを防ぐ */
   const textEditKeepAliveRef = useRef(0);
   /**
-   * タッチ: settled 後にキーボード直上へパッと出す（上昇追従＝上から来る演出を避ける）。
-   * open 後しばらく経っても出なければフォールバック表示。一度出したら外さない。
+   * 文字編集中は常に書式バーを出す。
+   * iOS では overlays-content 時に inset が 0 のままのことがあり、
+   * keyboard.open / settled 待ちだとバーが一生出ない。
+   * 位置は dockStyle（iOS は bottom:0＝VV 下端＝キーボード直上）に任せる。
    */
-  const [workspaceFormatBarLatched, setWorkspaceFormatBarLatched] = useState(false);
-  useEffect(() => {
-    if (!editingTextId) {
-      setWorkspaceFormatBarLatched(false);
-      return;
-    }
-    if (!coarsePointer || keyboard.settled) {
-      setWorkspaceFormatBarLatched(true);
-      return;
-    }
-    if (!keyboard.open) return;
-    const fallback = window.setTimeout(() => setWorkspaceFormatBarLatched(true), 420);
-    return () => window.clearTimeout(fallback);
-  }, [editingTextId, keyboard.settled, keyboard.open, coarsePointer]);
-  const showWorkspaceFormatBar =
-    Boolean(editingTextBox && canEdit && !toolbarHidden && toolbarMounted) &&
-    (!coarsePointer || workspaceFormatBarLatched);
+  const showWorkspaceFormatBar = Boolean(
+    editingTextBox && canEdit && !toolbarHidden && toolbarMounted,
+  );
 
   function touchWorkspaceTextKeepAlive() {
     textEditKeepAliveRef.current = Date.now();
@@ -2789,7 +2792,6 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
-  const coarsePointer = useCoarsePointer();
   const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
@@ -2827,27 +2829,15 @@ function SheetFullscreenEditor({
   overlaysRef.current = overlays;
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
-  /** settled 後にキーボード直上へパッと出し。出なければフォールバック。以降は外さない */
-  const [overlayFormatBarLatched, setOverlayFormatBarLatched] = useState(false);
-  useEffect(() => {
-    if (!editingOverlayId) {
-      setOverlayFormatBarLatched(false);
-      return;
-    }
-    if (!coarsePointer || keyboard.settled) {
-      setOverlayFormatBarLatched(true);
-      return;
-    }
-    if (!keyboard.open) return;
-    const fallback = window.setTimeout(() => setOverlayFormatBarLatched(true), 420);
-    return () => window.clearTimeout(fallback);
-  }, [editingOverlayId, keyboard.settled, keyboard.open, coarsePointer]);
+  /**
+   * 文字編集中は常に書式バーを出す（keyboard.open 待ち禁止）。
+   * iOS の inset 誤検知でバーが出ない問題の本体対策。
+   */
   const editingOverlayText =
     editingOverlayId && selectedOverlay && selectedOverlay.kind === "text" && selectedOverlay.id === editingOverlayId
       ? selectedOverlay
       : null;
-  const showOverlayFormatBar =
-    Boolean(canEdit && editingOverlayText) && (!coarsePointer || overlayFormatBarLatched);
+  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
 
   function touchOverlayTextKeepAlive() {
     overlayEditKeepAliveRef.current = Date.now();
@@ -3795,7 +3785,7 @@ function SheetFullscreenEditor({
           )
         : null}
 
-      {/* 一度開いたら VV 揺れで外さない。inset 直上固定（transition なし） */}
+      {/* 編集中は常に表示。iOS は bottom:0 でキーボード直上（transition なし） */}
       {showOverlayFormatBar && editingOverlayText
         ? createPortal(
             <div className="pointer-events-none" style={keyboard.dockStyle}>
