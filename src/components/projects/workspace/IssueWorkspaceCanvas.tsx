@@ -147,11 +147,22 @@ function useVisualKeyboard() {
       if (demoInset != null) return demoInset;
       return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     };
+    /**
+     * iOS は inset が取れない端末がある一方、キーボード閉じ後も textarea にフォーカスが残ることがある。
+     * VV がほぼ全高なら「閉じ」とみなしてフォーカス残りで open を維持しない。
+     */
+    const computeOpen = (next: number) => {
+      const insetOpen = next >= KEYBOARD_OPEN_PX;
+      if (insetOpen) return true;
+      const vvNearlyFull = vv.height >= window.innerHeight - 80;
+      if (vvNearlyFull && next < 40) return false;
+      // overlays-content で inset が弱い端末向け：キーボードで VV が縮んでいるときだけフォーカスを open 信号に使う
+      return Boolean(editableFocused && iosLike && !vvNearlyFull);
+    };
     const update = () => {
       const next = measureInset();
       setInset(next);
-      // iOS + overlays-content では inset が閾値未満のままの端末がある
-      const isOpen = next >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || next >= 40));
+      const isOpen = computeOpen(next);
       if (isOpen) {
         if (closeTimer) {
           clearTimeout(closeTimer);
@@ -162,9 +173,7 @@ function useVisualKeyboard() {
         if (settleTimer) return;
         settleTimer = setTimeout(() => {
           settleTimer = null;
-          const still =
-            measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
-          if (still) {
+          if (computeOpen(measureInset())) {
             settledOnce = true;
             setSettled(true);
           }
@@ -180,9 +189,7 @@ function useVisualKeyboard() {
       if (closeTimer) return;
       closeTimer = setTimeout(() => {
         closeTimer = null;
-        const stillOpen =
-          measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
-        if (!stillOpen) setOpen(false);
+        if (!computeOpen(measureInset())) setOpen(false);
       }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
     const onFocusIn = (event: FocusEvent) => {
@@ -2872,6 +2879,7 @@ function SheetFullscreenEditor({
   function finishOverlayTextEdit() {
     const id = editingOverlayId;
     setEditingOverlayId(null);
+    overlayTextRef.current?.blur();
     if (!id) return;
     const ov = overlaysRef.current.find((o) => o.id === id);
     if (ov?.kind === "text" && !ov.text.trim()) {
@@ -3089,10 +3097,11 @@ function SheetFullscreenEditor({
         return;
       }
       lastTap.current = { t: now, x: pt.x, y: pt.y };
-      // 文字ツールでも余白1タップでリサイズ／選択を解除（ダブルタップで配置）
+      // 文字ツールでも余白1タップで編集終了→完了／挿入バー復帰（ダブルタップで配置）
       setSelectedOverlayIds([]);
       setOverlayHandlesVisible(false);
-      setEditingOverlayId(null);
+      if (editingOverlayId) finishOverlayTextEdit();
+      else setEditingOverlayId(null);
       return;
     }
 
@@ -3112,7 +3121,8 @@ function SheetFullscreenEditor({
 
     setSelectedOverlayIds([]);
     setOverlayHandlesVisible(false);
-    setEditingOverlayId(null);
+    if (editingOverlayId) finishOverlayTextEdit();
+    else setEditingOverlayId(null);
   }
 
   function onCardPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -3652,10 +3662,10 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入バーはカード上に重ねる。キーボード／文字編集中は同じタイミングで隠す */}
+      {/* 完了・挿入バーはカード上に重ねる。文字編集中だけ隠し、終わればすぐ戻す（keyboard.open に依存しない） */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          {!editingOverlayId && !keyboard.open ? (
+          {!editingOverlayId ? (
             <button
               type="button"
               onClick={onClose}
@@ -3667,7 +3677,7 @@ function SheetFullscreenEditor({
           ) : (
             <span className="w-11" />
           )}
-          {canEdit && !editingOverlayId && !keyboard.open ? (
+          {canEdit && !editingOverlayId ? (
             <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
               {(
                 [
