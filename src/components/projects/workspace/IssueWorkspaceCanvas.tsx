@@ -3071,6 +3071,9 @@ function SheetFullscreenEditor({
   /** 書式バー連打中にキーボード誤閉じ → バー消滅を防ぐ */
   const overlayFormatBarGuardRef = useRef(0);
   const overlayFormatBarPointerDownRef = useRef(false);
+  /** サイズ／配置／色は DOM に即反映し、React 更新は指を離してから（再レンダーでキーボードが消えるのを防ぐ） */
+  const pendingOverlayStyleRef = useRef<Partial<{ fontSize: number; align: TextAlign; textColor: string }>>({});
+  const pendingOverlayHtmlRef = useRef<{ text: string; html: string } | null>(null);
   function touchOverlayFormatBar() {
     overlayFormatBarGuardRef.current = Date.now();
     holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
@@ -3081,6 +3084,33 @@ function SheetFullscreenEditor({
       overlayFormatBarPointerDownRef.current ||
       Date.now() - overlayFormatBarGuardRef.current < FORMAT_BAR_GUARD_MS
     );
+  }
+  function applyOverlayStyleDom(patch: Partial<{ fontSize: number; align: TextAlign; textColor: string }>) {
+    const el = overlayTextRef.current;
+    if (!el) return;
+    if (typeof patch.fontSize === "number") {
+      el.style.fontSize = `${patch.fontSize * 0.55}px`;
+    }
+    if (patch.align) el.style.textAlign = patch.align;
+    if (patch.textColor) el.style.color = patch.textColor;
+  }
+  function flushPendingOverlayEdits() {
+    const id = editingOverlayIdRef.current;
+    const pendingStyle = pendingOverlayStyleRef.current;
+    const pendingHtml = pendingOverlayHtmlRef.current;
+    pendingOverlayStyleRef.current = {};
+    pendingOverlayHtmlRef.current = null;
+    if (!id) return;
+    if (Object.keys(pendingStyle).length === 0 && !pendingHtml) return;
+    const next = overlaysRef.current.map((o) => {
+      if (o.id !== id) return o;
+      return {
+        ...o,
+        ...pendingStyle,
+        ...(pendingHtml ?? {}),
+      } as SheetOverlay;
+    });
+    onPatch({ overlays: next.length > 0 ? next : undefined });
   }
 
   useLayoutEffect(() => {
@@ -3103,6 +3133,7 @@ function SheetFullscreenEditor({
   }, [editingOverlayId]);
 
   function finishOverlayTextEdit() {
+    flushPendingOverlayEdits();
     const id = editingOverlayIdRef.current;
     setEditingOverlayId(null);
     lastTap.current = null;
@@ -3195,6 +3226,8 @@ function SheetFullscreenEditor({
     const update = () => {
       // 編集中にカード寸法が変わると iOS がフォーカス中キーボードを切る
       if (editingOverlayIdRef.current) return;
+      // 拡大中は基準サイズを凍結（スクロールバー出現で再フィットすると縦横比が崩れて見える）
+      if (cardZoomRef.current > 1.01) return;
       const cs = getComputedStyle(stage);
       const padX =
         (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
@@ -3227,9 +3260,10 @@ function SheetFullscreenEditor({
   // 文字編集中のカード持ち上げはしない。
   // キーボード上昇で margin/サイズが変わると iOS がフォーカス中キーボードを切る。
 
+  // 縦横比固定。高さは aspect-ratio に任せて歪みを防ぐ
   const displayCardW = cardSize.w > 0 ? Math.round(cardSize.w * cardZoom) : 0;
-  const displayCardH =
-    displayCardW > 0 ? Math.round(displayCardW / sheetRatio) : 0;
+  const sheetAspect =
+    (sheet.w > 0 ? sheet.w : DEFAULT_SHEET_W) / (sheet.h > 0 ? sheet.h : DEFAULT_SHEET_H);
 
   function clampSheetZoom(z: number) {
     return Math.min(SHEET_CARD_MAX_ZOOM, Math.max(SHEET_CARD_MIN_ZOOM, z));
@@ -3646,23 +3680,38 @@ function SheetFullscreenEditor({
           paddingBottom: "max(4.5rem, calc(env(safe-area-inset-bottom) + 3.25rem))",
           paddingLeft: 12,
           paddingRight: 12,
-          touchAction: editingOverlayId ? "none" : "manipulation",
+          // pan のみ許可。ブラウザのピンチズームは抑止し、自前ピンチで縦横比を保つ
+          touchAction: editingOverlayId ? "none" : "pan-x pan-y",
         }}
         onPointerDown={onStagePointerDown}
         onPointerMove={onStagePointerMove}
         onPointerUp={onStagePointerUp}
         onPointerCancel={onStagePointerUp}
       >
-            <div className="flex min-h-full min-w-full items-center justify-center">
+            <div
+              className="flex items-center justify-center"
+              style={{
+                // 拡大時はカード実寸分だけ広げ、全貌が見えなくてもスクロールで見る
+                minWidth: "100%",
+                minHeight: "100%",
+                width: displayCardW > 0 ? Math.max(displayCardW + 24, 0) : "100%",
+                height:
+                  displayCardW > 0
+                    ? Math.max(Math.round(displayCardW / sheetAspect) + 24, 0)
+                    : "100%",
+              }}
+            >
             <div
               ref={cardRef}
               data-sheet-card
               className="relative touch-none select-none overflow-visible rounded-2xl"
               style={{
                 width: displayCardW > 0 ? displayCardW : undefined,
-                height: displayCardH > 0 ? displayCardH : undefined,
+                aspectRatio: `${sheet.w > 0 ? sheet.w : DEFAULT_SHEET_W} / ${sheet.h > 0 ? sheet.h : DEFAULT_SHEET_H}`,
+                height: "auto",
                 visibility: displayCardW > 0 ? "visible" : "hidden",
                 boxSizing: "border-box",
+                flexShrink: 0,
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
                 userSelect: "none",
@@ -3833,12 +3882,17 @@ function SheetFullscreenEditor({
                     );
                   }
                   const editing = editingOverlayId === ov.id;
+                  // 書式バー連打中は pending を優先（親再レンダーで DOM 直書きが戻らないように）
+                  const pendingStyle = editing ? pendingOverlayStyleRef.current : {};
+                  const displayFontSize = pendingStyle.fontSize ?? ov.fontSize;
+                  const displayAlign = pendingStyle.align ?? ov.align;
+                  const displayColor = pendingStyle.textColor ?? ov.textColor;
                   // 表示と同じ大きさで打つ（編集時だけ 16px 下限にするとジャンプする）
-                  const fontPx = ov.fontSize * 0.55;
+                  const fontPx = displayFontSize * 0.55;
                   const hasRich = Boolean(ov.html);
                   const textStyle: CSSProperties = {
-                    color: ov.textColor,
-                    textAlign: ov.align,
+                    color: displayColor,
+                    textAlign: displayAlign,
                     fontSize: fontPx,
                     fontWeight: hasRich ? undefined : ov.bold ? 700 : 400,
                     fontStyle: hasRich ? undefined : ov.italic ? "italic" : "normal",
@@ -3889,7 +3943,10 @@ function SheetFullscreenEditor({
                               if (!el) return;
                               const html = sanitizeRichHtml(el.innerHTML);
                               const text = plainTextFromRichHtml(html);
-                              patchOverlay(ov.id, { text, html });
+                              const pendingStyle = pendingOverlayStyleRef.current;
+                              pendingOverlayStyleRef.current = {};
+                              pendingOverlayHtmlRef.current = null;
+                              patchOverlay(ov.id, { text, html, ...pendingStyle });
                               setOverlayInlineFormat(queryInlineFormatState());
                             }}
                             onBlur={() => {
@@ -3992,26 +4049,6 @@ function SheetFullscreenEditor({
             )}
             {canEdit && !editingOverlayId ? (
               <div className="pointer-events-auto flex items-center gap-2">
-                <div className="flex items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                  <button
-                    type="button"
-                    aria-label={tx("縮小", "Zoom out")}
-                    disabled={cardZoom <= SHEET_CARD_MIN_ZOOM + 0.01}
-                    onClick={() => setCardZoom((z) => clampSheetZoom(z - 0.25))}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-35"
-                  >
-                    <Minus className="h-4 w-4" strokeWidth={2.25} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={tx("拡大", "Zoom in")}
-                    disabled={cardZoom >= SHEET_CARD_MAX_ZOOM - 0.01}
-                    onClick={() => setCardZoom((z) => clampSheetZoom(z + 0.25))}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-35"
-                  >
-                    <Plus className="h-4 w-4" strokeWidth={2.25} />
-                  </button>
-                </div>
                 <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                   {(
                     [
@@ -4152,7 +4189,15 @@ function SheetFullscreenEditor({
                 italic={overlayInlineFormat.italic}
                 underline={overlayInlineFormat.underline}
                 tx={tx}
-                onChange={(patch) => patchOverlay(editingOverlayText.id, patch)}
+                onChange={(patch) => {
+                  overlayFormatBarPointerDownRef.current = true;
+                  touchOverlayFormatBar();
+                  applyOverlayStyleDom(patch);
+                  pendingOverlayStyleRef.current = {
+                    ...pendingOverlayStyleRef.current,
+                    ...patch,
+                  };
+                }}
                 onInlineFormat={(command, value) => {
                   overlayFormatBarPointerDownRef.current = true;
                   touchOverlayFormatBar();
@@ -4161,11 +4206,14 @@ function SheetFullscreenEditor({
                   if (el) {
                     const html = sanitizeRichHtml(el.innerHTML);
                     const text = plainTextFromRichHtml(html);
-                    patchOverlay(editingOverlayText.id, {
-                      text,
-                      html,
-                      ...(command === "foreColor" && value ? { textColor: value } : {}),
-                    });
+                    pendingOverlayHtmlRef.current = { text, html };
+                    if (command === "foreColor" && value) {
+                      pendingOverlayStyleRef.current = {
+                        ...pendingOverlayStyleRef.current,
+                        textColor: value,
+                      };
+                      applyOverlayStyleDom({ textColor: value });
+                    }
                   }
                   setOverlayInlineFormat(queryInlineFormatState());
                 }}
@@ -4176,6 +4224,7 @@ function SheetFullscreenEditor({
                 }}
                 onInteractEnd={() => {
                   overlayFormatBarPointerDownRef.current = false;
+                  flushPendingOverlayEdits();
                   touchOverlayFormatBar();
                 }}
               />
@@ -4228,13 +4277,26 @@ function SlidesTextFormatBar({
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
   const [colorOpen, setColorOpen] = useState(false);
+  /** 親への連打更新を避けるため、表示用はローカルで持つ */
+  const [localSize, setLocalSize] = useState(fontSize);
+  const [localAlign, setLocalAlign] = useState(align);
+  const [localColor, setLocalColor] = useState(textColor);
   const fontSizeRef = useRef(fontSize);
-  fontSizeRef.current = fontSize;
+  fontSizeRef.current = localSize;
   const sizeRepeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const interactingRef = useRef(false);
 
   useEffect(() => {
-    if (!sizeEditing) setSizeDraft(String(fontSize));
-  }, [fontSize, sizeEditing]);
+    if (!interactingRef.current) {
+      setLocalSize(fontSize);
+      setLocalAlign(align);
+      setLocalColor(textColor);
+    }
+  }, [fontSize, align, textColor]);
+
+  useEffect(() => {
+    if (!sizeEditing) setSizeDraft(String(localSize));
+  }, [localSize, sizeEditing]);
 
   useEffect(
     () => () => {
@@ -4247,6 +4309,7 @@ function SlidesTextFormatBar({
   function keepEditingPointerDown(e: ReactPointerEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
+    interactingRef.current = true;
     onInteract?.();
     onKeepFocus?.();
   }
@@ -4254,9 +4317,10 @@ function SlidesTextFormatBar({
   function bumpSize(delta: number) {
     const next = Math.min(96, Math.max(8, fontSizeRef.current + delta));
     fontSizeRef.current = next;
+    setLocalSize(next);
+    interactingRef.current = true;
     onInteract?.();
     onChange({ fontSize: next });
-    // 既フォーカス中の再 focus はしない（onKeepFocus 側でガード）
     onKeepFocus?.();
   }
 
@@ -4271,18 +4335,22 @@ function SlidesTextFormatBar({
       clearInterval(sizeRepeatRef.current);
       sizeRepeatRef.current = null;
     }
+    interactingRef.current = false;
+    onInteractEnd?.();
     onKeepFocus?.();
   }
 
   function commitSize(raw: string) {
     const n = Math.round(Number(raw));
     if (!Number.isFinite(n)) {
-      setSizeDraft(String(fontSize));
+      setSizeDraft(String(localSize));
       setSizeEditing(false);
       onKeepFocus?.();
       return;
     }
-    onChange({ fontSize: Math.min(96, Math.max(8, n)) });
+    const next = Math.min(96, Math.max(8, n));
+    setLocalSize(next);
+    onChange({ fontSize: next });
     setSizeEditing(false);
     onKeepFocus?.();
   }
@@ -4323,16 +4391,20 @@ function SlidesTextFormatBar({
               type="button"
               onPointerDown={keepEditingPointerDown}
               onClick={() => {
+                setLocalColor(color);
+                interactingRef.current = true;
                 if (onInlineFormat) {
                   onInlineFormat("foreColor", color);
                 } else {
                   onChange({ textColor: color });
                 }
                 setColorOpen(false);
+                interactingRef.current = false;
+                onInteractEnd?.();
                 window.requestAnimationFrame(() => onKeepFocus?.());
               }}
               className={`h-7 w-7 shrink-0 rounded-full border-2 ${
-                textColor.toLowerCase() === color.toLowerCase() ? "border-zinc-900" : "border-zinc-200"
+                localColor.toLowerCase() === color.toLowerCase() ? "border-zinc-900" : "border-zinc-200"
               }`}
               style={{ backgroundColor: color }}
               aria-label={tx("文字色", "Text color")}
@@ -4376,7 +4448,7 @@ function SlidesTextFormatBar({
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
           </div>
-          {sizeEditing ? (
+          {sizeEditing && !onKeepFocus ? (
             <input
               autoFocus
               inputMode="numeric"
@@ -4386,9 +4458,8 @@ function SlidesTextFormatBar({
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitSize(sizeDraft);
                 if (e.key === "Escape") {
-                  setSizeDraft(String(fontSize));
+                  setSizeDraft(String(localSize));
                   setSizeEditing(false);
-                  window.requestAnimationFrame(() => onKeepFocus?.());
                 }
               }}
               className="h-8 w-10 rounded bg-zinc-100 text-center text-[14px] font-semibold text-zinc-900 outline-none"
@@ -4398,12 +4469,14 @@ function SlidesTextFormatBar({
               type="button"
               onPointerDown={keepEditingPointerDown}
               onClick={() => {
-                setSizeDraft(String(fontSize));
+                // キーボード維持モードでは数値入力を開かず、フォーカスを奪わない
+                if (onKeepFocus) return;
+                setSizeDraft(String(localSize));
                 setSizeEditing(true);
               }}
               className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-1 text-[14px] font-semibold text-zinc-800"
             >
-              {fontSize}
+              {localSize}
             </button>
           )}
         </div>
@@ -4460,10 +4533,10 @@ function SlidesTextFormatBar({
           className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded text-zinc-700"
           aria-label={tx("文字色", "Text color")}
         >
-          <span className="text-[13px] font-bold leading-none" style={{ color: textColor }}>
+          <span className="text-[13px] font-bold leading-none" style={{ color: localColor }}>
             A
           </span>
-          <span className="mt-0.5 h-1 w-4 rounded-sm" style={{ backgroundColor: textColor }} />
+          <span className="mt-0.5 h-1 w-4 rounded-sm" style={{ backgroundColor: localColor }} />
         </button>
 
         {(
@@ -4479,11 +4552,15 @@ function SlidesTextFormatBar({
             title={label}
             onPointerDown={keepEditingPointerDown}
             onClick={() => {
+              setLocalAlign(value);
+              interactingRef.current = true;
               onChange({ align: value });
+              interactingRef.current = false;
+              onInteractEnd?.();
               window.requestAnimationFrame(() => onKeepFocus?.());
             }}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
-              align === value ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
+              localAlign === value ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-zinc-700"
             }`}
             aria-label={label}
           >
