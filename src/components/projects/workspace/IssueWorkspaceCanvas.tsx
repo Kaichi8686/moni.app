@@ -2999,14 +2999,14 @@ function SheetFullscreenEditor({
     }, confirmMs);
   }, [keyboard.open, editingOverlayId]);
 
-  const [stageBox, setStageBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const update = () => {
+      // 編集中にカード寸法が変わると iOS がフォーカス中キーボードを切る
+      if (editingOverlayIdRef.current) return;
       const boxW = stage.clientWidth;
       const boxH = stage.clientHeight;
-      setStageBox((prev) => (prev.w === boxW && prev.h === boxH ? prev : { w: boxW, h: boxH }));
       // 左右余白 + 上下に少し呼吸できる余白（画面中央配置用）
       const maxW = Math.max(0, boxW - 24);
       const maxH = Math.max(0, boxH - 48);
@@ -3031,14 +3031,8 @@ function SheetFullscreenEditor({
     };
   }, [sheetRatio]);
 
-  /** キーボード上にカード全体が収まるよう上へ持ち上げる量（書式バー分は編集開始時点で確保し、出現時の再ジャンプを防ぐ） */
-  const cardKeyboardLiftPx = useMemo(() => {
-    if (!keyboard.open || cardSize.h <= 0 || stageBox.h < 2) return 0;
-    const formatReserve = editingOverlayId ? 56 : 16;
-    const usableBottom = stageBox.h - keyboard.inset - formatReserve;
-    const cardBottom = stageBox.h / 2 + cardSize.h / 2;
-    return Math.max(0, Math.ceil(cardBottom - usableBottom));
-  }, [keyboard.open, keyboard.inset, cardSize.h, stageBox.h, editingOverlayId]);
+  // 文字編集中のカード持ち上げはしない。
+  // キーボード上昇で margin/サイズが変わると iOS がフォーカス中キーボードを切る。
 
   function setOverlays(next: SheetOverlay[]) {
     onPatch({ overlays: next.length > 0 ? next : undefined });
@@ -3421,7 +3415,7 @@ function SheetFullscreenEditor({
             <div
               ref={cardRef}
               data-sheet-card
-              className="relative touch-none select-none overflow-visible rounded-2xl will-change-transform"
+              className={`relative touch-none select-none overflow-visible rounded-2xl${editingOverlayId ? "" : " will-change-transform"}`}
               style={{
                 width: cardSize.w > 0 ? cardSize.w : undefined,
                 height: cardSize.h > 0 ? cardSize.h : undefined,
@@ -3430,8 +3424,6 @@ function SheetFullscreenEditor({
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
                 userSelect: "none",
-                // transform はフォーカス中の textarea 祖先で iOS キーボードを落とすので margin で持ち上げる
-                marginTop: cardKeyboardLiftPx > 0 ? -cardKeyboardLiftPx : 0,
                 transition: "none",
               }}
               onPointerDown={onCardPointerDown}
