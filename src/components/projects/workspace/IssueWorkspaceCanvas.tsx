@@ -147,9 +147,10 @@ function useVisualKeyboard() {
       if (demoInset != null) return demoInset >= KEYBOARD_OPEN_PX;
       const h = vv.height;
       const covered = measureInset();
+      // VV がほぼ全高ならキーボードは閉じている（フォーカス残りでも open にしない）
+      if (h >= window.innerHeight - 80 && covered < 40) return false;
       if (!editableFocused) return false;
       if (h > closedBaseline) closedBaseline = h;
-      // 閉じたあともフォーカスが残るので、VV が戻ったら閉じとみなす
       return closedBaseline - h > KEYBOARD_OPEN_PX || covered > KEYBOARD_OPEN_PX;
     };
     const update = () => {
@@ -2867,6 +2868,7 @@ function SheetFullscreenEditor({
   function finishOverlayTextEdit() {
     const id = editingOverlayId;
     setEditingOverlayId(null);
+    overlayTextRef.current?.blur();
     if (!id) return;
     const ov = overlaysRef.current.find((o) => o.id === id);
     if (ov?.kind === "text" && !ov.text.trim()) {
@@ -3084,10 +3086,11 @@ function SheetFullscreenEditor({
         return;
       }
       lastTap.current = { t: now, x: pt.x, y: pt.y };
-      // 文字ツールでも余白1タップでリサイズ／選択を解除（ダブルタップで配置）
+      // 文字ツールでも余白1タップで編集終了→完了／挿入バー復帰（ダブルタップで配置）
       setSelectedOverlayIds([]);
       setOverlayHandlesVisible(false);
-      setEditingOverlayId(null);
+      if (editingOverlayId) finishOverlayTextEdit();
+      else setEditingOverlayId(null);
       return;
     }
 
@@ -3107,7 +3110,8 @@ function SheetFullscreenEditor({
 
     setSelectedOverlayIds([]);
     setOverlayHandlesVisible(false);
-    setEditingOverlayId(null);
+    if (editingOverlayId) finishOverlayTextEdit();
+    else setEditingOverlayId(null);
   }
 
   function onCardPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -3647,10 +3651,10 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入バーはカード上に重ねる。キーボード／文字編集中は同じタイミングで隠す */}
+      {/* 完了・挿入バーはカード上に重ねる。文字編集中だけ隠し、終わればすぐ戻す（keyboard.open に依存しない） */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          {!editingOverlayId && !keyboard.open ? (
+          {!editingOverlayId ? (
             <button
               type="button"
               onClick={onClose}
@@ -3662,7 +3666,7 @@ function SheetFullscreenEditor({
           ) : (
             <span className="w-11" />
           )}
-          {canEdit && !editingOverlayId && !keyboard.open ? (
+          {canEdit && !editingOverlayId ? (
             <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
               {(
                 [
