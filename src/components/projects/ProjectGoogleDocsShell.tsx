@@ -850,7 +850,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       blurTypingTimerRef.current = null;
       const el = editorRef.current;
       if (el && document.activeElement === el) return;
+      // キーボード下降＝入力終了。書式バーも一緒に消す
       setTypingActive(false);
+      setColorOpen(false);
+      setAlignOpen(false);
+      setStyleOpen(false);
     }, 80);
   }, [flushToParent, refreshHistoryState, rememberSelection]);
 
@@ -1197,9 +1201,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           )}
         </div>
 
-        {/* 入力欄の直上（キーボードのすぐ上）に文字設定バー。
+        {/* キーボード表示中（入力中）だけ文字設定バーを出す。
             色などは上方向 absolute だとドキュメント面の下に回るので、バー内の行で開く */}
-        {editing ? (
+        {editing && typingActive ? (
           <div
             className={`relative z-50 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)] ${
               fullscreen && keyboardInset < 8
