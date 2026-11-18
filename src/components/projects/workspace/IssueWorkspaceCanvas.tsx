@@ -109,12 +109,6 @@ const TEXT_EDIT_KEEPALIVE_MS = 1800;
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 編集開始直後の blur / 誤閉じでキーボードを落とさない */
 const TEXT_EDIT_START_GRACE_MS = 900;
-/** 上の完了／挿入の下でカードが真ん中に見えるよう、静止時に少し上げる */
-const SHEET_CARD_REST_LIFT_PX = 40;
-/** 文字入力時に紙を上へ動かす量（滑らかにアニメ） */
-const SHEET_CARD_EDIT_LIFT_PX = 96;
-/** 紙の上下アニメ */
-const SHEET_CARD_LIFT_MS = 340;
 
 /** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
 function keyboardStillCovering() {
@@ -217,7 +211,22 @@ function useVisualKeyboard() {
         }
         return;
       }
-      // VV の一瞬の揺れでは peak / settled を落とさない（カード lift 再ジャンプ→iOS キーボード切断の原因）
+      // フォーカス中かつ VV がまだキーボードで潰れているなら「開いたまま」とみなす
+      // （数秒後に open=false → 編集終了 → キーボード消失の主因だった）
+      if (editableFocused) {
+        const covered = next;
+        if (covered > 80 || vv.height < window.innerHeight - 100) {
+          peakInset = Math.max(peakInset, covered);
+          setInset(peakInset || covered);
+          if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+          }
+          setOpen(true);
+          return;
+        }
+      }
+      // VV の一瞬の揺れでは peak / settled を落とさない
       if (!editableFocused) {
         closedBaseline = Math.max(closedBaseline, vv.height);
       } else if (vv.height > closedBaseline) {
@@ -226,6 +235,13 @@ function useVisualKeyboard() {
       if (closeTimer) return;
       closeTimer = setTimeout(() => {
         closeTimer = null;
+        if (editableFocused) {
+          const covered = measureInset();
+          if (covered > 80 || vv.height < window.innerHeight - 100) {
+            setOpen(true);
+            return;
+          }
+        }
         if (!measureOpen()) confirmClosed();
       }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
@@ -3440,19 +3456,19 @@ function SheetFullscreenEditor({
       >
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
-      {/* 上バーの下で真ん中に見えるよう、静止時は少し上げて中央配置 */}
+      {/*
+        カードは中央配置。transform で持ち上げると iOS がフォーカス中キーボードを切るので使わない。
+        上バー分だけ paddingBottom で見た目の中央を上げる（編集中も値を変えない）。
+      */}
       <div
         ref={stageRef}
         className="absolute inset-0 z-10 flex items-center justify-center px-3"
-        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+        style={{
+          paddingTop: "max(0.5rem, env(safe-area-inset-top))",
+          // 完了／挿入バー分だけ下に余白 → 幾何中心より上＝見た目の中央
+          paddingBottom: "max(4.5rem, calc(env(safe-area-inset-bottom) + 3.25rem))",
+        }}
       >
-            <div
-              className="will-change-transform"
-              style={{
-                transform: `translateY(-${SHEET_CARD_REST_LIFT_PX + (editingOverlayId ? SHEET_CARD_EDIT_LIFT_PX : 0)}px)`,
-                transition: `transform ${SHEET_CARD_LIFT_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
-              }}
-            >
             <div
               ref={cardRef}
               data-sheet-card
@@ -3750,7 +3766,6 @@ function SheetFullscreenEditor({
                 })}
               </div>
             </div>
-            </div>
       </div>
 
       <input
@@ -3791,21 +3806,22 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入バーは常に表示（文字編集中も隠さない） */}
+      {/* 完了・挿入は編集中は隠す。赤いキーボード閉じ → 編集終了で戻る */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          <button
-            type="button"
-            onClick={() => {
-              if (editingOverlayId) finishOverlayTextEdit();
-              onClose();
-            }}
-            className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
-          >
-            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-            {tx("完了", "Done")}
-          </button>
-          {canEdit ? (
+          {!editingOverlayId ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+              {tx("完了", "Done")}
+            </button>
+          ) : (
+            <span className="w-11" />
+          )}
+          {canEdit && !editingOverlayId ? (
             <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
               {(
                 [
@@ -3822,7 +3838,6 @@ function SheetFullscreenEditor({
                   aria-label={label}
                   disabled={id === "photo" && Boolean(uploading)}
                   onClick={() => {
-                    if (editingOverlayId) finishOverlayTextEdit();
                     if (id === "photo") {
                       photoInputRef.current?.click();
                       return;
