@@ -87,9 +87,15 @@ export const OFFICE_INCIDENT_SYSTEM_PROMPT = `あなたは学生向けビジネ�
   - bold：当たれば大きく、外すと痛い方針
 - targets は4個。事件と会社の実態に合わせる。fit が mismatch のものを必ず1個含める（相性が悪い層）。残りは good か ok
 - ターゲットの label は、人の属性を表す12字以内の名詞句にする（例：小学生の保護者、初めて来た人、近所の常連）。会社の説明文そのものや、説明文の切り出し・言い換えは禁止
+- scene は次のいずれか1つ：queue|complaint|rival|viral|staff_trouble|sold_out|equipment|vip|rainy|sns_fire|deadline|new_hire
+- speaker は {cast_role, emotion}。cast_role は newbie|veteran|accountant|regular|rival_ceo|secretary。emotion は panic|angry|happy|worried|smug
+- line は40字以内のセリフ（役割に合う口調。名前は入れない）
+- stakes は30字以内（放置するとどうなるか）
+- meters_at_risk は customers|morale|reputation|cash から1〜2個
+- 季節テーマやいちばん低いメーターの状況を事件に軽く反映する
 
 出力は次のJSONのみ。前後に文章やコードブロックは付けない：
-{"title":"...","description":"...","type":"pinch|chance|people|rival","strategies":[{"id":"s1","kind":"safe","title":"...","summary":"..."},{"id":"s2","kind":"standard","title":"...","summary":"..."},{"id":"s3","kind":"bold","title":"...","summary":"..."}],"targets":[{"id":"t1","label":"...","fit":"good"},{"id":"t2","label":"...","fit":"good"},{"id":"t3","label":"...","fit":"ok"},{"id":"t4","label":"...","fit":"mismatch"}]}`;
+{"title":"...","description":"...","type":"pinch|chance|people|rival","scene":"queue","speaker":{"cast_role":"newbie","emotion":"panic"},"line":"...","stakes":"...","meters_at_risk":["morale"],"strategies":[{"id":"s1","kind":"safe","title":"...","summary":"..."},{"id":"s2","kind":"standard","title":"...","summary":"..."},{"id":"s3","kind":"bold","title":"...","summary":"..."}],"targets":[{"id":"t1","label":"...","fit":"good"},{"id":"t2","label":"...","fit":"good"},{"id":"t3","label":"...","fit":"ok"},{"id":"t4","label":"...","fit":"mismatch"}]}`;
 
 export const OFFICE_STRATEGY_REROLL_SYSTEM_PROMPT = `あなたは学生向けビジネスゲーム「moni」のシナリオライターです。
 既存の事件に対する作戦カードだけを3枚、作り直してください（事件本体は変えない）。

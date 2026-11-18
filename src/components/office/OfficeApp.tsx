@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { CompanyCard } from "@/components/office/CompanyCard";
+import { CodexPanel } from "@/components/office/CodexPanel";
 import { NameSetup } from "@/components/office/NameSetup";
-import { OfficeScene } from "@/components/office/OfficeScene";
+import { OfficeChrome } from "@/components/office/OfficeChrome";
 import { RankingPanel } from "@/components/office/RankingPanel";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
+import { StageView } from "@/components/office/stage/StageView";
+import { SecretaryTip } from "@/components/office/stage/SecretaryTip";
 import { IncidentStep } from "@/components/office/play/IncidentStep";
 import {
   PlayStepper,
@@ -20,23 +22,34 @@ import { TargetStep } from "@/components/office/play/TargetStep";
 import { WriteStep } from "@/components/office/play/WriteStep";
 import {
   createCompany,
+  fetchCodex,
   fetchCompany,
   fetchIncident,
+  fetchPeers,
   fetchRanking,
   markResultSeen,
+  markSecretaryGuideDone,
+  reportPeer,
   rerollStrategies,
   setAbout,
+  setSfxMuted,
   submitAnswer,
   toggleRanking,
+  votePeer,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
 import {
   OFFICE_ANSWER_MIN,
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
+import { castMemberByRole } from "@/lib/office/cast";
+import type { CodexCell } from "@/lib/office/codex";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
+import { playOfficeSfx, setOfficeSfxMuted } from "@/lib/office/sfx";
 import { formatRemainMmSs, msUntil } from "@/lib/office/stamina";
+import type { OfficeSceneId } from "@/lib/office/scenes";
 import type {
+  IncidentType,
   OfficeIncident,
   OfficeSubmission,
   OfficeSubmitInput,
@@ -49,7 +62,7 @@ type Props = {
   active?: boolean;
 };
 
-type Tab = "play" | "rank";
+type Panel = "play" | "rank" | "codex";
 
 function preferReducedMotion(): boolean {
   return (
@@ -58,8 +71,10 @@ function preferReducedMotion(): boolean {
   );
 }
 
+const COL = "mx-auto w-full max-w-[480px] px-4 sm:px-5";
+
 export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
-  const [tab, setTab] = useState<Tab>("play");
+  const [panel, setPanel] = useState<Panel>("play");
   const [boot, setBoot] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -74,6 +89,10 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [answer, setAnswer] = useState("");
   const [rerolling, setRerolling] = useState(false);
   const [lastSubmit, setLastSubmit] = useState<OfficeSubmission | null>(null);
+  const [codexBonus, setCodexBonus] = useState(0);
+  const [codexCells, setCodexCells] = useState<CodexCell[]>([]);
+  const [peerScene, setPeerScene] = useState<OfficeSceneId | null>(null);
+  const [peerType, setPeerType] = useState<IncidentType | null>(null);
   const [rankRows, setRankRows] = useState<RankingRow[]>([]);
   const [rankMeta, setRankMeta] = useState<{
     seasonKey: string;
@@ -104,6 +123,10 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
 
   useEffect(() => () => clearAdvance(), [clearAdvance]);
 
+  useEffect(() => {
+    setOfficeSfxMuted(payload?.company?.sfxMuted !== false);
+  }, [payload?.company?.sfxMuted]);
+
   const resetChoices = useCallback(() => {
     clearAdvance();
     setStrategyId(null);
@@ -113,6 +136,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }, [clearAdvance]);
 
   const triggerFx = useCallback((type: string) => {
+    playOfficeSfx("enter");
     if (preferReducedMotion()) {
       setSceneFx(null);
       setPlayEnter(true);
@@ -174,7 +198,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }, [active, reload]);
 
   useEffect(() => {
-    if (!active || tab !== "rank") return;
+    if (!active || panel !== "rank") return;
     void (async () => {
       try {
         const r = await fetchRanking();
@@ -189,7 +213,18 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         setErr(e instanceof Error ? e.message : "ランキング取得失敗");
       }
     })();
-  }, [active, tab, payload?.company?.id, payload?.seasonRevenue]);
+  }, [active, panel, payload?.company?.id, payload?.seasonRevenue]);
+
+  useEffect(() => {
+    if (!active || panel !== "codex") return;
+    void (async () => {
+      try {
+        setCodexCells(await fetchCodex());
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "図鑑の取得に失敗");
+      }
+    })();
+  }, [active, panel, payload?.company?.id, lastSubmit?.id]);
 
   async function onSetup(input: { name: string; about: string }) {
     setBusy(true);
@@ -223,6 +258,9 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       };
       const res = await submitAnswer(input);
       setLastSubmit(res.submission);
+      setCodexBonus(res.codexBonus ?? 0);
+      setPeerScene(incident?.scene ?? null);
+      setPeerType(incident?.type ?? null);
       setPayload({
         company: res.company,
         stamina: res.stamina,
@@ -233,6 +271,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       setPlayEnter(false);
       setStep("result");
       const tone = res.submission.storyTone;
+      playOfficeSfx(tone === "great" ? "level" : "coin");
       triggerFx(tone === "great" ? "chance" : tone === "bitter" ? "people" : "rival");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "提出失敗");
@@ -256,6 +295,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }
 
   function onSelectStrategy(id: string) {
+    playOfficeSfx("tap");
     setStrategyId(id);
     scheduleAdvance("target");
   }
@@ -279,7 +319,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   }
 
   const speech = useMemo(() => {
-    if (!incident || step !== "incident") return null;
+    if (!incident || (step !== "incident" && step !== "strategy")) return null;
+    if (incident.line) return incident.line;
     return pickIncidentSpeech(incident.type, incident.id);
   }, [incident, step]);
 
@@ -339,6 +380,13 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     lastSubmit && step === "result" ? (
       <ResultStep
         submission={lastSubmit}
+        company={company}
+        codexBonus={codexBonus}
+        peerScene={peerScene}
+        peerType={peerType}
+        fetchPeers={fetchPeers}
+        onVotePeer={votePeer}
+        onReportPeer={reportPeer}
         busy={busy}
         onNext={() => void onNextIncident()}
       />
@@ -428,13 +476,13 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     );
 
   const body = boot ? (
-    <div className="mx-auto max-w-xl space-y-3 px-4 pt-6 sm:px-6">
+    <div className={`${COL} space-y-3 pb-28 pt-4`}>
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-28 animate-pulse rounded-3xl bg-white/70" />
+        <div key={i} className="h-24 animate-pulse rounded-3xl bg-zinc-100" />
       ))}
     </div>
   ) : needsSetup ? (
-    <div className="relative mx-auto max-w-xl px-4 pb-28 pt-6 sm:px-6">
+    <div className={`${COL} pb-28 pt-6`}>
       <NameSetup
         busy={busy}
         error={err}
@@ -445,78 +493,19 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       />
     </div>
   ) : (
-    <div className="relative min-h-[calc(100dvh-7.5rem)] overflow-x-hidden">
-      {tab === "play" && company ? (
-        <>
-          <OfficeScene
-            level={company.level}
-            industry={company.industry}
-            fx={sceneFx}
-            variant="backdrop"
-            speech={speech}
-          />
-          <div
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(255,247,237,0.22)_30%,rgba(255,247,237,0.1)_55%,rgba(255,255,255,0.55)_100%)]"
-            aria-hidden
-          />
-        </>
-      ) : null}
+    <div className={`${COL} space-y-3 pb-28 pt-3`}>
+      {err ? <p className="text-sm font-semibold text-rose-600">{err}</p> : null}
 
-      <div className="relative z-10 mx-auto max-w-xl space-y-4 px-4 pb-28 pt-3 sm:px-6">
-        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-white/70 bg-white/80 p-1 shadow-sm backdrop-blur-md">
+      {panel === "rank" ? (
+        <div className="space-y-3">
           <button
             type="button"
-            onClick={() => setTab("play")}
-            className={`rounded-xl py-2.5 text-sm font-extrabold ${
-              tab === "play" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-            }`}
+            onClick={() => setPanel("play")}
+            className="text-sm font-bold text-zinc-600 hover:text-zinc-900"
           >
-            オフィス
+            ← オフィスに戻る
           </button>
-          <button
-            type="button"
-            onClick={() => setTab("rank")}
-            className={`rounded-xl py-2.5 text-sm font-extrabold ${
-              tab === "rank" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"
-            }`}
-          >
-            順位
-          </button>
-        </div>
-
-        {err ? (
-          <p className="rounded-2xl bg-rose-50/90 px-3 py-2 text-sm font-semibold text-rose-600 backdrop-blur">
-            {err}
-          </p>
-        ) : null}
-
-        {tab === "play" ? (
-          <div className="space-y-4">
-            <CompanyCard
-              company={company!}
-              seasonRevenue={payload!.seasonRevenue}
-              staminaValue={payload!.stamina.value}
-              nextRecoverAt={payload!.stamina.nextRecoverAt}
-            />
-
-            {step !== "result" ? (
-              <div className="rounded-2xl border border-white/70 bg-white/75 px-2 py-1 backdrop-blur-md">
-                <PlayStepper
-                  step={step}
-                  canBack={Boolean(backStep)}
-                  onBack={() => {
-                    if (!backStep) return;
-                    clearAdvance();
-                    setStep(backStep);
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {stepPanel}
-          </div>
-        ) : (
-          <div className="rounded-3xl border border-white/80 bg-white/90 p-1 shadow-[0_12px_40px_rgba(28,25,23,0.06)] backdrop-blur-md">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-1 shadow-sm">
             <RankingPanel
               rows={rankRows}
               meta={rankMeta}
@@ -527,16 +516,65 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
               }}
             />
           </div>
-        )}
-      </div>
+        </div>
+      ) : panel === "codex" ? (
+        <CodexPanel cells={codexCells} onClose={() => setPanel("play")} />
+      ) : (
+        <div className="space-y-3">
+          <OfficeChrome
+            company={company!}
+            seasonRevenue={payload!.seasonRevenue}
+            staminaValue={payload!.stamina.value}
+            nextRecoverAt={payload!.stamina.nextRecoverAt}
+            onOpenRank={() => setPanel("rank")}
+            onOpenCodex={() => setPanel("codex")}
+            onToggleSfx={() => {
+              void (async () => {
+                const nextMuted = company!.sfxMuted === false;
+                playOfficeSfx("tap");
+                const c = await setSfxMuted(nextMuted);
+                setOfficeSfxMuted(c.sfxMuted !== false);
+                setPayload((p) => (p ? { ...p, company: c } : p));
+              })();
+            }}
+          />
+
+          <StageView
+            level={company!.level}
+            industry={company!.industry}
+            fx={sceneFx}
+            speech={speech}
+            scene={incident?.scene}
+            speaker={
+              incident?.speaker
+                ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
+                : null
+            }
+            emotion={incident?.speaker?.emotion}
+            enter={playEnter && step === "incident"}
+          />
+
+          <PlayStepper
+            step={step}
+            canBack={Boolean(backStep)}
+            onBack={() => {
+              if (!backStep) return;
+              clearAdvance();
+              setStep(backStep);
+            }}
+          />
+
+          {stepPanel}
+        </div>
+      )}
     </div>
   );
 
   const shell = (
     <>
       {!hideChrome ? (
-        <header className="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-md">
-          <div className="mx-auto max-w-xl px-4 pb-2 pt-1 sm:px-6">
+        <header className="sticky top-0 z-30 border-b border-zinc-100 bg-white">
+          <div className={`${COL} pb-2 pt-1`}>
             <AppBrandHeader bare />
             <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-500">
               オフィス
@@ -554,12 +592,40 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
           }}
         />
       ) : null}
+      {company && !company.secretaryGuideDone && !needsSetup && !boot ? (
+        <SecretaryTip
+          secretary={
+            castMemberByRole(company.cast ?? [], "secretary") ??
+            company.cast?.[0] ?? {
+              id: "sec",
+              role: "secretary",
+              name: "秘書",
+              look: { skin: 1, hair: 1, accessory: 0, color: 0 },
+            }
+          }
+          loginStreak={company.loginStreak ?? 0}
+          onDone={() => {
+            void (async () => {
+              try {
+                const next = await markSecretaryGuideDone();
+                setPayload((p) => (p ? { ...p, company: next } : p));
+              } catch {
+                setPayload((p) =>
+                  p?.company
+                    ? { ...p, company: { ...p.company, secretaryGuideDone: true } }
+                    : p,
+                );
+              }
+            })();
+          }}
+        />
+      ) : null}
       {!hideChrome && !embedded ? <AppBottomNav /> : null}
     </>
   );
 
   return (
-    <div className={embedded ? undefined : "min-h-[100dvh] overflow-x-hidden bg-[#FFF7ED] pb-bottom-nav"}>
+    <div className={embedded ? undefined : "min-h-[100dvh] overflow-x-hidden bg-white pb-bottom-nav"}>
       {shell}
     </div>
   );

@@ -12,10 +12,37 @@ import {
   scoreAnswerWithClaude,
 } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { ensureCompanyCast } from "@/lib/office/cast";
+import { unlockCodexCell, type CodexCell } from "@/lib/office/codex";
+import {
+  clipPeerAnswer,
+  OFFICE_PEER_VOTES_PER_DAY,
+  peerDayKey,
+  shouldHidePeer,
+  type PeerSolution,
+} from "@/lib/office/peers";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import {
+  defaultStageForType,
+  parseIncidentStageFields,
+} from "@/lib/office/incidentValidate";
+import {
+  applyMeterDecay,
+  applyMetersDelta,
+  computeMetersDelta,
+  ensureMeters,
+  lowestMeterKey,
+} from "@/lib/office/meters";
 import { isMangledOfflineDescription, offlineIncident } from "@/lib/office/offline";
+import {
+  buildResultPanels,
+  parseMetersDelta,
+  parseResultPanels,
+  reactionForTone,
+} from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
+import { seasonThemeFor } from "@/lib/office/seasonTheme";
 import { isTooSimilar } from "@/lib/office/similarity";
 import { pickIncidentSize } from "@/lib/office/sizePick";
 import { computeStamina } from "@/lib/office/stamina";
@@ -27,9 +54,12 @@ import {
 } from "@/lib/office/strategy";
 import { targetsPassValidation } from "@/lib/office/targetValidate";
 import { parseOfficeLeagueId } from "@/lib/office/tiers";
+import { nextLoginStreak } from "@/lib/office/loginStreak";
+import { parseCastEmotion, parseOfficeScene } from "@/lib/office/scenes";
 import type {
   IncidentStrategy,
   IncidentTargetInternal,
+  IncidentType,
   OfficeCompany,
   OfficeIncident,
   OfficeSeasonScore,
@@ -45,6 +75,12 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
   const about = aboutRaw && aboutRaw.trim() ? aboutRaw.trim() : null;
   const industry =
     parseOfficeIndustry(row.industry) ?? guessIndustryFromAbout(about);
+  const cast = ensureCompanyCast(
+    row.cast_members ?? row.cast,
+    String(row.id ?? row.user_id ?? "x"),
+  );
+  const metersUpdatedAt = row.meters_updated_at ? String(row.meters_updated_at) : null;
+  const meters = applyMeterDecay(ensureMeters(row.meters), metersUpdatedAt);
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -58,7 +94,41 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     staminaUpdatedAt: String(row.stamina_updated_at),
     leagueId: parseOfficeLeagueId(row.league_id),
     createdAt: String(row.created_at),
+    cast,
+    meters,
+    metersUpdatedAt,
+    shareOptOut: Boolean(row.share_opt_out ?? false),
+    sfxMuted: row.sfx_muted == null ? true : Boolean(row.sfx_muted),
+    secretaryGuideDone: Boolean(row.secretary_guide_done ?? false),
+    loginStreak: Number(row.login_streak ?? 0),
+    loginLastDate: row.login_last_date == null ? null : String(row.login_last_date).slice(0, 10),
   };
+}
+
+/** cast/meters 未設定の既存会社を埋める（失敗しても読み取りは続行） */
+async function backfillCastMeters(
+  admin: SupabaseClient,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const needsCast = row.cast_members == null && row.cast == null;
+  const needsMeters = row.meters == null;
+  if (!needsCast && !needsMeters) return row;
+  const cast = ensureCompanyCast(row.cast_members ?? row.cast, String(row.id ?? "x"));
+  const meters = ensureMeters(row.meters);
+  const patch: Record<string, unknown> = {};
+  if (needsCast) patch.cast_members = cast;
+  if (needsMeters) {
+    patch.meters = meters;
+    patch.meters_updated_at = new Date().toISOString();
+  }
+  const { data, error } = await admin
+    .from("office_companies")
+    .update(patch)
+    .eq("id", String(row.id))
+    .select("*")
+    .single();
+  if (error || !data) return { ...row, ...patch };
+  return data as Record<string, unknown>;
 }
 
 function readTargetsInternal(row: Record<string, unknown>): IncidentTargetInternal[] {
@@ -72,19 +142,34 @@ function readStrategies(row: Record<string, unknown>): IncidentStrategy[] {
 function mapIncident(row: Record<string, unknown>): OfficeIncident {
   const strategies = readStrategies(row);
   const targetsInternal = readTargetsInternal(row);
+  const type = row.type as OfficeIncident["type"];
+  const stage =
+    parseIncidentStageFields({
+      scene: row.scene,
+      speaker: row.speaker,
+      line: row.line,
+      stakes: row.stakes,
+      meters_at_risk: row.meters_at_risk,
+    }) ?? defaultStageForType(type);
   return {
     id: String(row.id),
     userId: String(row.user_id),
     companyId: String(row.company_id),
     title: String(row.title),
     description: String(row.description),
-    type: row.type as OfficeIncident["type"],
+    type,
     size: Number(row.size) as 1 | 2 | 3,
     status: row.status as OfficeIncident["status"],
     strategies,
     targets: stripTargetFit(targetsInternal),
     strategyRerolls: Math.max(0, Math.min(1, Number(row.strategy_rerolls ?? 0))),
     createdAt: String(row.created_at),
+    scene: stage.scene,
+    speaker: stage.speaker,
+    line: stage.line,
+    stakes: stage.stakes,
+    metersAtRisk: stage.metersAtRisk,
+    followupOf: row.followup_of ? String(row.followup_of) : null,
   };
 }
 
@@ -118,6 +203,13 @@ function mapSubmission(row: Record<string, unknown>): OfficeSubmission {
     wasSimilar: Boolean(row.was_similar),
     seasonKey: String(row.season_key),
     createdAt: String(row.created_at),
+    panels: parseResultPanels(row.panels),
+    strategyTitle: row.strategy_title == null ? null : String(row.strategy_title),
+    castMemberId: row.cast_member_id == null ? null : String(row.cast_member_id),
+    npcLine: row.npc_line == null ? null : String(row.npc_line),
+    reactionEmotion: parseCastEmotion(row.reaction_emotion),
+    metersDelta: parseMetersDelta(row.meters_delta),
+    safe: row.safe == null ? true : Boolean(row.safe),
   };
 }
 
@@ -168,7 +260,23 @@ export async function dbGetCompany(admin: SupabaseClient, userId: string) {
       pendingResult: null as OfficeSeasonScore | null,
     };
   }
-  const company = mapCompany(data as Record<string, unknown>);
+  const row = await backfillCastMeters(admin, data as Record<string, unknown>);
+  const company = mapCompany(row);
+  const streak = nextLoginStreak(company.loginStreak ?? 0, company.loginLastDate);
+  if (streak.changed) {
+    company.loginStreak = streak.streak;
+    company.loginLastDate = streak.lastDate;
+    const streakPatch = await admin
+      .from("office_companies")
+      .update({
+        login_streak: streak.streak,
+        login_last_date: streak.lastDate,
+      })
+      .eq("user_id", userId);
+    if (streakPatch.error) {
+      // SQL未適用時はメモリ上のみ
+    }
+  }
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
   if (
     stamina.value !== company.stamina ||
@@ -221,6 +329,9 @@ export async function dbCreateCompany(
     .maybeSingle();
   if (existing) throw new Error("すでに会社があるよ");
 
+  const now = new Date().toISOString();
+  const cast = ensureCompanyCast(null, userId);
+  const meters = ensureMeters(null);
   const { data, error } = await admin
     .from("office_companies")
     .insert({
@@ -230,7 +341,11 @@ export async function dbCreateCompany(
       industry,
       league_id: "rookie",
       stamina: 5,
-      stamina_updated_at: new Date().toISOString(),
+      stamina_updated_at: now,
+      cast_members: cast,
+      meters,
+      meters_updated_at: now,
+      sfx_muted: true,
     })
     .select("*")
     .single();
@@ -329,11 +444,50 @@ export async function dbCurrentIncident(
     .limit(5);
   const recentTitles = (recentRows ?? []).map((r) => String((r as { title: string }).title));
 
+  const theme = seasonThemeFor();
+  const castSummary = company.cast.map((c) => `${c.role}:${c.name}`).join(" / ");
+  let followup: { title: string; strategyTitle: string; storyTone: string; id: string } | null =
+    null;
+  if (Math.random() < 0.2) {
+    const { data: recentSubs } = await admin
+      .from("office_submissions")
+      .select("incident_id, strategy_title, story_tone")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    const pick = (recentSubs ?? [])[Math.floor(Math.random() * (recentSubs?.length || 1))];
+    if (pick) {
+      const { data: prevInc } = await admin
+        .from("office_incidents")
+        .select("id, title")
+        .eq("id", String((pick as { incident_id: string }).incident_id))
+        .maybeSingle();
+      if (prevInc) {
+        followup = {
+          id: String((prevInc as { id: string }).id),
+          title: String((prevInc as { title: string }).title),
+          strategyTitle: String((pick as { strategy_title?: string }).strategy_title ?? "作戦"),
+          storyTone: String((pick as { story_tone?: string }).story_tone ?? "ok"),
+        };
+      }
+    }
+  }
+
   const gen = await generateIncidentWithClaude({
     companyName: company.name,
     companyAbout: company.about,
     recentTitles,
     industryLabel: industryLabelJa(company.industry),
+    castSummary,
+    lowestMeter: lowestMeterKey(company.meters),
+    seasonTheme: `${theme.labelJa}（${theme.promptHint}）`,
+    followup: followup
+      ? {
+          title: followup.title,
+          strategyTitle: followup.strategyTitle,
+          storyTone: followup.storyTone,
+        }
+      : null,
   });
   if (!gen.ok) throw new Error(gen.message);
 
@@ -350,6 +504,12 @@ export async function dbCurrentIncident(
       strategies: gen.strategies,
       targets: gen.targets,
       strategy_rerolls: 0,
+      scene: gen.scene,
+      speaker: { cast_role: gen.speaker.castRole, emotion: gen.speaker.emotion },
+      line: gen.line,
+      stakes: gen.stakes,
+      meters_at_risk: gen.metersAtRisk,
+      followup_of: followup?.id ?? null,
     })
     .select("*")
     .single();
@@ -505,9 +665,45 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     strategyKind,
     strategyId,
     wasSimilar,
+    meters: company.meters,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
+  let codexBonus = 0;
+  if (incident.scene) {
+    try {
+      codexBonus = await dbUnlockCodex(
+        admin,
+        userId,
+        incident.scene,
+        incident.type,
+        scored.scores.total,
+      );
+    } catch {
+      codexBonus = 0;
+    }
+  }
+  const totalGain = rev.revenue + codexBonus;
+  const growth = applyRevenueGrowth(company.totalRevenue, totalGain);
   const season = await ensureSeasonRow(admin, userId, company.leagueId);
+
+  const metersDelta = computeMetersDelta({
+    scoreTotal: scored.scores.total,
+    strategyKind,
+    metersAtRisk: incident.metersAtRisk ?? [],
+  });
+  const nextMeters = applyMetersDelta(company.meters, metersDelta);
+  const reaction = reactionForTone(scored.scores.storyTone);
+  const speakerMember =
+    company.cast.find((c) => c.role === incident.speaker?.castRole) ?? company.cast[0] ?? null;
+  const panels = buildResultPanels({
+    incidentTitle: incident.title,
+    incidentLine: incident.line,
+    incidentDescription: incident.description,
+    strategyTitle,
+    targetLabels,
+    story: scored.scores.story,
+    storyTone: scored.scores.storyTone,
+    comment: scored.scores.comment,
+  });
 
   const { error: incErr } = await admin
     .from("office_incidents")
@@ -519,62 +715,100 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     throw new Error(incErr.message);
   }
 
-  const { data: subRow, error: subErr } = await admin
-    .from("office_submissions")
-    .insert({
-      user_id: userId,
-      company_id: company.id,
-      incident_id: incident.id,
-      answer: text,
-      strategy_id: strategyId,
-      strategy_kind: strategyKind,
-      target_ids: targetIds,
-      target_other_text: hasOther ? otherText : null,
-      score_solve: scored.scores.solve,
-      score_fun: scored.scores.fun,
-      score_feasible: scored.scores.feasible,
-      score_fit: scored.scores.fit,
-      score_total: scored.scores.total,
-      comment: scored.scores.comment,
-      story: scored.scores.story,
-      story_tone: scored.scores.storyTone,
-      next_hint: scored.scores.nextHint,
-      multiplier: rev.multiplier,
-      is_original: rev.isOriginal,
-      revenue: rev.revenue,
-      was_similar: wasSimilar,
-      season_key: season.seasonKey,
-    })
-    .select("*")
-    .single();
-  if (subErr || !subRow) {
-    await admin.rpc("office_restore_stamina", { p_user_id: userId });
-    await admin.from("office_incidents").update({ status: "open" }).eq("id", incident.id);
-    throw new Error(subErr?.message ?? "submit failed");
+  const baseSub = {
+    user_id: userId,
+    company_id: company.id,
+    incident_id: incident.id,
+    answer: text,
+    strategy_id: strategyId,
+    strategy_kind: strategyKind,
+    target_ids: targetIds,
+    target_other_text: hasOther ? otherText : null,
+    score_solve: scored.scores.solve,
+    score_fun: scored.scores.fun,
+    score_feasible: scored.scores.feasible,
+    score_fit: scored.scores.fit,
+    score_total: scored.scores.total,
+    comment: scored.scores.comment,
+    story: scored.scores.story,
+    story_tone: scored.scores.storyTone,
+    next_hint: scored.scores.nextHint,
+    multiplier: rev.multiplier,
+    is_original: rev.isOriginal,
+    revenue: rev.revenue,
+    was_similar: wasSimilar,
+    season_key: season.seasonKey,
+  };
+  const stageSub = {
+    cast_member_id: speakerMember?.id ?? null,
+    strategy_title: strategyTitle,
+    panels,
+    npc_line: reaction.line,
+    reaction_emotion: reaction.emotion,
+    meters_delta: metersDelta,
+    safe: true,
+  };
+
+  let subRow: Record<string, unknown> | null = null;
+  {
+    const first = await admin
+      .from("office_submissions")
+      .insert({ ...baseSub, ...stageSub })
+      .select("*")
+      .single();
+    if (!first.error && first.data) {
+      subRow = first.data as Record<string, unknown>;
+    } else {
+      // SQL未適用時は旧カラムのみでフォールバック
+      const second = await admin.from("office_submissions").insert(baseSub).select("*").single();
+      if (second.error || !second.data) {
+        await admin.rpc("office_restore_stamina", { p_user_id: userId });
+        await admin.from("office_incidents").update({ status: "open" }).eq("id", incident.id);
+        throw new Error(second.error?.message ?? first.error?.message ?? "submit failed");
+      }
+      subRow = second.data as Record<string, unknown>;
+    }
   }
 
-  await admin
+  const metersNow = new Date().toISOString();
+  const companyPatch: Record<string, unknown> = {
+    total_revenue: growth.totalRevenue,
+    level: growth.level,
+  };
+  const metersPatch = await admin
     .from("office_companies")
     .update({
-      total_revenue: growth.totalRevenue,
-      level: growth.level,
+      ...companyPatch,
+      meters: nextMeters,
+      meters_updated_at: metersNow,
     })
     .eq("user_id", userId);
+  if (metersPatch.error) {
+    await admin.from("office_companies").update(companyPatch).eq("user_id", userId);
+  }
 
   await admin
     .from("office_season_scores")
     .update({
-      revenue: season.revenue + rev.revenue,
+      revenue: season.revenue + totalGain,
       league_id: company.leagueId,
     })
     .eq("id", season.id);
 
   const refreshed = await dbGetCompany(admin, userId);
+  const submission = mapSubmission(subRow);
+  if (!submission.panels) submission.panels = panels;
+  if (!submission.strategyTitle) submission.strategyTitle = strategyTitle;
+  if (!submission.npcLine) submission.npcLine = reaction.line;
+  if (!submission.reactionEmotion) submission.reactionEmotion = reaction.emotion;
+  if (!submission.metersDelta) submission.metersDelta = metersDelta;
+  if (!submission.castMemberId && speakerMember) submission.castMemberId = speakerMember.id;
   return {
-    submission: mapSubmission(subRow as Record<string, unknown>),
+    submission,
     company: refreshed.company!,
     seasonRevenue: refreshed.seasonRevenue,
     stamina: refreshed.stamina,
+    codexBonus,
   };
 }
 
@@ -639,4 +873,213 @@ export async function dbMarkResultSeen(admin: SupabaseClient, userId: string, se
     .update({ result_seen: true })
     .eq("user_id", userId)
     .eq("season_key", seasonKey);
+}
+
+export async function dbMarkSecretaryGuideDone(admin: SupabaseClient, userId: string) {
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({ secretary_guide_done: true })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "guide update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbSetSfxMuted(admin: SupabaseClient, userId: string, muted: boolean) {
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({ sfx_muted: muted })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "sfx update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbGetCodex(admin: SupabaseClient, userId: string): Promise<CodexCell[]> {
+  const { data, error } = await admin
+    .from("office_codex")
+    .select("scene, type, first_solved_at, best_score")
+    .eq("user_id", userId);
+  if (error || !data) return [];
+  const cells: CodexCell[] = [];
+  for (const row of data as Record<string, unknown>[]) {
+    const scene = parseOfficeScene(row.scene);
+    const type = String(row.type ?? "") as IncidentType;
+    if (!scene) continue;
+    if (!["pinch", "chance", "people", "rival"].includes(type)) continue;
+    cells.push({
+      scene,
+      type,
+      firstSolvedAt: String(row.first_solved_at ?? new Date().toISOString()),
+      bestScore: Math.max(0, Math.min(100, Number(row.best_score ?? 0))),
+    });
+  }
+  return cells;
+}
+
+async function dbUnlockCodex(
+  admin: SupabaseClient,
+  userId: string,
+  scene: NonNullable<OfficeIncident["scene"]>,
+  type: IncidentType,
+  scoreTotal: number,
+): Promise<number> {
+  const existing = await dbGetCodex(admin, userId);
+  const unlocked = unlockCodexCell(existing, scene, type, scoreTotal);
+  const { error } = await admin.from("office_codex").upsert(
+    {
+      user_id: userId,
+      scene: unlocked.cell.scene,
+      type: unlocked.cell.type,
+      first_solved_at: unlocked.cell.firstSolvedAt,
+      best_score: unlocked.cell.bestScore,
+    },
+    { onConflict: "user_id,scene,type" },
+  );
+  if (error) return 0;
+  return unlocked.bonus;
+}
+
+export async function dbListPeers(
+  admin: SupabaseClient,
+  userId: string,
+  scene: NonNullable<OfficeIncident["scene"]>,
+  type: IncidentType,
+): Promise<PeerSolution[]> {
+  const { data: subs } = await admin
+    .from("office_submissions")
+    .select(
+      "id, user_id, answer, strategy_title, score_total, safe, incident_id, office_incidents!inner(scene, type), office_companies!inner(share_opt_out)",
+    )
+    .eq("office_incidents.scene", scene)
+    .eq("office_incidents.type", type)
+    .eq("safe", true)
+    .neq("user_id", userId)
+    .order("score_total", { ascending: false })
+    .limit(24);
+
+  if (!subs?.length) return [];
+
+  const ids = (subs as Record<string, unknown>[]).map((s) => String(s.id));
+  const [{ data: votes }, { data: reports }] = await Promise.all([
+    admin.from("office_peer_votes").select("submission_id, voter_id").in("submission_id", ids),
+    admin.from("office_peer_reports").select("submission_id, reporter_id").in("submission_id", ids),
+  ]);
+
+  const voteCount = new Map<string, number>();
+  const myVotes = new Set<string>();
+  for (const v of (votes ?? []) as { submission_id: string; voter_id: string }[]) {
+    voteCount.set(v.submission_id, (voteCount.get(v.submission_id) ?? 0) + 1);
+    if (v.voter_id === userId) myVotes.add(v.submission_id);
+  }
+  const reportCount = new Map<string, number>();
+  const myReports = new Set<string>();
+  for (const r of (reports ?? []) as { submission_id: string; reporter_id: string }[]) {
+    reportCount.set(r.submission_id, (reportCount.get(r.submission_id) ?? 0) + 1);
+    if (r.reporter_id === userId) myReports.add(r.submission_id);
+  }
+
+  const out: PeerSolution[] = [];
+  for (const raw of subs as Record<string, unknown>[]) {
+    const id = String(raw.id);
+    if (shouldHidePeer(reportCount.get(id) ?? 0)) continue;
+    const co = raw.office_companies as { share_opt_out?: boolean } | { share_opt_out?: boolean }[] | null;
+    const company = Array.isArray(co) ? co[0] : co;
+    if (company?.share_opt_out) continue;
+    out.push({
+      id,
+      answer: clipPeerAnswer(String(raw.answer ?? "")),
+      strategyTitle: raw.strategy_title == null ? null : String(raw.strategy_title),
+      scoreTotal: Number(raw.score_total ?? 0),
+      voteCount: voteCount.get(id) ?? 0,
+      votedByMe: myVotes.has(id),
+      reportedByMe: myReports.has(id),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export async function dbVotePeer(
+  admin: SupabaseClient,
+  userId: string,
+  submissionId: string,
+): Promise<PeerSolution[]> {
+  const { data: sub } = await admin
+    .from("office_submissions")
+    .select("id, user_id, office_incidents!inner(scene, type)")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (!sub) throw new Error("解決策が見つからないよ");
+  if (String((sub as { user_id: string }).user_id) === userId) {
+    throw new Error("自分の解決策には投票できないよ");
+  }
+  const incident = (sub as { office_incidents: { scene: string; type: string } | { scene: string; type: string }[] })
+    .office_incidents;
+  const inc = Array.isArray(incident) ? incident[0] : incident;
+  const scene = parseOfficeScene(inc?.scene);
+  const type = String(inc?.type ?? "") as IncidentType;
+  if (!scene || !["pinch", "chance", "people", "rival"].includes(type)) {
+    throw new Error("この解決策は対象外だよ");
+  }
+
+  const dayKey = peerDayKey();
+  const { count } = await admin
+    .from("office_peer_votes")
+    .select("id", { count: "exact", head: true })
+    .eq("voter_id", userId)
+    .eq("day_key", dayKey);
+  const { data: existing } = await admin
+    .from("office_peer_votes")
+    .select("id")
+    .eq("voter_id", userId)
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+  if (!existing) {
+    if ((count ?? 0) >= OFFICE_PEER_VOTES_PER_DAY) {
+      throw new Error(`投票は1日${OFFICE_PEER_VOTES_PER_DAY}回までだよ`);
+    }
+    const { error } = await admin.from("office_peer_votes").insert({
+      voter_id: userId,
+      submission_id: submissionId,
+      day_key: dayKey,
+    });
+    if (error) throw new Error(error.message);
+  }
+  return dbListPeers(admin, userId, scene, type);
+}
+
+export async function dbReportPeer(
+  admin: SupabaseClient,
+  userId: string,
+  submissionId: string,
+): Promise<PeerSolution[]> {
+  const { data: sub } = await admin
+    .from("office_submissions")
+    .select("id, office_incidents!inner(scene, type)")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (!sub) throw new Error("解決策が見つからないよ");
+  const incident = (sub as { office_incidents: { scene: string; type: string } | { scene: string; type: string }[] })
+    .office_incidents;
+  const inc = Array.isArray(incident) ? incident[0] : incident;
+  const scene = parseOfficeScene(inc?.scene);
+  const type = String(inc?.type ?? "") as IncidentType;
+  if (!scene) throw new Error("この解決策は対象外だよ");
+
+  await admin.from("office_peer_reports").upsert(
+    { reporter_id: userId, submission_id: submissionId },
+    { onConflict: "reporter_id,submission_id", ignoreDuplicates: true },
+  );
+
+  const { count } = await admin
+    .from("office_peer_reports")
+    .select("id", { count: "exact", head: true })
+    .eq("submission_id", submissionId);
+  if (shouldHidePeer(count ?? 0)) {
+    await admin.from("office_submissions").update({ safe: false }).eq("id", submissionId);
+  }
+  return dbListPeers(admin, userId, scene, type);
 }

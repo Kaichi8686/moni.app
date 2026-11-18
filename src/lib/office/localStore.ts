@@ -4,13 +4,25 @@ import {
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
+import { ensureCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
+import {
+  applyMeterDecay,
+  applyMetersDelta,
+  computeMetersDelta,
+  defaultMeters,
+  ensureMeters,
+} from "@/lib/office/meters";
 import {
   isMangledOfflineDescription,
   offlineIncident,
   offlineScores,
   offlineStrategies,
 } from "@/lib/office/offline";
+import { parseCodex, unlockCodexCell, type CodexCell } from "@/lib/office/codex";
+import { nextLoginStreak } from "@/lib/office/loginStreak";
+import { localPublishPeer } from "@/lib/office/peersLocal";
+import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
 import { applyRevenueGrowth, calcRevenue } from "@/lib/office/revenue";
 import { seasonKeyFor } from "@/lib/office/season";
 import { isTooSimilar } from "@/lib/office/similarity";
@@ -36,10 +48,11 @@ type Store = {
   incidents: OfficeIncident[];
   submissions: OfficeSubmission[];
   seasons: OfficeSeasonScore[];
+  codex: CodexCell[];
 };
 
 function empty(): Store {
-  return { company: null, incidents: [], submissions: [], seasons: [] };
+  return { company: null, incidents: [], submissions: [], seasons: [], codex: [] };
 }
 
 function read(): Store {
@@ -47,7 +60,12 @@ function read(): Store {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return empty();
-    return { ...empty(), ...(JSON.parse(raw) as Store) };
+    const parsed = JSON.parse(raw) as Partial<Store>;
+    return {
+      ...empty(),
+      ...parsed,
+      codex: parseCodex(parsed.codex),
+    };
   } catch {
     return empty();
   }
@@ -116,8 +134,25 @@ export function localGetCompany(userId: string): {
     company.industry = guessIndustryFromAbout(company.about);
     write(store);
   }
+  if (!company.cast?.length) {
+    company.cast = ensureCompanyCast(null, company.id);
+    write(store);
+  }
+  if (!company.meters) {
+    company.meters = defaultMeters();
+    company.metersUpdatedAt = new Date().toISOString();
+    write(store);
+  } else {
+    company.meters = applyMeterDecay(ensureMeters(company.meters), company.metersUpdatedAt);
+  }
   if (company.name.length > OFFICE_NAME_MAX) {
     company.name = company.name.slice(0, OFFICE_NAME_MAX);
+    write(store);
+  }
+  const streak = nextLoginStreak(company.loginStreak ?? 0, company.loginLastDate);
+  if (streak.changed) {
+    company.loginStreak = streak.streak;
+    company.loginLastDate = streak.lastDate;
     write(store);
   }
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt));
@@ -133,6 +168,22 @@ export function localGetCompany(userId: string): {
   return { company, stamina, seasonRevenue: season.revenue, pendingResult };
 }
 
+export function localMarkSecretaryGuideDone(userId: string): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  store.company.secretaryGuideDone = true;
+  write(store);
+  return store.company;
+}
+
+export function localSetSfxMuted(userId: string, muted: boolean): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  store.company.sfxMuted = muted;
+  write(store);
+  return store.company;
+}
+
 export function localCreateCompany(userId: string, name: string, aboutRaw: string): OfficeCompany {
   const store = read();
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
@@ -141,8 +192,9 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
   if (!about) throw new Error("会社の説明を書いてね");
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
+  const id = uid();
   const company: OfficeCompany = {
-    id: uid(),
+    id,
     userId,
     name: trimmed,
     about,
@@ -154,6 +206,14 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
     staminaUpdatedAt: now,
     leagueId: "rookie",
     createdAt: now,
+    cast: ensureCompanyCast(null, id),
+    meters: defaultMeters(),
+    metersUpdatedAt: now,
+    sfxMuted: true,
+    secretaryGuideDone: false,
+    shareOptOut: false,
+    loginStreak: 0,
+    loginLastDate: null,
   };
   store.company = company;
   ensureSeason(store, userId, "rookie");
@@ -240,6 +300,12 @@ export async function localCurrentIncident(
     targets: stripTargetFit(gen.targets),
     strategyRerolls: 0,
     createdAt: new Date().toISOString(),
+    scene: gen.scene,
+    speaker: gen.speaker,
+    line: gen.line,
+    stakes: gen.stakes,
+    metersAtRisk: gen.metersAtRisk,
+    followupOf: null,
   };
   store.incidents.push(incident);
   write(store);
@@ -259,6 +325,12 @@ export function localRerollStrategies(userId: string): OfficeIncident {
   return incident;
 }
 
+export function localGetCodex(userId: string): CodexCell[] {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) return [];
+  return store.codex ?? [];
+}
+
 export async function localSubmit(
   userId: string,
   input: OfficeSubmitInput,
@@ -267,6 +339,7 @@ export async function localSubmit(
   company: OfficeCompany;
   seasonRevenue: number;
   stamina: ReturnType<typeof computeStamina>;
+  codexBonus: number;
 }> {
   const store = read();
   const company = store.company;
@@ -319,20 +392,60 @@ export async function localSubmit(
     .slice(0, 10)
     .map((s) => s.answer);
   const wasSimilar = isTooSimilar(text, recent, OFFICE_SIMILARITY_THRESHOLD);
+  const metersBefore = company.meters ?? defaultMeters();
   const rev = calcRevenue({
     scoreTotal: scores.total,
     size: incident.size,
     strategyKind,
     strategyId,
     wasSimilar,
+    meters: metersBefore,
   });
-  const growth = applyRevenueGrowth(company.totalRevenue, rev.revenue);
+  let codexBonus = 0;
+  if (incident.scene) {
+    const unlocked = unlockCodexCell(
+      store.codex ?? [],
+      incident.scene,
+      incident.type,
+      scores.total,
+    );
+    store.codex = unlocked.cells;
+    codexBonus = unlocked.bonus;
+  }
+  const totalGain = rev.revenue + codexBonus;
+  const growth = applyRevenueGrowth(company.totalRevenue, totalGain);
   company.totalRevenue = growth.totalRevenue;
   company.level = growth.level;
 
+  const metersDelta = computeMetersDelta({
+    scoreTotal: scores.total,
+    strategyKind,
+    metersAtRisk: incident.metersAtRisk ?? [],
+  });
+  company.meters = applyMetersDelta(metersBefore, metersDelta);
+  company.metersUpdatedAt = new Date().toISOString();
+
+  const targetLabels = targetIds.map((tid) => {
+    if (tid === "other") return otherText || "その他";
+    return incident.targets.find((t) => t.id === tid)?.label ?? tid;
+  });
+  const reaction = reactionForTone(scores.storyTone);
+  const speakerMember =
+    company.cast.find((c) => c.role === incident.speaker?.castRole) ?? company.cast[0] ?? null;
+  const panels = buildResultPanels({
+    incidentTitle: incident.title,
+    incidentLine: incident.line,
+    incidentDescription: incident.description,
+    strategyTitle,
+    targetLabels,
+    story: scores.story,
+    storyTone: scores.storyTone,
+    comment: scores.comment,
+  });
+
   incident.status = "solved";
   const season = ensureSeason(store, userId, company.leagueId);
-  season.revenue += rev.revenue;
+  season.revenue += totalGain;
   season.leagueId = company.leagueId;
 
   const submission: OfficeSubmission = {
@@ -360,15 +473,36 @@ export async function localSubmit(
     wasSimilar,
     seasonKey: season.seasonKey,
     createdAt: new Date().toISOString(),
+    panels,
+    strategyTitle,
+    castMemberId: speakerMember?.id ?? null,
+    npcLine: reaction.line,
+    reactionEmotion: reaction.emotion,
+    metersDelta,
+    safe: true,
   };
   store.submissions.push(submission);
   write(store);
+
+  if (incident.scene && !company.shareOptOut) {
+    localPublishPeer({
+      id: submission.id,
+      userId,
+      scene: incident.scene,
+      type: incident.type,
+      answer: text,
+      strategyTitle,
+      scoreTotal: scores.total,
+      shareOptOut: company.shareOptOut,
+    });
+  }
 
   return {
     submission,
     company,
     seasonRevenue: season.revenue,
     stamina: computeStamina(company.stamina, new Date(company.staminaUpdatedAt)),
+    codexBonus,
   };
 }
 

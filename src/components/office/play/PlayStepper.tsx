@@ -2,7 +2,8 @@
 
 export type PlayStep = "incident" | "strategy" | "target" | "write" | "result";
 
-const DOT_STEPS: PlayStep[] = ["incident", "strategy", "target", "write"];
+/** 作戦ステップ以降のみドット表示 */
+const DOT_STEPS: PlayStep[] = ["strategy", "target", "write"];
 
 type Props = {
   step: PlayStep;
@@ -11,8 +12,9 @@ type Props = {
 };
 
 export function PlayStepper({ step, onBack, canBack }: Props) {
-  if (step === "result") return null;
+  if (step === "result" || step === "incident") return null;
   const idx = DOT_STEPS.indexOf(step);
+  if (idx < 0) return null;
 
   return (
     <div className="flex items-center justify-between gap-3">

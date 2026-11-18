@@ -31,4 +31,21 @@ describe("office revenue", () => {
     assert.equal(r.totalRevenue, 600);
     assert.equal(r.level, 2);
   });
+
+  it("applies meters all-high bonus once", () => {
+    const base = calcRevenue({
+      scoreTotal: 100,
+      size: 1,
+      strategyKind: "safe",
+      strategyId: "s1",
+    });
+    const boosted = calcRevenue({
+      scoreTotal: 100,
+      size: 1,
+      strategyKind: "safe",
+      strategyId: "s1",
+      meters: { customers: 70, morale: 70, reputation: 70, cash: 70 },
+    });
+    assert.equal(boosted.revenue, Math.round(base.revenue * 1.1));
+  });
 });
