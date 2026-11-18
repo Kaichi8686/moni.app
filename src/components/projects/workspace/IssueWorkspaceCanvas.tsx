@@ -109,6 +109,12 @@ const TEXT_EDIT_KEEPALIVE_MS = 1800;
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 編集開始直後の blur / 誤閉じでキーボードを落とさない */
 const TEXT_EDIT_START_GRACE_MS = 900;
+/** 上の完了／挿入の下でカードが真ん中に見えるよう、静止時に少し上げる */
+const SHEET_CARD_REST_LIFT_PX = 40;
+/** 文字入力時に紙を上へ動かす量（滑らかにアニメ） */
+const SHEET_CARD_EDIT_LIFT_PX = 96;
+/** 紙の上下アニメ */
+const SHEET_CARD_LIFT_MS = 340;
 
 /** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
 function keyboardStillCovering() {
@@ -2971,12 +2977,6 @@ function SheetFullscreenEditor({
     }
   }
 
-  /** ソフトキーボード表示中は余白タップで編集終了しない */
-  function overlayTapExitAllowed() {
-    if (keyboard.open) return false;
-    return true;
-  }
-
   /** 編集中・キーボード表示中・下降直後は「置く」ダブルタップを無効化 */
   function placeTextDblTapAllowed() {
     if (editingOverlayId || keyboard.open) return false;
@@ -3193,6 +3193,9 @@ function SheetFullscreenEditor({
     const target = event.target as HTMLElement;
     if (target.closest("[data-overlay-node]") || target.closest("[data-overlay-handle]")) return;
 
+    // 文字編集中はカード余白・背景タップを無視（キーボードを落とさない）
+    if (editingOverlayId) return;
+
     const pt = cardLocalPoint(event.clientX, event.clientY);
 
     // 余白タップでリサイズモード解除
@@ -3202,7 +3205,6 @@ function SheetFullscreenEditor({
     if (editTool === "text") {
       const now = Date.now();
       const prev = lastTap.current;
-      // キーボード表示中・下降中のタップは「置く」ダブルタップに使わない
       if (placeTextDblTapAllowed() && prev && now - prev.t < 420 && Math.hypot(pt.x - prev.x, pt.y - prev.y) < 8) {
         placeTextAt(pt.x, pt.y);
         lastTap.current = null;
@@ -3213,12 +3215,8 @@ function SheetFullscreenEditor({
       } else {
         lastTap.current = null;
       }
-      // キーボード表示中は余白タップで編集終了しない（キーボード閉じで終了）
-      if (editingOverlayId && !overlayTapExitAllowed()) return;
       setSelectedOverlayIds([]);
       setOverlayHandlesVisible(false);
-      if (editingOverlayId) finishOverlayTextEdit();
-      else setEditingOverlayId(null);
       return;
     }
 
@@ -3236,11 +3234,8 @@ function SheetFullscreenEditor({
       return;
     }
 
-    if (editingOverlayId && !overlayTapExitAllowed()) return;
     setSelectedOverlayIds([]);
     setOverlayHandlesVisible(false);
-    if (editingOverlayId) finishOverlayTextEdit();
-    else setEditingOverlayId(null);
   }
 
   function onCardPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -3445,15 +3440,23 @@ function SheetFullscreenEditor({
       >
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
-      {/* 画面全体で中央配置（ヘッダー分で下に寄らない） */}
+      {/* 上バーの下で真ん中に見えるよう、静止時は少し上げて中央配置 */}
       <div
         ref={stageRef}
         className="absolute inset-0 z-10 flex items-center justify-center px-3"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
       >
+            <div
+              className="will-change-transform"
+              style={{
+                transform: `translateY(-${SHEET_CARD_REST_LIFT_PX + (editingOverlayId ? SHEET_CARD_EDIT_LIFT_PX : 0)}px)`,
+                transition: `transform ${SHEET_CARD_LIFT_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+              }}
+            >
             <div
               ref={cardRef}
               data-sheet-card
-              className={`relative touch-none select-none overflow-visible rounded-2xl${editingOverlayId ? "" : " will-change-transform"}`}
+              className="relative touch-none select-none overflow-visible rounded-2xl"
               style={{
                 width: cardSize.w > 0 ? cardSize.w : undefined,
                 height: cardSize.h > 0 ? cardSize.h : undefined,
@@ -3462,7 +3465,6 @@ function SheetFullscreenEditor({
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
                 userSelect: "none",
-                transition: "none",
               }}
               onPointerDown={onCardPointerDown}
               onPointerMove={onCardPointerMove}
@@ -3748,6 +3750,7 @@ function SheetFullscreenEditor({
                 })}
               </div>
             </div>
+            </div>
       </div>
 
       <input
@@ -3788,22 +3791,21 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入バーはカード上に重ねる。文字編集中だけ隠し、終わればすぐ戻す（keyboard.open に依存しない） */}
+      {/* 完了・挿入バーは常に表示（文字編集中も隠さない） */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          {!editingOverlayId ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
-            >
-              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-              {tx("完了", "Done")}
-            </button>
-          ) : (
-            <span className="w-11" />
-          )}
-          {canEdit && !editingOverlayId ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (editingOverlayId) finishOverlayTextEdit();
+              onClose();
+            }}
+            className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+            {tx("完了", "Done")}
+          </button>
+          {canEdit ? (
             <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
               {(
                 [
@@ -3820,6 +3822,7 @@ function SheetFullscreenEditor({
                   aria-label={label}
                   disabled={id === "photo" && Boolean(uploading)}
                   onClick={() => {
+                    if (editingOverlayId) finishOverlayTextEdit();
                     if (id === "photo") {
                       photoInputRef.current?.click();
                       return;
@@ -3828,7 +3831,6 @@ function SheetFullscreenEditor({
                     setPenEraser(false);
                     setSelectedOverlayIds([]);
                     setOverlayHandlesVisible(false);
-                    setEditingOverlayId(null);
                   }}
                   className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
                     editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
