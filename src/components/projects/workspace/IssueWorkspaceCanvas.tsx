@@ -1726,14 +1726,14 @@ export function IssueWorkspaceCanvas({
   workspaceKeyboardOpenRef.current = keyboard.open;
   /**
    * デスクトップ: 編集中は常に表示。
-   * iOS: キーボードが落ち着いてから定位置にパッと出す（上昇中マウントのピョコを防ぐ）。
+   * iOS: キーボードが開いているあいだキーボード直上に表示（閉じたら消す）。
    */
   const showWorkspaceFormatBar = Boolean(
     editingTextBox &&
       canEdit &&
       !toolbarHidden &&
       toolbarMounted &&
-      (!keyboard.iosLike || (keyboard.open && keyboard.settled)),
+      (!keyboard.iosLike || keyboard.open),
   );
 
   function touchWorkspaceTextKeepAlive() {
@@ -1789,15 +1789,11 @@ export function IssueWorkspaceCanvas({
     workspaceKeyboardWasOpenRef.current = false;
     const editId = editingTextId;
     const focused = document.activeElement === textEditRef.current;
+    // フォーカス残り時だけ短く待って誤検知を避け、意図的な閉じは必ず編集終了→完了／挿入復帰
     const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingTextIdRef.current !== editId) return;
       if (workspaceKeyboardOpenRef.current) return;
-      // 入力直後の VV 誤閉じはフォーカスを戻してキーボードを維持
-      if (Date.now() - textEditKeepAliveRef.current < TEXT_EDIT_KEEPALIVE_MS) {
-        keepWorkspaceTextFocus();
-        return;
-      }
       finishWorkspaceTextEdit();
     }, confirmMs);
   }, [keyboard.open, editingTextId]);
@@ -2891,7 +2887,7 @@ function SheetFullscreenEditor({
 
   /**
    * デスクトップ: 編集中は常に表示。
-   * iOS: settled 後に定位置へパッと出す。キーボード閉じで編集終了→バーも消える。
+   * iOS: キーボード直上の書式バー（open 中のみ。閉じたら消えて完了／挿入が戻る）。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -2900,7 +2896,7 @@ function SheetFullscreenEditor({
       ? selectedOverlay
       : null;
   const showOverlayFormatBar = Boolean(
-    canEdit && editingOverlayText && (!keyboard.iosLike || (keyboard.open && keyboard.settled)),
+    canEdit && editingOverlayText && (!keyboard.iosLike || keyboard.open),
   );
 
   function touchOverlayTextKeepAlive() {
@@ -2972,14 +2968,11 @@ function SheetFullscreenEditor({
     overlayKeyboardWasOpenRef.current = false;
     const editId = editingOverlayId;
     const focused = document.activeElement === overlayTextRef.current;
+    // keep-alive で再フォーカスしない（閉じボタンなのに編集が残り、完了／挿入が出ない原因だった）
     const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingOverlayIdRef.current !== editId) return;
       if (overlayKeyboardOpenRef.current) return;
-      if (Date.now() - overlayEditKeepAliveRef.current < TEXT_EDIT_KEEPALIVE_MS) {
-        keepOverlayTextFocus();
-        return;
-      }
       finishOverlayTextEdit();
     }, confirmMs);
   }, [keyboard.open, editingOverlayId]);
