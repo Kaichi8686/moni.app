@@ -99,14 +99,14 @@ type Props = {
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 520;
-/** 入力フォーカス中は VV の中間イベント（開→一瞬閉じ→開）に強い */
-const KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS = 1100;
+/** フォーカス中・VV が曖昧なときの閉じ debounce（中間イベント耐性） */
+const KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS = 720;
+/** フォーカス中でも VV がはっきり全高なら短い debounce（赤い閉じの即応） */
+const KEYBOARD_CLOSE_DEBOUNCE_CLEAR_MS = 120;
 /** キーボード上昇が終わってから書式バーを出す（上昇中マウントのピョコ付きを防ぐ） */
 const KEYBOARD_SETTLE_MS = 260;
-/** フォーカス残り＋VV 揺れの「閉じ」誤検知を避ける確認待ち */
-const KEYBOARD_CLOSE_CONFIRM_MS = 900;
-/** 本当に閉じたか二度目の確認 */
-const KEYBOARD_CLOSE_RECHECK_MS = 450;
+/** open=false 直後に VV がまだ残っているときだけ待つ（下降アニメ） */
+const KEYBOARD_CLOSE_SETTLE_MS = 160;
 /** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 
@@ -235,7 +235,14 @@ function useVisualKeyboard() {
         closedBaseline = vv.height;
       }
       if (closeTimer) return;
-      const debounceMs = editableFocused ? KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS : KEYBOARD_CLOSE_DEBOUNCE_MS;
+      // はっきり閉じているなら短く、曖昧なら長く待つ（赤い閉じは即 open=false へ）
+      const clearlyClosed =
+        next < 40 && vv.height >= window.innerHeight - 60;
+      const debounceMs = !editableFocused
+        ? KEYBOARD_CLOSE_DEBOUNCE_MS
+        : clearlyClosed
+          ? KEYBOARD_CLOSE_DEBOUNCE_CLEAR_MS
+          : KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS;
       closeTimer = setTimeout(() => {
         closeTimer = null;
         if (editableFocused) {
@@ -1799,7 +1806,7 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }, [editingTextId]);
 
-  // iOS キーボード閉じボタン → 常に編集終了。開閉アニメの誤検知はフォーカス残り時に再確認。
+  // iOS キーボード閉じボタン → すぐ編集終了（完了／挿入復帰）。チラつきは covering で弾く。
   const workspaceKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (!editingTextId) {
@@ -1815,31 +1822,24 @@ export function IssueWorkspaceCanvas({
     const editId = editingTextId;
     let cancelled = false;
     const closeTimers: number[] = [];
-    const abortIfStillOpen = () => {
-      if (cancelled || editingTextIdRef.current !== editId) return true;
+    const tryFinish = () => {
+      if (cancelled || editingTextIdRef.current !== editId) return;
       if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
         workspaceKeyboardWasOpenRef.current = true;
         keepWorkspaceTextFocus();
-        return true;
+        return;
       }
-      return false;
+      finishWorkspaceTextEdit();
     };
-    closeTimers.push(
-      window.setTimeout(() => {
-        if (abortIfStillOpen()) return;
-        // 二度確認：チラつきで終わらせない
-        closeTimers.push(
-          window.setTimeout(() => {
-            if (abortIfStillOpen()) return;
-            finishWorkspaceTextEdit();
-          }, KEYBOARD_CLOSE_RECHECK_MS),
-        );
-      }, KEYBOARD_CLOSE_CONFIRM_MS),
-    );
+    // VV がすでに全高＝本当の閉じ → 即 chrome 復帰。下降中だけ短く待つ。
+    if (!keyboardStillCovering()) {
+      tryFinish();
+    } else {
+      closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
+    }
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
-      // open が戻ったら「開いてた」扱いを維持（次の本当の閉じを検知するため）
       if (workspaceKeyboardOpenRef.current) {
         workspaceKeyboardWasOpenRef.current = true;
       }
@@ -2987,7 +2987,7 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // iOS キーボード閉じボタン → 常に完了／挿入バー復帰。開閉アニメ誤検知はフォーカス残り時に再確認。
+  // iOS キーボード閉じボタン → すぐ完了／挿入復帰。チラつきは covering で弾く。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (keyboard.open) {
@@ -3013,27 +3013,21 @@ function SheetFullscreenEditor({
     const editId = editingOverlayId;
     let cancelled = false;
     const closeTimers: number[] = [];
-    const abortIfStillOpen = () => {
-      if (cancelled || editingOverlayIdRef.current !== editId) return true;
+    const tryFinish = () => {
+      if (cancelled || editingOverlayIdRef.current !== editId) return;
       if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
         overlayKeyboardWasOpenRef.current = true;
         keepOverlayTextFocus();
-        return true;
+        return;
       }
-      return false;
+      // 赤い閉じ → 書式バー消し・完了／挿入をすぐ戻す
+      finishOverlayTextEdit();
     };
-    closeTimers.push(
-      window.setTimeout(() => {
-        if (abortIfStillOpen()) return;
-        closeTimers.push(
-          window.setTimeout(() => {
-            if (abortIfStillOpen()) return;
-            // 赤い閉じボタンで本当に閉じた → 書式バー消し・完了／挿入復帰
-            finishOverlayTextEdit();
-          }, KEYBOARD_CLOSE_RECHECK_MS),
-        );
-      }, KEYBOARD_CLOSE_CONFIRM_MS),
-    );
+    if (!keyboardStillCovering()) {
+      tryFinish();
+    } else {
+      closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
+    }
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
