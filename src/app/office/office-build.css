@@ -1,0 +1,118 @@
+/* moni office build — night cafe + mood themes */
+.office-build {
+  --ob-bg: #17142b;
+  --ob-panel: #241e45;
+  --ob-border: #3a3068;
+  --ob-accent: #ffb347;
+  --ob-mint: #5eead4;
+  --ob-gold: #ffd27a;
+  --ob-text: #fff4dc;
+  --ob-muted: #b8b0d8;
+  --ob-sky: #2a2450;
+  --ob-glow: transparent;
+  --ob-font-display: var(--font-dotgothic), "DotGothic16", monospace;
+  --ob-font-body: var(--font-zen-kaku), "Zen Kaku Gothic New", sans-serif;
+  background: var(--ob-bg);
+  color: var(--ob-text);
+  font-family: var(--ob-font-body);
+  min-height: 100dvh;
+  transition:
+    background-color 1.5s ease,
+    color 1.5s ease;
+}
+
+.office-build[data-mood="great"] {
+  --ob-bg: #2e1e14;
+  --ob-panel: #4d3320;
+  --ob-border: #6b4a30;
+  --ob-sky: #ffb070;
+  --ob-accent: #ffd27a;
+  --ob-glow: rgba(255, 210, 122, 0.35);
+}
+
+.office-build[data-mood="good"] {
+  --ob-bg: #17142b;
+  --ob-panel: #241e45;
+  --ob-border: #3a3068;
+  --ob-sky: #2a2450;
+  --ob-accent: #ffb347;
+  --ob-glow: transparent;
+}
+
+.office-build[data-mood="low"] {
+  --ob-bg: #1e2430;
+  --ob-panel: #2a3140;
+  --ob-border: #3d4658;
+  --ob-sky: #4a5668;
+  --ob-accent: #ffb347;
+  --ob-glow: transparent;
+}
+
+.office-build[data-mood="crisis"] {
+  --ob-bg: #2b1520;
+  --ob-panel: #3d1d2c;
+  --ob-border: #7a2e45;
+  --ob-sky: #4a2030;
+  --ob-accent: #ffb347;
+  --ob-glow: #ff6b6b;
+}
+
+.office-build .ob-panel {
+  background: var(--ob-panel);
+  border: 2px solid var(--ob-border);
+  border-radius: 16px;
+}
+
+.office-build .ob-title {
+  font-family: var(--ob-font-display);
+  letter-spacing: 0.04em;
+}
+
+.office-build .ob-num {
+  font-family: var(--ob-font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.office-build .ob-btn {
+  background: var(--ob-accent);
+  color: #1a1220;
+  font-weight: 800;
+  border-radius: 12px;
+  border: none;
+  padding: 0.75rem 1rem;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.office-build .ob-btn:disabled {
+  opacity: 0.45;
+}
+.office-build .ob-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.office-build .ob-btn-ghost {
+  background: transparent;
+  color: var(--ob-muted);
+  border: 1px solid var(--ob-border);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+}
+
+.office-build[data-mood="crisis"]::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  box-shadow: inset 0 0 40px var(--ob-glow);
+  opacity: 0.55;
+  z-index: 50;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .office-build {
+    transition: none;
+  }
+  .office-build .ob-btn {
+    transition: none;
+  }
+}

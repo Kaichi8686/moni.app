@@ -48,6 +48,8 @@ export async function runSeasonClose(
   }
 
   // 新シーズン行はログイン時 ensure で作成。ここでは触らない（total_revenue も触らない）
+  // リーグの元データは「その月のデイリー営業売上合計」(office_runs mode=daily の revenue 合算 /
+  // または companies 側の season 集計)。フリー営業は含めない。
   void seasonKeyFor(now);
   return { ok: true, closed: target, detail: "closed" };
 }
