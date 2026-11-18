@@ -174,11 +174,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   },
   ref,
 ) {
+  const shellRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const documentsRef = useRef(documents);
   const flushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(docTitle);
   const contentRef = useRef("");
   const activeDocIdRef = useRef(activeDocId);
@@ -189,6 +191,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
   const suppressEditUntilRef = useRef(0);
+  const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  const editModeRef = useRef(false);
   const pinchRef = useRef<{
     startDist: number;
     startZoom: number;
@@ -200,14 +204,17 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
-  /** 編集可なら最初から入力できる。チェックで閲覧＋ズーム解禁、タップで再編集 */
+  /** 編集セッション（チェック・書式バー表示）。入力自体はダブルタップで開始 */
   const [editMode, setEditMode] = useState(() => Boolean(autoSave));
+  /** エディタにフォーカスして文字入力中 */
+  const [typingActive, setTypingActive] = useState(false);
+  editModeRef.current = editMode;
   const [zoomUnlocked, setZoomUnlocked] = useState(false);
   const [docZoom, setDocZoom] = useState(1);
   const [docPan, setDocPan] = useState({ x: 0, y: 0 });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  /** キーボード高さ分だけ下余白（シェル自体は lvh 全面のまま＝ジャンルが透けない） */
+  /** 可視領域下端より下にはみ出した分（Safari バー＋キーボード）。シェルは lvh のまま */
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [imageBusy, setImageBusy] = useState(false);
   const [imageErr, setImageErr] = useState("");
@@ -430,7 +437,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     setLeaving(true);
     try {
       await flushAndSave();
+      editModeRef.current = false;
       setEditMode(false);
+      setTypingActive(false);
       setZoomUnlocked(true);
       setColorOpen(false);
       setHighlightOpen(false);
@@ -442,7 +451,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       setCanRedo(false);
     } catch {
       // 保存失敗時も閲覧へは進める
+      editModeRef.current = false;
       setEditMode(false);
+      setTypingActive(false);
       setZoomUnlocked(true);
     } finally {
       setLeaving(false);
@@ -465,16 +476,33 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     onBack();
   }, [leaving, onBack]);
 
-  const enterEditMode = useCallback(() => {
+  const isDoubleTap = useCallback((x: number, y: number) => {
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    const doubled =
+      !!prev && now - prev.t < 380 && Math.hypot(x - prev.x, y - prev.y) < 28;
+    lastTapRef.current = { t: now, x, y };
+    return doubled;
+  }, []);
+
+  /** ダブルタップで編集セッション＋文字入力を開始 */
+  const beginTyping = useCallback(() => {
     if (!autoSave || activeDocId === null) return;
     if (Date.now() < suppressEditUntilRef.current) return;
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    lastTapRef.current = null;
+    editModeRef.current = true;
     setEditMode(true);
+    setTypingActive(true);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
     queueMicrotask(() => {
       const el = editorRef.current;
       if (!el) return;
-      el.focus();
+      el.focus({ preventScroll: true });
       refreshHistoryState();
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
@@ -588,26 +616,31 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     };
   }, [autoSave, activeDocId, readEditorHtml]);
 
-  /** 書式バーをキーボード直上へ（シェル高さは縮めない） */
-  useEffect(() => {
+  /** 書式バーを可視領域下端（Safari バー／キーボード直上）へ。シェル高さは縮めない */
+  useLayoutEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
     const sync = () => {
+      const shell = shellRef.current;
       const vv = window.visualViewport;
-      if (!vv) {
+      if (!shell || !vv) {
         setKeyboardInset(0);
         return;
       }
-      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      const rect = shell.getBoundingClientRect();
+      const vvBottom = vv.offsetTop + vv.height;
+      setKeyboardInset(Math.max(0, Math.round(rect.bottom - vvBottom)));
     };
     sync();
     const vv = window.visualViewport;
     vv?.addEventListener("resize", sync);
     vv?.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
     return () => {
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
     };
   }, [fullscreen]);
 
@@ -619,17 +652,19 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
+    editModeRef.current = Boolean(autoSave);
     setEditMode(Boolean(autoSave));
+    setTypingActive(false);
     setZoomUnlocked(false);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
+    lastTapRef.current = null;
     discardOnLeaveRef.current = false;
     queueMicrotask(() => {
       setSaveHint("保存済み");
       refreshHistoryState();
-      if (autoSave) {
-        el.focus();
-      }
+      // 開いた直後はフォーカスしない。ダブルタップで入力開始
+      el.blur();
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
 
@@ -662,27 +697,56 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     [onDocTitleChange, scheduleAutoSave],
   );
 
+  const onEditorFocus = useCallback(() => {
+    // 閲覧中の1打目で focus が立っても入力中扱いしない（ダブルタップ判定を壊す）
+    if (!editModeRef.current) {
+      queueMicrotask(() => {
+        if (!editModeRef.current) editorRef.current?.blur();
+      });
+      return;
+    }
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    setTypingActive(true);
+    refreshHistoryState();
+  }, [refreshHistoryState]);
+
   const onEditorBlur = useCallback(() => {
     rememberSelection();
     flushToParent();
     refreshHistoryState();
+    if (blurTypingTimerRef.current) clearTimeout(blurTypingTimerRef.current);
+    // 書式バーの preventDefault でフォーカスが戻る場合は入力継続
+    blurTypingTimerRef.current = setTimeout(() => {
+      blurTypingTimerRef.current = null;
+      const el = editorRef.current;
+      if (el && document.activeElement === el) return;
+      setTypingActive(false);
+    }, 80);
   }, [flushToParent, refreshHistoryState, rememberSelection]);
 
-  const onEditorActivate = useCallback(() => {
-    if (editMode) return;
-    if (Date.now() < suppressEditUntilRef.current) return;
-    if (docZoom > 1.02) return;
-    enterEditMode();
-  }, [docZoom, editMode, enterEditMode]);
+  const tryBeginTypingFromTap = useCallback(
+    (x: number, y: number) => {
+      // 編集セッション中かつ入力中のみスキップ。閲覧中の誤 focus 残留は無視
+      if (editModeRef.current && typingActive) return;
+      if (Date.now() < suppressEditUntilRef.current) return;
+      if (docZoom > 1.02) return;
+      // ピンチ中のみ拒否。単指の pointerdown 残余でダブルタップを落とさない
+      if (pointersRef.current.size >= 2 || pinchRef.current) return;
+      if (!isDoubleTap(x, y)) return;
+      beginTyping();
+    },
+    [beginTyping, docZoom, isDoubleTap, typingActive],
+  );
 
-  const onEditorTouchEnd = useCallback(() => {
-    if (editMode) return;
-    if (Date.now() < suppressEditUntilRef.current) return;
-    if (docZoom > 1.02) return;
-    if (pointersRef.current.size > 0) return;
-    // シングルタップで編集開始（iOS のダブルタップズームと競合しにくい）
-    enterEditMode();
-  }, [docZoom, editMode, enterEditMode]);
+  useEffect(
+    () => () => {
+      if (blurTypingTimerRef.current) clearTimeout(blurTypingTimerRef.current);
+    },
+    [],
+  );
 
   const applyBlockStyle = (v: string) => {
     if (v === "p") exec("formatBlock", "<p>");
@@ -751,9 +815,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const showSidebar = !hideSidebar && sidebar && !fullscreen;
   const canEditDoc = activeDocId !== null && autoSave;
   const editing = canEditDoc && editMode;
+  const showTypingShield = editing && !typingActive;
 
   return (
     <section
+      ref={shellRef}
       className={
         fullscreen
           ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-white"
@@ -812,11 +878,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               {activeDocId === null
                 ? ""
                 : editing
-                  ? saveHint
+                  ? typingActive
+                    ? saveHint
+                    : "ダブルタップで入力"
                   : canEditDoc
                     ? zoomUnlocked
-                      ? "ピンチで拡大 · タップで編集"
-                      : "タップで編集"
+                      ? "ピンチで拡大 · ダブルタップで編集"
+                      : "ダブルタップで編集"
                     : saveHint}
             </p>
           </div>
@@ -908,8 +976,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             <div
               className={
                 fullscreen
-                  ? "mx-auto flex min-h-full w-full flex-col bg-white"
-                  : "mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
+                  ? "relative mx-auto flex min-h-full w-full flex-col bg-white"
+                  : "relative mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
               }
               style={{
                 ...(fullscreen ? undefined : { maxWidth: PAGE_MAX_WIDTH }),
@@ -922,7 +990,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 role="textbox"
                 aria-multiline
                 aria-readonly={!editing}
-                tabIndex={0}
+                tabIndex={editing ? 0 : -1}
                 contentEditable={editing}
                 suppressContentEditableWarning
                 autoCorrect="off"
@@ -933,6 +1001,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 data-1p-ignore="true"
                 inputMode="text"
                 onInput={onEditorInput}
+                onFocus={onEditorFocus}
                 onBlur={onEditorBlur}
                 onMouseUp={() => {
                   rememberSelection();
@@ -946,9 +1015,24 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   refreshHistoryState();
                 }}
-                onClick={onEditorActivate}
-                onDoubleClick={onEditorActivate}
-                onTouchEnd={onEditorTouchEnd}
+                onClick={(event) => {
+                  // 一部環境で contentEditable=false 時に onDoubleClick が欠けるため detail でも拾う
+                  if (showTypingShield) return;
+                  if (editMode && typingActive) return;
+                  if (event.detail < 2) return;
+                  beginTyping();
+                }}
+                onDoubleClick={() => {
+                  if (editMode && typingActive) return;
+                  beginTyping();
+                }}
+                onTouchEnd={(event) => {
+                  if (showTypingShield) return;
+                  if (editMode && typingActive) return;
+                  const touch = event.changedTouches[0];
+                  if (!touch) return;
+                  tryBeginTypingFromTap(touch.clientX, touch.clientY);
+                }}
                 className={`gdocs-editor-body w-full flex-1 outline-none ${editing ? "" : "cursor-text"}`}
                 style={{
                   minHeight: fullscreen ? "100%" : PAGE_MIN_HEIGHT,
@@ -956,10 +1040,30 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     ? "1rem 1.25rem 1.5rem"
                     : "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
                   boxSizing: "border-box",
-                  // iOS のダブルタップズームを抑え、すぐ入力できるようにする
+                  // iOS のダブルタップズームを抑えつつ、ダブルタップ入力と両立
                   touchAction: canBrowseZoom ? "none" : "manipulation",
                 }}
               />
+              {showTypingShield ? (
+                <div
+                  className="absolute inset-0 z-10 touch-pan-y"
+                  aria-hidden
+                  onClick={(event) => {
+                    if (event.detail < 2) return;
+                    event.preventDefault();
+                    beginTyping();
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    beginTyping();
+                  }}
+                  onTouchEnd={(event) => {
+                    const touch = event.changedTouches[0];
+                    if (!touch) return;
+                    tryBeginTypingFromTap(touch.clientX, touch.clientY);
+                  }}
+                />
+              ) : null}
             </div>
           )}
         </div>
