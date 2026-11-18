@@ -26,6 +26,7 @@ import {
   defaultStageForType,
   parseIncidentStageFields,
 } from "@/lib/office/incidentValidate";
+import { ensureIncidentDialogue } from "@/lib/office/script";
 import {
   applyMeterDecay,
   applyMetersDelta,
@@ -102,6 +103,7 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     secretaryGuideDone: Boolean(row.secretary_guide_done ?? false),
     loginStreak: Number(row.login_streak ?? 0),
     loginLastDate: row.login_last_date == null ? null : String(row.login_last_date).slice(0, 10),
+    ownerName: row.owner_name == null ? null : String(row.owner_name).trim().slice(0, 12),
   };
 }
 
@@ -151,6 +153,16 @@ function mapIncident(row: Record<string, unknown>): OfficeIncident {
       stakes: row.stakes,
       meters_at_risk: row.meters_at_risk,
     }) ?? defaultStageForType(type);
+  const dialogue = ensureIncidentDialogue(
+    {
+      script: row.script,
+      mission: row.mission,
+      questions: row.questions,
+    },
+    type,
+    stage.line,
+    stage.speaker,
+  );
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -166,10 +178,13 @@ function mapIncident(row: Record<string, unknown>): OfficeIncident {
     createdAt: String(row.created_at),
     scene: stage.scene,
     speaker: stage.speaker,
-    line: stage.line,
+    line: dialogue.script[0]?.line ?? stage.line,
     stakes: stage.stakes,
     metersAtRisk: stage.metersAtRisk,
     followupOf: row.followup_of ? String(row.followup_of) : null,
+    script: dialogue.script,
+    mission: dialogue.mission,
+    questions: dialogue.questions,
   };
 }
 
@@ -510,6 +525,9 @@ export async function dbCurrentIncident(
       stakes: gen.stakes,
       meters_at_risk: gen.metersAtRisk,
       followup_of: followup?.id ?? null,
+      script: gen.script,
+      mission: gen.mission,
+      questions: gen.questions,
     })
     .select("*")
     .single();

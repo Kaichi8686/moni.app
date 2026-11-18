@@ -1,6 +1,12 @@
 import { defaultStageForType } from "@/lib/office/incidentValidate";
 import { clampScore, scoreTotal, storyToneFromTotal } from "@/lib/office/scoring";
 import type { MeterKey, OfficeSceneId } from "@/lib/office/scenes";
+import {
+  defaultDialogueForType,
+  type IncidentMission,
+  type IncidentQuestion,
+  type ScriptBeat,
+} from "@/lib/office/script";
 import type {
   IncidentSpeaker,
   IncidentStrategy,
@@ -36,6 +42,9 @@ export type OfflineIncidentResult = {
   line: string;
   stakes: string;
   metersAtRisk: MeterKey[];
+  script: ScriptBeat[];
+  mission: IncidentMission;
+  questions: IncidentQuestion[];
 };
 
 /** 旧オフライン案で説明を途中切断して混ぜた文（サー…らしい など） */
@@ -107,15 +116,19 @@ export function offlineIncident(ctx?: OfflineIncidentCtx): OfflineIncidentResult
   const list = filtered.length > 0 ? filtered : pool;
   const picked = list[Math.floor(Math.random() * list.length)]!;
   const stage = defaultStageForType(picked.type);
+  const dialogue = defaultDialogueForType(picked.type);
   return {
     ...picked,
     strategies: offlineStrategies(),
     targets: offlineTargets(ctx?.companyAbout ?? ""),
     scene: stage.scene,
     speaker: stage.speaker,
-    line: stage.line,
+    line: dialogue.script[0]?.line ?? stage.line,
     stakes: stage.stakes,
     metersAtRisk: stage.metersAtRisk,
+    script: dialogue.script,
+    mission: dialogue.mission,
+    questions: dialogue.questions,
   };
 }
 

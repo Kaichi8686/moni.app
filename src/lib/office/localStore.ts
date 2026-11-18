@@ -306,6 +306,9 @@ export async function localCurrentIncident(
     stakes: gen.stakes,
     metersAtRisk: gen.metersAtRisk,
     followupOf: null,
+    script: gen.script,
+    mission: gen.mission,
+    questions: gen.questions,
   };
   store.incidents.push(incident);
   write(store);
