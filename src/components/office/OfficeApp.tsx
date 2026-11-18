@@ -21,6 +21,7 @@ import { ResultStep } from "@/components/office/play/ResultStep";
 import { StrategyStep } from "@/components/office/play/StrategyStep";
 import { TargetStep } from "@/components/office/play/TargetStep";
 import { WriteStep } from "@/components/office/play/WriteStep";
+import { DialoguePlayer } from "@/components/office/stage/DialoguePlayer";
 import {
   createCompany,
   fetchCodex,
@@ -83,6 +84,8 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [incident, setIncident] = useState<OfficeIncident | null>(null);
   const [step, setStep] = useState<PlayStep>("strategy");
   const [playEnter, setPlayEnter] = useState(false);
+  /** 新規事件のみ台本再生。再オープンはスキップ */
+  const [scriptFresh, setScriptFresh] = useState(false);
   const [sceneFx, setSceneFx] = useState<string | null>(null);
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const [targetIds, setTargetIds] = useState<string[]>([]);
@@ -155,9 +158,17 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       resetChoices();
       setLastSubmit(null);
       if (opts?.allowFx && created) {
+        setScriptFresh(true);
         setStep("incident");
         triggerFx(inc.type);
+      } else if (inc.script?.length && inc.mission) {
+        // 再開：台本スキップしてミッション／聞き込みから
+        setScriptFresh(false);
+        setStep("ask");
+        setPlayEnter(false);
+        setSceneFx(null);
       } else {
+        setScriptFresh(false);
         setStep("strategy");
         setPlayEnter(false);
         setSceneFx(null);
@@ -395,6 +406,20 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       <section className={`${glass} text-center text-sm text-zinc-500`}>
         事件を用意してるよ…
       </section>
+    ) : step === "incident" && incident.script?.length && incident.mission ? (
+      <DialoguePlayer
+        script={incident.script}
+        mission={incident.mission}
+        cast={company!.cast ?? []}
+        level={company!.level}
+        industry={company!.industry}
+        baseScene={incident.scene}
+        skipPlayback={!scriptFresh}
+        onListen={() => {
+          setScriptFresh(false);
+          setStep("ask");
+        }}
+      />
     ) : step === "incident" ? (
       <IncidentStep
         incident={incident}
@@ -545,20 +570,22 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             }}
           />
 
-          <StageView
-            level={company!.level}
-            industry={company!.industry}
-            fx={sceneFx}
-            speech={speech}
-            scene={incident?.scene}
-            speaker={
-              incident?.speaker
-                ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
-                : null
-            }
-            emotion={incident?.speaker?.emotion}
-            enter={playEnter && step === "incident"}
-          />
+          {step === "incident" && incident?.script?.length && incident.mission ? null : (
+            <StageView
+              level={company!.level}
+              industry={company!.industry}
+              fx={sceneFx}
+              speech={speech}
+              scene={incident?.scene}
+              speaker={
+                incident?.speaker
+                  ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
+                  : null
+              }
+              emotion={incident?.speaker?.emotion}
+              enter={playEnter && step === "incident"}
+            />
+          )}
 
           <MissionBar
             step={step}

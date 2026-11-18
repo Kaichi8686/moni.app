@@ -4,6 +4,7 @@ import { CastFigure } from "@/components/office/stage/CastFigure";
 import { OfficeScene } from "@/components/office/OfficeScene";
 import type { CastMember } from "@/lib/office/cast";
 import type { OfficeIndustry } from "@/lib/office/industries";
+import type { ScriptAction } from "@/lib/office/script";
 import type { CastEmotion, OfficeSceneId } from "@/lib/office/scenes";
 
 type Props = {
@@ -16,6 +17,8 @@ type Props = {
   emotion?: CastEmotion | null;
   /** 新規発生時のみ入場演出 */
   enter?: boolean;
+  /** 台本 action（shake/jump/point など） */
+  action?: ScriptAction | null;
   className?: string;
 };
 
@@ -47,9 +50,18 @@ export function StageView({
   speaker,
   emotion,
   enter,
+  action,
   className,
 }: Props) {
   const wash = scene ? SCENE_WASH[scene] : null;
+  const actionClass =
+    action === "shake"
+      ? "office-act-shake"
+      : action === "jump"
+        ? "office-act-jump"
+        : action === "point"
+          ? "office-act-point"
+          : "";
 
   return (
     <div
@@ -76,7 +88,9 @@ export function StageView({
       ) : null}
 
       {speaker ? (
-        <div className="pointer-events-none absolute bottom-[6%] left-1/2 flex h-[62%] -translate-x-1/2 items-end justify-center">
+        <div
+          className={`pointer-events-none absolute bottom-[6%] left-1/2 flex h-[62%] -translate-x-1/2 items-end justify-center ${actionClass}`}
+        >
           <CastFigure member={speaker} emotion={emotion} enter={enter} />
         </div>
       ) : null}
