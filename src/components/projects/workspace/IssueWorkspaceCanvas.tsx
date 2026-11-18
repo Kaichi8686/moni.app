@@ -114,6 +114,8 @@ const KEYBOARD_SETTLE_MS = 260;
 const KEYBOARD_CLOSE_SETTLE_MS = 160;
 /** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
+/** 書式バー操作直後は誤閉じでバーが消えないようにする */
+const FORMAT_BAR_GUARD_MS = 1800;
 
 /** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
 function keyboardStillCovering() {
@@ -1795,6 +1797,15 @@ export function IssueWorkspaceCanvas({
     textEditRef.current?.focus({ preventScroll: true });
   }
 
+  const workspaceFormatBarGuardRef = useRef(0);
+  function touchWorkspaceFormatBar() {
+    workspaceFormatBarGuardRef.current = Date.now();
+    keepWorkspaceTextFocus();
+  }
+  function workspaceFormatBarGuarding() {
+    return Date.now() - workspaceFormatBarGuardRef.current < FORMAT_BAR_GUARD_MS;
+  }
+
   function finishWorkspaceTextEdit() {
     const id = editingTextIdRef.current;
     setEditingTextId(null);
@@ -1848,6 +1859,11 @@ export function IssueWorkspaceCanvas({
     const closeTimers: number[] = [];
     const tryFinish = () => {
       if (cancelled || editingTextIdRef.current !== editId) return;
+      if (workspaceFormatBarGuarding()) {
+        workspaceKeyboardWasOpenRef.current = true;
+        keepWorkspaceTextFocus();
+        return;
+      }
       if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
         workspaceKeyboardWasOpenRef.current = true;
         keepWorkspaceTextFocus();
@@ -1864,7 +1880,7 @@ export function IssueWorkspaceCanvas({
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
-      if (workspaceKeyboardOpenRef.current) {
+      if (workspaceKeyboardOpenRef.current || workspaceFormatBarGuarding()) {
         workspaceKeyboardWasOpenRef.current = true;
       }
     };
@@ -2326,7 +2342,11 @@ export function IssueWorkspaceCanvas({
                             const active = document.activeElement as HTMLElement | null;
                             if (active === textEditRef.current) return;
                             if (active?.closest("[data-text-format-bar]")) return;
-                            if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
+                            if (
+                              workspaceFormatBarGuarding() ||
+                              workspaceKeyboardOpenRef.current ||
+                              keyboardStillCovering()
+                            ) {
                               keepWorkspaceTextFocus();
                             }
                           }, 40);
@@ -2589,6 +2609,7 @@ export function IssueWorkspaceCanvas({
                         tx={tx}
                         onChange={(patch) => updateItem(editingTextBox!.id, patch)}
                         onInlineFormat={(command, value) => {
+                          touchWorkspaceFormatBar();
                           keepWorkspaceTextFocus();
                           applyInlineFormat(command, value);
                           const el = textEditRef.current;
@@ -2605,6 +2626,7 @@ export function IssueWorkspaceCanvas({
                           window.requestAnimationFrame(() => keepWorkspaceTextFocus());
                         }}
                         onKeepFocus={keepWorkspaceTextFocus}
+                        onInteract={touchWorkspaceFormatBar}
                       />
                     </div>,
                     document.body,
@@ -2990,6 +3012,16 @@ function SheetFullscreenEditor({
     overlayTextRef.current?.focus({ preventScroll: true });
   }
 
+  /** 書式バー連打中にキーボード誤閉じ → バー消滅を防ぐ */
+  const overlayFormatBarGuardRef = useRef(0);
+  function touchOverlayFormatBar() {
+    overlayFormatBarGuardRef.current = Date.now();
+    keepOverlayTextFocus();
+  }
+  function overlayFormatBarGuarding() {
+    return Date.now() - overlayFormatBarGuardRef.current < FORMAT_BAR_GUARD_MS;
+  }
+
   useLayoutEffect(() => {
     if (!editingOverlayId) return;
     const el = overlayTextRef.current;
@@ -3070,6 +3102,12 @@ function SheetFullscreenEditor({
     const closeTimers: number[] = [];
     const tryFinish = () => {
       if (cancelled || editingOverlayIdRef.current !== editId) return;
+      // 書式バー操作中の VV チラつきでは終わらせない
+      if (overlayFormatBarGuarding()) {
+        overlayKeyboardWasOpenRef.current = true;
+        keepOverlayTextFocus();
+        return;
+      }
       if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
         overlayKeyboardWasOpenRef.current = true;
         keepOverlayTextFocus();
@@ -3086,7 +3124,7 @@ function SheetFullscreenEditor({
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
-      if (overlayKeyboardOpenRef.current) {
+      if (overlayKeyboardOpenRef.current || overlayFormatBarGuarding()) {
         overlayKeyboardWasOpenRef.current = true;
       }
     };
@@ -3640,9 +3678,8 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          // テキスト／写真と同じ黄色枠（移動中も見える）
-                          outline: `2px solid ${SELECTION_YELLOW}`,
-                          outlineOffset: 2,
+                          // 作業スペースの図形と同じ黄色いリング
+                          boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40`,
                           borderRadius: 2,
                         }}
                       >
@@ -3751,7 +3788,12 @@ function SheetFullscreenEditor({
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (active?.closest("[data-text-format-bar]")) return;
-                                if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
+                                // 書式バー連打・キーボード表示中は常に取り戻す
+                                if (
+                                  overlayFormatBarGuarding() ||
+                                  overlayKeyboardOpenRef.current ||
+                                  keyboardStillCovering()
+                                ) {
                                   keepOverlayTextFocus();
                                 }
                               }, 40);
@@ -3834,42 +3876,55 @@ function SheetFullscreenEditor({
             <span className="w-11" />
           )}
           {canEdit && !editingOverlayId ? (
-            <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-              {(
-                [
-                  { id: "text" as const, label: tx("文字", "Text") },
-                  { id: "shape" as const, label: tx("図形", "Shape") },
-                  { id: "photo" as const, label: tx("写真", "Photo") },
-                  { id: "pen" as const, label: tx("手書き", "Pen") },
-                ]
-              ).map(({ id, label }) => (
+            <div className="pointer-events-auto flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                {(
+                  [
+                    { id: "text" as const, label: tx("文字", "Text") },
+                    { id: "shape" as const, label: tx("図形", "Shape") },
+                    { id: "photo" as const, label: tx("写真", "Photo") },
+                    { id: "pen" as const, label: tx("手書き", "Pen") },
+                  ]
+                ).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    title={label}
+                    aria-label={label}
+                    disabled={id === "photo" && Boolean(uploading)}
+                    onClick={() => {
+                      if (id === "photo") {
+                        photoInputRef.current?.click();
+                        return;
+                      }
+                      // 同じツール再押しで選択解除
+                      setEditTool((prev) => (prev === id ? null : id));
+                      setPenEraser(false);
+                      setSelectedOverlayIds([]);
+                      setOverlayHandlesVisible(false);
+                    }}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
+                      editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
+                    }`}
+                  >
+                    {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
+                    {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
+                    {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
+                    {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
+                  </button>
+                ))}
+              </div>
+              {selectedOverlayIds.length > 0 ? (
                 <button
-                  key={id}
                   type="button"
-                  title={label}
-                  aria-label={label}
-                  disabled={id === "photo" && Boolean(uploading)}
-                  onClick={() => {
-                    if (id === "photo") {
-                      photoInputRef.current?.click();
-                      return;
-                    }
-                    // 同じツール再押しで選択解除
-                    setEditTool((prev) => (prev === id ? null : id));
-                    setPenEraser(false);
-                    setSelectedOverlayIds([]);
-                    setOverlayHandlesVisible(false);
-                  }}
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
-                    editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
-                  }`}
+                  data-board-ui
+                  onClick={deleteSelectedOverlays}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+                  aria-label={tx("削除", "Delete")}
                 >
-                  {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
-                  {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
-                  {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
-                  {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
+                  <Trash2 className="h-5 w-5" strokeWidth={2.25} />
                 </button>
-              ))}
+              ) : null}
             </div>
           ) : (
             <span className="w-11" />
@@ -3949,24 +4004,6 @@ function SheetFullscreenEditor({
         ) : null}
       </div>
 
-      {/* 選択中パーツの削除（カード全体削除ボタンの代わり） */}
-      {canEdit && selectedOverlayIds.length > 0 && !editingOverlayId
-        ? createPortal(
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[720] flex justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <button
-                type="button"
-                data-board-ui
-                onClick={deleteSelectedOverlays}
-                className="pointer-events-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_28px_rgba(0,0,0,0.14)] active:scale-95"
-                aria-label={tx("削除", "Delete")}
-              >
-                <Trash2 className="h-6 w-6" strokeWidth={2.25} />
-              </button>
-            </div>,
-            document.body,
-          )
-        : null}
-
       {/* 編集中は常に表示。iOS は bottom:0 でキーボード直上（transition なし） */}
       {showOverlayFormatBar && editingOverlayText
         ? createPortal(
@@ -3981,6 +4018,7 @@ function SheetFullscreenEditor({
                 tx={tx}
                 onChange={(patch) => patchOverlay(editingOverlayText.id, patch)}
                 onInlineFormat={(command, value) => {
+                  touchOverlayFormatBar();
                   keepOverlayTextFocus();
                   applyInlineFormat(command, value);
                   const el = overlayTextRef.current;
@@ -3997,6 +4035,7 @@ function SheetFullscreenEditor({
                   window.requestAnimationFrame(() => keepOverlayTextFocus());
                 }}
                 onKeepFocus={keepOverlayTextFocus}
+                onInteract={touchOverlayFormatBar}
               />
             </div>,
             document.body,
@@ -4019,6 +4058,7 @@ function SlidesTextFormatBar({
   onChange,
   onInlineFormat,
   onKeepFocus,
+  onInteract,
 }: {
   fontSize: number;
   textColor: string;
@@ -4038,6 +4078,8 @@ function SlidesTextFormatBar({
   onInlineFormat?: (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => void;
   /** サイズ矢印など操作後にテキストエリアへフォーカスを戻す */
   onKeepFocus?: () => void;
+  /** 連打中に編集終了しないためのガード更新 */
+  onInteract?: () => void;
 }) {
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
@@ -4061,12 +4103,14 @@ function SlidesTextFormatBar({
   function keepEditingPointerDown(e: ReactPointerEvent<HTMLElement>) {
     e.preventDefault();
     e.stopPropagation();
+    onInteract?.();
     onKeepFocus?.();
   }
 
   function bumpSize(delta: number) {
     const next = Math.min(96, Math.max(8, fontSizeRef.current + delta));
     fontSizeRef.current = next;
+    onInteract?.();
     onChange({ fontSize: next });
     onKeepFocus?.();
     window.requestAnimationFrame(() => onKeepFocus?.());
@@ -4108,6 +4152,7 @@ function SlidesTextFormatBar({
         e.stopPropagation();
         const tag = (e.target as HTMLElement).tagName;
         if (tag !== "INPUT" && tag !== "TEXTAREA") e.preventDefault();
+        onInteract?.();
         onKeepFocus?.();
       }}
     >
