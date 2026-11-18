@@ -67,7 +67,10 @@ export function OfficeVisualApp({ embedded, hideChrome }: Props) {
         </header>
       ) : null}
 
-      <main className={`${COL} space-y-3 pb-28 pt-3`}>
+      <main
+        className={`${COL} space-y-3 pt-3`}
+        style={{ paddingBottom: "calc(var(--bottom-nav-clearance, 5.5rem) + 1.25rem)" }}
+      >
         <TopBar dateKey={MOCK_DATE_KEY} coins={coins} stamina={MOCK_STAMINA} />
         <StepTracker step={step} />
 
