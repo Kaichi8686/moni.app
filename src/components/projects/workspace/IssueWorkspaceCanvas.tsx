@@ -115,7 +115,10 @@ const KEYBOARD_CLOSE_SETTLE_MS = 160;
 /** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 書式バー操作直後は誤閉じでバーが消えないようにする */
-const FORMAT_BAR_GUARD_MS = 1800;
+const FORMAT_BAR_GUARD_MS = 4000;
+/** カード拡大（transform は使わず幅・高さで拡大＝編集中キーボードを切らない） */
+const SHEET_CARD_MIN_ZOOM = 1;
+const SHEET_CARD_MAX_ZOOM = 2.5;
 
 /** 書式バー連打中に visualViewport がチラついてもキーボード open を落とさない */
 let visualKeyboardHoldOpenUntil = 0;
@@ -299,13 +302,18 @@ function useVisualKeyboard() {
           active?.closest?.("[data-text-format-bar]")
         ) {
           editableFocused = true;
-          update();
+          if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+          }
+          setOpen(true);
+          if (peakInset > 0) setInset(peakInset);
           return;
         }
         editableFocused = isEditable(active);
         if (!editableFocused) closedBaseline = Math.max(closedBaseline, vv.height);
         update();
-      }, 80);
+      }, 120);
     };
     const onOrientation = () => {
       closedBaseline = vv.height;
@@ -2965,6 +2973,15 @@ function SheetFullscreenEditor({
     return Math.min(2.4, Math.max(0.45, w / h));
   }, [sheet.w, sheet.h]);
   const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
+  /** カード拡大（1〜2.5）。transform ではなく表示サイズで拡大する */
+  const [cardZoom, setCardZoom] = useState(1);
+  const cardZoomRef = useRef(1);
+  cardZoomRef.current = cardZoom;
+  const sheetPinchRef = useRef<{
+    dist: number;
+    zoom: number;
+  } | null>(null);
+  const sheetPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   /** null = 何も選ばない（初期・同じボタン再押しで解除） */
   const [editTool, setEditTool] = useState<SheetEditTool | null>(null);
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
@@ -3053,13 +3070,17 @@ function SheetFullscreenEditor({
 
   /** 書式バー連打中にキーボード誤閉じ → バー消滅を防ぐ */
   const overlayFormatBarGuardRef = useRef(0);
+  const overlayFormatBarPointerDownRef = useRef(false);
   function touchOverlayFormatBar() {
     overlayFormatBarGuardRef.current = Date.now();
-    holdVisualKeyboardOpen();
+    holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
     keepOverlayTextFocus();
   }
   function overlayFormatBarGuarding() {
-    return Date.now() - overlayFormatBarGuardRef.current < FORMAT_BAR_GUARD_MS;
+    return (
+      overlayFormatBarPointerDownRef.current ||
+      Date.now() - overlayFormatBarGuardRef.current < FORMAT_BAR_GUARD_MS
+    );
   }
 
   useLayoutEffect(() => {
@@ -3136,16 +3157,16 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    overlayKeyboardWasOpenRef.current = false;
     const editId = editingOverlayId;
     let cancelled = false;
     const closeTimers: number[] = [];
     const tryFinish = () => {
       if (cancelled || editingOverlayIdRef.current !== editId) return;
-      // 書式バー操作中の VV チラつきでは終わらせない
-      if (overlayFormatBarGuarding()) {
-        overlayKeyboardWasOpenRef.current = true;
+      // 書式バー操作中／直後は閉じない。ガード明けに再判定する
+      if (overlayFormatBarGuarding() || visualKeyboardHoldOpenActive()) {
+        holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
         keepOverlayTextFocus();
+        closeTimers.push(window.setTimeout(tryFinish, 400));
         return;
       }
       if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
@@ -3153,14 +3174,12 @@ function SheetFullscreenEditor({
         keepOverlayTextFocus();
         return;
       }
+      overlayKeyboardWasOpenRef.current = false;
       // 赤い閉じ → 書式バー消し・完了／挿入をすぐ戻す
       finishOverlayTextEdit();
     };
-    if (!keyboardStillCovering()) {
-      tryFinish();
-    } else {
-      closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
-    }
+    // wasOpen は成功するまで立てたまま（チラつきで取りこぼさない）
+    closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
@@ -3176,11 +3195,14 @@ function SheetFullscreenEditor({
     const update = () => {
       // 編集中にカード寸法が変わると iOS がフォーカス中キーボードを切る
       if (editingOverlayIdRef.current) return;
-      const boxW = stage.clientWidth;
-      const boxH = stage.clientHeight;
-      // 左右余白 + 上下に少し呼吸できる余白（画面中央配置用）
-      const maxW = Math.max(0, boxW - 24);
-      const maxH = Math.max(0, boxH - 48);
+      const cs = getComputedStyle(stage);
+      const padX =
+        (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      const padY =
+        (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      // パディング内側＝実表示領域。zoom=1 で収まる基準サイズ
+      const maxW = Math.max(0, stage.clientWidth - padX);
+      const maxH = Math.max(0, stage.clientHeight - padY);
       if (maxW < 2 || maxH < 2) return;
       let nextW = maxW;
       let nextH = nextW / sheetRatio;
@@ -3204,6 +3226,41 @@ function SheetFullscreenEditor({
 
   // 文字編集中のカード持ち上げはしない。
   // キーボード上昇で margin/サイズが変わると iOS がフォーカス中キーボードを切る。
+
+  const displayCardW = cardSize.w > 0 ? Math.round(cardSize.w * cardZoom) : 0;
+  const displayCardH =
+    displayCardW > 0 ? Math.round(displayCardW / sheetRatio) : 0;
+
+  function clampSheetZoom(z: number) {
+    return Math.min(SHEET_CARD_MAX_ZOOM, Math.max(SHEET_CARD_MIN_ZOOM, z));
+  }
+
+  function onStagePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    sheetPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (editingOverlayIdRef.current) return;
+    if (sheetPointersRef.current.size === 2) {
+      const pts = [...sheetPointersRef.current.values()];
+      const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
+      sheetPinchRef.current = { dist: Math.max(1, dist), zoom: cardZoomRef.current };
+    }
+  }
+
+  function onStagePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!sheetPointersRef.current.has(event.pointerId)) return;
+    sheetPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const pinch = sheetPinchRef.current;
+    if (!pinch || editingOverlayIdRef.current) return;
+    if (sheetPointersRef.current.size < 2) return;
+    const pts = [...sheetPointersRef.current.values()];
+    const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
+    const next = clampSheetZoom(pinch.zoom * (dist / pinch.dist));
+    setCardZoom(next);
+  }
+
+  function onStagePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    sheetPointersRef.current.delete(event.pointerId);
+    if (sheetPointersRef.current.size < 2) sheetPinchRef.current = null;
+  }
 
   function setOverlays(next: SheetOverlay[]) {
     onPatch({ overlays: next.length > 0 ? next : undefined });
@@ -3324,6 +3381,8 @@ function SheetFullscreenEditor({
 
   function onCardPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!canEdit || event.button !== 0) return;
+    // ピンチ拡大中は図形描画などを開始しない
+    if (sheetPointersRef.current.size > 1 || sheetPinchRef.current) return;
     const target = event.target as HTMLElement;
     if (target.closest("[data-overlay-node]") || target.closest("[data-overlay-handle]")) return;
 
@@ -3576,26 +3635,33 @@ function SheetFullscreenEditor({
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
       {/*
-        カードは中央配置。transform で持ち上げると iOS がフォーカス中キーボードを切るので使わない。
-        上バー分だけ paddingBottom で見た目の中央を上げる（編集中も値を変えない）。
+        カードは中央配置。transform 拡大は iOS がフォーカス中キーボードを切るので使わない。
+        ピンチは幅・高さで拡大。完了／挿入は fixed ポータルで画面に貼る。
       */}
       <div
         ref={stageRef}
-        className="absolute inset-0 z-10 flex items-center justify-center px-3"
+        className="absolute inset-0 z-10 overflow-auto overscroll-contain"
         style={{
-          paddingTop: "max(0.5rem, env(safe-area-inset-top))",
-          // 完了／挿入バー分だけ下に余白 → 幾何中心より上＝見た目の中央
+          paddingTop: "max(4.5rem, calc(env(safe-area-inset-top) + 3.25rem))",
           paddingBottom: "max(4.5rem, calc(env(safe-area-inset-bottom) + 3.25rem))",
+          paddingLeft: 12,
+          paddingRight: 12,
+          touchAction: editingOverlayId ? "none" : "manipulation",
         }}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerUp}
+        onPointerCancel={onStagePointerUp}
       >
+            <div className="flex min-h-full min-w-full items-center justify-center">
             <div
               ref={cardRef}
               data-sheet-card
               className="relative touch-none select-none overflow-visible rounded-2xl"
               style={{
-                width: cardSize.w > 0 ? cardSize.w : undefined,
-                height: cardSize.h > 0 ? cardSize.h : undefined,
-                visibility: cardSize.w > 0 ? "visible" : "hidden",
+                width: displayCardW > 0 ? displayCardW : undefined,
+                height: displayCardH > 0 ? displayCardH : undefined,
+                visibility: displayCardW > 0 ? "visible" : "hidden",
                 boxSizing: "border-box",
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
@@ -3864,6 +3930,7 @@ function SheetFullscreenEditor({
                 })}
               </div>
             </div>
+            </div>
       </div>
 
       <input
@@ -3904,149 +3971,174 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入は編集中は隠す。赤いキーボード閉じ → 編集終了で戻る */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between gap-2 px-3 pb-1">
-          {!editingOverlayId ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
-            >
-              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-              {tx("完了", "Done")}
-            </button>
-          ) : (
-            <span className="w-11" />
-          )}
-          {canEdit && !editingOverlayId ? (
-            <div className="pointer-events-auto flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+      {/* 完了・挿入は画面に固定（カード拡大／スクロールしても追従）。編集中は隠す */}
+      {createPortal(
+        <div
+          className="pointer-events-none fixed inset-x-0 top-0 z-[650] flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]"
+          data-board-ui
+        >
+          <div className="flex items-center justify-between gap-2 px-3 pb-1">
+            {!editingOverlayId ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="pointer-events-auto inline-flex min-h-11 items-center gap-0.5 rounded-full bg-white px-3 text-sm font-semibold text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+              >
+                <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+                {tx("完了", "Done")}
+              </button>
+            ) : (
+              <span className="w-11" />
+            )}
+            {canEdit && !editingOverlayId ? (
+              <div className="pointer-events-auto flex items-center gap-2">
+                <div className="flex items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  <button
+                    type="button"
+                    aria-label={tx("縮小", "Zoom out")}
+                    disabled={cardZoom <= SHEET_CARD_MIN_ZOOM + 0.01}
+                    onClick={() => setCardZoom((z) => clampSheetZoom(z - 0.25))}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-35"
+                  >
+                    <Minus className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={tx("拡大", "Zoom in")}
+                    disabled={cardZoom >= SHEET_CARD_MAX_ZOOM - 0.01}
+                    onClick={() => setCardZoom((z) => clampSheetZoom(z + 0.25))}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 disabled:opacity-35"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  {(
+                    [
+                      { id: "text" as const, label: tx("文字", "Text") },
+                      { id: "shape" as const, label: tx("図形", "Shape") },
+                      { id: "photo" as const, label: tx("写真", "Photo") },
+                      { id: "pen" as const, label: tx("手書き", "Pen") },
+                    ]
+                  ).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      disabled={id === "photo" && Boolean(uploading)}
+                      onClick={() => {
+                        if (id === "photo") {
+                          photoInputRef.current?.click();
+                          return;
+                        }
+                        setEditTool((prev) => (prev === id ? null : id));
+                        setPenEraser(false);
+                        setSelectedOverlayIds([]);
+                        setOverlayHandlesVisible(false);
+                      }}
+                      className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
+                        editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
+                      }`}
+                    >
+                      {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
+                      {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
+                      {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
+                      {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
+                    </button>
+                  ))}
+                </div>
+                {selectedOverlayIds.length > 0 ? (
+                  <button
+                    type="button"
+                    data-board-ui
+                    onClick={deleteSelectedOverlays}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
+                    aria-label={tx("削除", "Delete")}
+                  >
+                    <Trash2 className="h-5 w-5" strokeWidth={2.25} />
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <span className="w-11" />
+            )}
+          </div>
+
+          {canEdit && editTool === "shape" && !editingOverlayId ? (
+            <div className="flex justify-center px-3 pb-1">
+              <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
                 {(
                   [
-                    { id: "text" as const, label: tx("文字", "Text") },
-                    { id: "shape" as const, label: tx("図形", "Shape") },
-                    { id: "photo" as const, label: tx("写真", "Photo") },
-                    { id: "pen" as const, label: tx("手書き", "Pen") },
-                  ]
-                ).map(({ id, label }) => (
+                    ["rect", Square],
+                    ["circle", Circle],
+                    ["triangle", Triangle],
+                    ["line", Minus],
+                  ] as const
+                ).map(([kind, Icon]) => (
                   <button
-                    key={id}
+                    key={kind}
                     type="button"
-                    title={label}
-                    aria-label={label}
-                    disabled={id === "photo" && Boolean(uploading)}
-                    onClick={() => {
-                      if (id === "photo") {
-                        photoInputRef.current?.click();
-                        return;
-                      }
-                      // 同じツール再押しで選択解除
-                      setEditTool((prev) => (prev === id ? null : id));
-                      setPenEraser(false);
-                      setSelectedOverlayIds([]);
-                      setOverlayHandlesVisible(false);
-                    }}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full disabled:opacity-40 ${
-                      editTool === id ? "bg-zinc-100 text-zinc-950" : "text-zinc-600"
+                    onClick={() => setShapeKind(kind)}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                      shapeKind === kind ? "bg-zinc-100" : ""
                     }`}
                   >
-                    {id === "text" ? <Type className="h-4 w-4" strokeWidth={2.25} /> : null}
-                    {id === "shape" ? <Shapes className="h-4 w-4" strokeWidth={2.25} /> : null}
-                    {id === "photo" ? <ImageIcon className="h-4 w-4" strokeWidth={2.25} /> : null}
-                    {id === "pen" ? <PenLine className="h-4 w-4" strokeWidth={2.25} /> : null}
+                    <Icon className="h-4 w-4" />
                   </button>
                 ))}
+                {SHAPE_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setShapeColor(color)}
+                    className={`h-5 w-5 rounded-full border ${shapeColor === color ? "border-zinc-900" : "border-zinc-200"}`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
               </div>
-              {selectedOverlayIds.length > 0 ? (
-                <button
-                  type="button"
-                  data-board-ui
-                  onClick={deleteSelectedOverlays}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-rose-600 shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:scale-95"
-                  aria-label={tx("削除", "Delete")}
-                >
-                  <Trash2 className="h-5 w-5" strokeWidth={2.25} />
-                </button>
-              ) : null}
             </div>
-          ) : (
-            <span className="w-11" />
-          )}
-        </div>
+          ) : null}
 
-        {canEdit && editTool === "shape" && !editingOverlayId ? (
-          <div className="flex justify-center px-3 pb-1">
-            <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
-              {(
-                [
-                  ["rect", Square],
-                  ["circle", Circle],
-                  ["triangle", Triangle],
-                  ["line", Minus],
-                ] as const
-              ).map(([kind, Icon]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setShapeKind(kind)}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                    shapeKind === kind ? "bg-zinc-100" : ""
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-              ))}
+          {canEdit && editTool === "pen" && !editingOverlayId ? (
+            <div className="flex justify-center gap-1.5 px-3 pb-1">
               {SHAPE_COLORS.map((color) => (
                 <button
                   key={color}
                   type="button"
-                  onClick={() => setShapeColor(color)}
-                  className={`h-5 w-5 rounded-full border ${shapeColor === color ? "border-zinc-900" : "border-zinc-200"}`}
+                  onClick={() => {
+                    setPenEraser(false);
+                    setPenColor(color);
+                  }}
+                  className={`pointer-events-auto h-6 w-6 rounded-full border-2 ${
+                    !penEraser && penColor === color ? "border-zinc-900" : "border-zinc-200"
+                  }`}
                   style={{ backgroundColor: color }}
+                  aria-label={tx("ペン色", "Pen color")}
                 />
               ))}
-            </div>
-          </div>
-        ) : null}
-
-        {canEdit && editTool === "pen" && !editingOverlayId ? (
-          <div className="flex justify-center gap-1.5 px-3 pb-1">
-            {SHAPE_COLORS.map((color) => (
               <button
-                key={color}
                 type="button"
-                onClick={() => {
-                  setPenEraser(false);
-                  setPenColor(color);
-                }}
-                className={`pointer-events-auto h-6 w-6 rounded-full border-2 ${
-                  !penEraser && penColor === color ? "border-zinc-900" : "border-zinc-200"
+                onClick={() => setPenEraser(true)}
+                className={`pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${
+                  penEraser ? "border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
                 }`}
-                style={{ backgroundColor: color }}
-                aria-label={tx("ペン色", "Pen color")}
-              />
-            ))}
-            <button
-              type="button"
-              onClick={() => setPenEraser(true)}
-              className={`pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-full border-2 ${
-                penEraser ? "border-zinc-900 bg-zinc-100 text-zinc-900" : "border-zinc-200 text-zinc-600"
-              }`}
-              aria-label={tx("消しゴム", "Eraser")}
-              title={tx("消しゴム", "Eraser")}
-            >
-              <Eraser className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </button>
-          </div>
-        ) : null}
+                aria-label={tx("消しゴム", "Eraser")}
+                title={tx("消しゴム", "Eraser")}
+              >
+                <Eraser className="h-3.5 w-3.5" strokeWidth={2.25} />
+              </button>
+            </div>
+          ) : null}
 
-        {canEdit && editTool === "text" && !editingOverlayId ? (
-          <p className="px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
-            {tx("カード内をダブルタップして文字を置く", "Double-tap on the card to place text")}
-          </p>
-        ) : null}
-      </div>
+          {canEdit && editTool === "text" && !editingOverlayId ? (
+            <p className="px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
+              {tx("カード内をダブルタップして文字を置く", "Double-tap on the card to place text")}
+            </p>
+          ) : null}
+        </div>,
+        document.body,
+      )}
 
       {/* 編集中は常に表示。iOS は bottom:0 でキーボード直上（transition なし） */}
       {showOverlayFormatBar && editingOverlayText
@@ -4062,8 +4154,8 @@ function SheetFullscreenEditor({
                 tx={tx}
                 onChange={(patch) => patchOverlay(editingOverlayText.id, patch)}
                 onInlineFormat={(command, value) => {
+                  overlayFormatBarPointerDownRef.current = true;
                   touchOverlayFormatBar();
-                  keepOverlayTextFocus();
                   applyInlineFormat(command, value);
                   const el = overlayTextRef.current;
                   if (el) {
@@ -4076,10 +4168,16 @@ function SheetFullscreenEditor({
                     });
                   }
                   setOverlayInlineFormat(queryInlineFormatState());
-                  window.requestAnimationFrame(() => keepOverlayTextFocus());
                 }}
                 onKeepFocus={keepOverlayTextFocus}
-                onInteract={touchOverlayFormatBar}
+                onInteract={() => {
+                  overlayFormatBarPointerDownRef.current = true;
+                  touchOverlayFormatBar();
+                }}
+                onInteractEnd={() => {
+                  overlayFormatBarPointerDownRef.current = false;
+                  touchOverlayFormatBar();
+                }}
               />
             </div>,
             document.body,
@@ -4103,6 +4201,7 @@ function SlidesTextFormatBar({
   onInlineFormat,
   onKeepFocus,
   onInteract,
+  onInteractEnd,
 }: {
   fontSize: number;
   textColor: string;
@@ -4124,6 +4223,7 @@ function SlidesTextFormatBar({
   onKeepFocus?: () => void;
   /** 連打中に編集終了しないためのガード更新 */
   onInteract?: () => void;
+  onInteractEnd?: () => void;
 }) {
   const [sizeEditing, setSizeEditing] = useState(false);
   const [sizeDraft, setSizeDraft] = useState(String(fontSize));
@@ -4156,8 +4256,8 @@ function SlidesTextFormatBar({
     fontSizeRef.current = next;
     onInteract?.();
     onChange({ fontSize: next });
+    // 既フォーカス中の再 focus はしない（onKeepFocus 側でガード）
     onKeepFocus?.();
-    window.requestAnimationFrame(() => onKeepFocus?.());
   }
 
   function startSizeRepeat(delta: number) {
@@ -4199,6 +4299,21 @@ function SlidesTextFormatBar({
         onInteract?.();
         onKeepFocus?.();
       }}
+      onPointerUp={() => onInteractEnd?.()}
+      onPointerCancel={() => onInteractEnd?.()}
+      onPointerLeave={(e) => {
+        // バー外へドラッグで離した場合も解除
+        if (e.buttons === 0) onInteractEnd?.();
+      }}
+      onTouchStart={(e) => {
+        const tag = (e.target as HTMLElement).tagName;
+        // iOS: touch でフォーカスが奪われるのを防ぐ
+        if (tag !== "INPUT" && tag !== "TEXTAREA") e.preventDefault();
+        onInteract?.();
+        onKeepFocus?.();
+      }}
+      onTouchEnd={() => onInteractEnd?.()}
+      onTouchCancel={() => onInteractEnd?.()}
     >
       {colorOpen ? (
         <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
