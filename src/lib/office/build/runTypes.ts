@@ -46,6 +46,8 @@ export type BuildCompanyState = {
   mood: OfficeMood;
   streak: number;
   totalRevenue: number;
+  /** 今月のデイリー売上合計（リーグ用） */
+  seasonRevenue: number;
   level: number;
   stamina: number;
   staminaUpdatedAt: string;

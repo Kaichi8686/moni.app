@@ -260,7 +260,7 @@ export async function playRun(
   }
   if (run.status === "finished") {
     // 冪等：同じ結果を返す
-    return finishPayload(store, run, store.getCompany(userId)!);
+    return finishPayloadFull(store, run, store.getCompany(userId)!);
   }
   if (!run.hypothesisId) throw new RunServiceError("先に仮説を選んでね");
 
@@ -324,10 +324,12 @@ export async function playRun(
     streak: nextStreak,
     mood: moodAfter,
     recentRatios: recent,
-    totalRevenue:
+    // 成長用 total は全モード加算。リーグ用 season はデイリーのみ
+    totalRevenue: company.totalRevenue + scored.revenue,
+    seasonRevenue:
       run.mode === "daily"
-        ? company.totalRevenue + scored.revenue
-        : company.totalRevenue + scored.revenue,
+        ? (company.seasonRevenue ?? 0) + scored.revenue
+        : (company.seasonRevenue ?? 0),
     level: 1,
   };
   nextCompany.level = levelFromTotalRevenue(nextCompany.totalRevenue);
@@ -367,17 +369,15 @@ export async function playRun(
   store.saveRun(run);
 
   return {
-    ...finishPayload(store, run, nextCompany),
+    ...finishPayloadFull(store, run, nextCompany),
     adlibComment,
     newlyUnlockedTerms: newlyUnlocked
       .map((id) => OFFICE_TERMS.find((t) => t.id === id))
       .filter(Boolean),
-    correctHypothesis: correctHypothesis(run.event),
-    coach: run.event.coach,
   };
 }
 
-function finishPayload(store: RunStore, run: OfficeRun, company: BuildCompanyState) {
+function finishPayloadFull(store: RunStore, run: OfficeRun, company: BuildCompanyState) {
   void store;
   return {
     run: {
@@ -397,12 +397,22 @@ function finishPayload(store: RunStore, run: OfficeRun, company: BuildCompanySta
       hypothesisId: run.hypothesisId,
     },
     company,
+    adlibComment: "",
+    newlyUnlockedTerms: [] as (typeof OFFICE_TERMS)[number][],
+    correctHypothesis: correctHypothesis(run.event),
+    coach: run.event.coach,
   };
 }
 
 export function getGameState(store: RunStore, userId: string, now = new Date()) {
   const company = store.getCompany(userId);
-  if (!company) return { company: null as BuildCompanyState | null, daily: null };
+  if (!company) {
+    return {
+      company: null as BuildCompanyState | null,
+      daily: null,
+      dateKey: dateKeyFor(now),
+    };
+  }
 
   const stamina = computeStamina(company.stamina, new Date(company.staminaUpdatedAt), now);
   const dateKey = dateKeyFor(now);
@@ -431,15 +441,20 @@ export function getGameState(store: RunStore, userId: string, now = new Date()) 
 }
 
 export function ensureStarterCompany(
-  partial: Omit<BuildCompanyState, "deckIds" | "employeeIds" | "termIds" | "recentRatios"> & {
+  partial: Omit<
+    BuildCompanyState,
+    "deckIds" | "employeeIds" | "termIds" | "recentRatios" | "seasonRevenue"
+  > & {
     deckIds?: string[];
     employeeIds?: string[];
     termIds?: string[];
     recentRatios?: number[];
+    seasonRevenue?: number;
   },
 ): BuildCompanyState {
   return {
     ...partial,
+    seasonRevenue: partial.seasonRevenue ?? 0,
     deckIds: partial.deckIds?.length ? partial.deckIds : [...STARTER_CARD_IDS],
     employeeIds: partial.employeeIds ?? [],
     termIds: partial.termIds ?? ["customers", "revenue_eq", "norma", "hypothesis"],
