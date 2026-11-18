@@ -100,7 +100,7 @@ const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
 /** キーボード表示直後は余白タップで編集終了しない（誤ってキーボードが閉じるのを防ぐ） */
-const TEXT_EDIT_TAP_EXIT_GRACE_MS = 3000;
+const TEXT_EDIT_TAP_EXIT_GRACE_MS = 1000;
 /** フォーカス残り＋VV 揺れの「閉じ」誤検知を避ける確認待ち */
 const KEYBOARD_CLOSE_CONFIRM_MS = 480;
 
