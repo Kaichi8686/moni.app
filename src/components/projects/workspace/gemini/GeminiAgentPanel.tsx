@@ -137,12 +137,17 @@ export function GeminiAgentPanel({
   const [keyboardInset, setKeyboardInset] = useState(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
-  /** Peak inset while opening — ignore downward settle so the composer only moves up. */
+  /** Peak inset while opening — ignore tiny mid-open dips until settled / dismiss. */
   const keyboardInsetPeakRef = useRef(0);
-  /** Once dismiss starts, follow visualViewport down 1:1 (same speed as the keyboard). */
+  /** After open settles (or blur / big drop), follow visualViewport down 1:1. */
   const keyboardClosingRef = useRef(false);
+  /** Peak stopped rising long enough — real dismiss decreases should track, not stick. */
+  const keyboardOpenSettledRef = useRef(false);
   const composerFocusedRef = useRef(false);
   const keyboardCloseTimerRef = useRef<number | null>(null);
+  const keyboardSettleTimerRef = useRef<number | null>(null);
+  /** Paint paddingBottom on the DOM so dismiss tracks the keyboard without React lag. */
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
   const handoffAppliedRef = useRef(false);
@@ -252,10 +257,21 @@ export function GeminiAgentPanel({
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
 
+    /** Ignore tiny mid-open dips; anything larger is a real dismiss (even while focused). */
+    const CLOSE_DROP_PX = 12;
+    const OPEN_SETTLE_MS = 120;
+
     const clearCloseTimer = () => {
       if (keyboardCloseTimerRef.current != null) {
         window.clearTimeout(keyboardCloseTimerRef.current);
         keyboardCloseTimerRef.current = null;
+      }
+    };
+
+    const clearSettleTimer = () => {
+      if (keyboardSettleTimerRef.current != null) {
+        window.clearTimeout(keyboardSettleTimerRef.current);
+        keyboardSettleTimerRef.current = null;
       }
     };
 
@@ -275,48 +291,88 @@ export function GeminiAgentPanel({
       return Math.max(0, Math.round(window.innerHeight - vv.height));
     };
 
-    const applyInset = (inset: number) => {
+    const paintInset = (inset: number) => {
       const next = inset < 8 ? 0 : inset;
+      const el = shellRef.current;
+      if (el) {
+        if (next > 0) {
+          el.style.paddingBottom = `${next}px`;
+          el.style.transition = "none";
+        } else {
+          el.style.paddingBottom = "";
+          el.style.transition = "";
+        }
+      }
       keyboardInsetPeakRef.current = next;
       setKeyboardInset((prev) => (prev === next ? prev : next));
-      if (next === 0) keyboardClosingRef.current = false;
+      if (next === 0) {
+        keyboardClosingRef.current = false;
+        keyboardOpenSettledRef.current = false;
+        clearSettleTimer();
+      }
+    };
+
+    const markRising = (inset: number) => {
+      keyboardClosingRef.current = false;
+      keyboardOpenSettledRef.current = false;
+      clearSettleTimer();
+      keyboardInsetPeakRef.current = inset;
+      paintInset(inset);
+      keyboardSettleTimerRef.current = window.setTimeout(() => {
+        keyboardSettleTimerRef.current = null;
+        // Only settle if we are still near this peak (keyboard finished opening).
+        if (Math.abs(readInset() - keyboardInsetPeakRef.current) < CLOSE_DROP_PX) {
+          keyboardOpenSettledRef.current = true;
+        }
+      }, OPEN_SETTLE_MS);
     };
 
     const sync = () => {
       if (composerFocusedRef.current) lockScrollTop();
       const inset = readInset();
+      const peak = keyboardInsetPeakRef.current;
 
       // Dismiss path: track keyboard height down frame-by-frame (same speed).
       if (keyboardClosingRef.current) {
         clearCloseTimer();
-        applyInset(inset);
+        paintInset(inset);
+        return;
+      }
+
+      if (inset > peak) {
+        clearCloseTimer();
+        markRising(inset);
         return;
       }
 
       if (inset >= 8) {
         clearCloseTimer();
-        // Opening: follow upward only — never jump ahead / bounce down mid-open.
-        if (inset > keyboardInsetPeakRef.current) {
-          keyboardInsetPeakRef.current = inset;
-          setKeyboardInset(inset);
+        const drop = peak - inset;
+        // iOS often keeps focus while the keyboard animates closed — follow down
+        // once open has settled, or as soon as the drop is clearly a dismiss.
+        if (
+          drop >= CLOSE_DROP_PX &&
+          (keyboardOpenSettledRef.current || !composerFocusedRef.current || drop >= 80)
+        ) {
+          keyboardClosingRef.current = true;
+          paintInset(inset);
         }
         return;
       }
 
-      // Inset near 0 while not in closing mode.
-      if (keyboardInsetPeakRef.current > 0) {
-        if (!composerFocusedRef.current) {
-          // Blur already happened — start following down immediately.
+      // Inset near 0.
+      if (peak > 0) {
+        if (!composerFocusedRef.current || keyboardOpenSettledRef.current) {
           keyboardClosingRef.current = true;
-          applyInset(inset);
+          paintInset(inset);
           return;
         }
-        // Still focused: debounce so brief mid-open 0 frames don't drop us.
+        // Still focused & not settled: debounce so brief mid-open 0 frames don't drop us.
         clearCloseTimer();
         keyboardCloseTimerRef.current = window.setTimeout(() => {
           if (readInset() < 8) {
             keyboardClosingRef.current = true;
-            applyInset(readInset());
+            paintInset(readInset());
           }
         }, 180);
       }
@@ -330,6 +386,7 @@ export function GeminiAgentPanel({
     window.addEventListener("scroll", lockScrollTop, { passive: true });
     return () => {
       clearCloseTimer();
+      clearSettleTimer();
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
@@ -337,26 +394,31 @@ export function GeminiAgentPanel({
     };
   }, [fullscreen]);
 
-  // Soft keyboard closed → follow it down (do not snap after a delay).
-  // Debounce only the *start* of closing so mid-open flicker doesn't kick in.
+  // When the soft keyboard reports closed, force the descend path (focus may remain on iOS).
   useEffect(() => {
     if (!fullscreen) return;
-    if (keyboardOpen) {
-      keyboardClosingRef.current = false;
-      return;
-    }
+    if (keyboardOpen) return;
     if (keyboardInsetPeakRef.current <= 0) return;
-    const timer = window.setTimeout(() => {
-      if (keyboardOpen) return;
-      keyboardClosingRef.current = true;
-      const vv = window.visualViewport;
-      const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
-      const next = inset < 8 ? 0 : inset;
-      keyboardInsetPeakRef.current = next;
-      setKeyboardInset((prev) => (prev === next ? prev : next));
-      if (next === 0) keyboardClosingRef.current = false;
-    }, 80);
-    return () => window.clearTimeout(timer);
+    keyboardClosingRef.current = true;
+    const vv = window.visualViewport;
+    const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
+    const next = inset < 8 ? 0 : inset;
+    const el = shellRef.current;
+    if (el) {
+      if (next > 0) {
+        el.style.paddingBottom = `${next}px`;
+        el.style.transition = "none";
+      } else {
+        el.style.paddingBottom = "";
+        el.style.transition = "";
+      }
+    }
+    keyboardInsetPeakRef.current = next;
+    setKeyboardInset((prev) => (prev === next ? prev : next));
+    if (next === 0) {
+      keyboardClosingRef.current = false;
+      keyboardOpenSettledRef.current = false;
+    }
   }, [fullscreen, keyboardOpen]);
 
   useEffect(() => {
@@ -596,14 +658,7 @@ export function GeminiAgentPanel({
         <div className="hidden w-[240px] shrink-0 border-r border-[#E5E7EB] md:block">{historyRail}</div>
       ) : null}
 
-      <div
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-        style={
-          fullscreen && keyboardInset > 0
-            ? { paddingBottom: keyboardInset, transition: "none" }
-            : undefined
-        }
-      >
+      <div ref={shellRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {fullscreen ? (
           <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
             <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -939,6 +994,7 @@ export function GeminiAgentPanel({
                   if (!fullscreen) return;
                   composerFocusedRef.current = true;
                   keyboardClosingRef.current = false;
+                  keyboardOpenSettledRef.current = false;
                   // Do not lift until the keyboard is actually open — restoring height
                   // on focus alone left the composer stuck mid-screen after dismiss.
                   if (typeof window !== "undefined") {
@@ -950,8 +1006,8 @@ export function GeminiAgentPanel({
                 onBlur={() => {
                   if (!fullscreen) return;
                   composerFocusedRef.current = false;
-                  // Start tracking the keyboard down immediately so the composer
-                  // descends at the same speed instead of staying up then snapping.
+                  // Start tracking the keyboard down immediately (iOS may keep focus,
+                  // but blur still covers Done / tap-away dismiss).
                   if (keyboardInsetPeakRef.current > 0) {
                     keyboardClosingRef.current = true;
                   }
