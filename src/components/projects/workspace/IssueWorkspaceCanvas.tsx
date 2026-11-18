@@ -1683,6 +1683,8 @@ export function IssueWorkspaceCanvas({
   const keyboard = useVisualKeyboard();
   /** 入力・書式バー操作の最終時刻。VV 揺れで編集が落ちるのを防ぐ */
   const textEditKeepAliveRef = useRef(0);
+  const workspaceKeyboardOpenRef = useRef(keyboard.open);
+  workspaceKeyboardOpenRef.current = keyboard.open;
   /**
    * 文字編集中は常に書式バーを出す。
    * iOS では overlays-content 時に inset が 0 のままのことがあり、
@@ -1727,7 +1729,8 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }, [editingTextId]);
 
-  // キーボード閉じボタン等で inset が下がったら編集終了。入力中の VV 揺れでは落とさない。
+  // iOS キーボード閉じボタン → 編集終了（書式バーを消し、完了／挿入バーを戻す）。
+  // 閉じ判定は useVisualKeyboard でデバウンス済み。keep-alive で意図的な閉じを止めない。
   const workspaceKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (!editingTextId) {
@@ -1739,10 +1742,10 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (!workspaceKeyboardWasOpenRef.current) return;
-    if (Date.now() - textEditKeepAliveRef.current < 1800) return;
-    // まだ textarea にフォーカスがある＝誤検知の可能性が高い
-    if (document.activeElement === textEditRef.current) return;
     workspaceKeyboardWasOpenRef.current = false;
+    if (document.activeElement === textEditRef.current) {
+      textEditRef.current?.blur();
+    }
     finishWorkspaceTextEdit();
   }, [keyboard.open, editingTextId]);
 
@@ -2194,15 +2197,19 @@ export function IssueWorkspaceCanvas({
                         onFocus={touchWorkspaceTextKeepAlive}
                         onBlur={() => {
                           window.setTimeout(() => {
-                            // 書式バー連続操作・フォーカス直後の揺れでは編集を維持
-                            if (Date.now() - textEditKeepAliveRef.current < 1800) {
-                              keepWorkspaceTextFocus();
-                              return;
-                            }
                             const active = document.activeElement as HTMLElement | null;
                             if (active === textEditRef.current) return;
                             // シート全体の data-board-ui ではなく、書式バー操作だけ維持
                             if (active?.closest("[data-text-format-bar]")) return;
+                            // キーボード閉じボタン: 再フォーカスせず編集終了→完了／挿入バー復帰
+                            if (!workspaceKeyboardOpenRef.current) {
+                              finishWorkspaceTextEdit();
+                              return;
+                            }
+                            if (Date.now() - textEditKeepAliveRef.current < 1800) {
+                              keepWorkspaceTextFocus();
+                              return;
+                            }
                             finishWorkspaceTextEdit();
                           }, 40);
                         }}
@@ -2833,6 +2840,8 @@ function SheetFullscreenEditor({
    * 文字編集中は常に書式バーを出す（keyboard.open 待ち禁止）。
    * iOS の inset 誤検知でバーが出ない問題の本体対策。
    */
+  const overlayKeyboardOpenRef = useRef(keyboard.open);
+  overlayKeyboardOpenRef.current = keyboard.open;
   const editingOverlayText =
     editingOverlayId && selectedOverlay && selectedOverlay.kind === "text" && selectedOverlay.id === editingOverlayId
       ? selectedOverlay
@@ -2883,7 +2892,8 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // キーボード閉じ → 書式バーを消し、上のパーツ挿入バーを戻す。入力中の VV 揺れでは落とさない。
+  // iOS キーボード閉じボタン → 書式バーを消し、完了／上のパーツ挿入バーを戻す。
+  // 閉じ判定は useVisualKeyboard でデバウンス済み。keep-alive で意図的な閉じを止めない。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (!editingOverlayId) {
@@ -2895,9 +2905,10 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    if (Date.now() - overlayEditKeepAliveRef.current < 1800) return;
-    if (document.activeElement === overlayTextRef.current) return;
     overlayKeyboardWasOpenRef.current = false;
+    if (document.activeElement === overlayTextRef.current) {
+      overlayTextRef.current?.blur();
+    }
     finishOverlayTextEdit();
   }, [keyboard.open, editingOverlayId]);
 
@@ -3541,13 +3552,18 @@ function SheetFullscreenEditor({
                             onFocus={touchOverlayTextKeepAlive}
                             onBlur={() => {
                               window.setTimeout(() => {
+                                const active = document.activeElement as HTMLElement | null;
+                                if (active === overlayTextRef.current) return;
+                                if (active?.closest("[data-text-format-bar]")) return;
+                                // キーボード閉じボタン: 再フォーカスせず編集終了→完了／挿入バー復帰
+                                if (!overlayKeyboardOpenRef.current) {
+                                  finishOverlayTextEdit();
+                                  return;
+                                }
                                 if (Date.now() - overlayEditKeepAliveRef.current < 1800) {
                                   keepOverlayTextFocus();
                                   return;
                                 }
-                                const active = document.activeElement as HTMLElement | null;
-                                if (active === overlayTextRef.current) return;
-                                if (active?.closest("[data-text-format-bar]")) return;
                                 finishOverlayTextEdit();
                               }, 40);
                             }}
