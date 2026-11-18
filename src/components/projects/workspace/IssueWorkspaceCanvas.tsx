@@ -99,16 +99,16 @@ type Props = {
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 520;
+/** 入力フォーカス中は VV の中間イベント（開→一瞬閉じ→開）に強い */
+const KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS = 1100;
 /** キーボード上昇が終わってから書式バーを出す（上昇中マウントのピョコ付きを防ぐ） */
 const KEYBOARD_SETTLE_MS = 260;
 /** フォーカス残り＋VV 揺れの「閉じ」誤検知を避ける確認待ち */
-const KEYBOARD_CLOSE_CONFIRM_MS = 720;
-/** 直前の入力があれば誤閉じとみなし編集を維持する */
-const TEXT_EDIT_KEEPALIVE_MS = 1800;
+const KEYBOARD_CLOSE_CONFIRM_MS = 900;
+/** 本当に閉じたか二度目の確認 */
+const KEYBOARD_CLOSE_RECHECK_MS = 450;
 /** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
-/** 編集開始直後の blur / 誤閉じでキーボードを落とさない */
-const TEXT_EDIT_START_GRACE_MS = 900;
 
 /** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
 function keyboardStillCovering() {
@@ -171,9 +171,12 @@ function useVisualKeyboard() {
       if (demoInset != null) return demoInset >= KEYBOARD_OPEN_PX;
       const h = vv.height;
       const covered = measureInset();
-      // VV がほぼ全高ならキーボードは閉じている（フォーカス残りでも open にしない）
-      if (h >= window.innerHeight - 80 && covered < 40) return false;
-      if (!editableFocused) return false;
+      // フォーカス無しで VV がほぼ全高 → 閉じ
+      if (!editableFocused) {
+        return false;
+      }
+      // フォーカス中は「ほぼ全高」だけで閉じない（iOS は開閉中に中間 VV を吐く）
+      // 明確に潰れているときだけ open
       if (h > closedBaseline) closedBaseline = h;
       return closedBaseline - h > KEYBOARD_OPEN_PX || covered > KEYBOARD_OPEN_PX;
     };
@@ -211,11 +214,10 @@ function useVisualKeyboard() {
         }
         return;
       }
-      // フォーカス中かつ VV がまだキーボードで潰れているなら「開いたまま」とみなす
-      // （数秒後に open=false → 編集終了 → キーボード消失の主因だった）
+      // フォーカス中かつ VV がまだキーボードで潰れているなら「開いたまま」
       if (editableFocused) {
         const covered = next;
-        if (covered > 80 || vv.height < window.innerHeight - 100) {
+        if (covered > 60 || vv.height < window.innerHeight - 80) {
           peakInset = Math.max(peakInset, covered);
           setInset(peakInset || covered);
           if (closeTimer) {
@@ -233,17 +235,19 @@ function useVisualKeyboard() {
         closedBaseline = vv.height;
       }
       if (closeTimer) return;
+      const debounceMs = editableFocused ? KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS : KEYBOARD_CLOSE_DEBOUNCE_MS;
       closeTimer = setTimeout(() => {
         closeTimer = null;
         if (editableFocused) {
           const covered = measureInset();
-          if (covered > 80 || vv.height < window.innerHeight - 100) {
+          // フォーカス中ははっきり閉じたときだけ（中間イベントで落とさない）
+          if (covered > 40 || vv.height < window.innerHeight - 60) {
             setOpen(true);
             return;
           }
         }
         if (!measureOpen()) confirmClosed();
-      }, KEYBOARD_CLOSE_DEBOUNCE_MS);
+      }, debounceMs);
     };
     const onFocusIn = (event: FocusEvent) => {
       if (!isEditable(event.target)) return;
@@ -1756,8 +1760,6 @@ export function IssueWorkspaceCanvas({
   const insertFanOpen = plusMenuOpen || tool === "sheet" || tool === "text" || tool === "shape";
 
   const keyboard = useVisualKeyboard();
-  /** 入力・書式バー操作の最終時刻。VV 揺れで編集が落ちるのを防ぐ */
-  const textEditKeepAliveRef = useRef(0);
   const workspaceKeyboardOpenRef = useRef(keyboard.open);
   workspaceKeyboardOpenRef.current = keyboard.open;
   /** 編集中は書式バーを出す。キーボード閉じで編集終了したとき一緒に消える。 */
@@ -1765,22 +1767,14 @@ export function IssueWorkspaceCanvas({
     editingTextBox && canEdit && !toolbarHidden && toolbarMounted,
   );
 
-  function touchWorkspaceTextKeepAlive() {
-    textEditKeepAliveRef.current = Date.now();
-  }
-
   const editingTextIdRef = useRef<string | null>(null);
   editingTextIdRef.current = editingTextId;
-  const workspaceEditStartedAtRef = useRef(0);
 
   function beginWorkspaceTextEdit(id: string) {
-    touchWorkspaceTextKeepAlive();
-    workspaceEditStartedAtRef.current = Date.now();
     setEditingTextId(id);
   }
 
   function keepWorkspaceTextFocus() {
-    touchWorkspaceTextKeepAlive();
     textEditRef.current?.focus({ preventScroll: true });
   }
 
@@ -1819,20 +1813,37 @@ export function IssueWorkspaceCanvas({
     if (!workspaceKeyboardWasOpenRef.current) return;
     workspaceKeyboardWasOpenRef.current = false;
     const editId = editingTextId;
-    window.setTimeout(() => {
-      if (editingTextIdRef.current !== editId) return;
-      if (workspaceKeyboardOpenRef.current) {
-        workspaceKeyboardWasOpenRef.current = true;
-        return;
-      }
-      // VV がまだキーボード分つぶれている＝誤閉じ。編集を維持する
-      if (keyboardStillCovering()) {
+    let cancelled = false;
+    const closeTimers: number[] = [];
+    const abortIfStillOpen = () => {
+      if (cancelled || editingTextIdRef.current !== editId) return true;
+      if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
         workspaceKeyboardWasOpenRef.current = true;
         keepWorkspaceTextFocus();
-        return;
+        return true;
       }
-      finishWorkspaceTextEdit();
-    }, KEYBOARD_CLOSE_CONFIRM_MS);
+      return false;
+    };
+    closeTimers.push(
+      window.setTimeout(() => {
+        if (abortIfStillOpen()) return;
+        // 二度確認：チラつきで終わらせない
+        closeTimers.push(
+          window.setTimeout(() => {
+            if (abortIfStillOpen()) return;
+            finishWorkspaceTextEdit();
+          }, KEYBOARD_CLOSE_RECHECK_MS),
+        );
+      }, KEYBOARD_CLOSE_CONFIRM_MS),
+    );
+    return () => {
+      cancelled = true;
+      for (const t of closeTimers) window.clearTimeout(t);
+      // open が戻ったら「開いてた」扱いを維持（次の本当の閉じを検知するため）
+      if (workspaceKeyboardOpenRef.current) {
+        workspaceKeyboardWasOpenRef.current = true;
+      }
+    };
   }, [keyboard.open, editingTextId]);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
@@ -2275,40 +2286,18 @@ export function IssueWorkspaceCanvas({
                         ref={textEditRef}
                         data-board-ui
                         value={node.text}
-                        onChange={(e) => {
-                          touchWorkspaceTextKeepAlive();
-                          updateItem(node.id, { text: e.target.value });
-                        }}
-                        onInput={touchWorkspaceTextKeepAlive}
-                        onFocus={touchWorkspaceTextKeepAlive}
+                        onChange={(e) => updateItem(node.id, { text: e.target.value })}
                         onBlur={() => {
                           window.setTimeout(() => {
+                            if (!editingTextIdRef.current) return;
                             const active = document.activeElement as HTMLElement | null;
                             if (active === textEditRef.current) return;
-                            // シート全体の data-board-ui ではなく、書式バー操作だけ維持
                             if (active?.closest("[data-text-format-bar]")) return;
-                            // キーボードがまだ一度も開いていない開始直後だけ再フォーカス
-                            if (
-                              !workspaceKeyboardWasOpenRef.current &&
-                              Date.now() - workspaceEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS
-                            ) {
+                            // キーボードがまだあるときだけ取り戻す（blur では終わらせない）
+                            // 本当に閉じたあとに focus するとキーボードが再起動するので触らない
+                            if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
                               keepWorkspaceTextFocus();
-                              return;
                             }
-                            // 閉じ判定チラつき中は維持。本当に閉じたときだけ終了
-                            if (!workspaceKeyboardOpenRef.current) {
-                              if (keyboardStillCovering()) {
-                                keepWorkspaceTextFocus();
-                                return;
-                              }
-                              finishWorkspaceTextEdit();
-                              return;
-                            }
-                            if (Date.now() - textEditKeepAliveRef.current < TEXT_EDIT_KEEPALIVE_MS) {
-                              keepWorkspaceTextFocus();
-                              return;
-                            }
-                            finishWorkspaceTextEdit();
                           }, 40);
                         }}
                         className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
@@ -2893,7 +2882,6 @@ function SheetFullscreenEditor({
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
   const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboard = useVisualKeyboard();
-  const overlayEditKeepAliveRef = useRef(0);
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -2943,30 +2931,19 @@ function SheetFullscreenEditor({
   })();
   const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
 
-  function touchOverlayTextKeepAlive() {
-    overlayEditKeepAliveRef.current = Date.now();
-  }
-
   const editingOverlayIdRef = useRef<string | null>(null);
   editingOverlayIdRef.current = editingOverlayId;
 
   const placeTextDblTapArmedUntilRef = useRef(0);
   const keyboardWasOpenForPlaceRef = useRef(false);
-  const overlayEditStartedAtRef = useRef(0);
-  /** この編集セッションで一度でもキーボードが開いたか（閉じボタン検知用） */
-  const overlayKbEverOpenedRef = useRef(false);
 
   function beginOverlayTextEdit(id: string) {
-    touchOverlayTextKeepAlive();
-    overlayEditStartedAtRef.current = Date.now();
-    overlayKbEverOpenedRef.current = false;
     // 配置／編集開始の直後に残った 1 打目でダブルタップ判定しない
     lastTap.current = null;
     setEditingOverlayId(id);
   }
 
   function keepOverlayTextFocus() {
-    touchOverlayTextKeepAlive();
     overlayTextRef.current?.focus({ preventScroll: true });
   }
 
@@ -3025,32 +3002,45 @@ function SheetFullscreenEditor({
   useEffect(() => {
     if (!editingOverlayId) {
       overlayKeyboardWasOpenRef.current = false;
-      overlayKbEverOpenedRef.current = false;
       return;
     }
     if (keyboard.open) {
       overlayKeyboardWasOpenRef.current = true;
-      overlayKbEverOpenedRef.current = true;
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
     overlayKeyboardWasOpenRef.current = false;
     const editId = editingOverlayId;
-    window.setTimeout(() => {
-      if (editingOverlayIdRef.current !== editId) return;
-      if (overlayKeyboardOpenRef.current) {
-        overlayKeyboardWasOpenRef.current = true;
-        return;
-      }
-      // キーボードがまだ画面を覆っている＝VV チラつきの誤閉じ。編集を維持
-      if (keyboardStillCovering()) {
+    let cancelled = false;
+    const closeTimers: number[] = [];
+    const abortIfStillOpen = () => {
+      if (cancelled || editingOverlayIdRef.current !== editId) return true;
+      if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
         overlayKeyboardWasOpenRef.current = true;
         keepOverlayTextFocus();
-        return;
+        return true;
       }
-      // 本当に閉じた（赤い閉じボタン）→ 書式バーを消し完了／挿入を戻す
-      finishOverlayTextEdit();
-    }, KEYBOARD_CLOSE_CONFIRM_MS);
+      return false;
+    };
+    closeTimers.push(
+      window.setTimeout(() => {
+        if (abortIfStillOpen()) return;
+        closeTimers.push(
+          window.setTimeout(() => {
+            if (abortIfStillOpen()) return;
+            // 赤い閉じボタンで本当に閉じた → 書式バー消し・完了／挿入復帰
+            finishOverlayTextEdit();
+          }, KEYBOARD_CLOSE_RECHECK_MS),
+        );
+      }, KEYBOARD_CLOSE_CONFIRM_MS),
+    );
+    return () => {
+      cancelled = true;
+      for (const t of closeTimers) window.clearTimeout(t);
+      if (overlayKeyboardOpenRef.current) {
+        overlayKeyboardWasOpenRef.current = true;
+      }
+    };
   }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
@@ -3689,39 +3679,17 @@ function SheetFullscreenEditor({
                           <textarea
                             ref={overlayTextRef}
                             value={ov.text}
-                            onChange={(e) => {
-                              touchOverlayTextKeepAlive();
-                              patchOverlay(ov.id, { text: e.target.value });
-                            }}
-                            onInput={touchOverlayTextKeepAlive}
-                            onFocus={touchOverlayTextKeepAlive}
+                            onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
                             onBlur={() => {
                               window.setTimeout(() => {
+                                if (!editingOverlayIdRef.current) return;
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (active?.closest("[data-text-format-bar]")) return;
-                                // キーボード未オープンの開始直後だけ再フォーカス
-                                if (
-                                  !overlayKbEverOpenedRef.current &&
-                                  Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS
-                                ) {
+                                // キーボードがまだあるときだけ取り戻す（blur では終わらせない）
+                                if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
                                   keepOverlayTextFocus();
-                                  return;
                                 }
-                                // 閉じ判定チラつき中は維持。赤い閉じボタンで本当に閉じたら終了
-                                if (!overlayKeyboardOpenRef.current) {
-                                  if (keyboardStillCovering()) {
-                                    keepOverlayTextFocus();
-                                    return;
-                                  }
-                                  finishOverlayTextEdit();
-                                  return;
-                                }
-                                if (Date.now() - overlayEditKeepAliveRef.current < TEXT_EDIT_KEEPALIVE_MS) {
-                                  keepOverlayTextFocus();
-                                  return;
-                                }
-                                finishOverlayTextEdit();
                               }, 40);
                             }}
                             className="h-full w-full resize-none bg-transparent px-1 outline-none"
