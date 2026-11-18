@@ -1730,11 +1730,15 @@ export function IssueWorkspaceCanvas({
   const workspaceKeyboardOpenRef = useRef(keyboard.open);
   workspaceKeyboardOpenRef.current = keyboard.open;
   /**
-   * 編集中は常に書式バーを出す（iOS の open 判定遅れで消えるのを防ぐ）。
-   * キーボード閉じ → 編集終了で一緒に消える。
+   * デスクトップ: 編集中は常に表示。
+   * iOS: キーボード表示中だけ（閉じたら消えて完了／挿入が戻る）。
    */
   const showWorkspaceFormatBar = Boolean(
-    editingTextBox && canEdit && !toolbarHidden && toolbarMounted,
+    editingTextBox &&
+      canEdit &&
+      !toolbarHidden &&
+      toolbarMounted &&
+      (!keyboard.iosLike || keyboard.open),
   );
 
   function touchWorkspaceTextKeepAlive() {
@@ -1789,22 +1793,14 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (!workspaceKeyboardWasOpenRef.current) return;
-    if (Date.now() - workspaceEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
-      keepWorkspaceTextFocus();
-      return;
-    }
+    // キーボード閉じボタン → 必ず編集終了（grace で再フォーカスすると完了／挿入が戻らない）
     workspaceKeyboardWasOpenRef.current = false;
     const editId = editingTextId;
     const focused = document.activeElement === textEditRef.current;
-    // フォーカス残り時だけ短く待って誤検知を避け、意図的な閉じは必ず編集終了→完了／挿入復帰
     const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingTextIdRef.current !== editId) return;
       if (workspaceKeyboardOpenRef.current) return;
-      if (Date.now() - workspaceEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
-        keepWorkspaceTextFocus();
-        return;
-      }
       finishWorkspaceTextEdit();
     }, confirmMs);
   }, [keyboard.open, editingTextId]);
@@ -2261,8 +2257,11 @@ export function IssueWorkspaceCanvas({
                             if (active === textEditRef.current) return;
                             // シート全体の data-board-ui ではなく、書式バー操作だけ維持
                             if (active?.closest("[data-text-format-bar]")) return;
-                            // 編集開始直後のフォーカス揺れでは落とさない
-                            if (Date.now() - workspaceEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
+                            // キーボードがまだ一度も開いていない開始直後だけ再フォーカス
+                            if (
+                              !workspaceKeyboardWasOpenRef.current &&
+                              Date.now() - workspaceEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS
+                            ) {
                               keepWorkspaceTextFocus();
                               return;
                             }
@@ -2898,8 +2897,8 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   /**
-   * 編集中は常に書式バーを出す（選択解除や open 判定遅れで消えないようにする）。
-   * キーボード閉じ → 編集終了で消え、完了／挿入が戻る。
+   * デスクトップ: 編集中は常に表示。
+   * iOS: キーボード表示中だけ書式バー。閉じボタンで編集終了→完了／挿入復帰。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -2908,7 +2907,9 @@ function SheetFullscreenEditor({
     const ov = overlays.find((o) => o.id === editingOverlayId);
     return ov && ov.kind === "text" ? ov : null;
   })();
-  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
+  const showOverlayFormatBar = Boolean(
+    canEdit && editingOverlayText && (!keyboard.iosLike || keyboard.open),
+  );
 
   function touchOverlayTextKeepAlive() {
     overlayEditKeepAliveRef.current = Date.now();
@@ -2920,10 +2921,13 @@ function SheetFullscreenEditor({
   const placeTextDblTapArmedUntilRef = useRef(0);
   const keyboardWasOpenForPlaceRef = useRef(false);
   const overlayEditStartedAtRef = useRef(0);
+  /** この編集セッションで一度でもキーボードが開いたか（閉じボタン検知用） */
+  const overlayKbEverOpenedRef = useRef(false);
 
   function beginOverlayTextEdit(id: string) {
     touchOverlayTextKeepAlive();
     overlayEditStartedAtRef.current = Date.now();
+    overlayKbEverOpenedRef.current = false;
     // 配置／編集開始の直後に残った 1 打目でダブルタップ判定しない
     lastTap.current = null;
     setEditingOverlayId(id);
@@ -2995,30 +2999,23 @@ function SheetFullscreenEditor({
   useEffect(() => {
     if (!editingOverlayId) {
       overlayKeyboardWasOpenRef.current = false;
+      overlayKbEverOpenedRef.current = false;
       return;
     }
     if (keyboard.open) {
       overlayKeyboardWasOpenRef.current = true;
+      overlayKbEverOpenedRef.current = true;
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    // 編集開始直後の VV 揺れは閉じとみなさない
-    if (Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
-      keepOverlayTextFocus();
-      return;
-    }
+    // キーボード閉じボタン → 必ず編集終了。grace 再フォーカスだと書式バーが残り完了／挿入が出ない
     overlayKeyboardWasOpenRef.current = false;
     const editId = editingOverlayId;
     const focused = document.activeElement === overlayTextRef.current;
-    // keep-alive で再フォーカスしない（閉じボタンなのに編集が残り、完了／挿入が出ない原因だった）
     const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingOverlayIdRef.current !== editId) return;
       if (overlayKeyboardOpenRef.current) return;
-      if (Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
-        keepOverlayTextFocus();
-        return;
-      }
       finishOverlayTextEdit();
     }, confirmMs);
   }, [keyboard.open, editingOverlayId]);
@@ -3668,8 +3665,11 @@ function SheetFullscreenEditor({
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (active?.closest("[data-text-format-bar]")) return;
-                                // 編集開始直後（書式バー出現など）の blur ではキーボードを落とさない
-                                if (Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS) {
+                                // キーボード未オープンの開始直後だけ再フォーカス（閉じボタンでは終了）
+                                if (
+                                  !overlayKbEverOpenedRef.current &&
+                                  Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS
+                                ) {
                                   keepOverlayTextFocus();
                                   return;
                                 }
