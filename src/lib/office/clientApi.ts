@@ -153,6 +153,7 @@ export async function submitAnswer(input: OfficeSubmitInput): Promise<{
         strategy_id: input.strategyId,
         target_ids: input.targetIds,
         target_other_text: input.targetOtherText ?? null,
+        asked_question_ids: input.askedQuestionIds ?? [],
       }),
     });
   } catch (e) {

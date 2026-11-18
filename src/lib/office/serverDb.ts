@@ -225,6 +225,12 @@ function mapSubmission(row: Record<string, unknown>): OfficeSubmission {
     reactionEmotion: parseCastEmotion(row.reaction_emotion),
     metersDelta: parseMetersDelta(row.meters_delta),
     safe: row.safe == null ? true : Boolean(row.safe),
+    askedQuestionIds: Array.isArray(row.asked_question_ids)
+      ? row.asked_question_ids.map((x) => String(x))
+      : null,
+    reactionLines: Array.isArray(row.reaction_lines)
+      ? row.reaction_lines.map((x) => String(x).slice(0, 35)).filter(Boolean).slice(0, 2)
+      : null,
   };
 }
 
@@ -640,6 +646,18 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     }
   }
 
+  const qIds = Array.from(
+    new Set((input.askedQuestionIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  );
+  if (qIds.length > 2) throw new Error("質問は2つまでだよ");
+  const validQ = new Set((incident.questions ?? []).map((q) => q.id));
+  for (const qid of qIds) {
+    if (!validQ.has(qid)) throw new Error("その質問は選べないよ");
+  }
+  const heardClues = (incident.questions ?? [])
+    .filter((q) => qIds.includes(q.id))
+    .map((q) => q.clue);
+
   const targetLabels = targetIds.map((tid) => {
     if (tid === "other") return otherText || "その他";
     return targetsInternal.find((t) => t.id === tid)?.label ?? tid;
@@ -663,6 +681,9 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     strategyTitle,
     strategySummary,
     targetLabels,
+    missionGoal: incident.mission?.goal,
+    missionConstraint: incident.mission?.constraint,
+    heardClues,
   });
   if (!scored.ok) {
     await admin.rpc("office_restore_stamina", { p_user_id: userId });
@@ -765,6 +786,8 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     reaction_emotion: reaction.emotion,
     meters_delta: metersDelta,
     safe: true,
+    asked_question_ids: qIds,
+    reaction_lines: scored.scores.reactionLines ?? [],
   };
 
   let subRow: Record<string, unknown> | null = null;
@@ -821,6 +844,10 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
   if (!submission.reactionEmotion) submission.reactionEmotion = reaction.emotion;
   if (!submission.metersDelta) submission.metersDelta = metersDelta;
   if (!submission.castMemberId && speakerMember) submission.castMemberId = speakerMember.id;
+  if (!submission.askedQuestionIds) submission.askedQuestionIds = qIds;
+  if (!submission.reactionLines?.length) {
+    submission.reactionLines = scored.scores.reactionLines ?? [];
+  }
   return {
     submission,
     company: refreshed.company!,

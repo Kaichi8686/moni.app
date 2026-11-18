@@ -241,6 +241,17 @@ export function ResultStep({
         ) : null}
       </div>
 
+      {submission.reactionLines && submission.reactionLines.length > 0 ? (
+        <div className="space-y-1.5 rounded-2xl border border-zinc-100 bg-white/90 px-3 py-2.5">
+          <p className="text-[10px] font-bold text-zinc-400">キャラの反応</p>
+          {submission.reactionLines.map((line) => (
+            <p key={line} className="text-sm font-semibold text-zinc-700">
+              「{line}」
+            </p>
+          ))}
+        </div>
+      ) : null}
+
       <ResultComic
         panels={panels}
         speaker={speaker}

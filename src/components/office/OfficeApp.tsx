@@ -269,6 +269,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         strategyId,
         targetIds,
         targetOtherText: targetIds.includes("other") ? otherText.trim() : null,
+        askedQuestionIds: askedIds,
       };
       const res = await submitAnswer(input);
       setLastSubmit(res.submission);
@@ -507,6 +508,10 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
               ? `スタミナ切れ… 回復まで ${remain != null ? formatRemainMmSs(remain) : "しばらく"}`
               : null
           }
+          mission={incident.mission}
+          clues={(incident.questions ?? [])
+            .filter((q) => askedIds.includes(q.id))
+            .map((q) => q.clue)}
           onSubmit={() => void onSubmit()}
         />
       </div>

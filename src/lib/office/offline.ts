@@ -163,5 +163,11 @@ export function offlineScores(
     story: story.slice(0, 180),
     storyTone: tone,
     nextHint: "次はターゲットの反応を一文で想像して書いてみよう",
+    reactionLines:
+      tone === "great"
+        ? ["うまくいった！次もこの調子！", "現場が少し前向きになったよ"]
+        : tone === "bitter"
+          ? ["うーん、角度を変えよう", "次は手がかりを活かしてみて"]
+          : ["まずまずだね", "制約を守れたのが良いよ"],
   };
 }

@@ -267,6 +267,9 @@ export async function scoreAnswerWithClaude(input: {
   strategyTitle: string;
   strategySummary: string;
   targetLabels: string[];
+  missionGoal?: string | null;
+  missionConstraint?: string | null;
+  heardClues?: string[];
 }): Promise<{ ok: true; scores: OfficeScores } | { ok: false; message: string; offline?: boolean }> {
   const strategyLine =
     input.strategyId === "custom"
@@ -274,10 +277,18 @@ export async function scoreAnswerWithClaude(input: {
       : `作戦: [${input.strategyKind}] ${input.strategyTitle} — ${input.strategySummary}`;
   const targetsLine = `ターゲット: ${input.targetLabels.join(" / ")}`;
   const industry = input.industryLabel ? `\n業種: ${input.industryLabel}` : "";
+  const missionLine =
+    input.missionGoal || input.missionConstraint
+      ? `\nミッション目標: ${input.missionGoal ?? "—"}\nミッション制約: ${input.missionConstraint ?? "—"}`
+      : "";
+  const cluesLine =
+    input.heardClues && input.heardClues.length > 0
+      ? `\n聞いた手がかり: ${input.heardClues.join(" / ")}`
+      : "\n聞いた手がかり: （なし）";
 
   const user = `会社名: ${input.companyName}${industry}
 事件タイトル: ${input.title}
-事件の説明: ${input.description}
+事件の説明: ${input.description}${missionLine}${cluesLine}
 ${strategyLine}
 ${targetsLine}
 <answer>${input.answer}</answer>`;
@@ -303,6 +314,7 @@ ${targetsLine}
       story_tone?: unknown;
       next_hint?: unknown;
       comment?: unknown;
+      reaction_lines?: unknown;
     }>(ai.text);
     if (!parsed) return { message: "JSONパース失敗" };
     const solve = clampScore(Number(parsed.solve));
@@ -319,6 +331,12 @@ ${targetsLine}
       String(parsed.next_hint ?? "").trim().slice(0, 40) || "次はもっと具体的な一手を書いてみよう";
     const comment =
       String(parsed.comment ?? "").trim().slice(0, 60) || "いい感じのアイデアだね！";
+    const reactionLines = Array.isArray(parsed.reaction_lines)
+      ? parsed.reaction_lines
+          .map((x) => String(x ?? "").trim().slice(0, 35))
+          .filter(Boolean)
+          .slice(0, 2)
+      : [];
     return {
       scores: {
         solve,
@@ -330,6 +348,7 @@ ${targetsLine}
         story,
         storyTone,
         nextHint,
+        reactionLines,
       } satisfies OfficeScores,
     };
   };

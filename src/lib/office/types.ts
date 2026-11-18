@@ -115,6 +115,7 @@ export type OfficeScores = {
   story: string;
   storyTone: StoryTone;
   nextHint: string;
+  reactionLines?: string[];
 };
 
 export type OfficeSubmission = {
@@ -185,4 +186,5 @@ export type OfficeSubmitInput = {
   strategyId: string;
   targetIds: string[];
   targetOtherText?: string | null;
+  askedQuestionIds?: string[];
 };

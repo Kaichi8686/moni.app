@@ -387,6 +387,15 @@ export async function localSubmit(
   company.staminaUpdatedAt = consumed.state.updatedAt.toISOString();
   write(store);
 
+  const qIds = Array.from(
+    new Set((input.askedQuestionIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  );
+  if (qIds.length > 2) throw new Error("質問は2つまでだよ");
+  const validQ = new Set((incident.questions ?? []).map((q) => q.id));
+  for (const qid of qIds) {
+    if (!validQ.has(qid)) throw new Error("その質問は選べないよ");
+  }
+
   const scores = offlineScores(text, { strategyKind, strategyTitle });
 
   const recent = store.submissions
@@ -483,6 +492,8 @@ export async function localSubmit(
     reactionEmotion: reaction.emotion,
     metersDelta,
     safe: true,
+    askedQuestionIds: qIds,
+    reactionLines: scores.reactionLines ?? [],
   };
   store.submissions.push(submission);
   write(store);

@@ -14,12 +14,14 @@ export async function POST(req: NextRequest) {
       strategy_id?: string;
       target_ids?: string[];
       target_other_text?: string | null;
+      asked_question_ids?: string[];
     };
     const result = await dbSubmit(admin, auth.userId, {
       answer: body.answer ?? "",
       strategyId: body.strategy_id ?? "",
       targetIds: Array.isArray(body.target_ids) ? body.target_ids : [],
       targetOtherText: body.target_other_text ?? null,
+      askedQuestionIds: Array.isArray(body.asked_question_ids) ? body.asked_question_ids : [],
     });
     return NextResponse.json({
       submission: result.submission,
