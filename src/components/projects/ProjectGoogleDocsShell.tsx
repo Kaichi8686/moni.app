@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Bold,
   Check,
-  Highlighter,
   ImagePlus,
   Italic,
   Link2,
@@ -39,7 +38,6 @@ const PAGE_MIN_HEIGHT = a4MinHeightForWidth(PAGE_MAX_WIDTH);
 const AUTOSAVE_MS = 800;
 
 const TEXT_COLORS = ["#000000", "#434343", "#666666", "#d93025", "#e37400", "#188038", "#1a73e8", "#a142f4"] as const;
-const HIGHLIGHT_COLORS = ["transparent", "#fef08a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e5e7eb"] as const;
 
 function escapeHtml(s: string): string {
   return s
@@ -219,10 +217,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const [imageBusy, setImageBusy] = useState(false);
   const [imageErr, setImageErr] = useState("");
   const [colorOpen, setColorOpen] = useState(false);
-  const [highlightOpen, setHighlightOpen] = useState(false);
   const [alignOpen, setAlignOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [insertOpen, setInsertOpen] = useState(false);
+  const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
+  const [activeTextColor, setActiveTextColor] = useState<string>("#000000");
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -275,42 +274,169 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     }
   }, []);
 
+  const refreshFormatState = useCallback(() => {
+    try {
+      setFormatState({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+      });
+    } catch {
+      setFormatState({ bold: false, italic: false, underline: false });
+    }
+    try {
+      const value = document.queryCommandValue("foreColor");
+      if (!value) return;
+      // rgb(r, g, b) → #rrggbb
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (match) {
+        const hex = `#${[match[1], match[2], match[3]]
+          .map((n) => Number(n).toString(16).padStart(2, "0"))
+          .join("")}`;
+        setActiveTextColor(hex);
+      } else if (value.startsWith("#")) {
+        setActiveTextColor(value);
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const ensureEditorReadyForFormat = useCallback(() => {
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    if (!editModeRef.current) {
+      editModeRef.current = true;
+      setEditMode(true);
+    }
+    setTypingActive(true);
+    restoreSelection();
+    const el = editorRef.current;
+    el?.focus({ preventScroll: true });
+  }, [restoreSelection]);
+
+  const placeCaretInSpan = useCallback((span: HTMLElement) => {
+    const sel = window.getSelection();
+    if (!sel) return;
+    const next = document.createRange();
+    if (span.firstChild) {
+      const len = span.firstChild.textContent?.length ?? 0;
+      next.setStart(span.firstChild, len);
+    } else {
+      next.selectNodeContents(span);
+    }
+    next.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(next);
+  }, []);
+
+  const wrapSelectionOrCaret = useCallback(
+    (createSpan: () => HTMLSpanElement) => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return false;
+      const range = sel.getRangeAt(0);
+      const span = createSpan();
+      if (range.collapsed) {
+        // これから打つ文字用: キャレット位置に空 span を置き、中にキャレット
+        span.appendChild(document.createTextNode("\u200b"));
+        range.insertNode(span);
+        placeCaretInSpan(span);
+        return true;
+      }
+      try {
+        range.surroundContents(span);
+      } catch {
+        span.appendChild(range.extractContents());
+        range.insertNode(span);
+      }
+      sel.removeAllRanges();
+      const next = document.createRange();
+      next.selectNodeContents(span);
+      sel.addRange(next);
+      return true;
+    },
+    [placeCaretInSpan],
+  );
+
   const exec = useCallback(
     (command: string, value?: string) => {
-      restoreSelection();
-      const el = editorRef.current;
-      el?.focus();
+      ensureEditorReadyForFormat();
       try {
         document.execCommand("styleWithCSS", false, "true");
         const ok = document.execCommand(command, false, value);
         // iOS などで foreColor / fontSize が効かない場合は span でフォールバック
-        if (!ok && (command === "foreColor" || command === "hiliteColor" || command === "fontSize")) {
-          const sel = window.getSelection();
-          if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
-            const range = sel.getRangeAt(0);
+        if (!ok && (command === "foreColor" || command === "fontSize")) {
+          wrapSelectionOrCaret(() => {
             const span = document.createElement("span");
             if (command === "foreColor" && value) span.style.color = value;
-            if (command === "hiliteColor" && value) span.style.backgroundColor = value;
             if (command === "fontSize" && value) span.style.fontSize = value;
-            try {
-              range.surroundContents(span);
-            } catch {
-              span.appendChild(range.extractContents());
-              range.insertNode(span);
-            }
-            sel.removeAllRanges();
-            const next = document.createRange();
-            next.selectNodeContents(span);
-            sel.addRange(next);
-          }
+            return span;
+          });
         }
       } catch {
         /* noop */
       }
       rememberSelection();
       refreshHistoryState();
+      refreshFormatState();
     },
-    [rememberSelection, refreshHistoryState, restoreSelection],
+    [ensureEditorReadyForFormat, rememberSelection, refreshFormatState, refreshHistoryState, wrapSelectionOrCaret],
+  );
+
+  /** 太字・斜体・下線・文字色: 選択範囲に適用し、キャレットのみならこれから打つ文字にも効く */
+  const applyTextFormat = useCallback(
+    (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => {
+      ensureEditorReadyForFormat();
+      const selBefore = window.getSelection();
+      const collapsed =
+        !selBefore || selBefore.rangeCount === 0 || selBefore.getRangeAt(0).collapsed;
+
+      try {
+        document.execCommand("styleWithCSS", false, "true");
+
+        if (command === "foreColor" && value) {
+          setActiveTextColor(value);
+          if (collapsed) {
+            // キャレットのみ: 色付き span を置いてこれから打つ文字に効かせる
+            wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              span.style.color = value;
+              return span;
+            });
+          } else {
+            const ok = document.execCommand("foreColor", false, value);
+            if (!ok) {
+              wrapSelectionOrCaret(() => {
+                const span = document.createElement("span");
+                span.style.color = value;
+                return span;
+              });
+            }
+          }
+        } else {
+          // 選択あり: 選択範囲に適用。キャレットのみ: ブラウザの入力スタイルでこれから打つ文字に効く
+          const ok = document.execCommand(command, false, value);
+          if (!ok) {
+            wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              if (command === "bold") span.style.fontWeight = "700";
+              if (command === "italic") span.style.fontStyle = "italic";
+              if (command === "underline") span.style.textDecoration = "underline";
+              return span;
+            });
+          }
+        }
+      } catch {
+        /* noop */
+      }
+
+      rememberSelection();
+      refreshHistoryState();
+      refreshFormatState();
+    },
+    [ensureEditorReadyForFormat, rememberSelection, refreshFormatState, refreshHistoryState, wrapSelectionOrCaret],
   );
 
   const applyFontSizePx = useCallback(
@@ -442,7 +568,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       setTypingActive(false);
       setZoomUnlocked(true);
       setColorOpen(false);
-      setHighlightOpen(false);
       setAlignOpen(false);
       setStyleOpen(false);
       setInsertOpen(false);
@@ -686,7 +811,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     scheduleFlush();
     setSaveHint("編集中…");
     refreshHistoryState();
-  }, [refreshHistoryState, rememberSelection, scheduleFlush]);
+    refreshFormatState();
+  }, [refreshFormatState, refreshHistoryState, rememberSelection, scheduleFlush]);
 
   const onTitleChange = useCallback(
     (value: string) => {
@@ -711,7 +837,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     }
     setTypingActive(true);
     refreshHistoryState();
-  }, [refreshHistoryState]);
+    refreshFormatState();
+  }, [refreshFormatState, refreshHistoryState]);
 
   const onEditorBlur = useCallback(() => {
     rememberSelection();
@@ -905,7 +1032,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     rememberSelection();
                     setInsertOpen((v) => !v);
                     setColorOpen(false);
-                    setHighlightOpen(false);
                     setAlignOpen(false);
                     setStyleOpen(false);
                   }}
@@ -1006,14 +1132,17 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 onMouseUp={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
                 onKeyUp={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
                 onSelect={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
                 onClick={(event) => {
                   // 一部環境で contentEditable=false 時に onDoubleClick が欠けるため detail でも拾う
@@ -1088,38 +1217,15 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     key={c}
                     type="button"
                     aria-label={`文字色 ${c}`}
-                    className="h-8 w-8 shrink-0 rounded-full border border-[#dadce0]"
+                    className={`h-8 w-8 shrink-0 rounded-full border ${
+                      activeTextColor.toLowerCase() === c ? "border-[#1a73e8] ring-2 ring-[#1a73e8]/40" : "border-[#dadce0]"
+                    }`}
                     style={{ background: c }}
                     onMouseDown={(e) => e.preventDefault()}
                     onPointerDown={(e) => e.preventDefault()}
                     onClick={() => {
-                      exec("foreColor", c);
+                      applyTextFormat("foreColor", c);
                       setColorOpen(false);
-                      scheduleAutoSave();
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {highlightOpen ? (
-              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[#e8eaed] px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={c === "transparent" ? "ハイライトなし" : `ハイライト ${c}`}
-                    className="h-8 w-8 shrink-0 rounded-md border border-[#dadce0]"
-                    style={{
-                      background:
-                        c === "transparent"
-                          ? "linear-gradient(to bottom right, transparent calc(50% - 1px), #d93025 calc(50% - 1px), #d93025 calc(50% + 1px), transparent calc(50% + 1px)), #fff"
-                          : c,
-                    }}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      exec("hiliteColor", c === "transparent" ? "transparent" : c);
-                      setHighlightOpen(false);
                       scheduleAutoSave();
                     }}
                   />
@@ -1209,8 +1315,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <ToolBtn
                 title="太字"
+                active={formatState.bold}
                 onClick={() => {
-                  exec("bold");
+                  applyTextFormat("bold");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1219,8 +1326,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               </ToolBtn>
               <ToolBtn
                 title="斜体"
+                active={formatState.italic}
                 onClick={() => {
-                  exec("italic");
+                  applyTextFormat("italic");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1229,8 +1337,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               </ToolBtn>
               <ToolBtn
                 title="下線"
+                active={formatState.underline}
                 onClick={() => {
-                  exec("underline");
+                  applyTextFormat("underline");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1247,29 +1356,18 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 onClick={() => {
                   rememberSelection();
                   setColorOpen((v) => !v);
-                  setHighlightOpen(false);
                   setAlignOpen(false);
                   setStyleOpen(false);
                 }}
               >
                 <span className="flex flex-col items-center leading-none">
                   <span className="text-[15px] font-semibold">A</span>
-                  <span className="mt-0.5 h-[3px] w-4 rounded-sm bg-[#d93025]" aria-hidden />
+                  <span
+                    className="mt-0.5 h-[3px] w-4 rounded-sm"
+                    style={{ background: activeTextColor || "#d93025" }}
+                    aria-hidden
+                  />
                 </span>
-              </ToolBtn>
-              <ToolBtn
-                title="ハイライト"
-                active={highlightOpen}
-                disabled={!editing}
-                onClick={() => {
-                  rememberSelection();
-                  setHighlightOpen((v) => !v);
-                  setColorOpen(false);
-                  setAlignOpen(false);
-                  setStyleOpen(false);
-                }}
-              >
-                <Highlighter className="h-4 w-4" />
               </ToolBtn>
               <ToolBtn
                 title="配置"
@@ -1279,7 +1377,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   setAlignOpen((v) => !v);
                   setColorOpen(false);
-                  setHighlightOpen(false);
                   setStyleOpen(false);
                 }}
               >
@@ -1315,7 +1412,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   setStyleOpen((v) => !v);
                   setColorOpen(false);
-                  setHighlightOpen(false);
                   setAlignOpen(false);
                 }}
               >
