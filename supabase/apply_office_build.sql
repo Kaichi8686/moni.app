@@ -166,7 +166,9 @@ create index if not exists idx_office_runs_daily_revenue
   on public.office_runs (date_key, mode, status, revenue desc);
 
 -- ========== 日次ランキング用集計ビュー ==========
-create or replace view public.office_daily_ranking_public as
+-- CREATE OR REPLACE では列の挿入・改名ができないので DROP して作り直す
+drop view if exists public.office_daily_ranking_public;
+create view public.office_daily_ranking_public as
 select
   r.date_key,
   c.name as company_name,
@@ -182,8 +184,9 @@ where r.mode = 'daily'
   and c.ranking_enabled = true
   and r.revenue is not null;
 
--- 月間公開ビューに mood を足す（再定義）
-create or replace view public.office_ranking_public as
+-- 月間公開ビューに mood を足す（列順が変わるため DROP → CREATE）
+drop view if exists public.office_ranking_public;
+create view public.office_ranking_public as
 select
   s.season_key,
   s.league_id,
