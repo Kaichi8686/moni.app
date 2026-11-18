@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Bold,
   Check,
-  Highlighter,
   ImagePlus,
   Italic,
   Link2,
@@ -39,7 +38,6 @@ const PAGE_MIN_HEIGHT = a4MinHeightForWidth(PAGE_MAX_WIDTH);
 const AUTOSAVE_MS = 800;
 
 const TEXT_COLORS = ["#000000", "#434343", "#666666", "#d93025", "#e37400", "#188038", "#1a73e8", "#a142f4"] as const;
-const HIGHLIGHT_COLORS = ["transparent", "#fef08a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e5e7eb"] as const;
 
 function escapeHtml(s: string): string {
   return s
@@ -174,11 +172,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   },
   ref,
 ) {
+  const shellRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const documentsRef = useRef(documents);
   const flushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(docTitle);
   const contentRef = useRef("");
   const activeDocIdRef = useRef(activeDocId);
@@ -189,6 +189,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const discardOnLeaveRef = useRef(false);
   const savedRangeRef = useRef<Range | null>(null);
   const suppressEditUntilRef = useRef(0);
+  const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  const editModeRef = useRef(false);
   const pinchRef = useRef<{
     startDist: number;
     startZoom: number;
@@ -200,22 +202,26 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const [saveHint, setSaveHint] = useState("保存済み");
   const [leaving, setLeaving] = useState(false);
-  /** 編集可なら最初から入力できる。チェックで閲覧＋ズーム解禁、タップで再編集 */
+  /** 編集セッション（チェック・書式バー表示）。入力自体はダブルタップで開始 */
   const [editMode, setEditMode] = useState(() => Boolean(autoSave));
+  /** エディタにフォーカスして文字入力中 */
+  const [typingActive, setTypingActive] = useState(false);
+  editModeRef.current = editMode;
   const [zoomUnlocked, setZoomUnlocked] = useState(false);
   const [docZoom, setDocZoom] = useState(1);
   const [docPan, setDocPan] = useState({ x: 0, y: 0 });
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  /** キーボード高さ分だけ下余白（シェル自体は lvh 全面のまま＝ジャンルが透けない） */
+  /** 可視領域下端より下にはみ出した分（Safari バー＋キーボード）。シェルは lvh のまま */
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [imageBusy, setImageBusy] = useState(false);
   const [imageErr, setImageErr] = useState("");
   const [colorOpen, setColorOpen] = useState(false);
-  const [highlightOpen, setHighlightOpen] = useState(false);
   const [alignOpen, setAlignOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [insertOpen, setInsertOpen] = useState(false);
+  const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
+  const [activeTextColor, setActiveTextColor] = useState<string>("#000000");
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -268,42 +274,169 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     }
   }, []);
 
+  const refreshFormatState = useCallback(() => {
+    try {
+      setFormatState({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+      });
+    } catch {
+      setFormatState({ bold: false, italic: false, underline: false });
+    }
+    try {
+      const value = document.queryCommandValue("foreColor");
+      if (!value) return;
+      // rgb(r, g, b) → #rrggbb
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (match) {
+        const hex = `#${[match[1], match[2], match[3]]
+          .map((n) => Number(n).toString(16).padStart(2, "0"))
+          .join("")}`;
+        setActiveTextColor(hex);
+      } else if (value.startsWith("#")) {
+        setActiveTextColor(value);
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const ensureEditorReadyForFormat = useCallback(() => {
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    if (!editModeRef.current) {
+      editModeRef.current = true;
+      setEditMode(true);
+    }
+    setTypingActive(true);
+    restoreSelection();
+    const el = editorRef.current;
+    el?.focus({ preventScroll: true });
+  }, [restoreSelection]);
+
+  const placeCaretInSpan = useCallback((span: HTMLElement) => {
+    const sel = window.getSelection();
+    if (!sel) return;
+    const next = document.createRange();
+    if (span.firstChild) {
+      const len = span.firstChild.textContent?.length ?? 0;
+      next.setStart(span.firstChild, len);
+    } else {
+      next.selectNodeContents(span);
+    }
+    next.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(next);
+  }, []);
+
+  const wrapSelectionOrCaret = useCallback(
+    (createSpan: () => HTMLSpanElement) => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return false;
+      const range = sel.getRangeAt(0);
+      const span = createSpan();
+      if (range.collapsed) {
+        // これから打つ文字用: キャレット位置に空 span を置き、中にキャレット
+        span.appendChild(document.createTextNode("\u200b"));
+        range.insertNode(span);
+        placeCaretInSpan(span);
+        return true;
+      }
+      try {
+        range.surroundContents(span);
+      } catch {
+        span.appendChild(range.extractContents());
+        range.insertNode(span);
+      }
+      sel.removeAllRanges();
+      const next = document.createRange();
+      next.selectNodeContents(span);
+      sel.addRange(next);
+      return true;
+    },
+    [placeCaretInSpan],
+  );
+
   const exec = useCallback(
     (command: string, value?: string) => {
-      restoreSelection();
-      const el = editorRef.current;
-      el?.focus();
+      ensureEditorReadyForFormat();
       try {
         document.execCommand("styleWithCSS", false, "true");
         const ok = document.execCommand(command, false, value);
         // iOS などで foreColor / fontSize が効かない場合は span でフォールバック
-        if (!ok && (command === "foreColor" || command === "hiliteColor" || command === "fontSize")) {
-          const sel = window.getSelection();
-          if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
-            const range = sel.getRangeAt(0);
+        if (!ok && (command === "foreColor" || command === "fontSize")) {
+          wrapSelectionOrCaret(() => {
             const span = document.createElement("span");
             if (command === "foreColor" && value) span.style.color = value;
-            if (command === "hiliteColor" && value) span.style.backgroundColor = value;
             if (command === "fontSize" && value) span.style.fontSize = value;
-            try {
-              range.surroundContents(span);
-            } catch {
-              span.appendChild(range.extractContents());
-              range.insertNode(span);
-            }
-            sel.removeAllRanges();
-            const next = document.createRange();
-            next.selectNodeContents(span);
-            sel.addRange(next);
-          }
+            return span;
+          });
         }
       } catch {
         /* noop */
       }
       rememberSelection();
       refreshHistoryState();
+      refreshFormatState();
     },
-    [rememberSelection, refreshHistoryState, restoreSelection],
+    [ensureEditorReadyForFormat, rememberSelection, refreshFormatState, refreshHistoryState, wrapSelectionOrCaret],
+  );
+
+  /** 太字・斜体・下線・文字色: 選択範囲に適用し、キャレットのみならこれから打つ文字にも効く */
+  const applyTextFormat = useCallback(
+    (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => {
+      ensureEditorReadyForFormat();
+      const selBefore = window.getSelection();
+      const collapsed =
+        !selBefore || selBefore.rangeCount === 0 || selBefore.getRangeAt(0).collapsed;
+
+      try {
+        document.execCommand("styleWithCSS", false, "true");
+
+        if (command === "foreColor" && value) {
+          setActiveTextColor(value);
+          if (collapsed) {
+            // キャレットのみ: 色付き span を置いてこれから打つ文字に効かせる
+            wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              span.style.color = value;
+              return span;
+            });
+          } else {
+            const ok = document.execCommand("foreColor", false, value);
+            if (!ok) {
+              wrapSelectionOrCaret(() => {
+                const span = document.createElement("span");
+                span.style.color = value;
+                return span;
+              });
+            }
+          }
+        } else {
+          // 選択あり: 選択範囲に適用。キャレットのみ: ブラウザの入力スタイルでこれから打つ文字に効く
+          const ok = document.execCommand(command, false, value);
+          if (!ok) {
+            wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              if (command === "bold") span.style.fontWeight = "700";
+              if (command === "italic") span.style.fontStyle = "italic";
+              if (command === "underline") span.style.textDecoration = "underline";
+              return span;
+            });
+          }
+        }
+      } catch {
+        /* noop */
+      }
+
+      rememberSelection();
+      refreshHistoryState();
+      refreshFormatState();
+    },
+    [ensureEditorReadyForFormat, rememberSelection, refreshFormatState, refreshHistoryState, wrapSelectionOrCaret],
   );
 
   const applyFontSizePx = useCallback(
@@ -430,10 +563,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     setLeaving(true);
     try {
       await flushAndSave();
+      editModeRef.current = false;
       setEditMode(false);
+      setTypingActive(false);
       setZoomUnlocked(true);
       setColorOpen(false);
-      setHighlightOpen(false);
       setAlignOpen(false);
       setStyleOpen(false);
       setInsertOpen(false);
@@ -442,7 +576,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       setCanRedo(false);
     } catch {
       // 保存失敗時も閲覧へは進める
+      editModeRef.current = false;
       setEditMode(false);
+      setTypingActive(false);
       setZoomUnlocked(true);
     } finally {
       setLeaving(false);
@@ -465,16 +601,33 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     onBack();
   }, [leaving, onBack]);
 
-  const enterEditMode = useCallback(() => {
+  const isDoubleTap = useCallback((x: number, y: number) => {
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    const doubled =
+      !!prev && now - prev.t < 380 && Math.hypot(x - prev.x, y - prev.y) < 28;
+    lastTapRef.current = { t: now, x, y };
+    return doubled;
+  }, []);
+
+  /** ダブルタップで編集セッション＋文字入力を開始 */
+  const beginTyping = useCallback(() => {
     if (!autoSave || activeDocId === null) return;
     if (Date.now() < suppressEditUntilRef.current) return;
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    lastTapRef.current = null;
+    editModeRef.current = true;
     setEditMode(true);
+    setTypingActive(true);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
     queueMicrotask(() => {
       const el = editorRef.current;
       if (!el) return;
-      el.focus();
+      el.focus({ preventScroll: true });
       refreshHistoryState();
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
@@ -588,26 +741,31 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     };
   }, [autoSave, activeDocId, readEditorHtml]);
 
-  /** 書式バーをキーボード直上へ（シェル高さは縮めない） */
-  useEffect(() => {
+  /** 書式バーを可視領域下端（Safari バー／キーボード直上）へ。シェル高さは縮めない */
+  useLayoutEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
     const sync = () => {
+      const shell = shellRef.current;
       const vv = window.visualViewport;
-      if (!vv) {
+      if (!shell || !vv) {
         setKeyboardInset(0);
         return;
       }
-      setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+      const rect = shell.getBoundingClientRect();
+      const vvBottom = vv.offsetTop + vv.height;
+      setKeyboardInset(Math.max(0, Math.round(rect.bottom - vvBottom)));
     };
     sync();
     const vv = window.visualViewport;
     vv?.addEventListener("resize", sync);
     vv?.addEventListener("scroll", sync);
     window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
     return () => {
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
     };
   }, [fullscreen]);
 
@@ -619,17 +777,19 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     el.innerHTML = html;
     contentRef.current = sanitizeHtml(html);
     dirtyRef.current = false;
+    editModeRef.current = Boolean(autoSave);
     setEditMode(Boolean(autoSave));
+    setTypingActive(false);
     setZoomUnlocked(false);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
+    lastTapRef.current = null;
     discardOnLeaveRef.current = false;
     queueMicrotask(() => {
       setSaveHint("保存済み");
       refreshHistoryState();
-      if (autoSave) {
-        el.focus();
-      }
+      // 開いた直後はフォーカスしない。ダブルタップで入力開始
+      el.blur();
     });
   }, [activeDocId, autoSave, refreshHistoryState]);
 
@@ -651,7 +811,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     scheduleFlush();
     setSaveHint("編集中…");
     refreshHistoryState();
-  }, [refreshHistoryState, rememberSelection, scheduleFlush]);
+    refreshFormatState();
+  }, [refreshFormatState, refreshHistoryState, rememberSelection, scheduleFlush]);
 
   const onTitleChange = useCallback(
     (value: string) => {
@@ -662,27 +823,61 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     [onDocTitleChange, scheduleAutoSave],
   );
 
+  const onEditorFocus = useCallback(() => {
+    // 閲覧中の1打目で focus が立っても入力中扱いしない（ダブルタップ判定を壊す）
+    if (!editModeRef.current) {
+      queueMicrotask(() => {
+        if (!editModeRef.current) editorRef.current?.blur();
+      });
+      return;
+    }
+    if (blurTypingTimerRef.current) {
+      clearTimeout(blurTypingTimerRef.current);
+      blurTypingTimerRef.current = null;
+    }
+    setTypingActive(true);
+    refreshHistoryState();
+    refreshFormatState();
+  }, [refreshFormatState, refreshHistoryState]);
+
   const onEditorBlur = useCallback(() => {
     rememberSelection();
     flushToParent();
     refreshHistoryState();
+    if (blurTypingTimerRef.current) clearTimeout(blurTypingTimerRef.current);
+    // 書式バーの preventDefault でフォーカスが戻る場合は入力継続
+    blurTypingTimerRef.current = setTimeout(() => {
+      blurTypingTimerRef.current = null;
+      const el = editorRef.current;
+      if (el && document.activeElement === el) return;
+      // キーボード下降＝入力終了。書式バーも一緒に消す
+      setTypingActive(false);
+      setColorOpen(false);
+      setAlignOpen(false);
+      setStyleOpen(false);
+    }, 80);
   }, [flushToParent, refreshHistoryState, rememberSelection]);
 
-  const onEditorActivate = useCallback(() => {
-    if (editMode) return;
-    if (Date.now() < suppressEditUntilRef.current) return;
-    if (docZoom > 1.02) return;
-    enterEditMode();
-  }, [docZoom, editMode, enterEditMode]);
+  const tryBeginTypingFromTap = useCallback(
+    (x: number, y: number) => {
+      // 編集セッション中かつ入力中のみスキップ。閲覧中の誤 focus 残留は無視
+      if (editModeRef.current && typingActive) return;
+      if (Date.now() < suppressEditUntilRef.current) return;
+      if (docZoom > 1.02) return;
+      // ピンチ中のみ拒否。単指の pointerdown 残余でダブルタップを落とさない
+      if (pointersRef.current.size >= 2 || pinchRef.current) return;
+      if (!isDoubleTap(x, y)) return;
+      beginTyping();
+    },
+    [beginTyping, docZoom, isDoubleTap, typingActive],
+  );
 
-  const onEditorTouchEnd = useCallback(() => {
-    if (editMode) return;
-    if (Date.now() < suppressEditUntilRef.current) return;
-    if (docZoom > 1.02) return;
-    if (pointersRef.current.size > 0) return;
-    // シングルタップで編集開始（iOS のダブルタップズームと競合しにくい）
-    enterEditMode();
-  }, [docZoom, editMode, enterEditMode]);
+  useEffect(
+    () => () => {
+      if (blurTypingTimerRef.current) clearTimeout(blurTypingTimerRef.current);
+    },
+    [],
+  );
 
   const applyBlockStyle = (v: string) => {
     if (v === "p") exec("formatBlock", "<p>");
@@ -751,9 +946,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const showSidebar = !hideSidebar && sidebar && !fullscreen;
   const canEditDoc = activeDocId !== null && autoSave;
   const editing = canEditDoc && editMode;
+  const showTypingShield = editing && !typingActive;
 
   return (
     <section
+      ref={shellRef}
       className={
         fullscreen
           ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-white"
@@ -812,11 +1009,13 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               {activeDocId === null
                 ? ""
                 : editing
-                  ? saveHint
+                  ? typingActive
+                    ? saveHint
+                    : "ダブルタップで入力"
                   : canEditDoc
                     ? zoomUnlocked
-                      ? "ピンチで拡大 · タップで編集"
-                      : "タップで編集"
+                      ? "ピンチで拡大 · ダブルタップで編集"
+                      : "ダブルタップで編集"
                     : saveHint}
             </p>
           </div>
@@ -837,7 +1036,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     rememberSelection();
                     setInsertOpen((v) => !v);
                     setColorOpen(false);
-                    setHighlightOpen(false);
                     setAlignOpen(false);
                     setStyleOpen(false);
                   }}
@@ -908,8 +1106,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             <div
               className={
                 fullscreen
-                  ? "mx-auto flex min-h-full w-full flex-col bg-white"
-                  : "mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
+                  ? "relative mx-auto flex min-h-full w-full flex-col bg-white"
+                  : "relative mx-auto w-full bg-white shadow-sm ring-1 ring-[#E5E7EB]"
               }
               style={{
                 ...(fullscreen ? undefined : { maxWidth: PAGE_MAX_WIDTH }),
@@ -922,7 +1120,7 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 role="textbox"
                 aria-multiline
                 aria-readonly={!editing}
-                tabIndex={0}
+                tabIndex={editing ? 0 : -1}
                 contentEditable={editing}
                 suppressContentEditableWarning
                 autoCorrect="off"
@@ -933,22 +1131,41 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 data-1p-ignore="true"
                 inputMode="text"
                 onInput={onEditorInput}
+                onFocus={onEditorFocus}
                 onBlur={onEditorBlur}
                 onMouseUp={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
                 onKeyUp={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
                 onSelect={() => {
                   rememberSelection();
                   refreshHistoryState();
+                  refreshFormatState();
                 }}
-                onClick={onEditorActivate}
-                onDoubleClick={onEditorActivate}
-                onTouchEnd={onEditorTouchEnd}
+                onClick={(event) => {
+                  // 一部環境で contentEditable=false 時に onDoubleClick が欠けるため detail でも拾う
+                  if (showTypingShield) return;
+                  if (editMode && typingActive) return;
+                  if (event.detail < 2) return;
+                  beginTyping();
+                }}
+                onDoubleClick={() => {
+                  if (editMode && typingActive) return;
+                  beginTyping();
+                }}
+                onTouchEnd={(event) => {
+                  if (showTypingShield) return;
+                  if (editMode && typingActive) return;
+                  const touch = event.changedTouches[0];
+                  if (!touch) return;
+                  tryBeginTypingFromTap(touch.clientX, touch.clientY);
+                }}
                 className={`gdocs-editor-body w-full flex-1 outline-none ${editing ? "" : "cursor-text"}`}
                 style={{
                   minHeight: fullscreen ? "100%" : PAGE_MIN_HEIGHT,
@@ -956,17 +1173,37 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     ? "1rem 1.25rem 1.5rem"
                     : "clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 5vw, 4rem)",
                   boxSizing: "border-box",
-                  // iOS のダブルタップズームを抑え、すぐ入力できるようにする
+                  // iOS のダブルタップズームを抑えつつ、ダブルタップ入力と両立
                   touchAction: canBrowseZoom ? "none" : "manipulation",
                 }}
               />
+              {showTypingShield ? (
+                <div
+                  className="absolute inset-0 z-10 touch-pan-y"
+                  aria-hidden
+                  onClick={(event) => {
+                    if (event.detail < 2) return;
+                    event.preventDefault();
+                    beginTyping();
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    beginTyping();
+                  }}
+                  onTouchEnd={(event) => {
+                    const touch = event.changedTouches[0];
+                    if (!touch) return;
+                    tryBeginTypingFromTap(touch.clientX, touch.clientY);
+                  }}
+                />
+              ) : null}
             </div>
           )}
         </div>
 
-        {/* 入力欄の直上（キーボードのすぐ上）に文字設定バー。
+        {/* キーボード表示中（入力中）だけ文字設定バーを出す。
             色などは上方向 absolute だとドキュメント面の下に回るので、バー内の行で開く */}
-        {editing ? (
+        {editing && typingActive ? (
           <div
             className={`relative z-50 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)] ${
               fullscreen && keyboardInset < 8
@@ -984,38 +1221,15 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                     key={c}
                     type="button"
                     aria-label={`文字色 ${c}`}
-                    className="h-8 w-8 shrink-0 rounded-full border border-[#dadce0]"
+                    className={`h-8 w-8 shrink-0 rounded-full border ${
+                      activeTextColor.toLowerCase() === c ? "border-[#1a73e8] ring-2 ring-[#1a73e8]/40" : "border-[#dadce0]"
+                    }`}
                     style={{ background: c }}
                     onMouseDown={(e) => e.preventDefault()}
                     onPointerDown={(e) => e.preventDefault()}
                     onClick={() => {
-                      exec("foreColor", c);
+                      applyTextFormat("foreColor", c);
                       setColorOpen(false);
-                      scheduleAutoSave();
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {highlightOpen ? (
-              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[#e8eaed] px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={c === "transparent" ? "ハイライトなし" : `ハイライト ${c}`}
-                    className="h-8 w-8 shrink-0 rounded-md border border-[#dadce0]"
-                    style={{
-                      background:
-                        c === "transparent"
-                          ? "linear-gradient(to bottom right, transparent calc(50% - 1px), #d93025 calc(50% - 1px), #d93025 calc(50% + 1px), transparent calc(50% + 1px)), #fff"
-                          : c,
-                    }}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      exec("hiliteColor", c === "transparent" ? "transparent" : c);
-                      setHighlightOpen(false);
                       scheduleAutoSave();
                     }}
                   />
@@ -1105,8 +1319,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <ToolBtn
                 title="太字"
+                active={formatState.bold}
                 onClick={() => {
-                  exec("bold");
+                  applyTextFormat("bold");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1115,8 +1330,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               </ToolBtn>
               <ToolBtn
                 title="斜体"
+                active={formatState.italic}
                 onClick={() => {
-                  exec("italic");
+                  applyTextFormat("italic");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1125,8 +1341,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
               </ToolBtn>
               <ToolBtn
                 title="下線"
+                active={formatState.underline}
                 onClick={() => {
-                  exec("underline");
+                  applyTextFormat("underline");
                   scheduleAutoSave();
                 }}
                 disabled={!editing}
@@ -1143,29 +1360,18 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 onClick={() => {
                   rememberSelection();
                   setColorOpen((v) => !v);
-                  setHighlightOpen(false);
                   setAlignOpen(false);
                   setStyleOpen(false);
                 }}
               >
                 <span className="flex flex-col items-center leading-none">
                   <span className="text-[15px] font-semibold">A</span>
-                  <span className="mt-0.5 h-[3px] w-4 rounded-sm bg-[#d93025]" aria-hidden />
+                  <span
+                    className="mt-0.5 h-[3px] w-4 rounded-sm"
+                    style={{ background: activeTextColor || "#d93025" }}
+                    aria-hidden
+                  />
                 </span>
-              </ToolBtn>
-              <ToolBtn
-                title="ハイライト"
-                active={highlightOpen}
-                disabled={!editing}
-                onClick={() => {
-                  rememberSelection();
-                  setHighlightOpen((v) => !v);
-                  setColorOpen(false);
-                  setAlignOpen(false);
-                  setStyleOpen(false);
-                }}
-              >
-                <Highlighter className="h-4 w-4" />
               </ToolBtn>
               <ToolBtn
                 title="配置"
@@ -1175,7 +1381,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   setAlignOpen((v) => !v);
                   setColorOpen(false);
-                  setHighlightOpen(false);
                   setStyleOpen(false);
                 }}
               >
@@ -1211,7 +1416,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   rememberSelection();
                   setStyleOpen((v) => !v);
                   setColorOpen(false);
-                  setHighlightOpen(false);
                   setAlignOpen(false);
                 }}
               >
