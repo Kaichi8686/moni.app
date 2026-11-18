@@ -105,6 +105,8 @@ const KEYBOARD_SETTLE_MS = 260;
 const KEYBOARD_CLOSE_CONFIRM_MS = 480;
 /** 直前の入力があれば誤閉じとみなし編集を維持する */
 const TEXT_EDIT_KEEPALIVE_MS = 1800;
+/** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
+const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 
 function isIOSLikeUa() {
   if (typeof navigator === "undefined") return false;
@@ -2902,8 +2904,13 @@ function SheetFullscreenEditor({
   const editingOverlayIdRef = useRef<string | null>(null);
   editingOverlayIdRef.current = editingOverlayId;
 
+  const placeTextDblTapArmedUntilRef = useRef(0);
+  const keyboardWasOpenForPlaceRef = useRef(false);
+
   function beginOverlayTextEdit(id: string) {
     touchOverlayTextKeepAlive();
+    // 配置／編集開始の直後に残った 1 打目でダブルタップ判定しない
+    lastTap.current = null;
     setEditingOverlayId(id);
   }
 
@@ -2922,6 +2929,8 @@ function SheetFullscreenEditor({
   function finishOverlayTextEdit() {
     const id = editingOverlayIdRef.current;
     setEditingOverlayId(null);
+    lastTap.current = null;
+    placeTextDblTapArmedUntilRef.current = Date.now() + PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS;
     overlayTextRef.current?.blur();
     if (!id) return;
     const ov = overlaysRef.current.find((o) => o.id === id);
@@ -2933,9 +2942,16 @@ function SheetFullscreenEditor({
     }
   }
 
-  /** ソフトキーボード表示中は余白タップで編集終了しない（1秒後にキーボードが消える主因だった） */
+  /** ソフトキーボード表示中は余白タップで編集終了しない */
   function overlayTapExitAllowed() {
     if (keyboard.open) return false;
+    return true;
+  }
+
+  /** 編集中・キーボード表示中・下降直後は「置く」ダブルタップを無効化 */
+  function placeTextDblTapAllowed() {
+    if (editingOverlayId || keyboard.open) return false;
+    if (Date.now() < placeTextDblTapArmedUntilRef.current) return false;
     return true;
   }
 
@@ -2951,6 +2967,16 @@ function SheetFullscreenEditor({
 
   // iOS キーボード閉じボタン → 常に完了／挿入バー復帰。開閉アニメ誤検知はフォーカス残り時に再確認。
   const overlayKeyboardWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (keyboard.open) {
+      keyboardWasOpenForPlaceRef.current = true;
+      lastTap.current = null;
+    } else if (keyboardWasOpenForPlaceRef.current) {
+      keyboardWasOpenForPlaceRef.current = false;
+      lastTap.current = null;
+      placeTextDblTapArmedUntilRef.current = Date.now() + PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS;
+    }
+  }, [keyboard.open]);
   useEffect(() => {
     if (!editingOverlayId) {
       overlayKeyboardWasOpenRef.current = false;
@@ -3144,12 +3170,17 @@ function SheetFullscreenEditor({
     if (editTool === "text") {
       const now = Date.now();
       const prev = lastTap.current;
-      if (prev && now - prev.t < 420 && Math.hypot(pt.x - prev.x, pt.y - prev.y) < 8) {
+      // キーボード表示中・下降中のタップは「置く」ダブルタップに使わない
+      if (placeTextDblTapAllowed() && prev && now - prev.t < 420 && Math.hypot(pt.x - prev.x, pt.y - prev.y) < 8) {
         placeTextAt(pt.x, pt.y);
         lastTap.current = null;
         return;
       }
-      lastTap.current = { t: now, x: pt.x, y: pt.y };
+      if (placeTextDblTapAllowed()) {
+        lastTap.current = { t: now, x: pt.x, y: pt.y };
+      } else {
+        lastTap.current = null;
+      }
       // キーボード表示中は余白タップで編集終了しない（キーボード閉じで終了）
       if (editingOverlayId && !overlayTapExitAllowed()) return;
       setSelectedOverlayIds([]);
