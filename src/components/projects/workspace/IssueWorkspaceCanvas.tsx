@@ -99,8 +99,6 @@ type Props = {
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
-/** キーボードが開いてから書式バーをパッと出すまでの短い待ち（上昇追従を見せない） */
-const KEYBOARD_SETTLE_MS = 160;
 
 function isIOSLikeUa() {
   if (typeof navigator === "undefined") return false;
@@ -111,14 +109,14 @@ function isIOSLikeUa() {
 }
 
 /**
- * inset + open + settled。
- * iOS の fixed は visualViewport 基準 → bottom:0 がキーボード直上。
- * bottom:inset や layout 座標の translate は二重オフセット／画面外飛ばしになる。
+ * inset + open。
+ * open は visualViewport の縮みで判定（フォーカスだけでは不可：
+ * iOS はキーボードを閉じても textarea にフォーカスが残る）。
+ * iOS の fixed は VV 基準 → bottom:0 がキーボード直上。
  */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
   const [open, setOpen] = useState(false);
-  const [settled, setSettled] = useState(false);
   const iosLike = useSyncExternalStore(
     () => () => {},
     () => isIOSLikeUa(),
@@ -128,11 +126,9 @@ function useVisualKeyboard() {
     const vv = window.visualViewport;
     if (!vv) return;
     let closeTimer: ReturnType<typeof setTimeout> | null = null;
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
-    /** 開いているあいだ一度 settled したら、inset 揺れで戻さない */
-    let settledOnce = false;
-    /** iOS で inset が取れないとき、編集フォーカスを open の補助信号にする */
     let editableFocused = false;
+    /** キーボード閉じとみなしているあいだの最大 VV 高さ */
+    let closedBaseline = vv.height;
     /** dev プレビュー用: デスクトップでキーボード inset を模す */
     let demoInset: number | null = null;
     const isEditable = (el: EventTarget | null) => {
@@ -147,70 +143,66 @@ function useVisualKeyboard() {
       if (demoInset != null) return demoInset;
       return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     };
+    const measureOpen = () => {
+      if (demoInset != null) return demoInset >= KEYBOARD_OPEN_PX;
+      const h = vv.height;
+      const covered = measureInset();
+      if (!editableFocused) return false;
+      if (h > closedBaseline) closedBaseline = h;
+      // 閉じたあともフォーカスが残るので、VV が戻ったら閉じとみなす
+      return closedBaseline - h > KEYBOARD_OPEN_PX || covered > KEYBOARD_OPEN_PX;
+    };
     const update = () => {
       const next = measureInset();
       setInset(next);
-      // iOS + overlays-content では inset が閾値未満のままの端末がある
-      const isOpen = next >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || next >= 40));
+      const isOpen = measureOpen();
       if (isOpen) {
         if (closeTimer) {
           clearTimeout(closeTimer);
           closeTimer = null;
         }
         setOpen(true);
-        if (settledOnce) return;
-        if (settleTimer) return;
-        settleTimer = setTimeout(() => {
-          settleTimer = null;
-          const still =
-            measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
-          if (still) {
-            settledOnce = true;
-            setSettled(true);
-          }
-        }, KEYBOARD_SETTLE_MS);
         return;
       }
-      settledOnce = false;
-      setSettled(false);
-      if (settleTimer) {
-        clearTimeout(settleTimer);
-        settleTimer = null;
+      if (!editableFocused) {
+        closedBaseline = Math.max(closedBaseline, vv.height);
+      } else if (vv.height > closedBaseline) {
+        closedBaseline = vv.height;
       }
       if (closeTimer) return;
       closeTimer = setTimeout(() => {
         closeTimer = null;
-        const stillOpen =
-          measureInset() >= KEYBOARD_OPEN_PX || (editableFocused && (iosLike || measureInset() >= 40));
-        if (!stillOpen) setOpen(false);
+        if (!measureOpen()) setOpen(false);
       }, KEYBOARD_CLOSE_DEBOUNCE_MS);
     };
     const onFocusIn = (event: FocusEvent) => {
       if (!isEditable(event.target)) return;
       editableFocused = true;
-      update();
+      closedBaseline = Math.max(closedBaseline, vv.height);
+      window.setTimeout(update, 120);
+      window.setTimeout(update, 320);
     };
     const onFocusOut = () => {
       window.setTimeout(() => {
         editableFocused = isEditable(document.activeElement);
+        if (!editableFocused) closedBaseline = Math.max(closedBaseline, vv.height);
         update();
-      }, 0);
+      }, 80);
+    };
+    const onOrientation = () => {
+      closedBaseline = vv.height;
+      setOpen(false);
     };
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", onOrientation);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     if (process.env.NODE_ENV !== "production") {
       (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo = (inset) => {
         demoInset = inset == null ? null : Math.max(0, Math.round(inset));
-        settledOnce = false;
-        setSettled(false);
-        if (settleTimer) {
-          clearTimeout(settleTimer);
-          settleTimer = null;
-        }
         if (closeTimer) {
           clearTimeout(closeTimer);
           closeTimer = null;
@@ -220,25 +212,24 @@ function useVisualKeyboard() {
     }
     return () => {
       if (closeTimer) clearTimeout(closeTimer);
-      if (settleTimer) clearTimeout(settleTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", onOrientation);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       if (process.env.NODE_ENV !== "production") {
         delete (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo;
       }
     };
-  }, [iosLike]);
+  }, []);
   return {
     inset,
     open,
-    /** 開いてから短い待ちのあと true（一度立ったら閉じるまで維持） */
-    settled,
+    iosLike,
     /**
      * キーボード直上。
-     * - iOS: fixed が VV 基準なので bottom:0（inset 二重加算で上に飛ぶのを防ぐ）
+     * - iOS: fixed が VV 基準なので bottom:0
      * - その他: layout 基準なので inset で持ち上げる
      */
     dockStyle: {
@@ -1686,13 +1677,15 @@ export function IssueWorkspaceCanvas({
   const workspaceKeyboardOpenRef = useRef(keyboard.open);
   workspaceKeyboardOpenRef.current = keyboard.open;
   /**
-   * 文字編集中は常に書式バーを出す。
-   * iOS では overlays-content 時に inset が 0 のままのことがあり、
-   * keyboard.open / settled 待ちだとバーが一生出ない。
-   * 位置は dockStyle（iOS は bottom:0＝VV 下端＝キーボード直上）に任せる。
+   * デスクトップ: 編集中は常に表示。
+   * タッチ/iOS: キーボードが視覚的に開いているときだけ表示（閉じたら消す）。
    */
   const showWorkspaceFormatBar = Boolean(
-    editingTextBox && canEdit && !toolbarHidden && toolbarMounted,
+    editingTextBox &&
+      canEdit &&
+      !toolbarHidden &&
+      toolbarMounted &&
+      (!keyboard.iosLike || keyboard.open),
   );
 
   function touchWorkspaceTextKeepAlive() {
@@ -2837,8 +2830,8 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   /**
-   * 文字編集中は常に書式バーを出す（keyboard.open 待ち禁止）。
-   * iOS の inset 誤検知でバーが出ない問題の本体対策。
+   * デスクトップ: 編集中は常に表示。
+   * iOS: キーボードが開いているときだけ（閉じ検知で編集終了→バーも消える）。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -2846,7 +2839,9 @@ function SheetFullscreenEditor({
     editingOverlayId && selectedOverlay && selectedOverlay.kind === "text" && selectedOverlay.id === editingOverlayId
       ? selectedOverlay
       : null;
-  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
+  const showOverlayFormatBar = Boolean(
+    canEdit && editingOverlayText && (!keyboard.iosLike || keyboard.open),
+  );
 
   function touchOverlayTextKeepAlive() {
     overlayEditKeepAliveRef.current = Date.now();
