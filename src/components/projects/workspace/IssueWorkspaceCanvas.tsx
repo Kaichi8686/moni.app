@@ -98,17 +98,26 @@ type Props = {
 /** iOS などでキーボードが開いているとみなす閾値（px） */
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
-const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
+const KEYBOARD_CLOSE_DEBOUNCE_MS = 520;
 /** キーボード上昇が終わってから書式バーを出す（上昇中マウントのピョコ付きを防ぐ） */
 const KEYBOARD_SETTLE_MS = 260;
 /** フォーカス残り＋VV 揺れの「閉じ」誤検知を避ける確認待ち */
-const KEYBOARD_CLOSE_CONFIRM_MS = 480;
+const KEYBOARD_CLOSE_CONFIRM_MS = 720;
 /** 直前の入力があれば誤閉じとみなし編集を維持する */
 const TEXT_EDIT_KEEPALIVE_MS = 1800;
 /** キーボード下降直後は配置用ダブルタップを無視（閉じ操作のタップで新規テキストが開くのを防ぐ） */
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 編集開始直後の blur / 誤閉じでキーボードを落とさない */
 const TEXT_EDIT_START_GRACE_MS = 900;
+
+/** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
+function keyboardStillCovering() {
+  if (typeof window === "undefined") return false;
+  const vv = window.visualViewport;
+  if (!vv) return false;
+  const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  return covered > 80 || vv.height < window.innerHeight - 100;
+}
 
 function isIOSLikeUa() {
   if (typeof navigator === "undefined") return false;
@@ -1729,16 +1738,9 @@ export function IssueWorkspaceCanvas({
   const textEditKeepAliveRef = useRef(0);
   const workspaceKeyboardOpenRef = useRef(keyboard.open);
   workspaceKeyboardOpenRef.current = keyboard.open;
-  /**
-   * デスクトップ: 編集中は常に表示。
-   * iOS: キーボード表示中だけ（閉じたら消えて完了／挿入が戻る）。
-   */
+  /** 編集中は書式バーを出す。キーボード閉じで編集終了したとき一緒に消える。 */
   const showWorkspaceFormatBar = Boolean(
-    editingTextBox &&
-      canEdit &&
-      !toolbarHidden &&
-      toolbarMounted &&
-      (!keyboard.iosLike || keyboard.open),
+    editingTextBox && canEdit && !toolbarHidden && toolbarMounted,
   );
 
   function touchWorkspaceTextKeepAlive() {
@@ -1793,16 +1795,22 @@ export function IssueWorkspaceCanvas({
       return;
     }
     if (!workspaceKeyboardWasOpenRef.current) return;
-    // キーボード閉じボタン → 必ず編集終了（grace で再フォーカスすると完了／挿入が戻らない）
     workspaceKeyboardWasOpenRef.current = false;
     const editId = editingTextId;
-    const focused = document.activeElement === textEditRef.current;
-    const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingTextIdRef.current !== editId) return;
-      if (workspaceKeyboardOpenRef.current) return;
+      if (workspaceKeyboardOpenRef.current) {
+        workspaceKeyboardWasOpenRef.current = true;
+        return;
+      }
+      // VV がまだキーボード分つぶれている＝誤閉じ。編集を維持する
+      if (keyboardStillCovering()) {
+        workspaceKeyboardWasOpenRef.current = true;
+        keepWorkspaceTextFocus();
+        return;
+      }
       finishWorkspaceTextEdit();
-    }, confirmMs);
+    }, KEYBOARD_CLOSE_CONFIRM_MS);
   }, [keyboard.open, editingTextId]);
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
@@ -2265,8 +2273,12 @@ export function IssueWorkspaceCanvas({
                               keepWorkspaceTextFocus();
                               return;
                             }
-                            // キーボード閉じボタン: 再フォーカスせず編集終了→完了／挿入バー復帰
+                            // 閉じ判定チラつき中は維持。本当に閉じたときだけ終了
                             if (!workspaceKeyboardOpenRef.current) {
+                              if (keyboardStillCovering()) {
+                                keepWorkspaceTextFocus();
+                                return;
+                              }
                               finishWorkspaceTextEdit();
                               return;
                             }
@@ -2897,8 +2909,8 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   /**
-   * デスクトップ: 編集中は常に表示。
-   * iOS: キーボード表示中だけ書式バー。閉じボタンで編集終了→完了／挿入復帰。
+   * 編集中は書式バーを出す（open チラつきでアンマウントしない）。
+   * キーボード閉じ確定 → 編集終了で消え、完了／挿入が戻る。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -2907,9 +2919,7 @@ function SheetFullscreenEditor({
     const ov = overlays.find((o) => o.id === editingOverlayId);
     return ov && ov.kind === "text" ? ov : null;
   })();
-  const showOverlayFormatBar = Boolean(
-    canEdit && editingOverlayText && (!keyboard.iosLike || keyboard.open),
-  );
+  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
 
   function touchOverlayTextKeepAlive() {
     overlayEditKeepAliveRef.current = Date.now();
@@ -3008,16 +3018,23 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    // キーボード閉じボタン → 必ず編集終了。grace 再フォーカスだと書式バーが残り完了／挿入が出ない
     overlayKeyboardWasOpenRef.current = false;
     const editId = editingOverlayId;
-    const focused = document.activeElement === overlayTextRef.current;
-    const confirmMs = focused ? KEYBOARD_CLOSE_CONFIRM_MS : 0;
     window.setTimeout(() => {
       if (editingOverlayIdRef.current !== editId) return;
-      if (overlayKeyboardOpenRef.current) return;
+      if (overlayKeyboardOpenRef.current) {
+        overlayKeyboardWasOpenRef.current = true;
+        return;
+      }
+      // キーボードがまだ画面を覆っている＝VV チラつきの誤閉じ。編集を維持
+      if (keyboardStillCovering()) {
+        overlayKeyboardWasOpenRef.current = true;
+        keepOverlayTextFocus();
+        return;
+      }
+      // 本当に閉じた（赤い閉じボタン）→ 書式バーを消し完了／挿入を戻す
       finishOverlayTextEdit();
-    }, confirmMs);
+    }, KEYBOARD_CLOSE_CONFIRM_MS);
   }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
@@ -3665,7 +3682,7 @@ function SheetFullscreenEditor({
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (active?.closest("[data-text-format-bar]")) return;
-                                // キーボード未オープンの開始直後だけ再フォーカス（閉じボタンでは終了）
+                                // キーボード未オープンの開始直後だけ再フォーカス
                                 if (
                                   !overlayKbEverOpenedRef.current &&
                                   Date.now() - overlayEditStartedAtRef.current < TEXT_EDIT_START_GRACE_MS
@@ -3673,8 +3690,12 @@ function SheetFullscreenEditor({
                                   keepOverlayTextFocus();
                                   return;
                                 }
-                                // キーボード閉じボタン: 再フォーカスせず編集終了→完了／挿入バー復帰
+                                // 閉じ判定チラつき中は維持。赤い閉じボタンで本当に閉じたら終了
                                 if (!overlayKeyboardOpenRef.current) {
+                                  if (keyboardStillCovering()) {
+                                    keepOverlayTextFocus();
+                                    return;
+                                  }
                                   finishOverlayTextEdit();
                                   return;
                                 }
