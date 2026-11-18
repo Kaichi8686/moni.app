@@ -99,8 +99,6 @@ type Props = {
 const KEYBOARD_OPEN_PX = 120;
 /** 開閉アニメ中のチラつきで編集が終わるのを防ぐ */
 const KEYBOARD_CLOSE_DEBOUNCE_MS = 320;
-/** キーボード上昇が終わってから書式バーを出す（上昇中マウントのピョコ付きを防ぐ） */
-const KEYBOARD_SETTLE_MS = 260;
 /** キーボード表示直後は余白タップで編集終了しない（誤ってキーボードが閉じるのを防ぐ） */
 const TEXT_EDIT_TAP_EXIT_GRACE_MS = 1000;
 /** フォーカス残り＋VV 揺れの「閉じ」誤検知を避ける確認待ち */
@@ -115,15 +113,14 @@ function isIOSLikeUa() {
 }
 
 /**
- * inset + open + settled。
- * open は visualViewport の縮みで判定（フォーカスだけでは不可）。
- * settled は開いてから一度だけ立ち、上昇アニメ中は書式バーを出さない。
+ * inset + open。
+ * open は visualViewport の縮みで判定（フォーカスだけでは不可：
+ * iOS はキーボードを閉じても textarea にフォーカスが残る）。
  * iOS の fixed は VV 基準 → bottom:0 がキーボード直上。
  */
 function useVisualKeyboard() {
   const [inset, setInset] = useState(0);
   const [open, setOpen] = useState(false);
-  const [settled, setSettled] = useState(false);
   const iosLike = useSyncExternalStore(
     () => () => {},
     () => isIOSLikeUa(),
@@ -133,13 +130,9 @@ function useVisualKeyboard() {
     const vv = window.visualViewport;
     if (!vv) return;
     let closeTimer: ReturnType<typeof setTimeout> | null = null;
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
-    let settledOnce = false;
     let editableFocused = false;
     /** キーボード閉じとみなしているあいだの最大 VV 高さ */
     let closedBaseline = vv.height;
-    /** 開いているあいだの最大 inset（カード持ち上げの上下バウンス防止） */
-    let peakInset = 0;
     /** dev プレビュー用: デスクトップでキーボード inset を模す */
     let demoInset: number | null = null;
     const isEditable = (el: EventTarget | null) => {
@@ -166,34 +159,15 @@ function useVisualKeyboard() {
     };
     const update = () => {
       const next = measureInset();
+      setInset(next);
       const isOpen = measureOpen();
       if (isOpen) {
-        peakInset = Math.max(peakInset, next);
-        // 持ち上げ量は上方向だけ追従（一瞬大きくなって戻るピョコを防ぐ）
-        setInset(peakInset);
         if (closeTimer) {
           clearTimeout(closeTimer);
           closeTimer = null;
         }
         setOpen(true);
-        if (!settledOnce && !settleTimer) {
-          settleTimer = setTimeout(() => {
-            settleTimer = null;
-            if (measureOpen()) {
-              settledOnce = true;
-              setSettled(true);
-            }
-          }, KEYBOARD_SETTLE_MS);
-        }
         return;
-      }
-      peakInset = 0;
-      setInset(next);
-      settledOnce = false;
-      setSettled(false);
-      if (settleTimer) {
-        clearTimeout(settleTimer);
-        settleTimer = null;
       }
       if (!editableFocused) {
         closedBaseline = Math.max(closedBaseline, vv.height);
@@ -222,9 +196,6 @@ function useVisualKeyboard() {
     };
     const onOrientation = () => {
       closedBaseline = vv.height;
-      peakInset = 0;
-      settledOnce = false;
-      setSettled(false);
       setOpen(false);
     };
     update();
@@ -237,13 +208,6 @@ function useVisualKeyboard() {
     if (process.env.NODE_ENV !== "production") {
       (window as Window & { __moniSetKbDemo?: (inset: number | null) => void }).__moniSetKbDemo = (inset) => {
         demoInset = inset == null ? null : Math.max(0, Math.round(inset));
-        peakInset = 0;
-        settledOnce = false;
-        setSettled(false);
-        if (settleTimer) {
-          clearTimeout(settleTimer);
-          settleTimer = null;
-        }
         if (closeTimer) {
           clearTimeout(closeTimer);
           closeTimer = null;
@@ -253,7 +217,6 @@ function useVisualKeyboard() {
     }
     return () => {
       if (closeTimer) clearTimeout(closeTimer);
-      if (settleTimer) clearTimeout(settleTimer);
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -268,8 +231,6 @@ function useVisualKeyboard() {
   return {
     inset,
     open,
-    /** キーボード上昇後に一度だけ true。書式バーはこれで出してピョコ付きを防ぐ */
-    settled,
     iosLike,
     /**
      * キーボード直上。
@@ -1722,14 +1683,14 @@ export function IssueWorkspaceCanvas({
   workspaceKeyboardOpenRef.current = keyboard.open;
   /**
    * デスクトップ: 編集中は常に表示。
-   * iOS: キーボードが落ち着いてから定位置にパッと出す（上昇中マウントのピョコを防ぐ）。
+   * タッチ/iOS: キーボードが視覚的に開いているときだけ表示（閉じたら消す）。
    */
   const showWorkspaceFormatBar = Boolean(
     editingTextBox &&
       canEdit &&
       !toolbarHidden &&
       toolbarMounted &&
-      (!keyboard.iosLike || (keyboard.open && keyboard.settled)),
+      (!keyboard.iosLike || keyboard.open),
   );
 
   function touchWorkspaceTextKeepAlive() {
@@ -2887,7 +2848,7 @@ function SheetFullscreenEditor({
 
   /**
    * デスクトップ: 編集中は常に表示。
-   * iOS: settled 後に定位置へパッと出す。キーボード閉じで編集終了→バーも消える。
+   * iOS: キーボードが開いているときだけ（閉じ検知で編集終了→バーも消える）。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -2896,7 +2857,7 @@ function SheetFullscreenEditor({
       ? selectedOverlay
       : null;
   const showOverlayFormatBar = Boolean(
-    canEdit && editingOverlayText && (!keyboard.iosLike || (keyboard.open && keyboard.settled)),
+    canEdit && editingOverlayText && (!keyboard.iosLike || keyboard.open),
   );
 
   function touchOverlayTextKeepAlive() {
@@ -3013,7 +2974,7 @@ function SheetFullscreenEditor({
     };
   }, [sheetRatio]);
 
-  /** キーボード上にカード全体が収まるよう上へ持ち上げる量（書式バー分は編集開始時点で確保し、出現時の再ジャンプを防ぐ） */
+  /** キーボード上にカード全体が収まるよう上へ持ち上げる量 */
   const cardKeyboardLiftPx = useMemo(() => {
     if (!keyboard.open || cardSize.h <= 0 || stageBox.h < 2) return 0;
     const formatReserve = editingOverlayId ? 56 : 16;
@@ -3408,8 +3369,7 @@ function SheetFullscreenEditor({
                 WebkitTouchCallout: "none",
                 userSelect: "none",
                 transform: cardKeyboardLiftPx > 0 ? `translateY(-${cardKeyboardLiftPx}px)` : "translateY(0)",
-                // inset 追従の上下バウンスを出さない（書式バーのピョコの主因）
-                transition: "none",
+                transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
               }}
               onPointerDown={onCardPointerDown}
               onPointerMove={onCardPointerMove}
