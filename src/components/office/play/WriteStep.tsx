@@ -5,6 +5,7 @@ import {
   OFFICE_ANSWER_MAX,
   OFFICE_ANSWER_MIN,
 } from "@/lib/office/constants";
+import type { IncidentMission } from "@/lib/office/script";
 
 type Props = {
   strategyTitle: string;
@@ -16,6 +17,8 @@ type Props = {
   busy: boolean;
   stamina: number;
   staminaHint?: string | null;
+  mission?: IncidentMission | null;
+  clues?: string[];
   onSubmit: () => void;
 };
 
@@ -52,6 +55,8 @@ export function WriteStep({
   busy,
   stamina,
   staminaHint,
+  mission,
+  clues = [],
   onSubmit,
 }: Props) {
   const targetsText = targetLabels.length ? targetLabels.join("、") : "お客さん";
@@ -60,12 +65,40 @@ export function WriteStep({
     <div className="space-y-4">
       <h3 className="text-base font-black text-zinc-900">アイデアを書く</h3>
 
+      {mission ? (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2.5">
+          <p className="text-[10px] font-bold text-amber-700">ミッション</p>
+          <p className="mt-0.5 text-sm font-black text-zinc-900">{mission.goal}</p>
+          <p className="mt-0.5 text-xs font-medium text-zinc-600">制約: {mission.constraint}</p>
+        </div>
+      ) : null}
+
+      {clues.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-bold text-zinc-400">手がかり</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {clues.map((c) => (
+              <li
+                key={c}
+                className="rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-100"
+              >
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-[15px] leading-relaxed text-zinc-700">
         <span className="font-bold text-[#FF9600]">【{strategyTitle}】</span>
         の作戦で、
         <span className="font-bold text-zinc-900">【{targetsText}】</span>
         に向けて、
         <span className="text-zinc-400">＿＿＿</span>
+      </p>
+
+      <p className="text-[11px] font-medium text-zinc-400">
+        目安: 誰に／何を／どうやって（送信文には入らないよ）
       </p>
 
       <label className="block">

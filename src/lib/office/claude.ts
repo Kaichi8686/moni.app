@@ -18,6 +18,13 @@ import {
   parseIncidentStageFields,
 } from "@/lib/office/incidentValidate";
 import type { MeterKey, OfficeSceneId } from "@/lib/office/scenes";
+import {
+  ensureIncidentDialogue,
+  parseIncidentDialogue,
+  type IncidentMission,
+  type IncidentQuestion,
+  type ScriptBeat,
+} from "@/lib/office/script";
 import { parseStrategies, parseTargets } from "@/lib/office/strategy";
 import { filterValidTargetsOrNull } from "@/lib/office/targetValidate";
 import type {
@@ -50,6 +57,9 @@ export type GeneratedIncident = {
   line: string;
   stakes: string;
   metersAtRisk: MeterKey[];
+  script: ScriptBeat[];
+  mission: IncidentMission;
+  questions: IncidentQuestion[];
 };
 
 function normalizeIncidentFields(
@@ -65,9 +75,13 @@ function normalizeIncidentFields(
     stakes?: unknown;
     meters_at_risk?: unknown;
     metersAtRisk?: unknown;
+    script?: unknown;
+    mission?: unknown;
+    questions?: unknown;
   },
   companyName: string,
   companyAbout: string,
+  requireDialogue = false,
 ): GeneratedIncident | null {
   const title = String(parsed.title ?? "").trim().slice(0, 30);
   let description = String(parsed.description ?? "").trim().slice(0, 80);
@@ -84,6 +98,18 @@ function normalizeIncidentFields(
   const stage = parseIncidentStageFields(parsed) ?? defaultStageForType(type);
   // scene 等の許可値チェック：parse 失敗時は default。明示不正は再生成させる
   if (parsed.scene != null && !parseIncidentStageFields(parsed)) return null;
+
+  const dialogueParsed = parseIncidentDialogue(parsed);
+  if (requireDialogue && !dialogueParsed) return null;
+  const dialogue =
+    dialogueParsed ??
+    ensureIncidentDialogue(parsed, type, stage.line, stage.speaker);
+
+  const line = dialogue.script[0]?.line?.slice(0, 40) || stage.line;
+  const speaker: IncidentSpeaker = dialogue.script[0]
+    ? { castRole: dialogue.script[0].actor, emotion: dialogue.script[0].emotion }
+    : stage.speaker;
+
   return {
     title,
     description,
@@ -91,10 +117,13 @@ function normalizeIncidentFields(
     strategies,
     targets,
     scene: stage.scene,
-    speaker: stage.speaker,
-    line: stage.line,
+    speaker,
+    line,
     stakes: stage.stakes,
     metersAtRisk: stage.metersAtRisk,
+    script: dialogue.script,
+    mission: dialogue.mission,
+    questions: dialogue.questions,
   };
 }
 
@@ -119,13 +148,13 @@ export async function generateIncidentWithClaude(
 直近の事件タイトル（似せないで）:
 ${recent}${follow}
 
-上の会社に合った事件と、作戦3枚・ターゲット4個・場面情報をJSONだけで出力してください。`;
+上の会社に合った事件と、作戦3枚・ターゲット4個・場面情報・台本・ミッション・質問3つをJSONだけで出力してください。`;
 
-  const run = async () => {
+  const run = async (strictDialogue: boolean) => {
     const ai = await anthropicTextMessage({
       system: OFFICE_INCIDENT_SYSTEM_PROMPT,
       user,
-      maxTokens: 900,
+      maxTokens: 1400,
       model: officeModel(),
       temperature: 0.95,
     });
@@ -144,16 +173,24 @@ ${recent}${follow}
       line?: unknown;
       stakes?: unknown;
       meters_at_risk?: unknown;
+      script?: unknown;
+      mission?: unknown;
+      questions?: unknown;
     }>(ai.text);
     if (!parsed) return { message: "JSONパース失敗" };
-    const normalized = normalizeIncidentFields(parsed, ctx.companyName, ctx.companyAbout);
+    const normalized = normalizeIncidentFields(
+      parsed,
+      ctx.companyName,
+      ctx.companyAbout,
+      strictDialogue,
+    );
     if (!normalized) return { message: "事件フィールド不足" };
     return normalized;
   };
 
-  // 検証失敗時も含め、最大2回リトライ（計3試行）→だめならオフライン
+  // 台本検証失敗時は最大2回再生成（計3試行）→だめならオフライン
   for (let attempt = 0; attempt < 3; attempt++) {
-    const result = await run();
+    const result = await run(true);
     if ("title" in result) return { ok: true, ...result };
     if ("offline" in result && result.offline) return { ok: true, ...offlineIncident(ctx) };
   }
@@ -230,6 +267,9 @@ export async function scoreAnswerWithClaude(input: {
   strategyTitle: string;
   strategySummary: string;
   targetLabels: string[];
+  missionGoal?: string | null;
+  missionConstraint?: string | null;
+  heardClues?: string[];
 }): Promise<{ ok: true; scores: OfficeScores } | { ok: false; message: string; offline?: boolean }> {
   const strategyLine =
     input.strategyId === "custom"
@@ -237,10 +277,18 @@ export async function scoreAnswerWithClaude(input: {
       : `作戦: [${input.strategyKind}] ${input.strategyTitle} — ${input.strategySummary}`;
   const targetsLine = `ターゲット: ${input.targetLabels.join(" / ")}`;
   const industry = input.industryLabel ? `\n業種: ${input.industryLabel}` : "";
+  const missionLine =
+    input.missionGoal || input.missionConstraint
+      ? `\nミッション目標: ${input.missionGoal ?? "—"}\nミッション制約: ${input.missionConstraint ?? "—"}`
+      : "";
+  const cluesLine =
+    input.heardClues && input.heardClues.length > 0
+      ? `\n聞いた手がかり: ${input.heardClues.join(" / ")}`
+      : "\n聞いた手がかり: （なし）";
 
   const user = `会社名: ${input.companyName}${industry}
 事件タイトル: ${input.title}
-事件の説明: ${input.description}
+事件の説明: ${input.description}${missionLine}${cluesLine}
 ${strategyLine}
 ${targetsLine}
 <answer>${input.answer}</answer>`;
@@ -266,6 +314,7 @@ ${targetsLine}
       story_tone?: unknown;
       next_hint?: unknown;
       comment?: unknown;
+      reaction_lines?: unknown;
     }>(ai.text);
     if (!parsed) return { message: "JSONパース失敗" };
     const solve = clampScore(Number(parsed.solve));
@@ -282,6 +331,12 @@ ${targetsLine}
       String(parsed.next_hint ?? "").trim().slice(0, 40) || "次はもっと具体的な一手を書いてみよう";
     const comment =
       String(parsed.comment ?? "").trim().slice(0, 60) || "いい感じのアイデアだね！";
+    const reactionLines = Array.isArray(parsed.reaction_lines)
+      ? parsed.reaction_lines
+          .map((x) => String(x ?? "").trim().slice(0, 35))
+          .filter(Boolean)
+          .slice(0, 2)
+      : [];
     return {
       scores: {
         solve,
@@ -293,6 +348,7 @@ ${targetsLine}
         story,
         storyTone,
         nextHint,
+        reactionLines,
       } satisfies OfficeScores,
     };
   };

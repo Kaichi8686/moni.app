@@ -4,7 +4,7 @@ import {
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
-import { ensureCompanyCast } from "@/lib/office/cast";
+import { ensureCompanyCast, parseCompanyCast } from "@/lib/office/cast";
 import { industryLabelJa, parseOfficeIndustry } from "@/lib/office/industries";
 import {
   applyMeterDecay,
@@ -20,6 +20,11 @@ import {
   offlineStrategies,
 } from "@/lib/office/offline";
 import { parseCodex, unlockCodexCell, type CodexCell } from "@/lib/office/codex";
+import {
+  EDITABLE_CAST_ROLES,
+  validateCastName,
+  validateOwnerName,
+} from "@/lib/office/castValidate";
 import { nextLoginStreak } from "@/lib/office/loginStreak";
 import { localPublishPeer } from "@/lib/office/peersLocal";
 import { buildResultPanels, reactionForTone } from "@/lib/office/resultPanels";
@@ -184,7 +189,33 @@ export function localSetSfxMuted(userId: string, muted: boolean): OfficeCompany 
   return store.company;
 }
 
-export function localCreateCompany(userId: string, name: string, aboutRaw: string): OfficeCompany {
+export function localUpdateCast(
+  userId: string,
+  input: { ownerName: string; cast: OfficeCompany["cast"] },
+): OfficeCompany {
+  const store = read();
+  if (!store.company || store.company.userId !== userId) throw new Error("会社がないよ");
+  const ownerErr = validateOwnerName(input.ownerName);
+  if (ownerErr) throw new Error(ownerErr);
+  const parsed = parseCompanyCast(input.cast);
+  if (!parsed) throw new Error("キャストが不正だよ");
+  for (const m of parsed) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
+  store.company.ownerName = input.ownerName.trim().slice(0, 12);
+  store.company.cast = parsed;
+  write(store);
+  return store.company;
+}
+
+export function localCreateCompany(
+  userId: string,
+  name: string,
+  aboutRaw: string,
+  opts?: { ownerName?: string; cast?: OfficeCompany["cast"] },
+): OfficeCompany {
   const store = read();
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
@@ -193,6 +224,17 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
   if (store.company?.userId === userId) throw new Error("すでに会社があるよ");
   const now = new Date().toISOString();
   const id = uid();
+  const cast = ensureCompanyCast(opts?.cast ?? null, id);
+  const ownerNameRaw = opts?.ownerName?.trim() ?? "";
+  if (ownerNameRaw) {
+    const ownerErr = validateOwnerName(ownerNameRaw);
+    if (ownerErr) throw new Error(ownerErr);
+  }
+  for (const m of cast) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
   const company: OfficeCompany = {
     id,
     userId,
@@ -206,7 +248,8 @@ export function localCreateCompany(userId: string, name: string, aboutRaw: strin
     staminaUpdatedAt: now,
     leagueId: "rookie",
     createdAt: now,
-    cast: ensureCompanyCast(null, id),
+    cast,
+    ownerName: ownerNameRaw ? ownerNameRaw.slice(0, 12) : null,
     meters: defaultMeters(),
     metersUpdatedAt: now,
     sfxMuted: true,
@@ -306,6 +349,9 @@ export async function localCurrentIncident(
     stakes: gen.stakes,
     metersAtRisk: gen.metersAtRisk,
     followupOf: null,
+    script: gen.script,
+    mission: gen.mission,
+    questions: gen.questions,
   };
   store.incidents.push(incident);
   write(store);
@@ -383,6 +429,15 @@ export async function localSubmit(
   company.stamina = consumed.state.value;
   company.staminaUpdatedAt = consumed.state.updatedAt.toISOString();
   write(store);
+
+  const qIds = Array.from(
+    new Set((input.askedQuestionIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  );
+  if (qIds.length > 2) throw new Error("質問は2つまでだよ");
+  const validQ = new Set((incident.questions ?? []).map((q) => q.id));
+  for (const qid of qIds) {
+    if (!validQ.has(qid)) throw new Error("その質問は選べないよ");
+  }
 
   const scores = offlineScores(text, { strategyKind, strategyTitle });
 
@@ -480,6 +535,8 @@ export async function localSubmit(
     reactionEmotion: reaction.emotion,
     metersDelta,
     safe: true,
+    askedQuestionIds: qIds,
+    reactionLines: scores.reactionLines ?? [],
   };
   store.submissions.push(submission);
   write(store);

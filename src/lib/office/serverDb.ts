@@ -12,7 +12,12 @@ import {
   scoreAnswerWithClaude,
 } from "@/lib/office/claude";
 import { guessIndustryFromAbout, parseCompanyAbout } from "@/lib/office/about";
-import { ensureCompanyCast } from "@/lib/office/cast";
+import { ensureCompanyCast, parseCompanyCast } from "@/lib/office/cast";
+import {
+  EDITABLE_CAST_ROLES,
+  validateCastName,
+  validateOwnerName,
+} from "@/lib/office/castValidate";
 import { unlockCodexCell, type CodexCell } from "@/lib/office/codex";
 import {
   clipPeerAnswer,
@@ -26,6 +31,7 @@ import {
   defaultStageForType,
   parseIncidentStageFields,
 } from "@/lib/office/incidentValidate";
+import { ensureIncidentDialogue } from "@/lib/office/script";
 import {
   applyMeterDecay,
   applyMetersDelta,
@@ -102,6 +108,7 @@ function mapCompany(row: Record<string, unknown>): OfficeCompany {
     secretaryGuideDone: Boolean(row.secretary_guide_done ?? false),
     loginStreak: Number(row.login_streak ?? 0),
     loginLastDate: row.login_last_date == null ? null : String(row.login_last_date).slice(0, 10),
+    ownerName: row.owner_name == null ? null : String(row.owner_name).trim().slice(0, 12),
   };
 }
 
@@ -151,6 +158,16 @@ function mapIncident(row: Record<string, unknown>): OfficeIncident {
       stakes: row.stakes,
       meters_at_risk: row.meters_at_risk,
     }) ?? defaultStageForType(type);
+  const dialogue = ensureIncidentDialogue(
+    {
+      script: row.script,
+      mission: row.mission,
+      questions: row.questions,
+    },
+    type,
+    stage.line,
+    stage.speaker,
+  );
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -166,10 +183,13 @@ function mapIncident(row: Record<string, unknown>): OfficeIncident {
     createdAt: String(row.created_at),
     scene: stage.scene,
     speaker: stage.speaker,
-    line: stage.line,
+    line: dialogue.script[0]?.line ?? stage.line,
     stakes: stage.stakes,
     metersAtRisk: stage.metersAtRisk,
     followupOf: row.followup_of ? String(row.followup_of) : null,
+    script: dialogue.script,
+    mission: dialogue.mission,
+    questions: dialogue.questions,
   };
 }
 
@@ -210,6 +230,12 @@ function mapSubmission(row: Record<string, unknown>): OfficeSubmission {
     reactionEmotion: parseCastEmotion(row.reaction_emotion),
     metersDelta: parseMetersDelta(row.meters_delta),
     safe: row.safe == null ? true : Boolean(row.safe),
+    askedQuestionIds: Array.isArray(row.asked_question_ids)
+      ? row.asked_question_ids.map((x) => String(x))
+      : null,
+    reactionLines: Array.isArray(row.reaction_lines)
+      ? row.reaction_lines.map((x) => String(x).slice(0, 35)).filter(Boolean).slice(0, 2)
+      : null,
   };
 }
 
@@ -316,6 +342,7 @@ export async function dbCreateCompany(
   userId: string,
   name: string,
   aboutRaw: string,
+  opts?: { ownerName?: string; cast?: unknown },
 ) {
   const trimmed = name.trim().slice(0, OFFICE_NAME_MAX);
   if (trimmed.length < 1) throw new Error("会社名を入力してね");
@@ -330,7 +357,17 @@ export async function dbCreateCompany(
   if (existing) throw new Error("すでに会社があるよ");
 
   const now = new Date().toISOString();
-  const cast = ensureCompanyCast(null, userId);
+  const cast = ensureCompanyCast(opts?.cast ?? null, userId);
+  const ownerNameRaw = opts?.ownerName?.trim() ?? "";
+  if (ownerNameRaw) {
+    const ownerErr = validateOwnerName(ownerNameRaw);
+    if (ownerErr) throw new Error(ownerErr);
+  }
+  for (const m of cast) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
   const meters = ensureMeters(null);
   const { data, error } = await admin
     .from("office_companies")
@@ -343,6 +380,7 @@ export async function dbCreateCompany(
       stamina: 5,
       stamina_updated_at: now,
       cast_members: cast,
+      owner_name: ownerNameRaw ? ownerNameRaw.slice(0, 12) : null,
       meters,
       meters_updated_at: now,
       sfx_muted: true,
@@ -510,6 +548,9 @@ export async function dbCurrentIncident(
       stakes: gen.stakes,
       meters_at_risk: gen.metersAtRisk,
       followup_of: followup?.id ?? null,
+      script: gen.script,
+      mission: gen.mission,
+      questions: gen.questions,
     })
     .select("*")
     .single();
@@ -622,6 +663,18 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     }
   }
 
+  const qIds = Array.from(
+    new Set((input.askedQuestionIds ?? []).map((x) => String(x).trim()).filter(Boolean)),
+  );
+  if (qIds.length > 2) throw new Error("質問は2つまでだよ");
+  const validQ = new Set((incident.questions ?? []).map((q) => q.id));
+  for (const qid of qIds) {
+    if (!validQ.has(qid)) throw new Error("その質問は選べないよ");
+  }
+  const heardClues = (incident.questions ?? [])
+    .filter((q) => qIds.includes(q.id))
+    .map((q) => q.clue);
+
   const targetLabels = targetIds.map((tid) => {
     if (tid === "other") return otherText || "その他";
     return targetsInternal.find((t) => t.id === tid)?.label ?? tid;
@@ -645,6 +698,9 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     strategyTitle,
     strategySummary,
     targetLabels,
+    missionGoal: incident.mission?.goal,
+    missionConstraint: incident.mission?.constraint,
+    heardClues,
   });
   if (!scored.ok) {
     await admin.rpc("office_restore_stamina", { p_user_id: userId });
@@ -747,6 +803,8 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
     reaction_emotion: reaction.emotion,
     meters_delta: metersDelta,
     safe: true,
+    asked_question_ids: qIds,
+    reaction_lines: scored.scores.reactionLines ?? [],
   };
 
   let subRow: Record<string, unknown> | null = null;
@@ -803,6 +861,10 @@ export async function dbSubmit(admin: SupabaseClient, userId: string, input: Off
   if (!submission.reactionEmotion) submission.reactionEmotion = reaction.emotion;
   if (!submission.metersDelta) submission.metersDelta = metersDelta;
   if (!submission.castMemberId && speakerMember) submission.castMemberId = speakerMember.id;
+  if (!submission.askedQuestionIds) submission.askedQuestionIds = qIds;
+  if (!submission.reactionLines?.length) {
+    submission.reactionLines = scored.scores.reactionLines ?? [];
+  }
   return {
     submission,
     company: refreshed.company!,
@@ -894,6 +956,33 @@ export async function dbSetSfxMuted(admin: SupabaseClient, userId: string, muted
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message ?? "sfx update failed");
+  return mapCompany(data as Record<string, unknown>);
+}
+
+export async function dbUpdateCast(
+  admin: SupabaseClient,
+  userId: string,
+  input: { ownerName: string; cast: ReturnType<typeof mapCompany>["cast"] },
+) {
+  const ownerErr = validateOwnerName(input.ownerName);
+  if (ownerErr) throw new Error(ownerErr);
+  const parsed = parseCompanyCast(input.cast);
+  if (!parsed) throw new Error("キャストが不正だよ");
+  for (const m of parsed) {
+    if (!(EDITABLE_CAST_ROLES as readonly string[]).includes(m.role)) continue;
+    const err = validateCastName(m.name);
+    if (err) throw new Error(err);
+  }
+  const { data, error } = await admin
+    .from("office_companies")
+    .update({
+      owner_name: input.ownerName.trim().slice(0, 12),
+      cast_members: parsed,
+    })
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "cast update failed");
   return mapCompany(data as Record<string, unknown>);
 }
 

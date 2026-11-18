@@ -4,15 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { CodexPanel } from "@/components/office/CodexPanel";
+import {
+  CastSetup,
+  castSetupValid,
+  type CastSetupValue,
+} from "@/components/office/CastSetup";
 import { NameSetup } from "@/components/office/NameSetup";
 import { OfficeChrome } from "@/components/office/OfficeChrome";
 import { RankingPanel } from "@/components/office/RankingPanel";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
 import { StageView } from "@/components/office/stage/StageView";
 import { SecretaryTip } from "@/components/office/stage/SecretaryTip";
+import { AskStep, OFFICE_MAX_ASKS } from "@/components/office/play/AskStep";
 import { IncidentStep } from "@/components/office/play/IncidentStep";
+import { MissionBar } from "@/components/office/play/MissionBar";
 import {
-  PlayStepper,
   previousPlayStep,
   type PlayStep,
 } from "@/components/office/play/PlayStepper";
@@ -20,6 +26,8 @@ import { ResultStep } from "@/components/office/play/ResultStep";
 import { StrategyStep } from "@/components/office/play/StrategyStep";
 import { TargetStep } from "@/components/office/play/TargetStep";
 import { WriteStep } from "@/components/office/play/WriteStep";
+import { DialoguePlayer } from "@/components/office/stage/DialoguePlayer";
+import { DuoButton } from "@/components/idea-garden/DuoButton";
 import {
   createCompany,
   fetchCodex,
@@ -35,14 +43,15 @@ import {
   setSfxMuted,
   submitAnswer,
   toggleRanking,
+  updateCast,
   votePeer,
   type CompanyPayload,
 } from "@/lib/office/clientApi";
+import { castMemberByRole, ensureCompanyCast, type CastMember } from "@/lib/office/cast";
 import {
   OFFICE_ANSWER_MIN,
   OFFICE_TARGET_OTHER_MAX,
 } from "@/lib/office/constants";
-import { castMemberByRole } from "@/lib/office/cast";
 import type { CodexCell } from "@/lib/office/codex";
 import { pickIncidentSpeech } from "@/lib/office/incidentSpeech";
 import { playOfficeSfx, setOfficeSfxMuted } from "@/lib/office/sfx";
@@ -62,7 +71,7 @@ type Props = {
   active?: boolean;
 };
 
-type Panel = "play" | "rank" | "codex";
+type Panel = "play" | "rank" | "codex" | "cast";
 
 function preferReducedMotion(): boolean {
   return (
@@ -82,11 +91,14 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
   const [incident, setIncident] = useState<OfficeIncident | null>(null);
   const [step, setStep] = useState<PlayStep>("strategy");
   const [playEnter, setPlayEnter] = useState(false);
+  /** 新規事件のみ台本再生。再オープンはスキップ */
+  const [scriptFresh, setScriptFresh] = useState(false);
   const [sceneFx, setSceneFx] = useState<string | null>(null);
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const [targetIds, setTargetIds] = useState<string[]>([]);
   const [otherText, setOtherText] = useState("");
   const [answer, setAnswer] = useState("");
+  const [askedIds, setAskedIds] = useState<string[]>([]);
   const [rerolling, setRerolling] = useState(false);
   const [lastSubmit, setLastSubmit] = useState<OfficeSubmission | null>(null);
   const [codexBonus, setCodexBonus] = useState(0);
@@ -100,6 +112,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     myRank: number | null;
     rankingEnabled: boolean;
   } | null>(null);
+  const [castDraft, setCastDraft] = useState<CastSetupValue | null>(null);
   const advanceTimer = useRef<number | null>(null);
 
   const clearAdvance = useCallback(() => {
@@ -133,6 +146,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     setTargetIds([]);
     setOtherText("");
     setAnswer("");
+    setAskedIds([]);
   }, [clearAdvance]);
 
   const triggerFx = useCallback((type: string) => {
@@ -154,9 +168,17 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       resetChoices();
       setLastSubmit(null);
       if (opts?.allowFx && created) {
+        setScriptFresh(true);
         setStep("incident");
         triggerFx(inc.type);
+      } else if (inc.script?.length && inc.mission) {
+        // 再開：台本スキップしてミッション／聞き込みから
+        setScriptFresh(false);
+        setStep("ask");
+        setPlayEnter(false);
+        setSceneFx(null);
       } else {
+        setScriptFresh(false);
         setStep("strategy");
         setPlayEnter(false);
         setSceneFx(null);
@@ -226,20 +248,59 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
     })();
   }, [active, panel, payload?.company?.id, lastSubmit?.id]);
 
-  async function onSetup(input: { name: string; about: string }) {
+  async function onSetup(input: {
+    name: string;
+    about: string;
+    ownerName?: string;
+    cast?: CastMember[];
+  }) {
     setBusy(true);
     setErr("");
     try {
       if (payload?.company && !payload.company.about) {
         await setAbout(input.about);
       } else {
-        await createCompany(input.name, input.about);
+        await createCompany(input.name, input.about, {
+          ownerName: input.ownerName,
+          cast: input.cast,
+        });
       }
       const data = await fetchCompany();
       setPayload(data);
       await loadIncident({ allowFx: true });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "作成失敗");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openCastPanel() {
+    const c = payload?.company;
+    if (!c) return;
+    setCastDraft({
+      ownerName: c.ownerName ?? "",
+      members: ensureCompanyCast(c.cast, c.id),
+    });
+    setPanel("cast");
+    setErr("");
+  }
+
+  async function onSaveCast() {
+    if (!castDraft || !castSetupValid(castDraft)) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const c = await updateCast({
+        ownerName: castDraft.ownerName.trim(),
+        cast: castDraft.members,
+      });
+      setPayload((p) => (p ? { ...p, company: c } : p));
+      setPanel("play");
+      setCastDraft(null);
+      playOfficeSfx("tap");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "キャラ保存に失敗");
     } finally {
       setBusy(false);
     }
@@ -255,6 +316,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         strategyId,
         targetIds,
         targetOtherText: targetIds.includes("other") ? otherText.trim() : null,
+        askedQuestionIds: askedIds,
       };
       const res = await submitAnswer(input);
       setLastSubmit(res.submission);
@@ -394,11 +456,34 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
       <section className={`${glass} text-center text-sm text-zinc-500`}>
         事件を用意してるよ…
       </section>
+    ) : step === "incident" && incident.script?.length && incident.mission ? (
+      <DialoguePlayer
+        script={incident.script}
+        mission={incident.mission}
+        cast={company!.cast ?? []}
+        level={company!.level}
+        industry={company!.industry}
+        baseScene={incident.scene}
+        skipPlayback={!scriptFresh}
+        onListen={() => {
+          setScriptFresh(false);
+          setStep("ask");
+        }}
+      />
     ) : step === "incident" ? (
       <IncidentStep
         incident={incident}
         company={company!}
         playEnter={playEnter}
+        onNext={() => setStep("ask")}
+      />
+    ) : step === "ask" ? (
+      <AskStep
+        questions={incident.questions ?? []}
+        mission={incident.mission ?? null}
+        cast={company!.cast ?? []}
+        askedIds={askedIds}
+        onAskedIds={setAskedIds}
         onNext={() => setStep("strategy")}
       />
     ) : step === "strategy" ? (
@@ -470,6 +555,10 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
               ? `スタミナ切れ… 回復まで ${remain != null ? formatRemainMmSs(remain) : "しばらく"}`
               : null
           }
+          mission={incident.mission}
+          clues={(incident.questions ?? [])
+            .filter((q) => askedIds.includes(q.id))
+            .map((q) => q.clue)}
           onSubmit={() => void onSubmit()}
         />
       </div>
@@ -519,6 +608,34 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         </div>
       ) : panel === "codex" ? (
         <CodexPanel cells={codexCells} onClose={() => setPanel("play")} />
+      ) : panel === "cast" && castDraft ? (
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => {
+              setPanel("play");
+              setCastDraft(null);
+            }}
+            className="text-sm font-bold text-zinc-600 hover:text-zinc-900"
+          >
+            ← オフィスに戻る
+          </button>
+          <div className="rounded-3xl border border-zinc-200 bg-white px-3.5 py-4 shadow-sm">
+            <CastSetup value={castDraft} onChange={setCastDraft} />
+            <div className="mt-4">
+              <DuoButton
+                type="button"
+                tone="orange"
+                size="lg"
+                fullWidth
+                disabled={busy || !castSetupValid(castDraft)}
+                onClick={() => void onSaveCast()}
+              >
+                {busy ? "保存中…" : "キャラを保存"}
+              </DuoButton>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-3">
           <OfficeChrome
@@ -528,6 +645,7 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             nextRecoverAt={payload!.stamina.nextRecoverAt}
             onOpenRank={() => setPanel("rank")}
             onOpenCodex={() => setPanel("codex")}
+            onOpenCast={openCastPanel}
             onToggleSfx={() => {
               void (async () => {
                 const nextMuted = company!.sfxMuted === false;
@@ -539,23 +657,28 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             }}
           />
 
-          <StageView
-            level={company!.level}
-            industry={company!.industry}
-            fx={sceneFx}
-            speech={speech}
-            scene={incident?.scene}
-            speaker={
-              incident?.speaker
-                ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
-                : null
-            }
-            emotion={incident?.speaker?.emotion}
-            enter={playEnter && step === "incident"}
-          />
+          {step === "incident" && incident?.script?.length && incident.mission ? null : (
+            <StageView
+              level={company!.level}
+              industry={company!.industry}
+              fx={sceneFx}
+              speech={speech}
+              scene={incident?.scene}
+              speaker={
+                incident?.speaker
+                  ? castMemberByRole(company!.cast ?? [], incident.speaker.castRole)
+                  : null
+              }
+              emotion={incident?.speaker?.emotion}
+              enter={playEnter && step === "incident"}
+            />
+          )}
 
-          <PlayStepper
+          <MissionBar
             step={step}
+            asksRemaining={
+              step === "ask" ? Math.max(0, OFFICE_MAX_ASKS - askedIds.length) : null
+            }
             canBack={Boolean(backStep)}
             onBack={() => {
               if (!backStep) return;

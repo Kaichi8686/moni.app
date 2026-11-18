@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DuoButton } from "@/components/idea-garden/DuoButton";
+import { CastSetup, castSetupValid, type CastSetupValue } from "@/components/office/CastSetup";
+import { generateCompanyCast } from "@/lib/office/cast";
+import type { CastMember } from "@/lib/office/cast";
 import {
   OFFICE_ABOUT_MAX,
   OFFICE_ABOUT_MIN,
@@ -13,18 +16,30 @@ type Props = {
   error?: string;
   /** 説明補完モード：既存の会社名を固定表示 */
   existingName?: string | null;
-  onSubmit: (payload: { name: string; about: string }) => void;
+  onSubmit: (payload: {
+    name: string;
+    about: string;
+    ownerName?: string;
+    cast?: CastMember[];
+  }) => void;
 };
 
 export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
   const patchMode = Boolean(existingName);
   const [name, setName] = useState(existingName ?? "");
   const [about, setAbout] = useState("");
+  const seedMembers = useMemo(() => generateCompanyCast(`setup-${Date.now()}`), []);
+  const [castValue, setCastValue] = useState<CastSetupValue>({
+    ownerName: "",
+    members: seedMembers,
+  });
 
   const aboutOk = about.trim().length >= OFFICE_ABOUT_MIN && about.trim().length <= OFFICE_ABOUT_MAX;
+  const castOk = patchMode || castSetupValid(castValue);
   const canSubmit =
     !busy &&
     aboutOk &&
+    castOk &&
     (patchMode || (name.trim().length >= 1 && name.trim().length <= OFFICE_NAME_MAX));
 
   return (
@@ -38,7 +53,7 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
       <p className="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-zinc-600">
         {patchMode
           ? `『${existingName}』はどんな会社？短く書いてね。あとからは変えられないよ。`
-          : "会社名と、どんな会社かの説明を書こう。説明はあとから変えられないよ。"}
+          : "会社名と説明、あと仲間の名前を決めよう。説明はあとから変えられないよ。"}
       </p>
 
       {!patchMode ? (
@@ -84,6 +99,12 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
         </p>
       </label>
 
+      {!patchMode ? (
+        <div className="mt-8 rounded-3xl border border-zinc-200 bg-white px-3.5 py-4 shadow-sm">
+          <CastSetup value={castValue} onChange={setCastValue} />
+        </div>
+      ) : null}
+
       {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
       <div className="mt-5">
         <DuoButton
@@ -94,9 +115,16 @@ export function NameSetup({ busy, error, existingName, onSubmit }: Props) {
           disabled={!canSubmit}
           onClick={() => {
             if (!aboutOk) return;
+            if (!patchMode && !castSetupValid(castValue)) return;
             onSubmit({
               name: patchMode ? (existingName ?? "").trim() : name.trim(),
               about: about.trim(),
+              ...(patchMode
+                ? {}
+                : {
+                    ownerName: castValue.ownerName.trim(),
+                    cast: castValue.members,
+                  }),
             });
           }}
         >

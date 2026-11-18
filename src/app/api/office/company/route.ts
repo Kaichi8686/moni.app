@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as {
       name?: string;
       about?: string;
+      owner_name?: string;
+      cast?: unknown;
       markResultSeen?: string;
       markSecretaryGuideDone?: boolean;
     };
@@ -62,7 +64,10 @@ export async function POST(req: NextRequest) {
 
     if (existing.company) throw new Error("すでに会社があるよ");
     if (!body.about) throw new Error("会社の説明を書いてね");
-    const company = await dbCreateCompany(admin, auth.userId, body.name ?? "", body.about);
+    const company = await dbCreateCompany(admin, auth.userId, body.name ?? "", body.about, {
+      ownerName: body.owner_name,
+      cast: body.cast,
+    });
     return NextResponse.json({ company });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 400 });

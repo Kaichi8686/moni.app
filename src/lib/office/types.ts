@@ -3,6 +3,11 @@ import type { OfficeIndustry } from "@/lib/office/industries";
 import type { OfficeMeters } from "@/lib/office/meters";
 import type { ResultPanel } from "@/lib/office/resultPanels";
 import type {
+  IncidentMission,
+  IncidentQuestion,
+  ScriptBeat,
+} from "@/lib/office/script";
+import type {
   CastEmotion,
   CastRole,
   MeterKey,
@@ -39,6 +44,8 @@ export type OfficeCompany = {
   cast: CastMember[];
   meters: OfficeMeters;
   metersUpdatedAt: string | null;
+  /** 社長の表示名（1〜12字） */
+  ownerName?: string | null;
   shareOptOut?: boolean;
   sfxMuted?: boolean;
   secretaryGuideDone?: boolean;
@@ -92,6 +99,10 @@ export type OfficeIncident = {
   stakes?: string | null;
   metersAtRisk?: MeterKey[];
   followupOf?: string | null;
+  /** 会話台本（3〜5 beat） */
+  script?: ScriptBeat[] | null;
+  mission?: IncidentMission | null;
+  questions?: IncidentQuestion[] | null;
 };
 
 export type OfficeScores = {
@@ -104,6 +115,7 @@ export type OfficeScores = {
   story: string;
   storyTone: StoryTone;
   nextHint: string;
+  reactionLines?: string[];
 };
 
 export type OfficeSubmission = {
@@ -139,6 +151,8 @@ export type OfficeSubmission = {
   reactionEmotion?: CastEmotion | null;
   metersDelta?: Partial<OfficeMeters> | null;
   safe?: boolean;
+  askedQuestionIds?: string[] | null;
+  reactionLines?: string[] | null;
 };
 
 export type OfficeSeasonScore = {
@@ -172,4 +186,5 @@ export type OfficeSubmitInput = {
   strategyId: string;
   targetIds: string[];
   targetOtherText?: string | null;
+  askedQuestionIds?: string[];
 };
