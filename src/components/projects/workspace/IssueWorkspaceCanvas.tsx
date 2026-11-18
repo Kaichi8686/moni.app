@@ -2871,7 +2871,8 @@ function SheetFullscreenEditor({
     return Math.min(2.4, Math.max(0.45, w / h));
   }, [sheet.w, sheet.h]);
   const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
-  const [editTool, setEditTool] = useState<SheetEditTool>("text");
+  /** null = 何も選ばない（初期・同じボタン再押しで解除） */
+  const [editTool, setEditTool] = useState<SheetEditTool | null>(null);
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
   const [shapeColor, setShapeColor] = useState<string>(SHAPE_COLORS[0]!);
   const [penColor, setPenColor] = useState("#1A1A1A");
@@ -3107,7 +3108,6 @@ function SheetFullscreenEditor({
     setSelectedOverlayIds([id]);
     setOverlayHandlesVisible(false);
     beginOverlayTextEdit(id);
-    setEditTool("text");
   }
 
   function clearOverlayLongPress() {
@@ -3350,7 +3350,6 @@ function SheetFullscreenEditor({
       setOverlays([...overlays, overlay]);
       setSelectedOverlayIds([id]);
       setOverlayHandlesVisible(true);
-      setEditTool("text");
       setOverlayTick((n) => n + 1);
       return;
     }
@@ -3522,7 +3521,6 @@ function SheetFullscreenEditor({
                       );
                     }
                     if (ov.kind === "shape") {
-                      const selected = selectedOverlayIds.includes(ov.id);
                       return (
                         <g
                           key={ov.id}
@@ -3534,15 +3532,6 @@ function SheetFullscreenEditor({
                             beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
                           }}
                         >
-                          {selected ? (
-                            <ShapeGeometry
-                              shape={ov.shape}
-                              color={SELECTION_YELLOW}
-                              w={ov.w}
-                              h={ov.h}
-                              hairline
-                            />
-                          ) : null}
                           <ShapeGeometry
                             shape={ov.shape}
                             color={ov.color}
@@ -3592,7 +3581,16 @@ function SheetFullscreenEditor({
                       <div
                         key={`shape-handles-${ov.id}`}
                         className="pointer-events-none absolute"
-                        style={{ left: `${ov.x}%`, top: `${ov.y}%`, width: `${ov.w}%`, height: `${ov.h}%` }}
+                        style={{
+                          left: `${ov.x}%`,
+                          top: `${ov.y}%`,
+                          width: `${ov.w}%`,
+                          height: `${ov.h}%`,
+                          // テキスト／写真と同じ黄色枠（移動中も見える）
+                          outline: `2px solid ${SELECTION_YELLOW}`,
+                          outlineOffset: 2,
+                          borderRadius: 2,
+                        }}
                       >
                         <div className="pointer-events-auto absolute inset-0 overflow-visible">
                           {renderOverlayResizeHandles(ov)}
@@ -3761,7 +3759,7 @@ function SheetFullscreenEditor({
               ]);
               setSelectedOverlayIds([id]);
               setOverlayHandlesVisible(true);
-              setEditTool("text");
+              setEditTool(null);
             });
           };
           reader.readAsDataURL(file);
@@ -3804,7 +3802,8 @@ function SheetFullscreenEditor({
                       photoInputRef.current?.click();
                       return;
                     }
-                    setEditTool(id);
+                    // 同じツール再押しで選択解除
+                    setEditTool((prev) => (prev === id ? null : id));
                     setPenEraser(false);
                     setSelectedOverlayIds([]);
                     setOverlayHandlesVisible(false);
