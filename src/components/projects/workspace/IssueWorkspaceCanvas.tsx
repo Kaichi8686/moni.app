@@ -117,6 +117,15 @@ const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 書式バー操作直後は誤閉じでバーが消えないようにする */
 const FORMAT_BAR_GUARD_MS = 1800;
 
+/** 書式バー連打中に visualViewport がチラついてもキーボード open を落とさない */
+let visualKeyboardHoldOpenUntil = 0;
+function holdVisualKeyboardOpen(ms = FORMAT_BAR_GUARD_MS) {
+  visualKeyboardHoldOpenUntil = Math.max(visualKeyboardHoldOpenUntil, Date.now() + ms);
+}
+function visualKeyboardHoldOpenActive() {
+  return Date.now() < visualKeyboardHoldOpenUntil;
+}
+
 /** visualViewport がまだキーボード相当に潰れているか（誤閉じ判定用） */
 function keyboardStillCovering() {
   if (typeof window === "undefined") return false;
@@ -188,6 +197,12 @@ function useVisualKeyboard() {
       return closedBaseline - h > KEYBOARD_OPEN_PX || covered > KEYBOARD_OPEN_PX;
     };
     const confirmClosed = () => {
+      // 書式バー連打中は open を落とさない（キーボードが一瞬消えて戻るのを防ぐ）
+      if (visualKeyboardHoldOpenActive()) {
+        setOpen(true);
+        if (peakInset > 0) setInset(peakInset);
+        return;
+      }
       peakInset = 0;
       settledOnce = false;
       if (settleTimer) {
@@ -201,8 +216,8 @@ function useVisualKeyboard() {
     const update = () => {
       const next = measureInset();
       const isOpen = measureOpen();
-      if (isOpen) {
-        peakInset = Math.max(peakInset, next);
+      if (isOpen || (visualKeyboardHoldOpenActive() && peakInset > 0)) {
+        peakInset = Math.max(peakInset, next, visualKeyboardHoldOpenActive() ? peakInset : 0);
         // 持ち上げ量は上方向だけ追従（一瞬大きくなって戻るピョコを防ぐ）
         setInset(peakInset);
         if (closeTimer) {
@@ -213,7 +228,7 @@ function useVisualKeyboard() {
         if (!settledOnce && !settleTimer) {
           settleTimer = setTimeout(() => {
             settleTimer = null;
-            if (measureOpen()) {
+            if (measureOpen() || visualKeyboardHoldOpenActive()) {
               settledOnce = true;
               setSettled(true);
             }
@@ -252,6 +267,11 @@ function useVisualKeyboard() {
           : KEYBOARD_CLOSE_DEBOUNCE_FOCUSED_MS;
       closeTimer = setTimeout(() => {
         closeTimer = null;
+        if (visualKeyboardHoldOpenActive()) {
+          setOpen(true);
+          if (peakInset > 0) setInset(peakInset);
+          return;
+        }
         if (editableFocused) {
           const covered = measureInset();
           // フォーカス中ははっきり閉じたときだけ（中間イベントで落とさない）
@@ -272,7 +292,17 @@ function useVisualKeyboard() {
     };
     const onFocusOut = () => {
       window.setTimeout(() => {
-        editableFocused = isEditable(document.activeElement);
+        const active = document.activeElement as HTMLElement | null;
+        // 書式バー操作で一瞬フォーカスが外れる／ボタン側に移る → 開いたまま扱う
+        if (
+          visualKeyboardHoldOpenActive() ||
+          active?.closest?.("[data-text-format-bar]")
+        ) {
+          editableFocused = true;
+          update();
+          return;
+        }
+        editableFocused = isEditable(active);
         if (!editableFocused) closedBaseline = Math.max(closedBaseline, vv.height);
         update();
       }, 80);
@@ -1794,12 +1824,17 @@ export function IssueWorkspaceCanvas({
   }
 
   function keepWorkspaceTextFocus() {
-    textEditRef.current?.focus({ preventScroll: true });
+    const el = textEditRef.current;
+    if (!el) return;
+    // 既にフォーカス中の focus() は iOS でキーボードが一瞬消える
+    if (document.activeElement === el) return;
+    el.focus({ preventScroll: true });
   }
 
   const workspaceFormatBarGuardRef = useRef(0);
   function touchWorkspaceFormatBar() {
     workspaceFormatBarGuardRef.current = Date.now();
+    holdVisualKeyboardOpen();
     keepWorkspaceTextFocus();
   }
   function workspaceFormatBarGuarding() {
@@ -3009,13 +3044,18 @@ function SheetFullscreenEditor({
   }
 
   function keepOverlayTextFocus() {
-    overlayTextRef.current?.focus({ preventScroll: true });
+    const el = overlayTextRef.current;
+    if (!el) return;
+    // 既にフォーカス中の focus() は iOS でキーボードが一瞬消える
+    if (document.activeElement === el) return;
+    el.focus({ preventScroll: true });
   }
 
   /** 書式バー連打中にキーボード誤閉じ → バー消滅を防ぐ */
   const overlayFormatBarGuardRef = useRef(0);
   function touchOverlayFormatBar() {
     overlayFormatBarGuardRef.current = Date.now();
+    holdVisualKeyboardOpen();
     keepOverlayTextFocus();
   }
   function overlayFormatBarGuarding() {
@@ -3199,6 +3239,8 @@ function SheetFullscreenEditor({
     setOverlays([...overlays, overlay]);
     setSelectedOverlayIds([id]);
     setOverlayHandlesVisible(false);
+    // 1つ置いたら挿入ツールの選択を外す
+    setEditTool(null);
     beginOverlayTextEdit(id);
   }
 
@@ -3442,6 +3484,8 @@ function SheetFullscreenEditor({
       setOverlays([...overlays, overlay]);
       setSelectedOverlayIds([id]);
       setOverlayHandlesVisible(true);
+      // 1つ置いたら挿入ツールの選択を外す
+      setEditTool(null);
       setOverlayTick((n) => n + 1);
       return;
     }
