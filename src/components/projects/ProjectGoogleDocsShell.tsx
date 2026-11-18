@@ -31,6 +31,7 @@ import {
   type ReactNode,
   type WheelEvent as ReactWheelEvent,
 } from "react";
+import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 import { a4MinHeightForWidth } from "@/lib/projects/documents";
 
 const PAGE_MAX_WIDTH = 680;
@@ -191,6 +192,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const suppressEditUntilRef = useRef(0);
   const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
   const editModeRef = useRef(false);
+  const keyboardWasOpenRef = useRef(false);
+  const pendingCaretAtEndRef = useRef(false);
   const pinchRef = useRef<{
     startDist: number;
     startZoom: number;
@@ -222,6 +225,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const [insertOpen, setInsertOpen] = useState(false);
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
   const [activeTextColor, setActiveTextColor] = useState<string>("#000000");
+  /** iOS はフォーカス残留でもキーボードが閉じることがあるので VV で判定 */
+  const keyboardOpen = useVirtualKeyboardOpen(120);
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -610,7 +615,18 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     return doubled;
   }, []);
 
-  /** ダブルタップで編集セッション＋文字入力を開始 */
+  const placeCaretAtEnd = useCallback((el: HTMLElement) => {
+    const sel = window.getSelection();
+    if (!sel) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    savedRangeRef.current = range.cloneRange();
+  }, []);
+
+  /** ダブルタップで編集セッション＋文字入力を開始（キャレットは末尾＝右端） */
   const beginTyping = useCallback(() => {
     if (!autoSave || activeDocId === null) return;
     if (Date.now() < suppressEditUntilRef.current) return;
@@ -620,17 +636,24 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     }
     lastTapRef.current = null;
     editModeRef.current = true;
+    pendingCaretAtEndRef.current = true;
     setEditMode(true);
     setTypingActive(true);
     setDocZoom(1);
     setDocPan({ x: 0, y: 0 });
-    queueMicrotask(() => {
-      const el = editorRef.current;
-      if (!el) return;
-      el.focus({ preventScroll: true });
-      refreshHistoryState();
-    });
-  }, [activeDocId, autoSave, refreshHistoryState]);
+  }, [activeDocId, autoSave]);
+
+  /** contentEditable 有効化後にフォーカスし、末尾（右端）へキャレットを置く */
+  useLayoutEffect(() => {
+    if (!typingActive || !pendingCaretAtEndRef.current) return;
+    pendingCaretAtEndRef.current = false;
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    placeCaretAtEnd(el);
+    refreshHistoryState();
+    refreshFormatState();
+  }, [typingActive, placeCaretAtEnd, refreshFormatState, refreshHistoryState]);
 
   const canBrowseZoom = zoomUnlocked && !editMode;
 
@@ -768,6 +791,22 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
       window.removeEventListener("orientationchange", sync);
     };
   }, [fullscreen]);
+
+  /** キーボードが閉じたら入力終了（書式バー消去・再度ダブルタップが必要） */
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (keyboardOpen) {
+      keyboardWasOpenRef.current = true;
+      return;
+    }
+    if (!keyboardWasOpenRef.current || !typingActive) return;
+    keyboardWasOpenRef.current = false;
+    setTypingActive(false);
+    setColorOpen(false);
+    setAlignOpen(false);
+    setStyleOpen(false);
+    editorRef.current?.blur();
+  }, [fullscreen, keyboardOpen, typingActive]);
 
   useLayoutEffect(() => {
     const el = editorRef.current;
@@ -947,6 +986,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const canEditDoc = activeDocId !== null && autoSave;
   const editing = canEditDoc && editMode;
   const showTypingShield = editing && !typingActive;
+  /** フルスクリーンはキーボード実表示中のみ。デスクトップ埋め込みは入力中なら出す */
+  const showFormatBar = editing && typingActive && (!fullscreen || keyboardOpen);
 
   return (
     <section
@@ -1120,8 +1161,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                 role="textbox"
                 aria-multiline
                 aria-readonly={!editing}
-                tabIndex={editing ? 0 : -1}
-                contentEditable={editing}
+                tabIndex={editing && typingActive ? 0 : -1}
+                contentEditable={editing && typingActive}
                 suppressContentEditableWarning
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -1201,9 +1242,9 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
           )}
         </div>
 
-        {/* キーボード表示中（入力中）だけ文字設定バーを出す。
+        {/* キーボード表示中だけ文字設定バーを出す（閉じたら消える）。
             色などは上方向 absolute だとドキュメント面の下に回るので、バー内の行で開く */}
-        {editing && typingActive ? (
+        {showFormatBar ? (
           <div
             className={`relative z-50 shrink-0 border-t border-[#dadce0] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)] ${
               fullscreen && keyboardInset < 8
