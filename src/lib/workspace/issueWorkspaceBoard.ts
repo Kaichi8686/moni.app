@@ -47,7 +47,10 @@ export type SheetOverlay =
       y: number;
       w: number;
       h: number;
+      /** プレーンテキスト（空判定・検索用） */
       text: string;
+      /** 部分装飾用 HTML（b/i/u/span色）。無い場合は text + 全体スタイル */
+      html?: string;
       fontSize: number;
       textColor: string;
       align: TextAlign;
@@ -124,7 +127,10 @@ export type BoardTextBox = {
   y: number;
   w: number;
   h: number;
+  /** プレーンテキスト（空判定・検索用） */
   text: string;
+  /** 部分装飾用 HTML（b/i/u/span色）。無い場合は text + 全体スタイル */
+  html?: string;
   fontSize: number;
   textColor: string;
   align: TextAlign;
@@ -133,6 +139,142 @@ export type BoardTextBox = {
   underline?: boolean;
   z: number;
 };
+
+const RICH_TEXT_ALLOWED_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "SPAN", "BR", "DIV", "P", "FONT"]);
+
+function escapePlainText(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizeCssColor(input: string): string | null {
+  const t = input.trim();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(t)) {
+    if (t.length === 4) {
+      return `#${t[1]}${t[1]}${t[2]}${t[2]}${t[3]}${t[3]}`.toUpperCase();
+    }
+    return t.toUpperCase();
+  }
+  const rgb = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb) {
+    const hex = [rgb[1], rgb[2], rgb[3]]
+      .map((n) => Number(n).toString(16).padStart(2, "0"))
+      .join("");
+    return `#${hex}`.toUpperCase();
+  }
+  const named = TEXT_COLOR_ORDER.find((c) => c.toLowerCase() === t.toLowerCase());
+  return named ? named.toUpperCase() : null;
+}
+
+/** プレーン＋全体スタイルから初期 HTML を作る */
+export function plainTextToRichHtml(
+  text: string,
+  style?: { bold?: boolean; italic?: boolean; underline?: boolean; textColor?: string },
+) {
+  let html = escapePlainText(text).replace(/\r\n|\r|\n/g, "<br>");
+  if (!html) return "";
+  if (style?.bold) html = `<b>${html}</b>`;
+  if (style?.italic) html = `<i>${html}</i>`;
+  if (style?.underline) html = `<u>${html}</u>`;
+  if (style?.textColor && style.textColor.toLowerCase() !== DEFAULT_TEXT_COLOR.toLowerCase()) {
+    html = `<span style="color:${style.textColor}">${html}</span>`;
+  }
+  return html;
+}
+
+/** contentEditable から安全な HTML を取り出す */
+export function sanitizeRichHtml(raw: string): string {
+  if (typeof document === "undefined") return "";
+  const template = document.createElement("template");
+  template.innerHTML = raw;
+  const walk = (node: Node) => {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.TEXT_NODE) continue;
+      if (child.nodeType !== Node.ELEMENT_NODE) {
+        child.parentNode?.removeChild(child);
+        continue;
+      }
+      const el = child as HTMLElement;
+      const tag = el.tagName;
+      if (!RICH_TEXT_ALLOWED_TAGS.has(tag)) {
+        // 中身だけ残す
+        while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el);
+        el.parentNode?.removeChild(el);
+        continue;
+      }
+      // 属性は色以外落とす（execCommand は rgb() を返すことが多い）
+      const keepColor =
+        tag === "SPAN" || tag === "FONT"
+          ? normalizeCssColor(el.style.color || el.getAttribute("color") || "")
+          : null;
+      for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
+      if (keepColor) el.style.color = keepColor;
+      walk(el);
+    }
+  };
+  walk(template.content);
+  return template.innerHTML;
+}
+
+export function plainTextFromRichHtml(html: string): string {
+  if (typeof document === "undefined") {
+    return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  }
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return (div.innerText || div.textContent || "").replace(/\u00a0/g, " ");
+}
+
+export function richHtmlForTextBox(box: {
+  text: string;
+  html?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textColor?: string;
+}) {
+  if (typeof box.html === "string" && box.html.length > 0) return box.html;
+  return plainTextToRichHtml(box.text, box);
+}
+
+export function placeCaretAtEnd(el: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+export function queryInlineFormatState() {
+  try {
+    return {
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+    };
+  } catch {
+    return { bold: false, italic: false, underline: false };
+  }
+}
+
+export function applyInlineFormat(command: "bold" | "italic" | "underline" | "foreColor", value?: string) {
+  try {
+    document.execCommand("styleWithCSS", false, "true");
+    if (command === "foreColor") {
+      document.execCommand("foreColor", false, value || DEFAULT_TEXT_COLOR);
+    } else {
+      document.execCommand(command, false);
+    }
+  } catch {
+    // ignore — some browsers throw on unsupported commands
+  }
+}
 
 export type BoardShape = {
   id: string;
@@ -257,6 +399,8 @@ function parseOverlay(raw: unknown): SheetOverlay | null {
   if (typeof row.id !== "string" || !row.id) return null;
   if (row.kind === "text") {
     if (![row.x, row.y, row.w, row.h].every(isFiniteNumber)) return null;
+    const text = typeof row.text === "string" ? row.text : "";
+    const html = typeof row.html === "string" && row.html.length > 0 ? row.html : undefined;
     return {
       id: row.id,
       kind: "text",
@@ -264,7 +408,8 @@ function parseOverlay(raw: unknown): SheetOverlay | null {
       y: row.y as number,
       w: Math.max(40, row.w as number),
       h: Math.max(24, row.h as number),
-      text: typeof row.text === "string" ? row.text : "",
+      text,
+      html,
       fontSize:
         isFiniteNumber(row.fontSize) && (row.fontSize as number) >= 8
           ? Math.round(row.fontSize as number)
@@ -382,6 +527,8 @@ function parseTextBox(raw: Record<string, unknown>): BoardTextBox | null {
     return null;
   }
   if (typeof raw.id !== "string" || !raw.id) return null;
+  const text = typeof raw.text === "string" ? raw.text : "";
+  const html = typeof raw.html === "string" && raw.html.length > 0 ? raw.html : undefined;
   return {
     id: raw.id,
     kind: "text",
@@ -389,7 +536,8 @@ function parseTextBox(raw: Record<string, unknown>): BoardTextBox | null {
     y: raw.y,
     w: Math.max(40, raw.w),
     h: Math.max(28, raw.h),
-    text: typeof raw.text === "string" ? raw.text : "",
+    text,
+    html,
     fontSize:
       isFiniteNumber(raw.fontSize) && raw.fontSize >= 8 && raw.fontSize <= 96
         ? Math.round(raw.fontSize)

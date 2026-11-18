@@ -28,7 +28,6 @@ import {
   Circle,
   Crop,
   Eraser,
-  Highlighter,
   Image as ImageIcon,
   Italic,
   Minus,
@@ -48,6 +47,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
+  applyInlineFormat,
   defaultSheetTextStyle,
   edgePoint,
   isBoardNode,
@@ -55,6 +55,11 @@ import {
   nextZ,
   penBounds,
   penToPath,
+  placeCaretAtEnd,
+  plainTextFromRichHtml,
+  queryInlineFormatState,
+  richHtmlForTextBox,
+  sanitizeRichHtml,
   SHAPE_COLORS,
   SHEET_COLOR_ORDER,
   SHEET_COLORS,
@@ -701,7 +706,12 @@ export function IssueWorkspaceCanvas({
   const { tx, locale } = useI18n();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const textEditRef = useRef<HTMLTextAreaElement | null>(null);
+  const textEditRef = useRef<HTMLDivElement | null>(null);
+  const [workspaceInlineFormat, setWorkspaceInlineFormat] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+  });
   const [tool, setTool] = useState<Tool>("navigate");
   const [sheetColor, setSheetColor] = useState<SheetColor>("yellow");
   const [shapeKind, setShapeKind] = useState<BoardShapeKind>("rect");
@@ -1799,11 +1809,25 @@ export function IssueWorkspaceCanvas({
   }
 
   // autoFocus は iOS で scrollIntoView → キーボード即閉じの原因になるので preventScroll で当てる
+  // 既存テキストはキャレットを末尾へ（左端から始まらないように）
   useLayoutEffect(() => {
     if (!editingTextId) return;
     const el = textEditRef.current;
     if (!el) return;
+    const box = boardRef.current.items.find(
+      (item): item is BoardTextBox => item.kind === "text" && item.id === editingTextId,
+    );
+    el.innerHTML = box ? richHtmlForTextBox(box) : "";
     el.focus({ preventScroll: true });
+    placeCaretAtEnd(el);
+    setWorkspaceInlineFormat(queryInlineFormatState());
+  }, [editingTextId]);
+
+  useEffect(() => {
+    if (!editingTextId) return;
+    const sync = () => setWorkspaceInlineFormat(queryInlineFormatState());
+    document.addEventListener("selectionchange", sync);
+    return () => document.removeEventListener("selectionchange", sync);
   }, [editingTextId]);
 
   // iOS キーボード閉じボタン → すぐ編集終了（完了／挿入復帰）。チラつきは covering で弾く。
@@ -2240,14 +2264,14 @@ export function IssueWorkspaceCanvas({
 
             if (node.kind === "text") {
               const editing = editingTextId === node.id;
-              // iOS は input/textarea が 16px 未満だと勝手にズームする
-              const editFontPx = Math.max(16, node.fontSize);
+              const hasRich = Boolean(node.html);
               const textStyle: CSSProperties = {
                 color: node.textColor,
                 textAlign: node.align,
-                fontWeight: node.bold ? 700 : 400,
-                fontStyle: node.italic ? "italic" : "normal",
-                textDecoration: node.underline ? "underline" : "none",
+                fontSize: node.fontSize,
+                fontWeight: hasRich ? undefined : node.bold ? 700 : 400,
+                fontStyle: hasRich ? undefined : node.italic ? "italic" : "normal",
+                textDecoration: hasRich ? undefined : node.underline ? "underline" : "none",
               };
               return (
                 <div
@@ -2260,9 +2284,8 @@ export function IssueWorkspaceCanvas({
                     width: node.w,
                     height: node.h,
                     zIndex: node.z,
-                    border: editing
-                      ? "1.5px solid #2563EB"
-                      : selected
+                    border:
+                      editing || selected
                         ? `1.5px solid ${SELECTION_YELLOW}`
                         : "1px solid rgba(0,0,0,0.28)",
                     background: "transparent",
@@ -2282,38 +2305,34 @@ export function IssueWorkspaceCanvas({
                   }}
                 >
                   {editing && canEdit ? (
-                      <textarea
+                      <div
                         ref={textEditRef}
                         data-board-ui
-                        value={node.text}
-                        onChange={(e) => updateItem(node.id, { text: e.target.value })}
+                        contentEditable
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-multiline
+                        onInput={() => {
+                          const el = textEditRef.current;
+                          if (!el) return;
+                          const html = sanitizeRichHtml(el.innerHTML);
+                          const text = plainTextFromRichHtml(html);
+                          updateItem(node.id, { text, html });
+                          setWorkspaceInlineFormat(queryInlineFormatState());
+                        }}
                         onBlur={() => {
                           window.setTimeout(() => {
                             if (!editingTextIdRef.current) return;
                             const active = document.activeElement as HTMLElement | null;
                             if (active === textEditRef.current) return;
                             if (active?.closest("[data-text-format-bar]")) return;
-                            // キーボードがまだあるときだけ取り戻す（blur では終わらせない）
-                            // 本当に閉じたあとに focus するとキーボードが再起動するので触らない
                             if (workspaceKeyboardOpenRef.current || keyboardStillCovering()) {
                               keepWorkspaceTextFocus();
                             }
                           }, 40);
                         }}
-                        className="h-full w-full resize-none bg-transparent px-1 py-0.5 outline-none"
-                        style={{
-                          ...textStyle,
-                          fontSize: editFontPx,
-                          // フォーカス中の transform は iOS がキーボードを切るので付けない
-                        }}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck={false}
-                        data-form-type="other"
-                        data-lpignore="true"
-                        data-1p-ignore="true"
-                        enterKeyHint="done"
+                        className="h-full w-full bg-transparent px-1 py-0.5 outline-none"
+                        style={textStyle}
                         onPointerDown={(e) => e.stopPropagation()}
                       />
                   ) : (
@@ -2321,15 +2340,17 @@ export function IssueWorkspaceCanvas({
                       className="h-full w-full select-none whitespace-pre-wrap px-1 py-0.5"
                       style={{
                         ...textStyle,
-                        fontSize: node.fontSize,
                         WebkitUserSelect: "none",
                         WebkitTouchCallout: "none",
                         userSelect: "none",
                       }}
+                      {...(hasRich
+                        ? { dangerouslySetInnerHTML: { __html: richHtmlForTextBox(node) } }
+                        : {})}
                     >
-                      {node.text || (
-                        <span className="text-zinc-400">{tx("テキスト", "Text")}</span>
-                      )}
+                      {!hasRich
+                        ? node.text || <span className="text-zinc-400">{tx("テキスト", "Text")}</span>
+                        : null}
                     </div>
                   )}
                   {!editing ? handles : null}
@@ -2562,11 +2583,27 @@ export function IssueWorkspaceCanvas({
                         fontSize={editingTextBox!.fontSize}
                         textColor={editingTextBox!.textColor}
                         align={editingTextBox!.align}
-                        bold={Boolean(editingTextBox!.bold)}
-                        italic={Boolean(editingTextBox!.italic)}
-                        underline={Boolean(editingTextBox!.underline)}
+                        bold={workspaceInlineFormat.bold}
+                        italic={workspaceInlineFormat.italic}
+                        underline={workspaceInlineFormat.underline}
                         tx={tx}
                         onChange={(patch) => updateItem(editingTextBox!.id, patch)}
+                        onInlineFormat={(command, value) => {
+                          keepWorkspaceTextFocus();
+                          applyInlineFormat(command, value);
+                          const el = textEditRef.current;
+                          if (el) {
+                            const html = sanitizeRichHtml(el.innerHTML);
+                            const text = plainTextFromRichHtml(html);
+                            updateItem(editingTextBox!.id, {
+                              text,
+                              html,
+                              ...(command === "foreColor" && value ? { textColor: value } : {}),
+                            });
+                          }
+                          setWorkspaceInlineFormat(queryInlineFormatState());
+                          window.requestAnimationFrame(() => keepWorkspaceTextFocus());
+                        }}
                         onKeepFocus={keepWorkspaceTextFocus}
                       />
                     </div>,
@@ -2881,7 +2918,12 @@ function SheetFullscreenEditor({
   const selectedOverlayId = selectedOverlayIds[0] ?? null;
   const [editingOverlayId, setEditingOverlayId] = useState<string | null>(null);
   const [overlayHandlesVisible, setOverlayHandlesVisible] = useState(false);
-  const overlayTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const overlayTextRef = useRef<HTMLDivElement | null>(null);
+  const [overlayInlineFormat, setOverlayInlineFormat] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+  });
   const keyboard = useVisualKeyboard();
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
@@ -2952,7 +2994,19 @@ function SheetFullscreenEditor({
     if (!editingOverlayId) return;
     const el = overlayTextRef.current;
     if (!el) return;
+    const ov = overlaysRef.current.find((o) => o.id === editingOverlayId);
+    el.innerHTML =
+      ov && ov.kind === "text" ? richHtmlForTextBox(ov) : "";
     el.focus({ preventScroll: true });
+    placeCaretAtEnd(el);
+    setOverlayInlineFormat(queryInlineFormatState());
+  }, [editingOverlayId]);
+
+  useEffect(() => {
+    if (!editingOverlayId) return;
+    const sync = () => setOverlayInlineFormat(queryInlineFormatState());
+    document.addEventListener("selectionchange", sync);
+    return () => document.removeEventListener("selectionchange", sync);
   }, [editingOverlayId]);
 
   function finishOverlayTextEdit() {
@@ -3632,7 +3686,17 @@ function SheetFullscreenEditor({
                     );
                   }
                   const editing = editingOverlayId === ov.id;
-                  const editFontPx = Math.max(16, ov.fontSize * 0.55);
+                  // 表示と同じ大きさで打つ（編集時だけ 16px 下限にするとジャンプする）
+                  const fontPx = ov.fontSize * 0.55;
+                  const hasRich = Boolean(ov.html);
+                  const textStyle: CSSProperties = {
+                    color: ov.textColor,
+                    textAlign: ov.align,
+                    fontSize: fontPx,
+                    fontWeight: hasRich ? undefined : ov.bold ? 700 : 400,
+                    fontStyle: hasRich ? undefined : ov.italic ? "italic" : "normal",
+                    textDecoration: hasRich ? undefined : ov.underline ? "underline" : "none",
+                  };
                   return (
                     <div key={ov.id} className="pointer-events-none absolute inset-0 overflow-visible">
                       <div
@@ -3643,9 +3707,8 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          border: editing
-                            ? "1.5px solid #2563EB"
-                            : selected
+                          border:
+                            editing || selected
                               ? `2px solid ${SELECTION_YELLOW}`
                               : "1px solid rgba(0,0,0,0.28)",
                           background: "transparent",
@@ -3668,55 +3731,44 @@ function SheetFullscreenEditor({
                         }}
                       >
                         {editing && canEdit ? (
-                          <textarea
+                          <div
                             ref={overlayTextRef}
-                            value={ov.text}
-                            onChange={(e) => patchOverlay(ov.id, { text: e.target.value })}
+                            contentEditable
+                            suppressContentEditableWarning
+                            role="textbox"
+                            aria-multiline
+                            onInput={() => {
+                              const el = overlayTextRef.current;
+                              if (!el) return;
+                              const html = sanitizeRichHtml(el.innerHTML);
+                              const text = plainTextFromRichHtml(html);
+                              patchOverlay(ov.id, { text, html });
+                              setOverlayInlineFormat(queryInlineFormatState());
+                            }}
                             onBlur={() => {
                               window.setTimeout(() => {
                                 if (!editingOverlayIdRef.current) return;
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (active?.closest("[data-text-format-bar]")) return;
-                                // キーボードがまだあるときだけ取り戻す（blur では終わらせない）
                                 if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
                                   keepOverlayTextFocus();
                                 }
                               }, 40);
                             }}
-                            className="h-full w-full resize-none bg-transparent px-1 outline-none"
-                            style={{
-                              color: ov.textColor,
-                              textAlign: ov.align,
-                              // 16px 未満は iOS がズームするので下限 16。transform scale は
-                              // フォーカス中だとキーボードが切れるので使わない。
-                              fontSize: editFontPx,
-                              fontWeight: ov.bold ? 700 : 400,
-                              fontStyle: ov.italic ? "italic" : "normal",
-                              textDecoration: ov.underline ? "underline" : "none",
-                            }}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            autoCapitalize="off"
-                            spellCheck={false}
-                            data-form-type="other"
-                            data-lpignore="true"
-                            data-1p-ignore="true"
+                            className="h-full w-full bg-transparent px-1 outline-none"
+                            style={textStyle}
                             onPointerDown={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <div
                             className="h-full w-full overflow-hidden whitespace-pre-wrap px-1"
-                            style={{
-                              color: ov.textColor,
-                              textAlign: ov.align,
-                              fontSize: ov.fontSize * 0.55,
-                              fontWeight: ov.bold ? 700 : 400,
-                              fontStyle: ov.italic ? "italic" : "normal",
-                              textDecoration: ov.underline ? "underline" : "none",
-                            }}
+                            style={textStyle}
+                            {...(hasRich
+                              ? { dangerouslySetInnerHTML: { __html: richHtmlForTextBox(ov) } }
+                              : {})}
                           >
-                            {ov.text || tx("テキスト", "Text")}
+                            {!hasRich ? ov.text || tx("テキスト", "Text") : null}
                           </div>
                         )}
                         {!editing ? renderOverlayResizeHandles(ov) : null}
@@ -3923,11 +3975,27 @@ function SheetFullscreenEditor({
                 fontSize={editingOverlayText.fontSize}
                 textColor={editingOverlayText.textColor}
                 align={editingOverlayText.align}
-                bold={Boolean(editingOverlayText.bold)}
-                italic={Boolean(editingOverlayText.italic)}
-                underline={Boolean(editingOverlayText.underline)}
+                bold={overlayInlineFormat.bold}
+                italic={overlayInlineFormat.italic}
+                underline={overlayInlineFormat.underline}
                 tx={tx}
                 onChange={(patch) => patchOverlay(editingOverlayText.id, patch)}
+                onInlineFormat={(command, value) => {
+                  keepOverlayTextFocus();
+                  applyInlineFormat(command, value);
+                  const el = overlayTextRef.current;
+                  if (el) {
+                    const html = sanitizeRichHtml(el.innerHTML);
+                    const text = plainTextFromRichHtml(html);
+                    patchOverlay(editingOverlayText.id, {
+                      text,
+                      html,
+                      ...(command === "foreColor" && value ? { textColor: value } : {}),
+                    });
+                  }
+                  setOverlayInlineFormat(queryInlineFormatState());
+                  window.requestAnimationFrame(() => keepOverlayTextFocus());
+                }}
                 onKeepFocus={keepOverlayTextFocus}
               />
             </div>,
@@ -3949,6 +4017,7 @@ function SlidesTextFormatBar({
   underline,
   tx,
   onChange,
+  onInlineFormat,
   onKeepFocus,
 }: {
   fontSize: number;
@@ -3963,11 +4032,10 @@ function SlidesTextFormatBar({
       fontSize: number;
       textColor: string;
       align: TextAlign;
-      bold: boolean;
-      italic: boolean;
-      underline: boolean;
     }>,
   ) => void;
+  /** 選択範囲（またはこれから打つ文字）へのインライン装飾 */
+  onInlineFormat?: (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => void;
   /** サイズ矢印など操作後にテキストエリアへフォーカスを戻す */
   onKeepFocus?: () => void;
 }) {
@@ -4051,7 +4119,11 @@ function SlidesTextFormatBar({
               type="button"
               onPointerDown={keepEditingPointerDown}
               onClick={() => {
-                onChange({ textColor: color });
+                if (onInlineFormat) {
+                  onInlineFormat("foreColor", color);
+                } else {
+                  onChange({ textColor: color });
+                }
                 setColorOpen(false);
                 window.requestAnimationFrame(() => onKeepFocus?.());
               }}
@@ -4138,7 +4210,7 @@ function SlidesTextFormatBar({
           type="button"
           onPointerDown={keepEditingPointerDown}
           onClick={() => {
-            onChange({ bold: !bold });
+            onInlineFormat?.("bold");
             window.requestAnimationFrame(() => onKeepFocus?.());
           }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
@@ -4152,7 +4224,7 @@ function SlidesTextFormatBar({
           type="button"
           onPointerDown={keepEditingPointerDown}
           onClick={() => {
-            onChange({ italic: !italic });
+            onInlineFormat?.("italic");
             window.requestAnimationFrame(() => onKeepFocus?.());
           }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
@@ -4166,7 +4238,7 @@ function SlidesTextFormatBar({
           type="button"
           onPointerDown={keepEditingPointerDown}
           onClick={() => {
-            onChange({ underline: !underline });
+            onInlineFormat?.("underline");
             window.requestAnimationFrame(() => onKeepFocus?.());
           }}
           className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
@@ -4188,15 +4260,6 @@ function SlidesTextFormatBar({
             A
           </span>
           <span className="mt-0.5 h-1 w-4 rounded-sm" style={{ backgroundColor: textColor }} />
-        </button>
-        <button
-          type="button"
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-zinc-400"
-          aria-label={tx("ハイライト", "Highlight")}
-          disabled
-          title={tx("準備中", "Coming soon")}
-        >
-          <Highlighter className="h-4 w-4" strokeWidth={2.25} />
         </button>
 
         {(
