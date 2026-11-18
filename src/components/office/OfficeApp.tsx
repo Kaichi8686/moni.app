@@ -10,9 +10,10 @@ import { RankingPanel } from "@/components/office/RankingPanel";
 import { SeasonResultModal } from "@/components/office/SeasonResultModal";
 import { StageView } from "@/components/office/stage/StageView";
 import { SecretaryTip } from "@/components/office/stage/SecretaryTip";
+import { AskStep } from "@/components/office/play/AskStep";
 import { IncidentStep } from "@/components/office/play/IncidentStep";
+import { MissionBar } from "@/components/office/play/MissionBar";
 import {
-  PlayStepper,
   previousPlayStep,
   type PlayStep,
 } from "@/components/office/play/PlayStepper";
@@ -399,7 +400,12 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
         incident={incident}
         company={company!}
         playEnter={playEnter}
+        onNext={() => setStep("ask")}
+      />
+    ) : step === "ask" ? (
+      <AskStep
         onNext={() => setStep("strategy")}
+        onSkip={() => setStep("strategy")}
       />
     ) : step === "strategy" ? (
       <div className={glass}>
@@ -554,8 +560,9 @@ export function OfficeApp({ embedded, hideChrome, active = true }: Props) {
             enter={playEnter && step === "incident"}
           />
 
-          <PlayStepper
+          <MissionBar
             step={step}
+            asksRemaining={step === "ask" ? 2 : null}
             canBack={Boolean(backStep)}
             onBack={() => {
               if (!backStep) return;
