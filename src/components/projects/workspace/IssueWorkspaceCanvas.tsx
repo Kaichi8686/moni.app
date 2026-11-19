@@ -567,6 +567,18 @@ function resizeByHandle(
 }
 
 const RESIZE_HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
+
+/** 画面上で読みやすいハンドル。親の scale(zoom) を transform で打ち消す */
+const HANDLE_VISUAL_SCREEN_PX = 16;
+const HANDLE_HIT_SCREEN_PX = 36;
+const HANDLE_BORDER_SCREEN_PX = 2;
+
+/** 画面上で小さいオブジェクトは四隅だけにして重なりを防ぐ */
+function handlesForNode(zoom: number, nodeW: number, nodeH: number): ResizeHandle[] {
+  const onScreen = Math.min(nodeW, nodeH) * Math.max(0.05, zoom);
+  return onScreen < 80 ? CORNER_HANDLES : RESIZE_HANDLES;
+}
 
 function handleCursor(handle: ResizeHandle) {
   if (handle === "n" || handle === "s") return "ns-resize";
@@ -575,26 +587,82 @@ function handleCursor(handle: ResizeHandle) {
   return "nwse-resize";
 }
 
-function handleStyle(handle: ResizeHandle): CSSProperties {
+/**
+ * レイアウトは親座標系で固定サイズのまま、scale(1/zoom) で画面サイズを一定に保つ。
+ * ノードが極端に小さいときだけ、四隅に収まるよう控えめに縮める。
+ */
+function handleMetrics(zoom: number, nodeW = Number.POSITIVE_INFINITY, nodeH = Number.POSITIVE_INFINITY) {
+  const z = Math.max(0.05, zoom);
+  const onScreen = Math.min(nodeW * z, nodeH * z);
+  // 四隅ハンドルが重ならない上限（短辺の約 0.9 倍まで）
+  const fit = Number.isFinite(onScreen) ? onScreen * 0.9 : HANDLE_VISUAL_SCREEN_PX;
+  const visualScreen = Math.min(HANDLE_VISUAL_SCREEN_PX, Math.max(10, fit));
+  const hitScreen = Math.min(HANDLE_HIT_SCREEN_PX, Math.max(visualScreen + 12, Math.min(fit * 1.4, onScreen * 0.7 || HANDLE_HIT_SCREEN_PX)));
+  return {
+    layout: hitScreen,
+    halfLayout: hitScreen / 2,
+    visual: visualScreen,
+    border: Math.min(HANDLE_BORDER_SCREEN_PX, visualScreen * 0.18),
+    radius: Math.min(3, visualScreen * 0.2),
+    invZoom: 1 / z,
+  };
+}
+
+/** ヒット領域は中央に見た目の四角。transform でズーム打ち消し。 */
+function handleStyle(handle: ResizeHandle, zoom: number, nodeW: number, nodeH: number): CSSProperties {
+  const m = handleMetrics(zoom, nodeW, nodeH);
   const base: CSSProperties = {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    background: "#fff",
-    border: `2px solid ${SELECTION_YELLOW}`,
-    boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+    width: m.layout,
+    height: m.layout,
+    padding: 0,
+    margin: 0,
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transform: `scale(${m.invZoom})`,
+    transformOrigin: "center center",
     zIndex: 20,
     touchAction: "none",
   };
-  const mid = "calc(50% - 5px)";
-  if (handle.includes("n")) base.top = -5;
-  if (handle.includes("s")) base.bottom = -5;
-  if (handle.includes("w")) base.left = -5;
-  if (handle.includes("e")) base.right = -5;
-  if (handle === "n" || handle === "s") base.left = mid;
-  if (handle === "e" || handle === "w") base.top = mid;
+  if (handle.includes("n")) base.top = -m.halfLayout;
+  if (handle.includes("s")) base.bottom = -m.halfLayout;
+  if (handle.includes("w")) base.left = -m.halfLayout;
+  if (handle.includes("e")) base.right = -m.halfLayout;
+  if (handle === "n" || handle === "s") base.left = `calc(50% - ${m.halfLayout}px)`;
+  if (handle === "e" || handle === "w") base.top = `calc(50% - ${m.halfLayout}px)`;
   return base;
+}
+
+function HandleKnob({
+  zoom,
+  nodeW = Number.POSITIVE_INFINITY,
+  nodeH = Number.POSITIVE_INFINITY,
+  color = SELECTION_YELLOW,
+}: {
+  zoom: number;
+  nodeW?: number;
+  nodeH?: number;
+  color?: string;
+}) {
+  const m = handleMetrics(zoom, nodeW, nodeH);
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: m.visual,
+        height: m.visual,
+        borderRadius: m.radius,
+        background: "#fff",
+        border: `${m.border}px solid ${color}`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
+        pointerEvents: "none",
+        flexShrink: 0,
+      }}
+    />
+  );
 }
 
 function ShapeGeometry({
@@ -1953,15 +2021,17 @@ export function IssueWorkspaceCanvas({
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
-    return RESIZE_HANDLES.map((handle) => (
+    return handlesForNode(zoom, node.w, node.h).map((handle) => (
       <button
         key={handle}
         type="button"
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, zoom, node.w, node.h), cursor: handleCursor(handle) }}
         onPointerDown={(event) => onResizePointerDown(event, node, handle)}
-      />
+      >
+        <HandleKnob zoom={zoom} nodeW={node.w} nodeH={node.h} />
+      </button>
     ));
   }
 
@@ -2205,9 +2275,10 @@ export function IssueWorkspaceCanvas({
 
           {sortedNodes.map((node) => {
             const selected = selectedIds.includes(node.id) || connectFromId === node.id;
+            const zSafe = Math.max(0.05, zoom);
             const selectionStyle = selected
               ? {
-                  boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40, 2px 3px 0 rgba(0,0,0,0.08)`,
+                  boxShadow: `0 0 0 ${3 / zSafe}px ${SELECTION_YELLOW}, 0 0 0 ${6 / zSafe}px ${SELECTION_YELLOW}40, ${2 / zSafe}px ${3 / zSafe}px 0 rgba(0,0,0,0.08)`,
                 }
               : node.kind === "shape" || node.kind === "text"
                 ? {}
@@ -2380,7 +2451,7 @@ export function IssueWorkspaceCanvas({
                     zIndex: node.z,
                     border:
                       editing || selected
-                        ? `1.5px solid ${SELECTION_YELLOW}`
+                        ? `${1.5 / zSafe}px solid ${SELECTION_YELLOW}`
                         : "1px solid rgba(0,0,0,0.28)",
                     background: "transparent",
                     WebkitUserSelect: editing ? "text" : "none",
@@ -2513,7 +2584,7 @@ export function IssueWorkspaceCanvas({
                   width: node.w,
                   height: node.h,
                   zIndex: node.z,
-                  border: cropping ? "1.5px solid #2563EB" : "1px solid #D4D4D8",
+                  border: cropping ? `${1.5 / zSafe}px solid #2563EB` : "1px solid #D4D4D8",
                   WebkitUserSelect: "none",
                   WebkitTouchCallout: "none",
                   ...selectionStyle,
@@ -2554,7 +2625,7 @@ export function IssueWorkspaceCanvas({
                             width: `${draft.w * 100}%`,
                             height: `${draft.h * 100}%`,
                             boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
-                            outline: "1.5px dashed #2563EB",
+                            outline: `${1.5 / Math.max(0.05, zoom)}px dashed #2563EB`,
                             outlineOffset: 0,
                           }}
                           onPointerDown={(event) => beginCropAdjust(event, node.id, "move", draft)}
@@ -2575,7 +2646,7 @@ export function IssueWorkspaceCanvas({
                           />
                         </div>
                       </div>
-                      {RESIZE_HANDLES.map((handle) => {
+                      {handlesForNode(zoom, node.w, node.h).map((handle) => {
                         const left = handle.includes("w")
                           ? draft.x
                           : handle.includes("e")
@@ -2586,6 +2657,7 @@ export function IssueWorkspaceCanvas({
                           : handle.includes("s")
                             ? draft.y + draft.h
                             : draft.y + draft.h / 2;
+                        const cropHandle = handleMetrics(zoom, node.w, node.h);
                         return (
                           <div
                             key={handle}
@@ -2593,10 +2665,23 @@ export function IssueWorkspaceCanvas({
                             tabIndex={0}
                             data-board-ui
                             aria-label={tx("切り取り枠", "Crop frame")}
-                            className="absolute z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-[#2563EB] bg-white shadow-sm"
-                            style={{ left: `${left * 100}%`, top: `${top * 100}%`, cursor: handleCursor(handle) }}
+                            className="absolute z-30 flex items-center justify-center"
+                            style={{
+                              left: `${left * 100}%`,
+                              top: `${top * 100}%`,
+                              width: cropHandle.layout,
+                              height: cropHandle.layout,
+                              marginLeft: -cropHandle.halfLayout,
+                              marginTop: -cropHandle.halfLayout,
+                              transform: `scale(${cropHandle.invZoom})`,
+                              transformOrigin: "center center",
+                              cursor: handleCursor(handle),
+                              touchAction: "none",
+                            }}
                             onPointerDown={(event) => beginCropAdjust(event, node.id, handle, draft)}
-                          />
+                          >
+                            <HandleKnob zoom={zoom} nodeW={node.w} nodeH={node.h} color="#2563EB" />
+                          </div>
                         );
                       })}
                     </>
@@ -3925,14 +4010,16 @@ function SheetFullscreenEditor({
     if (!canEdit || !overlayHandlesVisible || selectedOverlayIds.length !== 1 || selectedOverlayId !== ov.id) {
       return null;
     }
-    return RESIZE_HANDLES.map((handle) => (
+    const ovW = cardSize.w > 0 ? (ov.w / 100) * cardSize.w : 120;
+    const ovH = cardSize.h > 0 ? (ov.h / 100) * cardSize.h : 80;
+    return handlesForNode(cardZoom, ovW, ovH).map((handle) => (
       <button
         key={handle}
         type="button"
         data-overlay-handle
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, cardZoom, ovW, ovH), cursor: handleCursor(handle) }}
         onPointerDown={(event) => {
           if (!canEdit || event.button !== 0) return;
           event.stopPropagation();
@@ -3950,7 +4037,9 @@ function SheetFullscreenEditor({
           };
           (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
         }}
-      />
+      >
+        <HandleKnob zoom={cardZoom} nodeW={ovW} nodeH={ovH} />
+      </button>
     ));
   }
 
@@ -4135,7 +4224,7 @@ function SheetFullscreenEditor({
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
                           // 作業スペースの図形と同じ黄色いリング
-                          boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40`,
+                          boxShadow: `0 0 0 ${3 / Math.max(0.05, cardZoom)}px ${SELECTION_YELLOW}, 0 0 0 ${6 / Math.max(0.05, cardZoom)}px ${SELECTION_YELLOW}40`,
                           borderRadius: 2,
                         }}
                       >
@@ -4166,8 +4255,10 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          outline: selected ? `2px solid ${SELECTION_YELLOW}` : undefined,
-                          outlineOffset: 1,
+                          outline: selected
+                            ? `${2 / Math.max(0.05, cardZoom)}px solid ${SELECTION_YELLOW}`
+                            : undefined,
+                          outlineOffset: 1 / Math.max(0.05, cardZoom),
                           borderRadius: 4,
                           WebkitTouchCallout: "none",
                           userSelect: "none",
@@ -4215,7 +4306,7 @@ function SheetFullscreenEditor({
                           height: `${ov.h}%`,
                           border:
                             editing || selected
-                              ? `2px solid ${SELECTION_YELLOW}`
+                              ? `${2 / Math.max(0.05, cardZoom)}px solid ${SELECTION_YELLOW}`
                               : "1px solid rgba(0,0,0,0.28)",
                           background: "transparent",
                           borderRadius: 4,
