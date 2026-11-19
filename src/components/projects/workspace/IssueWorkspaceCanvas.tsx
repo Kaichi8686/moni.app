@@ -49,6 +49,7 @@ import {
   applyInlineFormat,
   defaultSheetTextStyle,
   edgePoint,
+  editorHasTextSelection,
   isBoardNode,
   newBoardId,
   nextZ,
@@ -61,6 +62,7 @@ import {
   restoreEditorSelection,
   richHtmlForTextBox,
   sanitizeRichHtml,
+  type InlineFormatCommand,
   SHAPE_COLORS,
   SHEET_COLOR_ORDER,
   SHEET_COLORS,
@@ -4504,7 +4506,7 @@ function SheetFullscreenEditor({
                   rememberOverlaySelection();
                   touchOverlayFormatBar();
                   restoreOverlaySelection();
-                  // サイズ／配置はボックス全体。色は onInlineFormat のみ
+                  // 未選択時のサイズ／配置。色・選択サイズは onInlineFormat
                   const { textColor: _ignoreColor, ...boxPatch } = patch;
                   void _ignoreColor;
                   applyOverlayStyleDom(boxPatch);
@@ -4525,7 +4527,7 @@ function SheetFullscreenEditor({
                     const html = sanitizeRichHtml(el.innerHTML);
                     const text = plainTextFromRichHtml(html);
                     pendingOverlayHtmlRef.current = { text, html };
-                    // foreColor は選択／次入力のみ。ボックス全体の textColor は変えない
+                    // foreColor / 選択 fontSize はインラインのみ（ボックス全体は変えない）
                   }
                   setOverlayInlineFormat(queryInlineFormatState());
                 }}
@@ -4593,7 +4595,7 @@ function SlidesTextFormatBar({
     }>,
   ) => void;
   /** 選択範囲（またはこれから打つ文字）へのインライン装飾 */
-  onInlineFormat?: (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => void;
+  onInlineFormat?: (command: InlineFormatCommand, value?: string) => void;
   /** サイズ操作後にテキストエリアへフォーカスを戻す */
   onKeepFocus?: () => void;
   /** 連打中に編集終了しないためのガード更新 */
@@ -4640,14 +4642,22 @@ function SlidesTextFormatBar({
     onKeepFocus?.();
   }
 
-  function bumpSize(delta: number) {
-    const next = Math.min(96, Math.max(8, fontSizeRef.current + delta));
+  function applySize(next: number) {
     fontSizeRef.current = next;
     setLocalSize(next);
     interactingRef.current = true;
     onInteract?.();
-    onChange({ fontSize: next });
+    // 選択中 → その範囲だけ。未選択 → ボックス全体
+    if (onInlineFormat && editorHasTextSelection()) {
+      onInlineFormat("fontSize", String(next));
+    } else {
+      onChange({ fontSize: next });
+    }
     onKeepFocus?.();
+  }
+
+  function bumpSize(delta: number) {
+    applySize(Math.min(96, Math.max(8, fontSizeRef.current + delta)));
   }
 
   function startSizeRepeat(delta: number) {
@@ -4674,11 +4684,8 @@ function SlidesTextFormatBar({
       onKeepFocus?.();
       return;
     }
-    const next = Math.min(96, Math.max(8, n));
-    setLocalSize(next);
-    onChange({ fontSize: next });
+    applySize(Math.min(96, Math.max(8, n)));
     setSizeEditing(false);
-    onKeepFocus?.();
   }
 
   return (
