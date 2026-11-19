@@ -3214,8 +3214,10 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    if (overlayFormatBarPointerDownRef.current) {
+    // 書式バー連打中の VV チラつきで open が落ちても編集を落とさない
+    if (overlayFormatBarGuarding() || visualKeyboardHoldOpenActive()) {
       overlayKeyboardWasOpenRef.current = true;
+      keepOverlayTextFocus();
       return;
     }
     clearVisualKeyboardHold();
@@ -3233,7 +3235,11 @@ function SheetFullscreenEditor({
       Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     const endEditNow = () => {
       if (!editingOverlayIdRef.current) return;
-      if (overlayFormatBarPointerDownRef.current) return;
+      // 指が離れた瞬間も含め、連打ガード中は終了しない
+      if (overlayFormatBarGuarding() || visualKeyboardHoldOpenActive()) {
+        keepOverlayTextFocus();
+        return;
+      }
       clearVisualKeyboardHold();
       overlayKeyboardWasOpenRef.current = false;
       overlayKbPeakCoveredRef.current = 0;
@@ -3247,14 +3253,21 @@ function SheetFullscreenEditor({
       if (covered > overlayKbPeakCoveredRef.current) {
         overlayKbPeakCoveredRef.current = covered;
       }
-      // 書式バー操作中は閉じ判定しない（誤終了防止）
-      if (overlayFormatBarPointerDownRef.current) {
-        if (covered > 80) overlayKeyboardWasOpenRef.current = true;
+      // 書式バー連打／ホールド中は VV の一瞬の縮みを閉じと見なさない
+      if (overlayFormatBarGuarding() || visualKeyboardHoldOpenActive()) {
+        if (covered > 80) {
+          overlayKeyboardWasOpenRef.current = true;
+          // チラつき後に戻ったらピークも立て直す（誤 dismiss を残さない）
+          overlayKbPeakCoveredRef.current = Math.max(
+            overlayKbPeakCoveredRef.current,
+            covered,
+          );
+        }
         return;
       }
       const peak = overlayKbPeakCoveredRef.current;
-      // 閉じアニメ開始（ピークから少し減った瞬間）で即終了。covered>100 でも待つ
-      const dismissing = peak >= 120 && covered <= peak - 24;
+      // 閉じアニメ開始で即終了（連打チラつきより大きい落ちのみ）
+      const dismissing = peak >= 140 && covered <= peak - 72;
       const gone = covered <= 48;
       if (overlayKeyboardWasOpenRef.current && (dismissing || gone)) {
         endEditNow();
@@ -4117,13 +4130,15 @@ function SheetFullscreenEditor({
                             }}
                             onBlur={() => {
                               // 遅延なし。書式バー以外への blur は即編集終了。
+                              // 連打中はフォーカスが一瞬外れるのでガードで取り戻す。
                               queueMicrotask(() => {
                                 if (!editingOverlayIdRef.current) return;
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
                                 if (
                                   active?.closest("[data-text-format-bar]") ||
-                                  overlayFormatBarPointerDownRef.current
+                                  overlayFormatBarGuarding() ||
+                                  visualKeyboardHoldOpenActive()
                                 ) {
                                   keepOverlayTextFocus();
                                   return;
@@ -4390,9 +4405,13 @@ function SheetFullscreenEditor({
                   touchOverlayFormatBar();
                 }}
                 onInteractEnd={() => {
-                  overlayFormatBarPointerDownRef.current = false;
                   flushPendingOverlayEdits();
+                  // 指が離れた直後の VV チラつきでも連打扱いを続ける
                   touchOverlayFormatBar();
+                  holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
+                  window.setTimeout(() => {
+                    overlayFormatBarPointerDownRef.current = false;
+                  }, 320);
                 }}
               />
             </div>,
