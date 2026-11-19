@@ -116,9 +116,9 @@ const KEYBOARD_CLOSE_SETTLE_MS = 160;
 const PLACE_TEXT_DBLTAP_IGNORE_AFTER_KB_MS = 600;
 /** 書式バー操作直後は誤閉じでバーが消えないようにする */
 const FORMAT_BAR_GUARD_MS = 4000;
-/** カード拡大（transform は使わず幅・高さで拡大＝編集中キーボードを切らない） */
-const SHEET_CARD_MIN_ZOOM = 1;
-const SHEET_CARD_MAX_ZOOM = 2.5;
+/** 用紙エディタのピンチ拡大（作業スペースと同じ translate + scale） */
+const SHEET_CARD_MIN_ZOOM = 0.5;
+const SHEET_CARD_MAX_ZOOM = 5;
 
 /** 書式バー連打中に visualViewport がチラついてもキーボード open を落とさない */
 let visualKeyboardHoldOpenUntil = 0;
@@ -2973,13 +2973,26 @@ function SheetFullscreenEditor({
     return Math.min(2.4, Math.max(0.45, w / h));
   }, [sheet.w, sheet.h]);
   const [cardSize, setCardSize] = useState({ w: 0, h: 0 });
-  /** カード拡大（1〜2.5）。transform ではなく表示サイズで拡大する */
+  /** 作業スペースと同じ：translate + scale で好きな位置を拡大・パン */
   const [cardZoom, setCardZoom] = useState(1);
   const cardZoomRef = useRef(1);
   cardZoomRef.current = cardZoom;
+  const [sheetPan, setSheetPan] = useState({ x: 0, y: 0 });
+  const sheetPanRef = useRef(sheetPan);
+  sheetPanRef.current = sheetPan;
   const sheetPinchRef = useRef<{
     dist: number;
     zoom: number;
+    panX: number;
+    panY: number;
+    midX: number;
+    midY: number;
+  } | null>(null);
+  const sheetPanDragRef = useRef<{
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
   } | null>(null);
   const sheetPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   /** null = 何も選ばない（初期・同じボタン再押しで解除） */
@@ -3226,16 +3239,11 @@ function SheetFullscreenEditor({
     const update = () => {
       // 編集中にカード寸法が変わると iOS がフォーカス中キーボードを切る
       if (editingOverlayIdRef.current) return;
-      // 拡大中は基準サイズを凍結（スクロールバー出現で再フィットすると縦横比が崩れて見える）
+      // 拡大中は基準サイズを凍結
       if (cardZoomRef.current > 1.01) return;
-      const cs = getComputedStyle(stage);
-      const padX =
-        (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-      const padY =
-        (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-      // パディング内側＝実表示領域。zoom=1 で収まる基準サイズ
-      const maxW = Math.max(0, stage.clientWidth - padX);
-      const maxH = Math.max(0, stage.clientHeight - padY);
+      // 画面に収まる基準サイズ（zoom=1）
+      const maxW = Math.max(0, stage.clientWidth - 24);
+      const maxH = Math.max(0, stage.clientHeight - 24);
       if (maxW < 2 || maxH < 2) return;
       let nextW = maxW;
       let nextH = nextW / sheetRatio;
@@ -3257,42 +3265,130 @@ function SheetFullscreenEditor({
     };
   }, [sheetRatio]);
 
-  // 文字編集中のカード持ち上げはしない。
-  // キーボード上昇で margin/サイズが変わると iOS がフォーカス中キーボードを切る。
+  // zoom≈1 のときカードを中央へ（作業スペースの初期配置に相当）
+  useEffect(() => {
+    if (cardSize.w <= 0 || cardSize.h <= 0) return;
+    if (cardZoomRef.current > 1.01) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    setSheetPan({
+      x: (stage.clientWidth - cardSize.w) / 2,
+      y: (stage.clientHeight - cardSize.h) / 2,
+    });
+  }, [cardSize.w, cardSize.h]);
 
-  // 拡大はフィット済みの幅・高さを同じ倍率で伸ばすだけ（縦だけ／横だけにしない）
-  const displayCardW = cardSize.w > 0 ? Math.round(cardSize.w * cardZoom) : 0;
-  const displayCardH = cardSize.h > 0 ? Math.round(cardSize.h * cardZoom) : 0;
+  // 文字編集中はビューを動かさない（transform 変更で iOS キーボードが切れる）
 
   function clampSheetZoom(z: number) {
     return Math.min(SHEET_CARD_MAX_ZOOM, Math.max(SHEET_CARD_MIN_ZOOM, z));
   }
 
-  function onStagePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+  function applySheetView(nextZoom: number, nextPan: { x: number; y: number }) {
+    const z = clampSheetZoom(nextZoom);
+    setCardZoom(z);
+    setSheetPan(nextPan);
+  }
+
+  function beginSheetPinch() {
+    const pts = [...sheetPointersRef.current.values()];
+    if (pts.length < 2) return;
+    const midX = (pts[0]!.x + pts[1]!.x) / 2;
+    const midY = (pts[0]!.y + pts[1]!.y) / 2;
+    const rect = stageRef.current?.getBoundingClientRect();
+    sheetPinchRef.current = {
+      dist: Math.max(1, Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y)),
+      zoom: cardZoomRef.current,
+      panX: sheetPanRef.current.x,
+      panY: sheetPanRef.current.y,
+      midX: midX - (rect?.left ?? 0),
+      midY: midY - (rect?.top ?? 0),
+    };
+    sheetPanDragRef.current = null;
+    overlayDrag.current = null;
+  }
+
+  function updateSheetPinch() {
+    const pinch = sheetPinchRef.current;
+    const pts = [...sheetPointersRef.current.values()];
+    if (!pinch || pts.length < 2) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    const midX = (pts[0]!.x + pts[1]!.x) / 2 - (rect?.left ?? 0);
+    const midY = (pts[0]!.y + pts[1]!.y) / 2 - (rect?.top ?? 0);
+    const dist = Math.max(1, Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y));
+    const nextZoom = clampSheetZoom(pinch.zoom * (dist / pinch.dist));
+    // ピンチ中心を基準にズーム（作業スペースと同じ）
+    const worldX = (pinch.midX - pinch.panX) / pinch.zoom;
+    const worldY = (pinch.midY - pinch.panY) / pinch.zoom;
+    applySheetView(nextZoom, {
+      x: midX - worldX * nextZoom,
+      y: midY - worldY * nextZoom,
+    });
+  }
+
+  /** capture でポインタを拾う（オーバーレイの stopPropagation でもピンチできるように） */
+  function onStagePointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
     sheetPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (editingOverlayIdRef.current) return;
-    if (sheetPointersRef.current.size === 2) {
-      const pts = [...sheetPointersRef.current.values()];
-      const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
-      sheetPinchRef.current = { dist: Math.max(1, dist), zoom: cardZoomRef.current };
+    if (sheetPointersRef.current.size >= 2) beginSheetPinch();
+  }
+
+  function onStagePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    if (editingOverlayIdRef.current) return;
+    if (sheetPointersRef.current.size >= 2 || sheetPinchRef.current) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-overlay-node]") || target.closest("[data-overlay-handle]")) return;
+    // 挿入ツール未選択時は1本指でパン（作業スペースの掴んで移動）
+    if (!editTool) {
+      sheetPanDragRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        panX: sheetPanRef.current.x,
+        panY: sheetPanRef.current.y,
+      };
     }
   }
 
   function onStagePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!sheetPointersRef.current.has(event.pointerId)) return;
-    sheetPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const pinch = sheetPinchRef.current;
-    if (!pinch || editingOverlayIdRef.current) return;
-    if (sheetPointersRef.current.size < 2) return;
-    const pts = [...sheetPointersRef.current.values()];
-    const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
-    const next = clampSheetZoom(pinch.zoom * (dist / pinch.dist));
-    setCardZoom(next);
+    if (sheetPointersRef.current.has(event.pointerId)) {
+      sheetPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (editingOverlayIdRef.current) return;
+    if (sheetPinchRef.current && sheetPointersRef.current.size >= 2) {
+      updateSheetPinch();
+      return;
+    }
+    const drag = sheetPanDragRef.current;
+    if (!drag || sheetPointersRef.current.size !== 1) return;
+    applySheetView(cardZoomRef.current, {
+      x: drag.panX + (event.clientX - drag.startX),
+      y: drag.panY + (event.clientY - drag.startY),
+    });
   }
 
   function onStagePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     sheetPointersRef.current.delete(event.pointerId);
     if (sheetPointersRef.current.size < 2) sheetPinchRef.current = null;
+    if (sheetPointersRef.current.size === 0) sheetPanDragRef.current = null;
+  }
+
+  function onStageWheel(event: React.WheelEvent<HTMLDivElement>) {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (editingOverlayIdRef.current) return;
+    event.preventDefault();
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const midX = event.clientX - rect.left;
+    const midY = event.clientY - rect.top;
+    const z = cardZoomRef.current;
+    const nextZoom = clampSheetZoom(z * (event.deltaY > 0 ? 0.92 : 1.08));
+    const worldX = (midX - sheetPanRef.current.x) / z;
+    const worldY = (midY - sheetPanRef.current.y) / z;
+    applySheetView(nextZoom, {
+      x: midX - worldX * nextZoom,
+      y: midY - worldY * nextZoom,
+    });
   }
 
   function setOverlays(next: SheetOverlay[]) {
@@ -3668,46 +3764,34 @@ function SheetFullscreenEditor({
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={workspaceDots} />
 
       {/*
-        カードは中央配置。transform 拡大は iOS がフォーカス中キーボードを切るので使わない。
-        ピンチは幅・高さを同じ倍率で拡大。完了／挿入は fixed ポータルで画面に貼る。
+        作業スペースと同じ：translate + scale で指の位置を中心に拡大・パン。
+        編集中はビュー固定。完了／挿入は fixed ポータル。
       */}
       <div
         ref={stageRef}
-        className="absolute inset-0 z-10 overflow-auto overscroll-contain"
-        style={{
-          paddingTop: "max(4.5rem, calc(env(safe-area-inset-top) + 3.25rem))",
-          paddingBottom: "max(4.5rem, calc(env(safe-area-inset-bottom) + 3.25rem))",
-          paddingLeft: 12,
-          paddingRight: 12,
-          // pan のみ。ブラウザのピンチは抑止し、自前ピンチで幅・高さを同時に拡大
-          touchAction: editingOverlayId ? "none" : "pan-x pan-y",
-        }}
+        className="absolute inset-0 z-10 touch-none overflow-hidden overscroll-none"
+        style={{ touchAction: "none" }}
+        onPointerDownCapture={onStagePointerDownCapture}
         onPointerDown={onStagePointerDown}
         onPointerMove={onStagePointerMove}
         onPointerUp={onStagePointerUp}
         onPointerCancel={onStagePointerUp}
+        onWheel={onStageWheel}
       >
             <div
+              className="absolute left-0 top-0 origin-top-left will-change-transform"
               style={{
-                // 拡大後は縦横とも実寸分スクロールできる（flex だと横幅が潰れることがある）
-                // transform 中央寄せは使わない（iOS が編集中キーボードを切る）
-                boxSizing: "border-box",
-                minWidth: "100%",
-                minHeight: "100%",
-                width: displayCardW > 0 ? displayCardW + 24 : "100%",
-                height: displayCardH > 0 ? displayCardH + 24 : "100%",
-                display: "grid",
-                placeItems: "center",
+                width: cardSize.w > 0 ? cardSize.w : undefined,
+                height: cardSize.h > 0 ? cardSize.h : undefined,
+                transform: `translate(${sheetPan.x}px, ${sheetPan.y}px) scale(${cardZoom})`,
+                visibility: cardSize.w > 0 ? "visible" : "hidden",
               }}
             >
             <div
               ref={cardRef}
               data-sheet-card
-              className="relative touch-none select-none overflow-visible rounded-2xl"
+              className="relative h-full w-full touch-none select-none overflow-visible rounded-2xl"
               style={{
-                width: displayCardW > 0 ? displayCardW : undefined,
-                height: displayCardH > 0 ? displayCardH : undefined,
-                visibility: displayCardW > 0 ? "visible" : "hidden",
                 boxSizing: "border-box",
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
