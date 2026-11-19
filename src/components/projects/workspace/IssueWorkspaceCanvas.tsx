@@ -3260,10 +3260,9 @@ function SheetFullscreenEditor({
   // 文字編集中のカード持ち上げはしない。
   // キーボード上昇で margin/サイズが変わると iOS がフォーカス中キーボードを切る。
 
-  // 縦横比固定。高さは aspect-ratio に任せて歪みを防ぐ
+  // 拡大はフィット済みの幅・高さを同じ倍率で伸ばすだけ（縦だけ／横だけにしない）
   const displayCardW = cardSize.w > 0 ? Math.round(cardSize.w * cardZoom) : 0;
-  const sheetAspect =
-    (sheet.w > 0 ? sheet.w : DEFAULT_SHEET_W) / (sheet.h > 0 ? sheet.h : DEFAULT_SHEET_H);
+  const displayCardH = cardSize.h > 0 ? Math.round(cardSize.h * cardZoom) : 0;
 
   function clampSheetZoom(z: number) {
     return Math.min(SHEET_CARD_MAX_ZOOM, Math.max(SHEET_CARD_MIN_ZOOM, z));
@@ -3670,7 +3669,7 @@ function SheetFullscreenEditor({
 
       {/*
         カードは中央配置。transform 拡大は iOS がフォーカス中キーボードを切るので使わない。
-        ピンチは幅・高さで拡大。完了／挿入は fixed ポータルで画面に貼る。
+        ピンチは幅・高さを同じ倍率で拡大。完了／挿入は fixed ポータルで画面に貼る。
       */}
       <div
         ref={stageRef}
@@ -3680,7 +3679,7 @@ function SheetFullscreenEditor({
           paddingBottom: "max(4.5rem, calc(env(safe-area-inset-bottom) + 3.25rem))",
           paddingLeft: 12,
           paddingRight: 12,
-          // pan のみ許可。ブラウザのピンチズームは抑止し、自前ピンチで縦横比を保つ
+          // pan のみ。ブラウザのピンチは抑止し、自前ピンチで幅・高さを同時に拡大
           touchAction: editingOverlayId ? "none" : "pan-x pan-y",
         }}
         onPointerDown={onStagePointerDown}
@@ -3689,16 +3688,16 @@ function SheetFullscreenEditor({
         onPointerCancel={onStagePointerUp}
       >
             <div
-              className="flex items-center justify-center"
               style={{
-                // 拡大時はカード実寸分だけ広げ、全貌が見えなくてもスクロールで見る
+                // 拡大後は縦横とも実寸分スクロールできる（flex だと横幅が潰れることがある）
+                // transform 中央寄せは使わない（iOS が編集中キーボードを切る）
+                boxSizing: "border-box",
                 minWidth: "100%",
                 minHeight: "100%",
-                width: displayCardW > 0 ? Math.max(displayCardW + 24, 0) : "100%",
-                height:
-                  displayCardW > 0
-                    ? Math.max(Math.round(displayCardW / sheetAspect) + 24, 0)
-                    : "100%",
+                width: displayCardW > 0 ? displayCardW + 24 : "100%",
+                height: displayCardH > 0 ? displayCardH + 24 : "100%",
+                display: "grid",
+                placeItems: "center",
               }}
             >
             <div
@@ -3707,11 +3706,9 @@ function SheetFullscreenEditor({
               className="relative touch-none select-none overflow-visible rounded-2xl"
               style={{
                 width: displayCardW > 0 ? displayCardW : undefined,
-                aspectRatio: `${sheet.w > 0 ? sheet.w : DEFAULT_SHEET_W} / ${sheet.h > 0 ? sheet.h : DEFAULT_SHEET_H}`,
-                height: "auto",
+                height: displayCardH > 0 ? displayCardH : undefined,
                 visibility: displayCardW > 0 ? "visible" : "hidden",
                 boxSizing: "border-box",
-                flexShrink: 0,
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
                 userSelect: "none",
