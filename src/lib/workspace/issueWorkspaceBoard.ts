@@ -202,11 +202,20 @@ function wrapElementContents(el: HTMLElement, tagName: "b" | "i" | "u") {
  * styleWithCSS の span（font-weight / font-style / underline）を
  * ネスト可能な b/i/u に昇格させ、太字+斜体の両立を保つ。
  */
+function normalizeFontSizeCss(value: string): string | null {
+  const t = value.trim();
+  if (!t) return null;
+  const px = Number.parseFloat(t);
+  if (!Number.isFinite(px) || px < 8 || px > 96) return null;
+  return `${Math.round(px)}px`;
+}
+
 function promoteInlineStyles(el: HTMLElement) {
   const weight = el.style.fontWeight || "";
   const fontStyle = el.style.fontStyle || "";
   const deco = `${el.style.textDecoration} ${el.style.textDecorationLine}`;
   const keepColor = normalizeCssColor(el.style.color || el.getAttribute("color") || "");
+  const keepFontSize = normalizeFontSizeCss(el.style.fontSize || "");
 
   const isBold = isBoldWeight(weight);
   const isItalic = fontStyle === "italic" || fontStyle === "oblique";
@@ -214,6 +223,7 @@ function promoteInlineStyles(el: HTMLElement) {
 
   for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
   if (keepColor) el.style.color = keepColor;
+  if (keepFontSize) el.style.fontSize = keepFontSize;
 
   // 内側からネスト（b > i > u > text）
   if (isUnderline) wrapElementContents(el, "u");
@@ -243,13 +253,15 @@ export function sanitizeRichHtml(raw: string): string {
         continue;
       }
       if (tag === "SPAN" || tag === "FONT") {
-        // CSS 装飾を b/i/u に変換してから色以外の属性を落とす
+        // CSS 装飾を b/i/u に変換し、色・フォントサイズは保持
         promoteInlineStyles(el);
       } else {
-        // セマンティックタグ: foreColor が style="color" を付けた場合も色は残す
+        // セマンティックタグ: color / font-size を残す
         const keepColor = normalizeCssColor(el.style.color || "");
+        const keepFontSize = normalizeFontSizeCss(el.style.fontSize || "");
         for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
         if (keepColor) el.style.color = keepColor;
+        if (keepFontSize) el.style.fontSize = keepFontSize;
       }
       walk(el);
     }
@@ -343,6 +355,36 @@ function placeCaretInColoredSpan(span: HTMLElement) {
   sel.addRange(range);
 }
 
+/** 文字が実際に選択されているか（キャレットのみは false） */
+export function editorHasTextSelection(): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  try {
+    return !sel.getRangeAt(0).collapsed;
+  } catch {
+    return false;
+  }
+}
+
+function wrapRangeWithSpan(range: Range, style: Partial<CSSStyleDeclaration>) {
+  const sel = window.getSelection();
+  const span = document.createElement("span");
+  if (style.color) span.style.color = style.color;
+  if (style.fontSize) span.style.fontSize = style.fontSize;
+  try {
+    range.surroundContents(span);
+  } catch {
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+  }
+  if (sel) {
+    sel.removeAllRanges();
+    const next = document.createRange();
+    next.selectNodeContents(span);
+    sel.addRange(next);
+  }
+}
+
 /**
  * 選択範囲を色付き span で包む。折りたたみキャレットなら「次に打つ文字」用の空 span を置く。
  */
@@ -365,25 +407,36 @@ function applyForeColorToSelectionOrCaret(color: string) {
   const ok = document.execCommand("foreColor", false, color);
   if (ok) return;
 
-  // iOS など exec 失敗時: 選択を span で包む
-  const span = document.createElement("span");
-  span.style.color = color;
-  try {
-    range.surroundContents(span);
-  } catch {
-    span.appendChild(range.extractContents());
-    range.insertNode(span);
-  }
-  sel.removeAllRanges();
-  const next = document.createRange();
-  next.selectNodeContents(span);
-  sel.addRange(next);
+  wrapRangeWithSpan(range, { color });
 }
 
-export function applyInlineFormat(command: "bold" | "italic" | "underline" | "foreColor", value?: string) {
+/**
+ * 選択範囲だけフォントサイズを変える。
+ * （未選択＝ボックス全体は呼び出し側で onChange する）
+ */
+function applyFontSizeToSelection(px: number) {
+  const size = Math.min(96, Math.max(8, Math.round(px)));
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return;
+
+  // execCommand fontSize は 1–7 しか無いので span で px 指定
+  wrapRangeWithSpan(range, { fontSize: `${size}px` });
+}
+
+export type InlineFormatCommand = "bold" | "italic" | "underline" | "foreColor" | "fontSize";
+
+export function applyInlineFormat(command: InlineFormatCommand, value?: string) {
   try {
     if (command === "foreColor") {
       applyForeColorToSelectionOrCaret(value || DEFAULT_TEXT_COLOR);
+      return;
+    }
+    if (command === "fontSize") {
+      const px = Math.round(Number(value));
+      if (!Number.isFinite(px)) return;
+      applyFontSizeToSelection(px);
       return;
     }
     // 太字・斜体・下線は <b>/<i>/<u> でネスト可能にし、同時適用できるようにする
