@@ -1,19 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useFullscreenCoverStyles } from "@/hooks/useFullscreenCoverStyle";
 import { useImmersiveWorkEditorLock } from "@/hooks/useImmersiveWorkEditorLock";
 
 function subscribeNever() {
   return () => {};
 }
 
-/** Avoid fixed bottom:0 — iOS tracks visualViewport and opens a gap to underlays. */
-const FULLSCREEN_COVER_STYLE: CSSProperties = {
-  bottom: "auto",
-  height: "100lvh",
-  minHeight: "100lvh",
-};
 import {
   ArrowLeft,
   ExternalLink,
@@ -171,16 +166,17 @@ const DOC_EDITOR_CLASS = "moni-doc-editor";
 
 /** レイアウト全面を覆う（bottom:0 禁止＝VV追従でジャンルが透けない） */
 function DocEditorViewport({ children }: { children: ReactNode }) {
+  const { shell, shadow } = useFullscreenCoverStyles();
   return (
     <>
       <div
         aria-hidden
         className="pointer-events-none fixed left-0 right-0 top-0 z-[239] bg-white"
-        style={{ ...FULLSCREEN_COVER_STYLE, height: "160lvh", minHeight: "160lvh" }}
+        style={shadow}
       />
       <div
         className="fixed left-0 right-0 top-0 z-[240] flex flex-col overscroll-none bg-white"
-        style={FULLSCREEN_COVER_STYLE}
+        style={shell}
       >
         {children}
       </div>
@@ -189,16 +185,17 @@ function DocEditorViewport({ children }: { children: ReactNode }) {
 }
 
 function CanvasEditorViewport({ children }: { children: ReactNode }) {
+  const { shell, shadow } = useFullscreenCoverStyles();
   return (
     <>
       <div
         aria-hidden
         className="pointer-events-none fixed left-0 right-0 top-0 z-[239] bg-white"
-        style={{ ...FULLSCREEN_COVER_STYLE, height: "160lvh", minHeight: "160lvh" }}
+        style={shadow}
       />
       <div
         className="fixed left-0 right-0 top-0 z-[240] overflow-hidden overscroll-none bg-white"
-        style={FULLSCREEN_COVER_STYLE}
+        style={shell}
       >
         {children}
       </div>

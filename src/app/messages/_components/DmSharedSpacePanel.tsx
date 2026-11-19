@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useFullscreenCoverStyles } from "@/hooks/useFullscreenCoverStyle";
 
 function subscribeNever() {
   return () => {};
@@ -138,16 +139,36 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
 }
 
 function DocEditorViewport({ children }: { children: ReactNode }) {
+  const { shell, shadow } = useFullscreenCoverStyles();
   return (
     <>
       <div
         aria-hidden
         className="pointer-events-none fixed left-0 right-0 top-0 z-[239] bg-white"
-        style={{ bottom: "auto", height: "160lvh", minHeight: "160lvh" }}
+        style={shadow}
       />
       <div
         className="fixed left-0 right-0 top-0 z-[240] flex flex-col overscroll-none bg-white"
-        style={{ bottom: "auto", height: "100lvh", minHeight: "100lvh" }}
+        style={shell}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
+function CanvasEditorViewport({ children }: { children: ReactNode }) {
+  const { shell, shadow } = useFullscreenCoverStyles();
+  return (
+    <>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed left-0 right-0 top-0 z-[239] bg-white"
+        style={shadow}
+      />
+      <div
+        className="fixed left-0 right-0 top-0 z-[240] overflow-hidden overscroll-none bg-white"
+        style={shell}
       >
         {children}
       </div>
@@ -503,7 +524,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
 
     if (openFile.kind === "canvas") {
       return createPortal(
-        <div className="fixed inset-0 z-[240] overflow-hidden overscroll-none bg-white">
+        <CanvasEditorViewport>
           <IssueWorkspaceCanvas
             board={canvasDraft}
             canEdit
@@ -537,7 +558,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
               {error}
             </p>
           ) : null}
-        </div>,
+        </CanvasEditorViewport>,
         document.body,
       );
     }
