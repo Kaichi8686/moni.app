@@ -125,6 +125,9 @@ let visualKeyboardHoldOpenUntil = 0;
 function holdVisualKeyboardOpen(ms = FORMAT_BAR_GUARD_MS) {
   visualKeyboardHoldOpenUntil = Math.max(visualKeyboardHoldOpenUntil, Date.now() + ms);
 }
+function clearVisualKeyboardHold() {
+  visualKeyboardHoldOpenUntil = 0;
+}
 function visualKeyboardHoldOpenActive() {
   return Date.now() < visualKeyboardHoldOpenUntil;
 }
@@ -3049,8 +3052,8 @@ function SheetFullscreenEditor({
   const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
 
   /**
-   * 編集中は書式バーを出す（open チラつきでアンマウントしない）。
-   * キーボード閉じ確定 → 編集終了で消え、完了／挿入が戻る。
+   * キーボード表示中だけ書式バー。閉じたら消して完了／挿入を戻す。
+   * covering 中はチラつきでバーが消えないように残す。
    */
   const overlayKeyboardOpenRef = useRef(keyboard.open);
   overlayKeyboardOpenRef.current = keyboard.open;
@@ -3059,7 +3062,11 @@ function SheetFullscreenEditor({
     const ov = overlays.find((o) => o.id === editingOverlayId);
     return ov && ov.kind === "text" ? ov : null;
   })();
-  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText);
+  const showOverlayFormatBar = Boolean(
+    canEdit && editingOverlayText && (keyboard.open || keyboardStillCovering()),
+  );
+  /** 書式バーが出ているあいだは完了／挿入を隠す */
+  const showSheetChrome = !showOverlayFormatBar;
 
   const editingOverlayIdRef = useRef<string | null>(null);
   editingOverlayIdRef.current = editingOverlayId;
@@ -3147,6 +3154,9 @@ function SheetFullscreenEditor({
 
   function finishOverlayTextEdit() {
     flushPendingOverlayEdits();
+    clearVisualKeyboardHold();
+    overlayFormatBarPointerDownRef.current = false;
+    overlayFormatBarGuardRef.current = 0;
     const id = editingOverlayIdRef.current;
     setEditingOverlayId(null);
     lastTap.current = null;
@@ -3179,7 +3189,8 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // iOS キーボード閉じボタン → すぐ完了／挿入復帰。チラつきは covering で弾く。
+  // iOS キーボード閉じ → 編集終了して書式バー消し・完了／挿入復帰。
+  // 書式バー／hold ガードで止めない（閉じたのにバーが残る原因だった）。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (keyboard.open) {
@@ -3206,28 +3217,24 @@ function SheetFullscreenEditor({
     const closeTimers: number[] = [];
     const tryFinish = () => {
       if (cancelled || editingOverlayIdRef.current !== editId) return;
-      // 書式バー操作中／直後は閉じない。ガード明けに再判定する
-      if (overlayFormatBarGuarding() || visualKeyboardHoldOpenActive()) {
-        holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
-        keepOverlayTextFocus();
-        closeTimers.push(window.setTimeout(tryFinish, 400));
-        return;
-      }
+      // 下降アニメ中だけ待つ。フォーカスは戻さない（ユーザーの閉じを尊重）
       if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
         overlayKeyboardWasOpenRef.current = true;
-        keepOverlayTextFocus();
+        closeTimers.push(window.setTimeout(tryFinish, 280));
         return;
       }
       overlayKeyboardWasOpenRef.current = false;
-      // 赤い閉じ → 書式バー消し・完了／挿入をすぐ戻す
       finishOverlayTextEdit();
     };
-    // wasOpen は成功するまで立てたまま（チラつきで取りこぼさない）
-    closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
+    if (!keyboardStillCovering()) {
+      tryFinish();
+    } else {
+      closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
+    }
     return () => {
       cancelled = true;
       for (const t of closeTimers) window.clearTimeout(t);
-      if (overlayKeyboardOpenRef.current || overlayFormatBarGuarding()) {
+      if (overlayKeyboardOpenRef.current) {
         overlayKeyboardWasOpenRef.current = true;
       }
     };
@@ -4156,14 +4163,14 @@ function SheetFullscreenEditor({
         }}
       />
 
-      {/* 完了・挿入は画面に固定（カード拡大／スクロールしても追従）。編集中は隠す */}
+      {/* 完了・挿入は画面に固定。キーボード／書式バー表示中は隠す */}
       {createPortal(
         <div
           className="pointer-events-none fixed inset-x-0 top-0 z-[650] flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]"
           data-board-ui
         >
           <div className="flex items-center justify-between gap-2 px-3 pb-1">
-            {!editingOverlayId ? (
+            {showSheetChrome ? (
               <button
                 type="button"
                 onClick={onClose}
@@ -4175,7 +4182,7 @@ function SheetFullscreenEditor({
             ) : (
               <span className="w-11" />
             )}
-            {canEdit && !editingOverlayId ? (
+            {canEdit && showSheetChrome ? (
               <div className="pointer-events-auto flex items-center gap-2">
                 <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                   {(
@@ -4230,7 +4237,7 @@ function SheetFullscreenEditor({
             )}
           </div>
 
-          {canEdit && editTool === "shape" && !editingOverlayId ? (
+          {canEdit && editTool === "shape" && showSheetChrome ? (
             <div className="flex justify-center px-3 pb-1">
               <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white px-2 py-1 shadow-sm">
                 {(
@@ -4265,7 +4272,7 @@ function SheetFullscreenEditor({
             </div>
           ) : null}
 
-          {canEdit && editTool === "pen" && !editingOverlayId ? (
+          {canEdit && editTool === "pen" && showSheetChrome ? (
             <div className="flex justify-center gap-1.5 px-3 pb-1">
               {SHAPE_COLORS.map((color) => (
                 <button
@@ -4296,7 +4303,7 @@ function SheetFullscreenEditor({
             </div>
           ) : null}
 
-          {canEdit && editTool === "text" && !editingOverlayId ? (
+          {canEdit && editTool === "text" && showSheetChrome ? (
             <p className="px-3 pb-1 text-center text-[11px] font-medium text-zinc-500">
               {tx("カード内をダブルタップして文字を置く", "Double-tap on the card to place text")}
             </p>
