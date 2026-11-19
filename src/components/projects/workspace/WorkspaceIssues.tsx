@@ -3,6 +3,8 @@
 import { WorkspacePageSkeleton } from "@/components/ui/Skeleton";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, MoreVertical, Pin, Plus, StickyNote } from "lucide-react";
+import { useFullscreenCoverStyle } from "@/hooks/useFullscreenCoverStyle";
+import { repairIosLayoutViewport } from "@/lib/ios/repairIosLayoutViewport";
 import { useProjectWorkspace } from "@/components/projects/workspace/ProjectWorkspaceContext";
 import { GenreCreateWizard } from "@/components/projects/workspace/GenreCreateWizard";
 import { IssueCreateWizard } from "@/components/projects/workspace/IssueCreateWizard";
@@ -107,6 +109,9 @@ function IssuesSlidePanel({
   // マウント時の値だけ使う（課題の下層になったあと再スライドしない）
   const [shouldAnimateEnter] = useState(animateEnter);
   const [entered, setEntered] = useState(!shouldAnimateEnter);
+  // Avoid inset-0 / bottom:0 — iOS can leave layout viewport short so fixed
+  // bottom anchors mid-screen and the lower half stays blank white.
+  const coverStyle = useFullscreenCoverStyle();
   useEffect(() => {
     if (!shouldAnimateEnter) return;
     const id = requestAnimationFrame(() => setEntered(true));
@@ -123,7 +128,8 @@ function IssuesSlidePanel({
 
   return (
     <div
-      className={`moni-issues-underlay fixed inset-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-br from-white to-[#E3F2FD] px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
+      className={`moni-issues-underlay fixed left-0 right-0 top-0 ${zClass} w-full max-w-[100vw] overflow-x-hidden overflow-y-auto overscroll-contain bg-gradient-to-br from-white to-[#E3F2FD] px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] ${motionClass}`}
+      style={coverStyle}
     >
       <div className="mx-auto w-full min-w-0 max-w-3xl">{children}</div>
     </div>
@@ -166,11 +172,22 @@ export default function WorkspaceIssues() {
   }, []);
 
   // ジャンル一覧・メモ・課題詳細では下タブを隠す
+  const issuesDrillActive = useRef(false);
   useEffect(() => {
     const drill = screen?.kind === "genre" || screen?.kind === "memo" || screen?.kind === "task";
     document.documentElement.classList.toggle("moni-issues-drill", Boolean(drill));
+    const wasDrill = issuesDrillActive.current;
+    issuesDrillActive.current = drill;
+    // Only repair when leaving the fixed slide stack entirely (not genre→task).
+    if (wasDrill && !drill) repairIosLayoutViewport();
     return () => document.documentElement.classList.remove("moni-issues-drill");
   }, [screen?.kind]);
+
+  useEffect(() => {
+    return () => {
+      if (issuesDrillActive.current) repairIosLayoutViewport();
+    };
+  }, []);
 
 
   const sortedPhases = useMemo(

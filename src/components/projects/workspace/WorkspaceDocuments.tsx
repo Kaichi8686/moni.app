@@ -15,22 +15,24 @@ import {
   wordCountFromDocContent,
 } from "@/lib/projects/documents";
 import { uploadProjectImage } from "@/lib/projects/uploadProjectImage";
+import { useFullscreenCoverStyles } from "@/hooks/useFullscreenCoverStyle";
 import { useImmersiveWorkEditorLock } from "@/hooks/useImmersiveWorkEditorLock";
 
 const DOC_EDITOR_CLASS = "moni-doc-editor";
 
 /** レイアウト全面を覆う（bottom:0 禁止＝VV追従で下層が透けない） */
 function DocEditorViewport({ children }: { children: ReactNode }) {
+  const { shell, shadow } = useFullscreenCoverStyles();
   return (
     <>
       <div
         aria-hidden
         className="pointer-events-none fixed left-0 right-0 top-0 z-[199] bg-white"
-        style={{ bottom: "auto", height: "160lvh", minHeight: "160lvh" }}
+        style={shadow}
       />
       <div
         className="fixed left-0 right-0 top-0 z-[200] flex flex-col overscroll-none bg-white"
-        style={{ bottom: "auto", height: "100lvh", minHeight: "100lvh" }}
+        style={shell}
       >
         {children}
       </div>

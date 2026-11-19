@@ -43,6 +43,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
+import { useFullscreenCoverStyles } from "@/hooks/useFullscreenCoverStyle";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   applyInlineFormat,
@@ -3057,6 +3058,7 @@ function SheetFullscreenEditor({
     underline: false,
   });
   const keyboard = useVisualKeyboard();
+  const { shell: workspaceCoverStyle, shadow: workspaceShadowStyle } = useFullscreenCoverStyles();
   const overlayDrag = useRef<
     | { kind: "shape"; startX: number; startY: number; curX: number; curY: number }
     | { kind: "pen"; points: Array<{ x: number; y: number }> }
@@ -3951,12 +3953,7 @@ function SheetFullscreenEditor({
   }
 
   // iOS は fixed + bottom:0 が visualViewport に追従して縮み、キーボード下にジャンルが透ける。
-  // bottom は使わず lvh で覆い、さらに下へ伸ばした作業スペース影で隙間を塞ぐ。
-  const workspaceCoverStyle = {
-    bottom: "auto" as const,
-    height: "100lvh",
-    minHeight: "100lvh",
-  };
+  // bottom は使わず、VV 基準の高さ＋影レイヤーで隙間を塞ぐ（lvh だけだと縮んだまま残ることがある）。
   const workspaceDots = {
     backgroundImage: "radial-gradient(circle, #a1a1aa 1px, transparent 1px)",
     backgroundSize: "18px 18px",
@@ -3967,7 +3964,7 @@ function SheetFullscreenEditor({
       <div
         aria-hidden
         className="pointer-events-none fixed left-0 right-0 top-0 z-[599] bg-zinc-200"
-        style={{ ...workspaceCoverStyle, height: "160lvh", minHeight: "160lvh", ...workspaceDots }}
+        style={{ ...workspaceShadowStyle, ...workspaceDots }}
       />
       <div
         data-board-ui
