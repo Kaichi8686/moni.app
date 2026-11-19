@@ -565,6 +565,11 @@ function resizeByHandle(
 
 const RESIZE_HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
+/** 画面上で常に同じ大きさに見えるハンドル（ズームで縮小しない） */
+const HANDLE_VISUAL_SCREEN_PX = 18;
+const HANDLE_HIT_SCREEN_PX = 44;
+const HANDLE_BORDER_SCREEN_PX = 2.5;
+
 function handleCursor(handle: ResizeHandle) {
   if (handle === "n" || handle === "s") return "ns-resize";
   if (handle === "e" || handle === "w") return "ew-resize";
@@ -572,26 +577,65 @@ function handleCursor(handle: ResizeHandle) {
   return "nwse-resize";
 }
 
-function handleStyle(handle: ResizeHandle): CSSProperties {
+function handleMetrics(zoom: number) {
+  const z = Math.max(0.05, zoom);
+  const hit = HANDLE_HIT_SCREEN_PX / z;
+  const visual = HANDLE_VISUAL_SCREEN_PX / z;
+  const border = HANDLE_BORDER_SCREEN_PX / z;
+  return {
+    hit,
+    visual,
+    border,
+    radius: 3 / z,
+    halfHit: hit / 2,
+    shadowY: 1 / z,
+    shadowBlur: 2 / z,
+  };
+}
+
+/** ヒット領域は大きめ・見た目の四角は中央に。いずれも画面ピクセル基準。 */
+function handleStyle(handle: ResizeHandle, zoom: number): CSSProperties {
+  const m = handleMetrics(zoom);
   const base: CSSProperties = {
     position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    background: "#fff",
-    border: `2px solid ${SELECTION_YELLOW}`,
-    boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+    width: m.hit,
+    height: m.hit,
+    padding: 0,
+    margin: 0,
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 20,
     touchAction: "none",
   };
-  const mid = "calc(50% - 5px)";
-  if (handle.includes("n")) base.top = -5;
-  if (handle.includes("s")) base.bottom = -5;
-  if (handle.includes("w")) base.left = -5;
-  if (handle.includes("e")) base.right = -5;
-  if (handle === "n" || handle === "s") base.left = mid;
-  if (handle === "e" || handle === "w") base.top = mid;
+  if (handle.includes("n")) base.top = -m.halfHit;
+  if (handle.includes("s")) base.bottom = -m.halfHit;
+  if (handle.includes("w")) base.left = -m.halfHit;
+  if (handle.includes("e")) base.right = -m.halfHit;
+  if (handle === "n" || handle === "s") base.left = `calc(50% - ${m.halfHit}px)`;
+  if (handle === "e" || handle === "w") base.top = `calc(50% - ${m.halfHit}px)`;
   return base;
+}
+
+function HandleKnob({ zoom, color = SELECTION_YELLOW }: { zoom: number; color?: string }) {
+  const m = handleMetrics(zoom);
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: m.visual,
+        height: m.visual,
+        borderRadius: m.radius,
+        background: "#fff",
+        border: `${m.border}px solid ${color}`,
+        boxShadow: `0 ${m.shadowY}px ${m.shadowBlur}px rgba(0,0,0,0.18)`,
+        pointerEvents: "none",
+        flexShrink: 0,
+      }}
+    />
+  );
 }
 
 function ShapeGeometry({
@@ -1956,9 +2000,11 @@ export function IssueWorkspaceCanvas({
         type="button"
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, zoom), cursor: handleCursor(handle) }}
         onPointerDown={(event) => onResizePointerDown(event, node, handle)}
-      />
+      >
+        <HandleKnob zoom={zoom} />
+      </button>
     ));
   }
 
@@ -2202,9 +2248,10 @@ export function IssueWorkspaceCanvas({
 
           {sortedNodes.map((node) => {
             const selected = selectedIds.includes(node.id) || connectFromId === node.id;
+            const zSafe = Math.max(0.05, zoom);
             const selectionStyle = selected
               ? {
-                  boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40, 2px 3px 0 rgba(0,0,0,0.08)`,
+                  boxShadow: `0 0 0 ${3 / zSafe}px ${SELECTION_YELLOW}, 0 0 0 ${6 / zSafe}px ${SELECTION_YELLOW}40, ${2 / zSafe}px ${3 / zSafe}px 0 rgba(0,0,0,0.08)`,
                 }
               : node.kind === "shape" || node.kind === "text"
                 ? {}
@@ -2377,7 +2424,7 @@ export function IssueWorkspaceCanvas({
                     zIndex: node.z,
                     border:
                       editing || selected
-                        ? `1.5px solid ${SELECTION_YELLOW}`
+                        ? `${1.5 / zSafe}px solid ${SELECTION_YELLOW}`
                         : "1px solid rgba(0,0,0,0.28)",
                     background: "transparent",
                     WebkitUserSelect: editing ? "text" : "none",
@@ -2510,7 +2557,7 @@ export function IssueWorkspaceCanvas({
                   width: node.w,
                   height: node.h,
                   zIndex: node.z,
-                  border: cropping ? "1.5px solid #2563EB" : "1px solid #D4D4D8",
+                  border: cropping ? `${1.5 / zSafe}px solid #2563EB` : "1px solid #D4D4D8",
                   WebkitUserSelect: "none",
                   WebkitTouchCallout: "none",
                   ...selectionStyle,
@@ -2551,7 +2598,7 @@ export function IssueWorkspaceCanvas({
                             width: `${draft.w * 100}%`,
                             height: `${draft.h * 100}%`,
                             boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
-                            outline: "1.5px dashed #2563EB",
+                            outline: `${1.5 / Math.max(0.05, zoom)}px dashed #2563EB`,
                             outlineOffset: 0,
                           }}
                           onPointerDown={(event) => beginCropAdjust(event, node.id, "move", draft)}
@@ -2583,6 +2630,7 @@ export function IssueWorkspaceCanvas({
                           : handle.includes("s")
                             ? draft.y + draft.h
                             : draft.y + draft.h / 2;
+                        const cropHandle = handleMetrics(zoom);
                         return (
                           <div
                             key={handle}
@@ -2590,10 +2638,21 @@ export function IssueWorkspaceCanvas({
                             tabIndex={0}
                             data-board-ui
                             aria-label={tx("切り取り枠", "Crop frame")}
-                            className="absolute z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border-2 border-[#2563EB] bg-white shadow-sm"
-                            style={{ left: `${left * 100}%`, top: `${top * 100}%`, cursor: handleCursor(handle) }}
+                            className="absolute z-30 flex items-center justify-center"
+                            style={{
+                              left: `${left * 100}%`,
+                              top: `${top * 100}%`,
+                              width: cropHandle.hit,
+                              height: cropHandle.hit,
+                              marginLeft: -cropHandle.halfHit,
+                              marginTop: -cropHandle.halfHit,
+                              cursor: handleCursor(handle),
+                              touchAction: "none",
+                            }}
                             onPointerDown={(event) => beginCropAdjust(event, node.id, handle, draft)}
-                          />
+                          >
+                            <HandleKnob zoom={zoom} color="#2563EB" />
+                          </div>
                         );
                       })}
                     </>
@@ -3928,7 +3987,7 @@ function SheetFullscreenEditor({
         data-overlay-handle
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, cardZoom), cursor: handleCursor(handle) }}
         onPointerDown={(event) => {
           if (!canEdit || event.button !== 0) return;
           event.stopPropagation();
@@ -3946,7 +4005,9 @@ function SheetFullscreenEditor({
           };
           (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
         }}
-      />
+      >
+        <HandleKnob zoom={cardZoom} />
+      </button>
     ));
   }
 
@@ -4136,7 +4197,7 @@ function SheetFullscreenEditor({
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
                           // 作業スペースの図形と同じ黄色いリング
-                          boxShadow: `0 0 0 3px ${SELECTION_YELLOW}, 0 0 0 6px ${SELECTION_YELLOW}40`,
+                          boxShadow: `0 0 0 ${3 / Math.max(0.05, cardZoom)}px ${SELECTION_YELLOW}, 0 0 0 ${6 / Math.max(0.05, cardZoom)}px ${SELECTION_YELLOW}40`,
                           borderRadius: 2,
                         }}
                       >
@@ -4167,8 +4228,10 @@ function SheetFullscreenEditor({
                           top: `${ov.y}%`,
                           width: `${ov.w}%`,
                           height: `${ov.h}%`,
-                          outline: selected ? `2px solid ${SELECTION_YELLOW}` : undefined,
-                          outlineOffset: 1,
+                          outline: selected
+                            ? `${2 / Math.max(0.05, cardZoom)}px solid ${SELECTION_YELLOW}`
+                            : undefined,
+                          outlineOffset: 1 / Math.max(0.05, cardZoom),
                           borderRadius: 4,
                           WebkitTouchCallout: "none",
                           userSelect: "none",
@@ -4216,7 +4279,7 @@ function SheetFullscreenEditor({
                           height: `${ov.h}%`,
                           border:
                             editing || selected
-                              ? `2px solid ${SELECTION_YELLOW}`
+                              ? `${2 / Math.max(0.05, cardZoom)}px solid ${SELECTION_YELLOW}`
                               : "1px solid rgba(0,0,0,0.28)",
                           background: "transparent",
                           borderRadius: 4,
