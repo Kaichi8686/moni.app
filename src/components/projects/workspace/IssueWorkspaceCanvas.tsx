@@ -3062,9 +3062,8 @@ function SheetFullscreenEditor({
     const ov = overlays.find((o) => o.id === editingOverlayId);
     return ov && ov.kind === "text" ? ov : null;
   })();
-  const showOverlayFormatBar = Boolean(
-    canEdit && editingOverlayText && (keyboard.open || keyboardStillCovering()),
-  );
+  /** キーボード表示中だけ書式バー。閉じ確定／blur で editing が消えると完了／挿入が戻る */
+  const showOverlayFormatBar = Boolean(canEdit && editingOverlayText && keyboard.open);
   /** 書式バーが出ているあいだは完了／挿入を隠す */
   const showSheetChrome = !showOverlayFormatBar;
 
@@ -3189,8 +3188,7 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // iOS キーボード閉じ → 編集終了して書式バー消し・完了／挿入復帰。
-  // 書式バー／hold ガードで止めない（閉じたのにバーが残る原因だった）。
+  // iOS キーボード閉じ → 編集終了。主は blur。ここは open=false の保険。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (keyboard.open) {
@@ -3212,32 +3210,16 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    const editId = editingOverlayId;
-    let cancelled = false;
-    const closeTimers: number[] = [];
-    const tryFinish = () => {
-      if (cancelled || editingOverlayIdRef.current !== editId) return;
-      // 下降アニメ中だけ待つ。フォーカスは戻さない（ユーザーの閉じを尊重）
-      if (overlayKeyboardOpenRef.current || keyboardStillCovering()) {
-        overlayKeyboardWasOpenRef.current = true;
-        closeTimers.push(window.setTimeout(tryFinish, 280));
-        return;
-      }
-      overlayKeyboardWasOpenRef.current = false;
-      finishOverlayTextEdit();
-    };
-    if (!keyboardStillCovering()) {
-      tryFinish();
-    } else {
-      closeTimers.push(window.setTimeout(tryFinish, KEYBOARD_CLOSE_SETTLE_MS));
+    // 書式バー操作中、またはまだ入力欄にフォーカス中の open チラつきは無視（閉じは blur 担当）
+    if (
+      overlayFormatBarPointerDownRef.current ||
+      document.activeElement === overlayTextRef.current
+    ) {
+      overlayKeyboardWasOpenRef.current = true;
+      return;
     }
-    return () => {
-      cancelled = true;
-      for (const t of closeTimers) window.clearTimeout(t);
-      if (overlayKeyboardOpenRef.current) {
-        overlayKeyboardWasOpenRef.current = true;
-      }
-    };
+    overlayKeyboardWasOpenRef.current = false;
+    finishOverlayTextEdit();
   }, [keyboard.open, editingOverlayId]);
 
   useEffect(() => {
@@ -4085,20 +4067,23 @@ function SheetFullscreenEditor({
                               setOverlayInlineFormat(queryInlineFormatState());
                             }}
                             onBlur={() => {
+                              // キーボード閉じボタンは blur する。以前は covering 中に
+                              // focus を戻してしまい、書式バーが残って完了が戻らなかった。
                               window.setTimeout(() => {
                                 if (!editingOverlayIdRef.current) return;
                                 const active = document.activeElement as HTMLElement | null;
                                 if (active === overlayTextRef.current) return;
-                                if (active?.closest("[data-text-format-bar]")) return;
-                                // 書式バー連打・キーボード表示中は常に取り戻す
+                                // 書式バーへ一瞬フォーカスが移ったときだけ取り戻す
                                 if (
-                                  overlayFormatBarGuarding() ||
-                                  overlayKeyboardOpenRef.current ||
-                                  keyboardStillCovering()
+                                  active?.closest("[data-text-format-bar]") ||
+                                  overlayFormatBarPointerDownRef.current
                                 ) {
                                   keepOverlayTextFocus();
+                                  return;
                                 }
-                              }, 40);
+                                // キーボード閉じ／画面タップ → 即編集終了
+                                finishOverlayTextEdit();
+                              }, 30);
                             }}
                             className="h-full w-full bg-transparent px-1 outline-none"
                             style={textStyle}
