@@ -8,7 +8,7 @@ export default function MessagesPage() {
     <>
       <Suspense
         fallback={
-          <div className="min-h-[100dvh] bg-[#fafafa] pb-bottom-nav">
+          <div className="min-h-[100dvh] bg-[#ffffff] pb-bottom-nav">
             <div className="border-b border-zinc-100 px-4 py-2">
               <div className="h-10 animate-pulse rounded-xl bg-zinc-100" />
             </div>

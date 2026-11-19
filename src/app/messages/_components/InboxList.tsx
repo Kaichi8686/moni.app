@@ -373,7 +373,7 @@ export function InboxList() {
         （iOS でタブバーが浮く原因になる）。
       */}
       <div className="min-h-[100dvh] w-full pb-bottom-nav">
-        <div className="sticky top-0 z-10 border-b border-zinc-100 bg-[#fafafa] px-4 py-2">
+        <div className="sticky top-0 z-10 border-b border-zinc-100 bg-[#ffffff] px-4 py-2">
           <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2">
             <Search className="h-4 w-4 shrink-0 text-zinc-400" />
             <input
