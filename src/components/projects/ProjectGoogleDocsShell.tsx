@@ -338,27 +338,27 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   }, []);
 
   const wrapSelectionOrCaret = useCallback(
-    (createSpan: () => HTMLSpanElement) => {
+    (createEl: () => HTMLElement) => {
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return false;
       const range = sel.getRangeAt(0);
-      const span = createSpan();
+      const el = createEl();
       if (range.collapsed) {
-        // これから打つ文字用: キャレット位置に空 span を置き、中にキャレット
-        span.appendChild(document.createTextNode("\u200b"));
-        range.insertNode(span);
-        placeCaretInSpan(span);
+        // これから打つ文字用: キャレット位置に空要素を置き、中にキャレット
+        el.appendChild(document.createTextNode("\u200b"));
+        range.insertNode(el);
+        placeCaretInSpan(el);
         return true;
       }
       try {
-        range.surroundContents(span);
+        range.surroundContents(el);
       } catch {
-        span.appendChild(range.extractContents());
-        range.insertNode(span);
+        el.appendChild(range.extractContents());
+        range.insertNode(el);
       }
       sel.removeAllRanges();
       const next = document.createRange();
-      next.selectNodeContents(span);
+      next.selectNodeContents(el);
       sel.addRange(next);
       return true;
     },
@@ -369,7 +369,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     (command: string, value?: string) => {
       ensureEditorReadyForFormat();
       try {
-        document.execCommand("styleWithCSS", false, "true");
+        const useCss = command === "foreColor" || command === "fontSize";
+        document.execCommand("styleWithCSS", false, useCss ? "true" : "false");
         const ok = document.execCommand(command, false, value);
         // iOS などで foreColor / fontSize が効かない場合は span でフォールバック
         if (!ok && (command === "foreColor" || command === "fontSize")) {
@@ -390,7 +391,8 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     [ensureEditorReadyForFormat, rememberSelection, refreshFormatState, refreshHistoryState, wrapSelectionOrCaret],
   );
 
-  /** 太字・斜体・下線・文字色: 選択範囲に適用し、キャレットのみならこれから打つ文字にも効く */
+  /** 太字・斜体・下線・文字色: 選択範囲に適用し、キャレットのみならこれから打つ文字にも効く。
+   *  太字+斜体は <b>/<i> ネストで同時適用可能にする。 */
   const applyTextFormat = useCallback(
     (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => {
       ensureEditorReadyForFormat();
@@ -399,12 +401,10 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
         !selBefore || selBefore.rangeCount === 0 || selBefore.getRangeAt(0).collapsed;
 
       try {
-        document.execCommand("styleWithCSS", false, "true");
-
         if (command === "foreColor" && value) {
           setActiveTextColor(value);
+          document.execCommand("styleWithCSS", false, "true");
           if (collapsed) {
-            // キャレットのみ: 色付き span を置いてこれから打つ文字に効かせる
             wrapSelectionOrCaret(() => {
               const span = document.createElement("span");
               span.style.color = value;
@@ -421,16 +421,21 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             }
           }
         } else {
-          // 選択あり: 選択範囲に適用。キャレットのみ: ブラウザの入力スタイルでこれから打つ文字に効く
-          const ok = document.execCommand(command, false, value);
-          if (!ok) {
-            wrapSelectionOrCaret(() => {
-              const span = document.createElement("span");
-              if (command === "bold") span.style.fontWeight = "700";
-              if (command === "italic") span.style.fontStyle = "italic";
-              if (command === "underline") span.style.textDecoration = "underline";
-              return span;
-            });
+          // セマンティックタグでネスト（太字+斜体の両立）
+          document.execCommand("styleWithCSS", false, "false");
+          const before = document.queryCommandState(command);
+          const ok = document.execCommand(command, false);
+          const after = document.queryCommandState(command);
+          if (!ok || before === after) {
+            // exec が効かない／トグルできなかった場合は b/i/u で包む
+            // すでに ON なら外すのは難しいので、OFF→ON のフォールバックに限定
+            if (!before) {
+              wrapSelectionOrCaret(() => {
+                if (command === "bold") return document.createElement("b");
+                if (command === "italic") return document.createElement("i");
+                return document.createElement("u");
+              });
+            }
           }
         }
       } catch {
@@ -807,6 +812,17 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     setStyleOpen(false);
     editorRef.current?.blur();
   }, [fullscreen, keyboardOpen, typingActive]);
+
+  /** iOS の選択ハンドル操作中も選択範囲を保持（書式ボタンで消えないように） */
+  useEffect(() => {
+    if (!typingActive) return;
+    const onSel = () => {
+      rememberSelection();
+      refreshFormatState();
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
+  }, [typingActive, rememberSelection, refreshFormatState]);
 
   useLayoutEffect(() => {
     const el = editorRef.current;
@@ -1253,7 +1269,11 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             }`}
             role="toolbar"
             aria-label="文字の書式"
-            onPointerDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              // タップ前に選択を退避（iOS で選択が消える前に掴む）
+              rememberSelection();
+            }}
           >
             {colorOpen ? (
               <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[#e8eaed] px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
