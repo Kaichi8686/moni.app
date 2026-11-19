@@ -2040,6 +2040,9 @@ export function IssueWorkspaceCanvas({
     : "relative h-[min(70vh,560px)] overflow-hidden overscroll-none rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
 
   const crosshairTool = tool === "sheet" || tool === "text" || tool === "shape" || tool === "pen" || tool === "select";
+  // 点の間隔・半径をどちらも zoom に合わせる（広げたときに点だけ相対的に大きく見えない）
+  const gridPitch = 20 * zoom;
+  const gridDot = Math.max(0.3, zoom);
 
   return (
     <div
@@ -2056,9 +2059,8 @@ export function IssueWorkspaceCanvas({
         }`}
         style={{
           backgroundColor: "#F4F4F5",
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(161,161,170,0.35) 1px, transparent 0)",
-          backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
+          backgroundImage: `radial-gradient(circle at ${gridDot}px ${gridDot}px, rgba(161,161,170,0.35) ${gridDot}px, transparent 0)`,
+          backgroundSize: `${gridPitch}px ${gridPitch}px`,
           backgroundPosition: `${viewPan.x}px ${viewPan.y}px`,
           WebkitTouchCallout: "none",
           WebkitUserSelect: "none",
