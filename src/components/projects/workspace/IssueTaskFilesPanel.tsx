@@ -193,12 +193,25 @@ function CanvasEditorViewport({ children }: { children: ReactNode }) {
     <>
       <div
         aria-hidden
-        className="pointer-events-none fixed left-0 right-0 top-0 z-[239] bg-white"
-        style={{ ...FULLSCREEN_COVER_STYLE, height: "160lvh", minHeight: "160lvh" }}
+        className="pointer-events-none fixed left-0 right-0 top-0 z-[239] select-none bg-white"
+        style={{
+          ...FULLSCREEN_COVER_STYLE,
+          height: "160lvh",
+          minHeight: "160lvh",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
       />
       <div
-        className="fixed left-0 right-0 top-0 z-[240] overflow-hidden overscroll-none bg-white"
-        style={FULLSCREEN_COVER_STYLE}
+        className="fixed left-0 right-0 top-0 z-[240] overflow-hidden overscroll-none select-none bg-white"
+        style={{
+          ...FULLSCREEN_COVER_STYLE,
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
+        onContextMenu={(event) => event.preventDefault()}
       >
         {children}
       </div>
@@ -1022,10 +1035,12 @@ export function IssueTaskFilesPanel({
                 type="button"
                 data-board-ui
                 onClick={closeEditor}
-                className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+                onContextMenu={(event) => event.preventDefault()}
+                className="inline-flex h-10 shrink-0 select-none items-center gap-0.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+                style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
               >
                 <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-                <span>{tx("戻る", "Back")}</span>
+                <span className="select-none">{tx("戻る", "Back")}</span>
               </button>
             }
           />
