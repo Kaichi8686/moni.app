@@ -3188,7 +3188,8 @@ function SheetFullscreenEditor({
     if (editingOverlayId && drop.has(editingOverlayId)) setEditingOverlayId(null);
   }
 
-  // iOS キーボード閉じ → 編集終了。主は blur。ここは open=false の保険。
+  // iOS キーボード閉じボタンはフォーカスを残すことが多い。
+  // open=false / VV 復帰のどちらかで即編集終了（書式バー＋完了／挿入を戻す）。
   const overlayKeyboardWasOpenRef = useRef(false);
   useEffect(() => {
     if (keyboard.open) {
@@ -3210,17 +3211,52 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    // 書式バー操作中、またはまだ入力欄にフォーカス中の open チラつきは無視（閉じは blur 担当）
-    if (
-      overlayFormatBarPointerDownRef.current ||
-      document.activeElement === overlayTextRef.current
-    ) {
+    // 書式バーを指で押している最中だけ待つ
+    if (overlayFormatBarPointerDownRef.current) {
       overlayKeyboardWasOpenRef.current = true;
       return;
     }
+    // フォーカスが残っていても終了（閉じボタン対策）
+    clearVisualKeyboardHold();
     overlayKeyboardWasOpenRef.current = false;
     finishOverlayTextEdit();
   }, [keyboard.open, editingOverlayId]);
+
+  // holdVisualKeyboardOpen で open が true のまま残る場合の保険：VV が全高に戻ったら終了
+  useEffect(() => {
+    if (!editingOverlayId) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let timer: number | null = null;
+    const coveredPx = () =>
+      Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    const onViewport = () => {
+      if (!editingOverlayIdRef.current) return;
+      const covered = coveredPx();
+      if (covered > 60) {
+        overlayKeyboardWasOpenRef.current = true;
+        return;
+      }
+      if (!overlayKeyboardWasOpenRef.current) return;
+      if (overlayFormatBarPointerDownRef.current) return;
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!editingOverlayIdRef.current) return;
+        if (overlayFormatBarPointerDownRef.current) return;
+        if (coveredPx() > 60) return;
+        clearVisualKeyboardHold();
+        overlayKeyboardWasOpenRef.current = false;
+        finishOverlayTextEdit();
+      }, 50);
+    };
+    vv.addEventListener("resize", onViewport);
+    vv.addEventListener("scroll", onViewport);
+    return () => {
+      vv.removeEventListener("resize", onViewport);
+      vv.removeEventListener("scroll", onViewport);
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [editingOverlayId]);
 
   useEffect(() => {
     const stage = stageRef.current;
