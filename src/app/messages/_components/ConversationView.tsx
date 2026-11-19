@@ -348,7 +348,7 @@ export function ConversationView({ conversationId }: Props) {
 
   if (!userId) {
     return (
-      <div className="flex h-full min-h-0 flex-1 flex-col bg-[#fafafa]">
+      <div className="flex h-full min-h-0 flex-1 flex-col bg-[#ffffff]">
         <ConversationHeader title={headerTitle} />
         <p className="flex flex-1 items-center justify-center px-4 text-center text-sm text-zinc-500">
           <a href="/login" className="font-medium text-violet-600 underline">
@@ -361,7 +361,7 @@ export function ConversationView({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#fafafa]">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#ffffff]">
       <ConversationHeader
         title={headerTitle}
         subtitle={header.subtitle}
