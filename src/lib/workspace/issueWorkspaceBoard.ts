@@ -185,6 +185,42 @@ export function plainTextToRichHtml(
   return html;
 }
 
+function isBoldWeight(value: string): boolean {
+  const t = value.trim().toLowerCase();
+  if (t === "bold" || t === "bolder") return true;
+  const n = Number.parseInt(t, 10);
+  return Number.isFinite(n) && n >= 600;
+}
+
+function wrapElementContents(el: HTMLElement, tagName: "b" | "i" | "u") {
+  const wrapper = document.createElement(tagName);
+  while (el.firstChild) wrapper.appendChild(el.firstChild);
+  el.appendChild(wrapper);
+}
+
+/**
+ * styleWithCSS の span（font-weight / font-style / underline）を
+ * ネスト可能な b/i/u に昇格させ、太字+斜体の両立を保つ。
+ */
+function promoteInlineStyles(el: HTMLElement) {
+  const weight = el.style.fontWeight || "";
+  const fontStyle = el.style.fontStyle || "";
+  const deco = `${el.style.textDecoration} ${el.style.textDecorationLine}`;
+  const keepColor = normalizeCssColor(el.style.color || el.getAttribute("color") || "");
+
+  const isBold = isBoldWeight(weight);
+  const isItalic = fontStyle === "italic" || fontStyle === "oblique";
+  const isUnderline = /underline/i.test(deco);
+
+  for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
+  if (keepColor) el.style.color = keepColor;
+
+  // 内側からネスト（b > i > u > text）
+  if (isUnderline) wrapElementContents(el, "u");
+  if (isItalic) wrapElementContents(el, "i");
+  if (isBold) wrapElementContents(el, "b");
+}
+
 /** contentEditable から安全な HTML を取り出す */
 export function sanitizeRichHtml(raw: string): string {
   if (typeof document === "undefined") return "";
@@ -206,13 +242,15 @@ export function sanitizeRichHtml(raw: string): string {
         el.parentNode?.removeChild(el);
         continue;
       }
-      // 属性は色以外落とす（execCommand は rgb() を返すことが多い）
-      const keepColor =
-        tag === "SPAN" || tag === "FONT"
-          ? normalizeCssColor(el.style.color || el.getAttribute("color") || "")
-          : null;
-      for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
-      if (keepColor) el.style.color = keepColor;
+      if (tag === "SPAN" || tag === "FONT") {
+        // CSS 装飾を b/i/u に変換してから色以外の属性を落とす
+        promoteInlineStyles(el);
+      } else {
+        // セマンティックタグ: foreColor が style="color" を付けた場合も色は残す
+        const keepColor = normalizeCssColor(el.style.color || "");
+        for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
+        if (keepColor) el.style.color = keepColor;
+      }
       walk(el);
     }
   };
@@ -265,12 +303,15 @@ export function queryInlineFormatState() {
 
 export function applyInlineFormat(command: "bold" | "italic" | "underline" | "foreColor", value?: string) {
   try {
-    document.execCommand("styleWithCSS", false, "true");
     if (command === "foreColor") {
+      // 色は span style のまま（sanitize が color を保持）
+      document.execCommand("styleWithCSS", false, "true");
       document.execCommand("foreColor", false, value || DEFAULT_TEXT_COLOR);
-    } else {
-      document.execCommand(command, false);
+      return;
     }
+    // 太字・斜体・下線は <b>/<i>/<u> でネスト可能にし、同時適用できるようにする
+    document.execCommand("styleWithCSS", false, "false");
+    document.execCommand(command, false);
   } catch {
     // ignore — some browsers throw on unsupported commands
   }
