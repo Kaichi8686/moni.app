@@ -75,9 +75,9 @@ function kindLabel(kind: IssueWorkFileKind, tx: (ja: string, en: string) => stri
 function FileKindIcon({ kind }: { kind: IssueWorkFileKind }) {
   if (kind === "doc") {
     return (
-      <svg width="36" height="36" viewBox="0 0 24 24" aria-hidden className="shrink-0">
-        <path fill="#4285F4" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-      </svg>
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#E8F0FE] text-[#4285F4]">
+        <FileText className="h-5 w-5" aria-hidden />
+      </span>
     );
   }
   if (kind === "board") {
@@ -897,12 +897,12 @@ export function IssueCreateWizard({
               <div className="pointer-events-auto mb-1 flex w-[220px] flex-col gap-1 rounded-2xl border border-[#dadce0] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
                 {(
                   [
-                    ["doc", tx("ドキュメント", "Document"), <FileText key="d" className="h-5 w-5 text-[#4285F4]" />],
-                    ["canvas", tx("作業スペース", "Workspace"), <PenTool key="c" className="h-5 w-5 text-[#E65100]" />],
-                    ["photo", tx("写真依頼", "Photo request"), <ImageIcon key="p" className="h-5 w-5 text-[#2E7D32]" />],
-                    ["link", tx("リンク依頼", "Link request"), <Link2 key="l" className="h-5 w-5 text-[#1565C0]" />],
+                    ["doc", tx("ドキュメント", "Document")],
+                    ["canvas", tx("作業スペース", "Workspace")],
+                    ["photo", tx("写真依頼", "Photo request")],
+                    ["link", tx("リンク依頼", "Link request")],
                   ] as const
-                ).map(([kind, label, icon]) => (
+                ).map(([kind, label]) => (
                   <button
                     key={kind}
                     type="button"
@@ -910,7 +910,7 @@ export function IssueCreateWizard({
                     onClick={() => openNamePrompt(kind)}
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
                   >
-                    {icon}
+                    <FileKindIcon kind={kind} />
                     {label}
                   </button>
                 ))}

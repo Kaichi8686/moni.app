@@ -15,7 +15,6 @@ import {
   LayoutGrid,
   Link2,
   MoreVertical,
-  PenTool,
   StickyNote,
   X,
 } from "lucide-react";
@@ -59,10 +58,9 @@ type Props = {
 
 function DocIcon() {
   return (
-    <svg width="36" height="36" viewBox="0 0 24 24" aria-hidden className="shrink-0">
-      <path fill="#4285F4" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-      <path fill="#A1C2FA" d="M13 3.5L18.5 9H14c-.55 0-1-.45-1-1V3.5z" />
-    </svg>
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#E8F0FE] text-[#4285F4]">
+      <FileText className="h-5 w-5" aria-hidden />
+    </span>
   );
 }
 
@@ -684,7 +682,7 @@ export function DmSharedSpacePanel({ conversationId, peerName, uid, onClose }: P
                 onClick={() => void createFile("canvas")}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#202124] hover:bg-[#f8f9fa] disabled:opacity-50"
               >
-                <PenTool className="h-5 w-5 text-[#E65100]" aria-hidden />
+                <CanvasIcon />
                 {tx("作業スペース", "Workspace")}
               </button>
               <button
