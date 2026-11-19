@@ -24,7 +24,7 @@ export function InboxListSkeleton({ count = 8, className = "" }: CountProps) {
       role="status"
       aria-busy="true"
       aria-label="Loading"
-      className={`divide-y divide-zinc-50 ${className}`}
+      className={className}
     >
       <span className="sr-only">Loading…</span>
       {Array.from({ length: count }, (_, i) => (

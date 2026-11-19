@@ -391,7 +391,7 @@ export function InboxList() {
 
         {scopedProjectId && scopedMemberOk ? <InboxVoteCards projectId={scopedProjectId} /> : null}
 
-        <div className="divide-y divide-zinc-50">
+        <div>
           {!userId ? (
             <p className="px-4 py-8 text-center text-sm text-zinc-500">
               <Link href="/" className="font-medium text-violet-600 underline">
