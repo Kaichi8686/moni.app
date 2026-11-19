@@ -564,11 +564,18 @@ function resizeByHandle(
 }
 
 const RESIZE_HANDLES: ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+const CORNER_HANDLES: ResizeHandle[] = ["nw", "ne", "se", "sw"];
 
-/** 画面上で常に同じ大きさに見えるハンドル（ズームで縮小しない） */
-const HANDLE_VISUAL_SCREEN_PX = 18;
-const HANDLE_HIT_SCREEN_PX = 44;
-const HANDLE_BORDER_SCREEN_PX = 2.5;
+/** 画面上で読みやすいハンドル。親の scale(zoom) を transform で打ち消す */
+const HANDLE_VISUAL_SCREEN_PX = 16;
+const HANDLE_HIT_SCREEN_PX = 36;
+const HANDLE_BORDER_SCREEN_PX = 2;
+
+/** 画面上で小さいオブジェクトは四隅だけにして重なりを防ぐ */
+function handlesForNode(zoom: number, nodeW: number, nodeH: number): ResizeHandle[] {
+  const onScreen = Math.min(nodeW, nodeH) * Math.max(0.05, zoom);
+  return onScreen < 80 ? CORNER_HANDLES : RESIZE_HANDLES;
+}
 
 function handleCursor(handle: ResizeHandle) {
   if (handle === "n" || handle === "s") return "ns-resize";
@@ -577,29 +584,34 @@ function handleCursor(handle: ResizeHandle) {
   return "nwse-resize";
 }
 
-function handleMetrics(zoom: number) {
+/**
+ * レイアウトは親座標系で固定サイズのまま、scale(1/zoom) で画面サイズを一定に保つ。
+ * ノードが極端に小さいときだけ、四隅に収まるよう控えめに縮める。
+ */
+function handleMetrics(zoom: number, nodeW = Number.POSITIVE_INFINITY, nodeH = Number.POSITIVE_INFINITY) {
   const z = Math.max(0.05, zoom);
-  const hit = HANDLE_HIT_SCREEN_PX / z;
-  const visual = HANDLE_VISUAL_SCREEN_PX / z;
-  const border = HANDLE_BORDER_SCREEN_PX / z;
+  const onScreen = Math.min(nodeW * z, nodeH * z);
+  // 四隅ハンドルが重ならない上限（短辺の約 0.9 倍まで）
+  const fit = Number.isFinite(onScreen) ? onScreen * 0.9 : HANDLE_VISUAL_SCREEN_PX;
+  const visualScreen = Math.min(HANDLE_VISUAL_SCREEN_PX, Math.max(10, fit));
+  const hitScreen = Math.min(HANDLE_HIT_SCREEN_PX, Math.max(visualScreen + 12, Math.min(fit * 1.4, onScreen * 0.7 || HANDLE_HIT_SCREEN_PX)));
   return {
-    hit,
-    visual,
-    border,
-    radius: 3 / z,
-    halfHit: hit / 2,
-    shadowY: 1 / z,
-    shadowBlur: 2 / z,
+    layout: hitScreen,
+    halfLayout: hitScreen / 2,
+    visual: visualScreen,
+    border: Math.min(HANDLE_BORDER_SCREEN_PX, visualScreen * 0.18),
+    radius: Math.min(3, visualScreen * 0.2),
+    invZoom: 1 / z,
   };
 }
 
-/** ヒット領域は大きめ・見た目の四角は中央に。いずれも画面ピクセル基準。 */
-function handleStyle(handle: ResizeHandle, zoom: number): CSSProperties {
-  const m = handleMetrics(zoom);
+/** ヒット領域は中央に見た目の四角。transform でズーム打ち消し。 */
+function handleStyle(handle: ResizeHandle, zoom: number, nodeW: number, nodeH: number): CSSProperties {
+  const m = handleMetrics(zoom, nodeW, nodeH);
   const base: CSSProperties = {
     position: "absolute",
-    width: m.hit,
-    height: m.hit,
+    width: m.layout,
+    height: m.layout,
     padding: 0,
     margin: 0,
     border: "none",
@@ -607,20 +619,32 @@ function handleStyle(handle: ResizeHandle, zoom: number): CSSProperties {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    transform: `scale(${m.invZoom})`,
+    transformOrigin: "center center",
     zIndex: 20,
     touchAction: "none",
   };
-  if (handle.includes("n")) base.top = -m.halfHit;
-  if (handle.includes("s")) base.bottom = -m.halfHit;
-  if (handle.includes("w")) base.left = -m.halfHit;
-  if (handle.includes("e")) base.right = -m.halfHit;
-  if (handle === "n" || handle === "s") base.left = `calc(50% - ${m.halfHit}px)`;
-  if (handle === "e" || handle === "w") base.top = `calc(50% - ${m.halfHit}px)`;
+  if (handle.includes("n")) base.top = -m.halfLayout;
+  if (handle.includes("s")) base.bottom = -m.halfLayout;
+  if (handle.includes("w")) base.left = -m.halfLayout;
+  if (handle.includes("e")) base.right = -m.halfLayout;
+  if (handle === "n" || handle === "s") base.left = `calc(50% - ${m.halfLayout}px)`;
+  if (handle === "e" || handle === "w") base.top = `calc(50% - ${m.halfLayout}px)`;
   return base;
 }
 
-function HandleKnob({ zoom, color = SELECTION_YELLOW }: { zoom: number; color?: string }) {
-  const m = handleMetrics(zoom);
+function HandleKnob({
+  zoom,
+  nodeW = Number.POSITIVE_INFINITY,
+  nodeH = Number.POSITIVE_INFINITY,
+  color = SELECTION_YELLOW,
+}: {
+  zoom: number;
+  nodeW?: number;
+  nodeH?: number;
+  color?: string;
+}) {
+  const m = handleMetrics(zoom, nodeW, nodeH);
   return (
     <span
       aria-hidden
@@ -630,7 +654,7 @@ function HandleKnob({ zoom, color = SELECTION_YELLOW }: { zoom: number; color?: 
         borderRadius: m.radius,
         background: "#fff",
         border: `${m.border}px solid ${color}`,
-        boxShadow: `0 ${m.shadowY}px ${m.shadowBlur}px rgba(0,0,0,0.18)`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
         pointerEvents: "none",
         flexShrink: 0,
       }}
@@ -1994,16 +2018,16 @@ export function IssueWorkspaceCanvas({
 
   function renderResizeHandles(node: BoardNode, selected: boolean) {
     if (!canEdit || !selected || !handlesVisible) return null;
-    return RESIZE_HANDLES.map((handle) => (
+    return handlesForNode(zoom, node.w, node.h).map((handle) => (
       <button
         key={handle}
         type="button"
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle, zoom), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, zoom, node.w, node.h), cursor: handleCursor(handle) }}
         onPointerDown={(event) => onResizePointerDown(event, node, handle)}
       >
-        <HandleKnob zoom={zoom} />
+        <HandleKnob zoom={zoom} nodeW={node.w} nodeH={node.h} />
       </button>
     ));
   }
@@ -2619,7 +2643,7 @@ export function IssueWorkspaceCanvas({
                           />
                         </div>
                       </div>
-                      {RESIZE_HANDLES.map((handle) => {
+                      {handlesForNode(zoom, node.w, node.h).map((handle) => {
                         const left = handle.includes("w")
                           ? draft.x
                           : handle.includes("e")
@@ -2630,7 +2654,7 @@ export function IssueWorkspaceCanvas({
                           : handle.includes("s")
                             ? draft.y + draft.h
                             : draft.y + draft.h / 2;
-                        const cropHandle = handleMetrics(zoom);
+                        const cropHandle = handleMetrics(zoom, node.w, node.h);
                         return (
                           <div
                             key={handle}
@@ -2642,16 +2666,18 @@ export function IssueWorkspaceCanvas({
                             style={{
                               left: `${left * 100}%`,
                               top: `${top * 100}%`,
-                              width: cropHandle.hit,
-                              height: cropHandle.hit,
-                              marginLeft: -cropHandle.halfHit,
-                              marginTop: -cropHandle.halfHit,
+                              width: cropHandle.layout,
+                              height: cropHandle.layout,
+                              marginLeft: -cropHandle.halfLayout,
+                              marginTop: -cropHandle.halfLayout,
+                              transform: `scale(${cropHandle.invZoom})`,
+                              transformOrigin: "center center",
                               cursor: handleCursor(handle),
                               touchAction: "none",
                             }}
                             onPointerDown={(event) => beginCropAdjust(event, node.id, handle, draft)}
                           >
-                            <HandleKnob zoom={zoom} color="#2563EB" />
+                            <HandleKnob zoom={zoom} nodeW={node.w} nodeH={node.h} color="#2563EB" />
                           </div>
                         );
                       })}
@@ -3980,14 +4006,16 @@ function SheetFullscreenEditor({
     if (!canEdit || !overlayHandlesVisible || selectedOverlayIds.length !== 1 || selectedOverlayId !== ov.id) {
       return null;
     }
-    return RESIZE_HANDLES.map((handle) => (
+    const ovW = cardSize.w > 0 ? (ov.w / 100) * cardSize.w : 120;
+    const ovH = cardSize.h > 0 ? (ov.h / 100) * cardSize.h : 80;
+    return handlesForNode(cardZoom, ovW, ovH).map((handle) => (
       <button
         key={handle}
         type="button"
         data-overlay-handle
         data-board-ui
         aria-label={tx("サイズ変更", "Resize")}
-        style={{ ...handleStyle(handle, cardZoom), cursor: handleCursor(handle) }}
+        style={{ ...handleStyle(handle, cardZoom, ovW, ovH), cursor: handleCursor(handle) }}
         onPointerDown={(event) => {
           if (!canEdit || event.button !== 0) return;
           event.stopPropagation();
@@ -4006,7 +4034,7 @@ function SheetFullscreenEditor({
           (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
         }}
       >
-        <HandleKnob zoom={cardZoom} />
+        <HandleKnob zoom={cardZoom} nodeW={ovW} nodeH={ovH} />
       </button>
     ));
   }
