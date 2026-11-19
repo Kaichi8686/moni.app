@@ -3265,10 +3265,11 @@ function SheetFullscreenEditor({
     };
   }, [sheetRatio]);
 
-  // zoom≈1 のときカードを中央へ（作業スペースの初期配置に相当）
+  // 用紙を開いた／フィットしたときはカードを画面中央へ
   useEffect(() => {
     if (cardSize.w <= 0 || cardSize.h <= 0) return;
     if (cardZoomRef.current > 1.01) return;
+    if (editingOverlayIdRef.current) return;
     const stage = stageRef.current;
     if (!stage) return;
     setSheetPan({
@@ -3277,7 +3278,52 @@ function SheetFullscreenEditor({
     });
   }, [cardSize.w, cardSize.h]);
 
-  // 文字編集中はビューを動かさない（transform 変更で iOS キーボードが切れる）
+  /**
+   * キーボードでテキストが隠れたら、見えるまでカードを上へ一度だけずらす。
+   * 連打で transform をいじると iOS がキーボードを切るので settled 後に一回だけ。
+   */
+  const sheetKbLiftAppliedRef = useRef(0);
+  useEffect(() => {
+    if (!editingOverlayId) {
+      if (sheetKbLiftAppliedRef.current !== 0) {
+        const lift = sheetKbLiftAppliedRef.current;
+        sheetKbLiftAppliedRef.current = 0;
+        setSheetPan((p) => ({ ...p, y: p.y + lift }));
+      }
+      return;
+    }
+    if (!keyboard.open) {
+      if (sheetKbLiftAppliedRef.current !== 0) {
+        const lift = sheetKbLiftAppliedRef.current;
+        sheetKbLiftAppliedRef.current = 0;
+        setSheetPan((p) => ({ ...p, y: p.y + lift }));
+      }
+      return;
+    }
+    if (!keyboard.settled) return;
+    if (sheetKbLiftAppliedRef.current !== 0) return;
+
+    const el = overlayTextRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight - keyboard.inset;
+    // 書式バー分を空けて、打つ場所がキーボード／バーの上に来るようにする
+    const formatBarH = 56;
+    const margin = 12;
+    const limitY = visibleBottom - formatBarH - margin;
+    const overflow = rect.bottom - limitY;
+    if (overflow <= 8) return;
+
+    const lift = Math.ceil(overflow);
+    sheetKbLiftAppliedRef.current = lift;
+    holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
+    setSheetPan((p) => ({ ...p, y: p.y - lift }));
+    window.requestAnimationFrame(() => {
+      keepOverlayTextFocus();
+      window.requestAnimationFrame(() => keepOverlayTextFocus());
+    });
+  }, [editingOverlayId, keyboard.open, keyboard.settled, keyboard.inset]);
 
   function clampSheetZoom(z: number) {
     return Math.min(SHEET_CARD_MAX_ZOOM, Math.max(SHEET_CARD_MIN_ZOOM, z));
@@ -3765,7 +3811,8 @@ function SheetFullscreenEditor({
 
       {/*
         作業スペースと同じ：translate + scale で指の位置を中心に拡大・パン。
-        編集中はビュー固定。完了／挿入は fixed ポータル。
+        開いたときは中央。キーボード時はテキストが見えるまで上へずらす。
+        完了／挿入は fixed ポータル。
       */}
       <div
         ref={stageRef}
