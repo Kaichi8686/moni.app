@@ -160,6 +160,8 @@ export function GeminiAgentPanel({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLFormElement | null>(null);
   const composerFocusedRef = useRef(false);
+  /** Track real keyboard open→close so we don't blur on the pre-open focus frame. */
+  const keyboardWasOccludingRef = useRef(false);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
   const iosLike = useSyncExternalStore(
@@ -270,29 +272,35 @@ export function GeminiAgentPanel({
   useEffect(() => {
     if (!fullscreen) return;
     const root = document.documentElement;
-    // タブバーをしまうモード（!tabBarVisible）でも、キーボード中以外は
-    // 「タブバーを出す」ボタンを出せるよう、immersive は実キーボード時＋明示的に隠す時だけ。
-    const hideBar = !tabBarVisible || keyboardOccluding;
+    // Focus clears tab clearance immediately so fixed bottom:0 can ride the keyboard up.
+    // Also honor explicit tab-hide and live keyboard occlusion.
+    const hideBar = !tabBarVisible || composerFocused || keyboardOccluding;
     root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, hideBar);
     return () => {
       root.classList.remove(AI_CHAT_IMMERSIVE_CLASS);
     };
-  }, [fullscreen, tabBarVisible, keyboardOccluding]);
+  }, [fullscreen, tabBarVisible, composerFocused, keyboardOccluding]);
 
-  // iOS のキーボード閉じは blur しないことがある → 閉じたらフォーカス状態を必ず解除
+  // iOS often keeps focus after dismiss. Clear focus only AFTER the keyboard was
+  // actually open and then closed — never on the focus frame before it opens
+  // (that was blurring the input and preventing the keyboard from appearing).
   useEffect(() => {
     if (!fullscreen) return;
-    if (keyboardOccluding) return;
+    if (keyboardOccluding) {
+      keyboardWasOccludingRef.current = true;
+      return;
+    }
+    if (!keyboardWasOccludingRef.current) return;
+    keyboardWasOccludingRef.current = false;
     const el = composerRef.current;
     if (el) el.style.removeProperty("bottom");
-    if (!composerFocused) return;
     const input = el?.querySelector("input,textarea");
     if (input && document.activeElement === input) {
       (input as HTMLElement).blur();
     }
     composerFocusedRef.current = false;
     setComposerFocused(false);
-  }, [fullscreen, keyboardOccluding, composerFocused]);
+  }, [fullscreen, keyboardOccluding]);
 
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
@@ -313,7 +321,8 @@ export function GeminiAgentPanel({
       el.style.left = "0px";
       el.style.right = "0px";
       el.style.top = "auto";
-      el.style.zIndex = "45";
+      // Above .app-bottom-nav (z-index: 50) so the input stays tappable.
+      el.style.zIndex = "60";
       el.style.transition = "none";
       if (docked) {
         // iOS: fixed bottom:0 rides the visualViewport with the keyboard (ChatGPT-like).
@@ -599,7 +608,7 @@ export function GeminiAgentPanel({
         left: 0,
         right: 0,
         top: "auto",
-        zIndex: 45,
+        zIndex: 60,
         transition: "none",
       }
     : undefined;
@@ -642,8 +651,8 @@ export function GeminiAgentPanel({
                     el.style.left = "0px";
                     el.style.right = "0px";
                     el.style.top = "auto";
-                    el.style.bottom = iosLike ? "0px" : "0px";
-                    el.style.zIndex = "45";
+                    el.style.bottom = "0px";
+                    el.style.zIndex = "60";
                     el.style.transition = "none";
                   }
                   if (typeof window !== "undefined") {
@@ -689,8 +698,8 @@ export function GeminiAgentPanel({
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
             </div>
-            {/* キーボードが閉じたら必ず表示（隠したタブバーを戻す導線を消さない） */}
-            {fullscreen && !keyboardOccluding ? (
+            {/* Hide while typing; show again once the keyboard is gone. */}
+            {fullscreen && !keyboardOccluding && !composerFocused ? (
               <button
                 type="button"
                 onClick={() => setTabBarVisible((v) => !v)}
