@@ -264,17 +264,35 @@ export function GeminiAgentPanel({
     setPortalReady(true);
   }, []);
 
+  /** キーボードが実際に画面を覆っているか（フォーカス残留だけでは判定しない） */
+  const keyboardOccluding = keyboardOpen || keyboardInset > 8;
+
   useEffect(() => {
     if (!fullscreen) return;
     const root = document.documentElement;
-    // Focus immediately clears tab clearance so fixed bottom:0 can ride the keyboard up
-    // (ChatGPT-style) instead of waiting for inset > 0.
-    const hideBar = !tabBarVisible || composerFocused || keyboardOpen || keyboardInset > 8;
+    // タブバーをしまうモード（!tabBarVisible）でも、キーボード中以外は
+    // 「タブバーを出す」ボタンを出せるよう、immersive は実キーボード時＋明示的に隠す時だけ。
+    const hideBar = !tabBarVisible || keyboardOccluding;
     root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, hideBar);
     return () => {
       root.classList.remove(AI_CHAT_IMMERSIVE_CLASS);
     };
-  }, [fullscreen, tabBarVisible, composerFocused, keyboardOpen, keyboardInset]);
+  }, [fullscreen, tabBarVisible, keyboardOccluding]);
+
+  // iOS のキーボード閉じは blur しないことがある → 閉じたらフォーカス状態を必ず解除
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (keyboardOccluding) return;
+    const el = composerRef.current;
+    if (el) el.style.removeProperty("bottom");
+    if (!composerFocused) return;
+    const input = el?.querySelector("input,textarea");
+    if (input && document.activeElement === input) {
+      (input as HTMLElement).blur();
+    }
+    composerFocusedRef.current = false;
+    setComposerFocused(false);
+  }, [fullscreen, keyboardOccluding, composerFocused]);
 
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
@@ -572,7 +590,7 @@ export function GeminiAgentPanel({
     "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]";
   const showModePicker = Boolean(onModeChange && (mode === "general" || mode === "ideas"));
   /** ChatGPT-style: ride the keyboard. iOS fixed bottom:0 tracks VV; others use inset. */
-  const keyboardDocked = fullscreen && (composerFocused || keyboardOpen || keyboardInset > 8);
+  const keyboardDocked = fullscreen && (composerFocused || keyboardOccluding);
   // bottom is painted from visualViewport sync (not React state) so it stays
   // glued to the keyboard without one-frame lag / overwrite fights.
   const composerDockStyle: CSSProperties | undefined = fullscreen
@@ -671,7 +689,8 @@ export function GeminiAgentPanel({
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
               </button>
             </div>
-            {fullscreen && !keyboardOpen && keyboardInset < 8 && !composerFocused ? (
+            {/* キーボードが閉じたら必ず表示（隠したタブバーを戻す導線を消さない） */}
+            {fullscreen && !keyboardOccluding ? (
               <button
                 type="button"
                 onClick={() => setTabBarVisible((v) => !v)}
