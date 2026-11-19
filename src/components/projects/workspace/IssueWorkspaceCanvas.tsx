@@ -3213,14 +3213,18 @@ function SheetFullscreenEditor({
       return;
     }
     if (!overlayKeyboardWasOpenRef.current) return;
-    // 連打チラつき: 指がバー上／直前操作かつまだキーボードが覆っているときだけ維持
-    if (
-      (overlayFormatBarPointerDownRef.current || overlayFormatBarGuarding()) &&
-      keyboardStillCovering()
-    ) {
-      overlayKeyboardWasOpenRef.current = true;
-      keepOverlayTextFocus();
-      return;
+    // 連打中: covered が残っているあいだは open チラつきを無視（≤48 なら本当の閉じ）
+    if (overlayFormatBarPointerDownRef.current || overlayFormatBarGuarding()) {
+      const vv = window.visualViewport;
+      const covered = vv
+        ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+        : 0;
+      if (covered > 48 || keyboardStillCovering()) {
+        overlayKeyboardWasOpenRef.current = true;
+        holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
+        keepOverlayTextFocus();
+        return;
+      }
     }
     // 閉じボタン等で本当に閉じた → hold ごと即終了（バー／完了は covered 側で先に切替済）
     clearVisualKeyboardHold();
@@ -3249,32 +3253,35 @@ function SheetFullscreenEditor({
     const onViewport = () => {
       if (!editingOverlayIdRef.current) return;
       const covered = coveredPx();
+      // バー／完了の表示は常に live covered（閉じボタンで即切替）
       setViewportCovered(covered);
       if (covered > overlayKbPeakCoveredRef.current) {
         overlayKbPeakCoveredRef.current = covered;
       }
       const peak = overlayKbPeakCoveredRef.current;
-      const fingerOnBar = overlayFormatBarPointerDownRef.current;
-      const mashJitter =
-        (fingerOnBar || overlayFormatBarGuarding()) && covered > 100;
+      const mashGuarding =
+        overlayFormatBarPointerDownRef.current || overlayFormatBarGuarding();
 
-      // キーボードがほぼ消えた → 連打ガード／hold を無視して即終了
+      // キーボードがほぼ消えた → 連打ガードを無視して即終了（閉じ完了）
       if (overlayKeyboardWasOpenRef.current && covered <= 48) {
         endEditNow();
         return;
       }
 
-      // 連打中の小さな VV 揺れだけ無視（閉じボタンの大きな下降は通す）
-      if (mashJitter) {
+      // 書式バー連打中（指のあいだ含む）: 中間の VV 揺れでは絶対に終了しない
+      // → キーボード維持。表示は covered 側なので閉じボタン時はバーだけ先に消える
+      if (mashGuarding) {
         overlayKeyboardWasOpenRef.current = true;
+        holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
+        if (covered > 80) {
+          overlayKbPeakCoveredRef.current = Math.max(peak, covered);
+        }
         return;
       }
 
-      // 閉じアニメ開始（ピークから明確に減少）→ 即終了
+      // 閉じアニメ開始 → 即編集終了（ガード外＝閉じボタン／画面タップ）
       const dismissing = peak >= 120 && covered <= peak - 40;
       if (overlayKeyboardWasOpenRef.current && dismissing) {
-        // バーに指があるあいだだけ待つ（離れたらこのまま終了）
-        if (fingerOnBar) return;
         endEditNow();
         return;
       }
@@ -4143,7 +4150,7 @@ function SheetFullscreenEditor({
                             }}
                             onBlur={() => {
                               // 遅延なし。書式バー以外への blur は即編集終了。
-                              // 連打中の一瞬 blur は、まだキーボードが覆っているときだけ取り戻す。
+                              // 連打中の一瞬 blur は、キーボードがまだあるあいだ取り戻す。
                               queueMicrotask(() => {
                                 if (!editingOverlayIdRef.current) return;
                                 const active = document.activeElement as HTMLElement | null;
@@ -4151,12 +4158,21 @@ function SheetFullscreenEditor({
                                 const onFormatBar = Boolean(
                                   active?.closest("[data-text-format-bar]"),
                                 );
-                                const mashKeep =
+                                const vv = window.visualViewport;
+                                const covered = vv
+                                  ? Math.max(
+                                      0,
+                                      Math.round(window.innerHeight - vv.height - vv.offsetTop),
+                                    )
+                                  : 0;
+                                // covered が残っている／連打ガード中 → フォーカス復帰（閉じ完了時は finish）
+                                if (
                                   (onFormatBar ||
                                     overlayFormatBarGuarding() ||
                                     visualKeyboardHoldOpenActive()) &&
-                                  keyboardStillCovering();
-                                if (mashKeep) {
+                                  covered > 48
+                                ) {
+                                  holdVisualKeyboardOpen(FORMAT_BAR_GUARD_MS);
                                   keepOverlayTextFocus();
                                   return;
                                 }
