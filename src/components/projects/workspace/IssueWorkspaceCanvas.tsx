@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SVGProps,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -35,7 +36,6 @@ import {
   Redo2,
   Shapes,
   Square,
-  StickyNote,
   Triangle,
   Type,
   Trash2,
@@ -2937,7 +2937,7 @@ export function IssueWorkspaceCanvas({
                           <PillIconButton
                             active={tool === "sheet"}
                             label={tx("カード", "Card")}
-                            icon={StickyNote}
+                            icon={OverlappingCardsIcon}
                             disabled={!canEdit}
                             onClick={() => canEdit && selectTool(tool === "sheet" ? "navigate" : "sheet")}
                           />
@@ -4992,6 +4992,29 @@ function SlidesTextFormatBar({
     </div>
   );
 }
+
+/** 挿入メニューのカード：2枚が一部重なったマーク */
+const OverlappingCardsIcon = (({
+  className,
+  strokeWidth = 2.25,
+  ...props
+}: SVGProps<SVGSVGElement> & { strokeWidth?: number | string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+    {...props}
+  >
+    <rect x="2.5" y="3.5" width="12" height="15" rx="2" />
+    <rect x="9.5" y="5.5" width="12" height="15" rx="2" />
+  </svg>
+)) as LucideIcon;
 
 function PillIconButton({
   active,
