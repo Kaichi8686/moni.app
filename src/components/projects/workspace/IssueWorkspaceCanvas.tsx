@@ -4026,7 +4026,15 @@ function SheetFullscreenEditor({
                           borderRadius: 2,
                         }}
                       >
-                        <div className="pointer-events-auto absolute inset-0 overflow-visible">
+                        {/* 選択中はリングが SVG 図形の上に乗るので、ここから移動を開始する */}
+                        <div
+                          data-overlay-node
+                          className="pointer-events-auto absolute inset-0 overflow-visible"
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            beginOverlayPartPointer(e, ov, e.clientX, e.clientY);
+                          }}
+                        >
                           {renderOverlayResizeHandles(ov)}
                         </div>
                       </div>
