@@ -301,12 +301,89 @@ export function queryInlineFormatState() {
   }
 }
 
+/** 書式バー操作前に選択を退避（ボタンで選択が消えるのを防ぐ） */
+export function rememberEditorSelection(store: { current: Range | null }) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  try {
+    store.current = sel.getRangeAt(0).cloneRange();
+  } catch {
+    /* noop */
+  }
+}
+
+export function restoreEditorSelection(store: { current: Range | null }) {
+  const range = store.current;
+  if (!range) return false;
+  const sel = window.getSelection();
+  if (!sel) return false;
+  try {
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function placeCaretInColoredSpan(span: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const range = document.createRange();
+  const text = span.firstChild;
+  if (text && text.nodeType === Node.TEXT_NODE) {
+    const len = text.textContent?.length ?? 0;
+    range.setStart(text, len);
+    range.setEnd(text, len);
+  } else {
+    range.selectNodeContents(span);
+    range.collapse(false);
+  }
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/**
+ * 選択範囲を色付き span で包む。折りたたみキャレットなら「次に打つ文字」用の空 span を置く。
+ */
+function applyForeColorToSelectionOrCaret(color: string) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const collapsed = range.collapsed;
+
+  if (collapsed) {
+    const span = document.createElement("span");
+    span.style.color = color;
+    span.appendChild(document.createTextNode("\u200b"));
+    range.insertNode(span);
+    placeCaretInColoredSpan(span);
+    return;
+  }
+
+  document.execCommand("styleWithCSS", false, "true");
+  const ok = document.execCommand("foreColor", false, color);
+  if (ok) return;
+
+  // iOS など exec 失敗時: 選択を span で包む
+  const span = document.createElement("span");
+  span.style.color = color;
+  try {
+    range.surroundContents(span);
+  } catch {
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+  }
+  sel.removeAllRanges();
+  const next = document.createRange();
+  next.selectNodeContents(span);
+  sel.addRange(next);
+}
+
 export function applyInlineFormat(command: "bold" | "italic" | "underline" | "foreColor", value?: string) {
   try {
     if (command === "foreColor") {
-      // 色は span style のまま（sanitize が color を保持）
-      document.execCommand("styleWithCSS", false, "true");
-      document.execCommand("foreColor", false, value || DEFAULT_TEXT_COLOR);
+      applyForeColorToSelectionOrCaret(value || DEFAULT_TEXT_COLOR);
       return;
     }
     // 太字・斜体・下線は <b>/<i>/<u> でネスト可能にし、同時適用できるようにする
@@ -316,6 +393,9 @@ export function applyInlineFormat(command: "bold" | "italic" | "underline" | "fo
     // ignore — some browsers throw on unsupported commands
   }
 }
+
+/** 作業スペース上のシートプレビューで、カード編集時と同じ相対サイズに近づける基準幅 */
+export const SHEET_TEXT_REF_WIDTH = 360;
 
 export type BoardShape = {
   id: string;

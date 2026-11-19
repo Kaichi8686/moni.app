@@ -56,11 +56,14 @@ import {
   placeCaretAtEnd,
   plainTextFromRichHtml,
   queryInlineFormatState,
+  rememberEditorSelection,
+  restoreEditorSelection,
   richHtmlForTextBox,
   sanitizeRichHtml,
   SHAPE_COLORS,
   SHEET_COLOR_ORDER,
   SHEET_COLORS,
+  SHEET_TEXT_REF_WIDTH,
   TEXT_COLOR_ORDER,
   isConnectorArrow,
   isFreeformArrow,
@@ -1840,6 +1843,14 @@ export function IssueWorkspaceCanvas({
     el.focus({ preventScroll: true });
   }
 
+  const workspaceSavedRangeRef = useRef<Range | null>(null);
+  function rememberWorkspaceSelection() {
+    rememberEditorSelection(workspaceSavedRangeRef);
+  }
+  function restoreWorkspaceSelection() {
+    restoreEditorSelection(workspaceSavedRangeRef);
+  }
+
   const workspaceFormatBarGuardRef = useRef(0);
   function touchWorkspaceFormatBar() {
     workspaceFormatBarGuardRef.current = Date.now();
@@ -1880,7 +1891,14 @@ export function IssueWorkspaceCanvas({
 
   useEffect(() => {
     if (!editingTextId) return;
-    const sync = () => setWorkspaceInlineFormat(queryInlineFormatState());
+    const sync = () => {
+      setWorkspaceInlineFormat(queryInlineFormatState());
+      const sel = window.getSelection();
+      const el = textEditRef.current;
+      if (sel && el && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+        rememberWorkspaceSelection();
+      }
+    };
     document.addEventListener("selectionchange", sync);
     return () => document.removeEventListener("selectionchange", sync);
   }, [editingTextId]);
@@ -2278,10 +2296,16 @@ export function IssueWorkspaceCanvas({
                         </svg>
                         {node.overlays!.map((ov) => {
                           if (ov.kind === "text") {
+                            // カード編集と同じ見た目（基準幅に対する相対サイズ）
+                            const previewFontPx = Math.max(
+                              6,
+                              ov.fontSize * (node.w / SHEET_TEXT_REF_WIDTH),
+                            );
+                            const hasRich = Boolean(ov.html);
                             return (
                               <div
                                 key={ov.id}
-                                className="absolute overflow-hidden text-[8px] leading-tight"
+                                className="absolute overflow-hidden leading-tight"
                                 style={{
                                   left: `${ov.x}%`,
                                   top: `${ov.y}%`,
@@ -2289,9 +2313,16 @@ export function IssueWorkspaceCanvas({
                                   height: `${ov.h}%`,
                                   color: ov.textColor,
                                   textAlign: ov.align,
+                                  fontSize: previewFontPx,
+                                  fontWeight: hasRich ? undefined : ov.bold ? 700 : 400,
+                                  fontStyle: hasRich ? undefined : ov.italic ? "italic" : "normal",
+                                  textDecoration: hasRich ? undefined : ov.underline ? "underline" : "none",
                                 }}
+                                {...(hasRich
+                                  ? { dangerouslySetInnerHTML: { __html: richHtmlForTextBox(ov) } }
+                                  : {})}
                               >
-                                {ov.text}
+                                {!hasRich ? ov.text : null}
                               </div>
                             );
                           }
@@ -2651,26 +2682,39 @@ export function IssueWorkspaceCanvas({
                         italic={workspaceInlineFormat.italic}
                         underline={workspaceInlineFormat.underline}
                         tx={tx}
-                        onChange={(patch) => updateItem(editingTextBox!.id, patch)}
+                        onChange={(patch) => {
+                          const { textColor: _ignoreColor, ...boxPatch } = patch;
+                          void _ignoreColor;
+                          updateItem(editingTextBox!.id, boxPatch);
+                        }}
                         onInlineFormat={(command, value) => {
+                          rememberWorkspaceSelection();
                           touchWorkspaceFormatBar();
-                          keepWorkspaceTextFocus();
+                          restoreWorkspaceSelection();
                           applyInlineFormat(command, value);
+                          rememberWorkspaceSelection();
                           const el = textEditRef.current;
                           if (el) {
                             const html = sanitizeRichHtml(el.innerHTML);
                             const text = plainTextFromRichHtml(html);
-                            updateItem(editingTextBox!.id, {
-                              text,
-                              html,
-                              ...(command === "foreColor" && value ? { textColor: value } : {}),
-                            });
+                            // 色はインラインのみ。ボックス全体の textColor は変えない
+                            updateItem(editingTextBox!.id, { text, html });
                           }
                           setWorkspaceInlineFormat(queryInlineFormatState());
-                          window.requestAnimationFrame(() => keepWorkspaceTextFocus());
+                          window.requestAnimationFrame(() => {
+                            keepWorkspaceTextFocus();
+                            restoreWorkspaceSelection();
+                          });
                         }}
-                        onKeepFocus={keepWorkspaceTextFocus}
-                        onInteract={touchWorkspaceFormatBar}
+                        onKeepFocus={() => {
+                          keepWorkspaceTextFocus();
+                          restoreWorkspaceSelection();
+                        }}
+                        onInteract={() => {
+                          rememberWorkspaceSelection();
+                          touchWorkspaceFormatBar();
+                          restoreWorkspaceSelection();
+                        }}
                       />
                     </div>,
                     document.body,
@@ -3087,6 +3131,15 @@ function SheetFullscreenEditor({
     el.focus({ preventScroll: true });
   }
 
+  /** 書式バーで選択が消える前に退避 */
+  const overlaySavedRangeRef = useRef<Range | null>(null);
+  function rememberOverlaySelection() {
+    rememberEditorSelection(overlaySavedRangeRef);
+  }
+  function restoreOverlaySelection() {
+    restoreEditorSelection(overlaySavedRangeRef);
+  }
+
   /** 書式バー連打中にキーボード誤閉じ → バー消滅を防ぐ */
   const overlayFormatBarGuardRef = useRef(0);
   const overlayFormatBarPointerDownRef = useRef(false);
@@ -3113,11 +3166,12 @@ function SheetFullscreenEditor({
   function applyOverlayStyleDom(patch: Partial<{ fontSize: number; align: TextAlign; textColor: string }>) {
     const el = overlayTextRef.current;
     if (!el) return;
+    // 作業スペースのテキストと同じく fontSize を px そのまま使う
     if (typeof patch.fontSize === "number") {
-      el.style.fontSize = `${patch.fontSize * 0.55}px`;
+      el.style.fontSize = `${patch.fontSize}px`;
     }
     if (patch.align) el.style.textAlign = patch.align;
-    if (patch.textColor) el.style.color = patch.textColor;
+    // 文字色は選択／次入力のインライン span のみ。コンテナ全体色は触らない
   }
   function flushPendingOverlayEdits() {
     const id = editingOverlayIdRef.current;
@@ -3152,7 +3206,14 @@ function SheetFullscreenEditor({
 
   useEffect(() => {
     if (!editingOverlayId) return;
-    const sync = () => setOverlayInlineFormat(queryInlineFormatState());
+    const sync = () => {
+      setOverlayInlineFormat(queryInlineFormatState());
+      const sel = window.getSelection();
+      const el = overlayTextRef.current;
+      if (sel && el && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+        rememberOverlaySelection();
+      }
+    };
     document.addEventListener("selectionchange", sync);
     return () => document.removeEventListener("selectionchange", sync);
   }, [editingOverlayId]);
@@ -4132,8 +4193,8 @@ function SheetFullscreenEditor({
                   const displayFontSize = pendingStyle.fontSize ?? ov.fontSize;
                   const displayAlign = pendingStyle.align ?? ov.align;
                   const displayColor = pendingStyle.textColor ?? ov.textColor;
-                  // 表示と同じ大きさで打つ（編集時だけ 16px 下限にするとジャンプする）
-                  const fontPx = displayFontSize * 0.55;
+                  // 作業スペースのテキストボックスと同じ px（倍率なし）
+                  const fontPx = displayFontSize;
                   const hasRich = Boolean(ov.html);
                   const textStyle: CSSProperties = {
                     color: displayColor,
@@ -4443,36 +4504,43 @@ function SheetFullscreenEditor({
                 tx={tx}
                 onChange={(patch) => {
                   overlayFormatBarPointerDownRef.current = true;
+                  rememberOverlaySelection();
                   touchOverlayFormatBar();
-                  applyOverlayStyleDom(patch);
+                  restoreOverlaySelection();
+                  // サイズ／配置はボックス全体。色は onInlineFormat のみ
+                  const { textColor: _ignoreColor, ...boxPatch } = patch;
+                  void _ignoreColor;
+                  applyOverlayStyleDom(boxPatch);
                   pendingOverlayStyleRef.current = {
                     ...pendingOverlayStyleRef.current,
-                    ...patch,
+                    ...boxPatch,
                   };
                 }}
                 onInlineFormat={(command, value) => {
                   overlayFormatBarPointerDownRef.current = true;
+                  rememberOverlaySelection();
                   touchOverlayFormatBar();
+                  restoreOverlaySelection();
                   applyInlineFormat(command, value);
+                  rememberOverlaySelection();
                   const el = overlayTextRef.current;
                   if (el) {
                     const html = sanitizeRichHtml(el.innerHTML);
                     const text = plainTextFromRichHtml(html);
                     pendingOverlayHtmlRef.current = { text, html };
-                    if (command === "foreColor" && value) {
-                      pendingOverlayStyleRef.current = {
-                        ...pendingOverlayStyleRef.current,
-                        textColor: value,
-                      };
-                      applyOverlayStyleDom({ textColor: value });
-                    }
+                    // foreColor は選択／次入力のみ。ボックス全体の textColor は変えない
                   }
                   setOverlayInlineFormat(queryInlineFormatState());
                 }}
-                onKeepFocus={keepOverlayTextFocus}
+                onKeepFocus={() => {
+                  keepOverlayTextFocus();
+                  restoreOverlaySelection();
+                }}
                 onInteract={() => {
                   overlayFormatBarPointerDownRef.current = true;
+                  rememberOverlaySelection();
                   touchOverlayFormatBar();
+                  restoreOverlaySelection();
                 }}
                 onInteractEnd={() => {
                   // 連打中は親へ flush しない（再レンダーで iOS キーボードが切れる）
