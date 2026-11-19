@@ -22,9 +22,7 @@ import {
   AlignRight,
   ArrowUpRight,
   Bold,
-  ChevronDown,
   ChevronLeft,
-  ChevronUp,
   Circle,
   Crop,
   Eraser,
@@ -4437,7 +4435,7 @@ function SlidesTextFormatBar({
   ) => void;
   /** 選択範囲（またはこれから打つ文字）へのインライン装飾 */
   onInlineFormat?: (command: "bold" | "italic" | "underline" | "foreColor", value?: string) => void;
-  /** サイズ矢印など操作後にテキストエリアへフォーカスを戻す */
+  /** サイズ操作後にテキストエリアへフォーカスを戻す */
   onKeepFocus?: () => void;
   /** 連打中に編集終了しないためのガード更新 */
   onInteract?: () => void;
@@ -4582,76 +4580,6 @@ function SlidesTextFormatBar({
         </div>
       ) : null}
       <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex shrink-0 items-center gap-0.5 pr-1">
-          <div className="flex flex-col">
-            <button
-              type="button"
-              className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
-              aria-label={tx("大きく", "Larger")}
-              onPointerDown={(e) => {
-                keepEditingPointerDown(e);
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                startSizeRepeat(1);
-              }}
-              onPointerUp={stopSizeRepeat}
-              onPointerCancel={stopSizeRepeat}
-              onLostPointerCapture={stopSizeRepeat}
-              onClick={(e) => e.preventDefault()}
-            >
-              <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-4 w-5 items-center justify-center text-zinc-600 active:bg-zinc-100"
-              aria-label={tx("小さく", "Smaller")}
-              onPointerDown={(e) => {
-                keepEditingPointerDown(e);
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                startSizeRepeat(-1);
-              }}
-              onPointerUp={stopSizeRepeat}
-              onPointerCancel={stopSizeRepeat}
-              onLostPointerCapture={stopSizeRepeat}
-              onClick={(e) => e.preventDefault()}
-            >
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
-            </button>
-          </div>
-          {sizeEditing && !onKeepFocus ? (
-            <input
-              autoFocus
-              inputMode="numeric"
-              value={sizeDraft}
-              onChange={(e) => setSizeDraft(e.target.value.replace(/[^\d]/g, ""))}
-              onBlur={() => commitSize(sizeDraft)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitSize(sizeDraft);
-                if (e.key === "Escape") {
-                  setSizeDraft(String(localSize));
-                  setSizeEditing(false);
-                }
-              }}
-              className="h-8 w-10 rounded bg-zinc-100 text-center text-[14px] font-semibold text-zinc-900 outline-none"
-            />
-          ) : (
-            <button
-              type="button"
-              onPointerDown={keepEditingPointerDown}
-              onClick={() => {
-                // キーボード維持モードでは数値入力を開かず、フォーカスを奪わない
-                if (onKeepFocus) return;
-                setSizeDraft(String(localSize));
-                setSizeEditing(true);
-              }}
-              className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-1 text-[14px] font-semibold text-zinc-800"
-            >
-              {localSize}
-            </button>
-          )}
-        </div>
-
-        <div className="mx-1 h-6 w-px shrink-0 bg-zinc-200" />
-
         <button
           type="button"
           onPointerDown={keepEditingPointerDown}
@@ -4707,6 +4635,73 @@ function SlidesTextFormatBar({
           </span>
           <span className="mt-0.5 h-1 w-4 rounded-sm" style={{ backgroundColor: localColor }} />
         </button>
+
+        {/* 文字色と配置のあいだ：− 数値 ＋ */}
+        <div className="mx-0.5 flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-zinc-700 active:bg-zinc-100"
+            aria-label={tx("小さく", "Smaller")}
+            onPointerDown={(e) => {
+              keepEditingPointerDown(e);
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              startSizeRepeat(-1);
+            }}
+            onPointerUp={stopSizeRepeat}
+            onPointerCancel={stopSizeRepeat}
+            onLostPointerCapture={stopSizeRepeat}
+            onClick={(e) => e.preventDefault()}
+          >
+            <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
+          {sizeEditing && !onKeepFocus ? (
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={sizeDraft}
+              onChange={(e) => setSizeDraft(e.target.value.replace(/[^\d]/g, ""))}
+              onBlur={() => commitSize(sizeDraft)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitSize(sizeDraft);
+                if (e.key === "Escape") {
+                  setSizeDraft(String(localSize));
+                  setSizeEditing(false);
+                }
+              }}
+              className="h-8 w-10 rounded bg-zinc-100 text-center text-[14px] font-semibold text-zinc-900 outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onPointerDown={keepEditingPointerDown}
+              onClick={() => {
+                // キーボード維持モードでは数値入力を開かず、フォーカスを奪わない
+                if (onKeepFocus) return;
+                setSizeDraft(String(localSize));
+                setSizeEditing(true);
+              }}
+              className="inline-flex h-8 min-w-[1.75rem] items-center justify-center px-0.5 text-[14px] font-semibold tabular-nums text-zinc-800"
+            >
+              {localSize}
+            </button>
+          )}
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-zinc-700 active:bg-zinc-100"
+            aria-label={tx("大きく", "Larger")}
+            onPointerDown={(e) => {
+              keepEditingPointerDown(e);
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              startSizeRepeat(1);
+            }}
+            onPointerUp={stopSizeRepeat}
+            onPointerCancel={stopSizeRepeat}
+            onLostPointerCapture={stopSizeRepeat}
+            onClick={(e) => e.preventDefault()}
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
+        </div>
 
         {(
           [
