@@ -1,6 +1,15 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   History,
@@ -37,6 +46,14 @@ import { useVirtualKeyboardOpen } from "@/hooks/useVirtualKeyboardOpen";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 const AI_CHAT_IMMERSIVE_CLASS = "moni-ai-chat-immersive";
+
+function isIOSLikeUa() {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
 
 function conversationsKey(projectId: string, mode: GeminiAgentMode) {
   return `moni-gemini-conversations.v1:${projectId}:${mode}`;
@@ -133,23 +150,23 @@ export function GeminiAgentPanel({
   const [hydrated, setHydrated] = useState(false);
   /** Fullscreen coach: bottom tab bar visible (false → slide off-screen). */
   const [tabBarVisible, setTabBarVisible] = useState(true);
-  /** Lift composer above the soft keyboard (overlays-content does not shrink layout). */
+  /** Soft-keyboard occlusion (layout viewport − visualViewport). */
   const [keyboardInset, setKeyboardInset] = useState(0);
+  /** Focused composer — enter immersive immediately so dock can ride the keyboard up. */
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(72);
+  const [portalReady, setPortalReady] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
-  /** Peak inset while opening — ignore tiny mid-open dips until settled / dismiss. */
-  const keyboardInsetPeakRef = useRef(0);
-  /** After open settles (or blur / big drop), follow visualViewport down 1:1. */
-  const keyboardClosingRef = useRef(false);
-  /** Peak stopped rising long enough — real dismiss decreases should track, not stick. */
-  const keyboardOpenSettledRef = useRef(false);
+  const composerRef = useRef<HTMLFormElement | null>(null);
   const composerFocusedRef = useRef(false);
-  const keyboardCloseTimerRef = useRef<number | null>(null);
-  const keyboardSettleTimerRef = useRef<number | null>(null);
-  /** Paint paddingBottom on the DOM so dismiss tracks the keyboard without React lag. */
-  const shellRef = useRef<HTMLDivElement | null>(null);
   const fullscreen = variant === "fullscreen";
   const keyboardOpen = useVirtualKeyboardOpen();
+  const iosLike = useSyncExternalStore(
+    () => () => {},
+    () => isIOSLikeUa(),
+    () => false,
+  );
   const handoffAppliedRef = useRef(false);
   /** Only persist to the store key that this panel instance last hydrated for (per project). */
   const persistKeyRef = useRef("");
@@ -244,138 +261,65 @@ export function GeminiAgentPanel({
   }, [hydrated, messages, projectId, mode]);
 
   useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!fullscreen) return;
     const root = document.documentElement;
-    // Hide clearance while typing so the composer can sit flush above the keyboard.
-    const hideBar = !tabBarVisible || keyboardOpen || keyboardInset > 8;
+    // Focus immediately clears tab clearance so fixed bottom:0 can ride the keyboard up
+    // (ChatGPT-style) instead of waiting for inset > 0.
+    const hideBar = !tabBarVisible || composerFocused || keyboardOpen || keyboardInset > 8;
     root.classList.toggle(AI_CHAT_IMMERSIVE_CLASS, hideBar);
     return () => {
       root.classList.remove(AI_CHAT_IMMERSIVE_CLASS);
     };
-  }, [fullscreen, tabBarVisible, keyboardOpen, keyboardInset]);
+  }, [fullscreen, tabBarVisible, composerFocused, keyboardOpen, keyboardInset]);
 
   useEffect(() => {
     if (!fullscreen || typeof window === "undefined") return;
 
-    /** Ignore tiny mid-open dips; anything larger is a real dismiss (even while focused). */
-    const CLOSE_DROP_PX = 12;
-    const OPEN_SETTLE_MS = 120;
-
-    const clearCloseTimer = () => {
-      if (keyboardCloseTimerRef.current != null) {
-        window.clearTimeout(keyboardCloseTimerRef.current);
-        keyboardCloseTimerRef.current = null;
-      }
-    };
-
-    const clearSettleTimer = () => {
-      if (keyboardSettleTimerRef.current != null) {
-        window.clearTimeout(keyboardSettleTimerRef.current);
-        keyboardSettleTimerRef.current = null;
-      }
-    };
-
     const lockScrollTop = () => {
-      // iOS pans visualViewport / document to reveal the focused field; that then
-      // shrinks our inset and makes the composer bounce down. Keep scroll at 0.
+      // iOS pans visualViewport / document to reveal the focused field; keep scroll at 0
+      // so the fixed dock is not fighting a focus scroll.
       if (window.scrollY !== 0) window.scrollTo(0, 0);
       if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
       if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
     };
 
-    const readInset = () => {
-      const vv = window.visualViewport;
-      if (!vv) return 0;
-      // Prefer keyboard occlusion height. Ignoring offsetTop while scroll-locked
-      // avoids the up-then-down bounce from iOS focus scrolling.
-      return Math.max(0, Math.round(window.innerHeight - vv.height));
-    };
-
-    const paintInset = (inset: number) => {
-      const next = inset < 8 ? 0 : inset;
-      const el = shellRef.current;
-      if (el) {
-        if (next > 0) {
-          el.style.paddingBottom = `${next}px`;
-          el.style.transition = "none";
-        } else {
-          el.style.paddingBottom = "";
-          el.style.transition = "";
-        }
+    const paintDock = (inset: number) => {
+      const el = composerRef.current;
+      if (!el) return;
+      const docked = composerFocusedRef.current || inset > 0;
+      el.style.position = "fixed";
+      el.style.left = "0px";
+      el.style.right = "0px";
+      el.style.top = "auto";
+      el.style.zIndex = "45";
+      el.style.transition = "none";
+      if (docked) {
+        // iOS: fixed bottom:0 rides the visualViewport with the keyboard (ChatGPT-like).
+        // Others: set bottom to the live inset every frame (bypass React lag).
+        el.style.bottom = iosLike ? "0px" : `${inset}px`;
+      } else {
+        el.style.removeProperty("bottom");
       }
-      keyboardInsetPeakRef.current = next;
-      setKeyboardInset((prev) => (prev === next ? prev : next));
-      if (next === 0) {
-        keyboardClosingRef.current = false;
-        keyboardOpenSettledRef.current = false;
-        clearSettleTimer();
-      }
-    };
-
-    const markRising = (inset: number) => {
-      keyboardClosingRef.current = false;
-      keyboardOpenSettledRef.current = false;
-      clearSettleTimer();
-      keyboardInsetPeakRef.current = inset;
-      paintInset(inset);
-      keyboardSettleTimerRef.current = window.setTimeout(() => {
-        keyboardSettleTimerRef.current = null;
-        // Only settle if we are still near this peak (keyboard finished opening).
-        if (Math.abs(readInset() - keyboardInsetPeakRef.current) < CLOSE_DROP_PX) {
-          keyboardOpenSettledRef.current = true;
-        }
-      }, OPEN_SETTLE_MS);
     };
 
     const sync = () => {
       if (composerFocusedRef.current) lockScrollTop();
-      const inset = readInset();
-      const peak = keyboardInsetPeakRef.current;
-
-      // Dismiss path: track keyboard height down frame-by-frame (same speed).
-      if (keyboardClosingRef.current) {
-        clearCloseTimer();
-        paintInset(inset);
+      const vv = window.visualViewport;
+      if (!vv) {
+        paintDock(0);
+        setKeyboardInset(0);
         return;
       }
-
-      if (inset > peak) {
-        clearCloseTimer();
-        markRising(inset);
-        return;
-      }
-
-      if (inset >= 8) {
-        clearCloseTimer();
-        const drop = peak - inset;
-        // iOS often keeps focus while the keyboard animates closed — follow down
-        // once open has settled, or as soon as the drop is clearly a dismiss.
-        if (
-          drop >= CLOSE_DROP_PX &&
-          (keyboardOpenSettledRef.current || !composerFocusedRef.current || drop >= 80)
-        ) {
-          keyboardClosingRef.current = true;
-          paintInset(inset);
-        }
-        return;
-      }
-
-      // Inset near 0.
-      if (peak > 0) {
-        if (!composerFocusedRef.current || keyboardOpenSettledRef.current) {
-          keyboardClosingRef.current = true;
-          paintInset(inset);
-          return;
-        }
-        // Still focused & not settled: debounce so brief mid-open 0 frames don't drop us.
-        clearCloseTimer();
-        keyboardCloseTimerRef.current = window.setTimeout(() => {
-          if (readInset() < 8) {
-            keyboardClosingRef.current = true;
-            paintInset(readInset());
-          }
-        }, 180);
-      }
+      // Occlusion height — message padding + non-iOS dock bottom.
+      // iOS docks with fixed bottom:0 (VV-tracked); do not double-offset.
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height));
+      const next = inset < 8 ? 0 : inset;
+      paintDock(next);
+      setKeyboardInset((prev) => (prev === next ? prev : next));
     };
 
     sync();
@@ -385,41 +329,23 @@ export function GeminiAgentPanel({
     window.addEventListener("resize", sync);
     window.addEventListener("scroll", lockScrollTop, { passive: true });
     return () => {
-      clearCloseTimer();
-      clearSettleTimer();
       vv?.removeEventListener("resize", sync);
       vv?.removeEventListener("scroll", sync);
       window.removeEventListener("resize", sync);
       window.removeEventListener("scroll", lockScrollTop);
     };
-  }, [fullscreen]);
+  }, [fullscreen, iosLike, portalReady]);
 
-  // When the soft keyboard reports closed, force the descend path (focus may remain on iOS).
   useEffect(() => {
     if (!fullscreen) return;
-    if (keyboardOpen) return;
-    if (keyboardInsetPeakRef.current <= 0) return;
-    keyboardClosingRef.current = true;
-    const vv = window.visualViewport;
-    const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
-    const next = inset < 8 ? 0 : inset;
-    const el = shellRef.current;
-    if (el) {
-      if (next > 0) {
-        el.style.paddingBottom = `${next}px`;
-        el.style.transition = "none";
-      } else {
-        el.style.paddingBottom = "";
-        el.style.transition = "";
-      }
-    }
-    keyboardInsetPeakRef.current = next;
-    setKeyboardInset((prev) => (prev === next ? prev : next));
-    if (next === 0) {
-      keyboardClosingRef.current = false;
-      keyboardOpenSettledRef.current = false;
-    }
-  }, [fullscreen, keyboardOpen]);
+    const el = composerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const update = () => setComposerHeight(Math.ceil(el.getBoundingClientRect().height));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fullscreen, portalReady, keyboardInset, keyboardOpen, composerFocused]);
 
   useEffect(() => {
     if (!hydrated || !initialUserMessage?.trim() || handoffAppliedRef.current) return;
@@ -645,6 +571,133 @@ export function GeminiAgentPanel({
   const circleBtn =
     "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]";
   const showModePicker = Boolean(onModeChange && (mode === "general" || mode === "ideas"));
+  /** ChatGPT-style: ride the keyboard. iOS fixed bottom:0 tracks VV; others use inset. */
+  const keyboardDocked = fullscreen && (composerFocused || keyboardOpen || keyboardInset > 8);
+  // bottom is painted from visualViewport sync (not React state) so it stays
+  // glued to the keyboard without one-frame lag / overwrite fights.
+  const composerDockStyle: CSSProperties | undefined = fullscreen
+    ? {
+        position: "fixed",
+        left: 0,
+        right: 0,
+        top: "auto",
+        zIndex: 45,
+        transition: "none",
+      }
+    : undefined;
+
+  const composerForm = (
+        <form
+          ref={composerRef}
+          onSubmit={(e) => void onSubmit(e)}
+          style={composerDockStyle}
+          className={
+            fullscreen
+              ? `border-t border-zinc-100 bg-white px-3 pt-2 ${
+                  keyboardDocked
+                    ? "pb-2"
+                    : "bottom-[var(--bottom-nav-clearance)] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                }`
+              : "shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          }
+        >
+          <div className={fullscreen ? "mx-auto flex w-full max-w-lg items-center gap-2" : undefined}>
+            <div
+              className={
+                fullscreen
+                  ? "flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F7F7F8] px-2 py-1.5 focus-within:border-zinc-300 focus-within:bg-white"
+                  : "flex gap-2"
+              }
+            >
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={loading}
+                onFocus={() => {
+                  if (!fullscreen) return;
+                  composerFocusedRef.current = true;
+                  setComposerFocused(true);
+                  // Dock to VV bottom immediately so the composer rises with the keyboard.
+                  const el = composerRef.current;
+                  if (el) {
+                    el.style.position = "fixed";
+                    el.style.left = "0px";
+                    el.style.right = "0px";
+                    el.style.top = "auto";
+                    el.style.bottom = iosLike ? "0px" : "0px";
+                    el.style.zIndex = "45";
+                    el.style.transition = "none";
+                  }
+                  if (typeof window !== "undefined") {
+                    window.scrollTo(0, 0);
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                  }
+                }}
+                onBlur={() => {
+                  if (!fullscreen) return;
+                  composerFocusedRef.current = false;
+                  setComposerFocused(false);
+                }}
+                placeholder={
+                  fullscreen
+                    ? mode === "ideas"
+                      ? tx("アイデアの相談を入力…", "Type an idea prompt…")
+                      : tx("相談内容を入力…", "Type your question…")
+                    : tx(
+                        meta.placeholder,
+                        mode === "roadmap"
+                          ? "e.g. Make a 3-month plan to ship an MVP"
+                          : mode === "general"
+                            ? "e.g. The team can’t agree"
+                            : "e.g. 10 feature ideas users would love",
+                      )
+                }
+                className={
+                  fullscreen
+                    ? "min-h-[40px] flex-1 bg-transparent px-3 text-[16px] text-[#0D0D0D] outline-none placeholder:text-[#9CA3AF] disabled:opacity-60"
+                    : "min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
+                }
+              />
+              <button
+                type="submit"
+                disabled={loading || !draft.trim()}
+                className={
+                  fullscreen
+                    ? "inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-violet-600 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
+                    : "min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
+                }
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
+              </button>
+            </div>
+            {fullscreen && !keyboardOpen && keyboardInset < 8 && !composerFocused ? (
+              <button
+                type="button"
+                onClick={() => setTabBarVisible((v) => !v)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]"
+                aria-pressed={tabBarVisible}
+                aria-label={
+                  tabBarVisible
+                    ? tx("タブバーをしまう", "Hide tab bar")
+                    : tx("タブバーを出す", "Show tab bar")
+                }
+                title={
+                  tabBarVisible
+                    ? tx("タブバーをしまう", "Hide tab bar")
+                    : tx("タブバーを出す", "Show tab bar")
+                }
+              >
+                {tabBarVisible ? (
+                  <PanelBottomClose className="h-5 w-5" aria-hidden />
+                ) : (
+                  <PanelBottom className="h-5 w-5" aria-hidden />
+                )}
+              </button>
+            ) : null}
+          </div>
+        </form>
+  );
 
   return (
     <div
@@ -658,7 +711,7 @@ export function GeminiAgentPanel({
         <div className="hidden w-[240px] shrink-0 border-r border-[#E5E7EB] md:block">{historyRail}</div>
       ) : null}
 
-      <div ref={shellRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {fullscreen ? (
           <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-100 bg-white">
             <div className="mx-auto flex max-w-lg items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -713,8 +766,13 @@ export function GeminiAgentPanel({
         <div
           ref={messagesRef}
           className={`min-h-0 flex-1 space-y-5 overflow-y-auto ${
-            fullscreen ? "px-4 pb-4 pt-3" : "space-y-3 p-4"
+            fullscreen ? "px-4 pt-3" : "space-y-3 p-4"
           }`}
+          style={
+            fullscreen
+              ? { paddingBottom: Math.max(16, composerHeight + keyboardInset + 12) }
+              : undefined
+          }
         >
           {messages.length === 0 ? (
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 px-2 py-6">
@@ -966,110 +1024,9 @@ export function GeminiAgentPanel({
           <div ref={endRef} />
         </div>
 
-        <form
-          onSubmit={(e) => void onSubmit(e)}
-          className={
-            fullscreen
-              ? `sticky bottom-0 z-20 shrink-0 border-t border-zinc-100 bg-white px-3 pt-2 ${
-                  keyboardInset > 0 || keyboardOpen
-                    ? "pb-2"
-                    : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-                }`
-              : "shrink-0 border-t border-[#E5E7EB] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-          }
-        >
-          <div className={fullscreen ? "flex items-center gap-2" : undefined}>
-            <div
-              className={
-                fullscreen
-                  ? "flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#E5E7EB] bg-[#F7F7F8] px-2 py-1.5 focus-within:border-zinc-300 focus-within:bg-white"
-                  : "flex gap-2"
-              }
-            >
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                disabled={loading}
-                onFocus={() => {
-                  if (!fullscreen) return;
-                  composerFocusedRef.current = true;
-                  keyboardClosingRef.current = false;
-                  keyboardOpenSettledRef.current = false;
-                  // Do not lift until the keyboard is actually open — restoring height
-                  // on focus alone left the composer stuck mid-screen after dismiss.
-                  if (typeof window !== "undefined") {
-                    window.scrollTo(0, 0);
-                    document.documentElement.scrollTop = 0;
-                    document.body.scrollTop = 0;
-                  }
-                }}
-                onBlur={() => {
-                  if (!fullscreen) return;
-                  composerFocusedRef.current = false;
-                  // Start tracking the keyboard down immediately (iOS may keep focus,
-                  // but blur still covers Done / tap-away dismiss).
-                  if (keyboardInsetPeakRef.current > 0) {
-                    keyboardClosingRef.current = true;
-                  }
-                }}
-                placeholder={
-                  fullscreen
-                    ? mode === "ideas"
-                      ? tx("アイデアの相談を入力…", "Type an idea prompt…")
-                      : tx("相談内容を入力…", "Type your question…")
-                    : tx(
-                        meta.placeholder,
-                        mode === "roadmap"
-                          ? "e.g. Make a 3-month plan to ship an MVP"
-                          : mode === "general"
-                            ? "e.g. The team can’t agree"
-                            : "e.g. 10 feature ideas users would love",
-                      )
-                }
-                className={
-                  fullscreen
-                    ? "min-h-[40px] flex-1 bg-transparent px-3 text-[16px] text-[#0D0D0D] outline-none placeholder:text-[#9CA3AF] disabled:opacity-60"
-                    : "min-h-[48px] flex-1 rounded-xl border border-[#E5E7EB] px-3 text-[15px] outline-none ring-violet-300 focus:ring-2"
-                }
-              />
-              <button
-                type="submit"
-                disabled={loading || !draft.trim()}
-                className={
-                  fullscreen
-                    ? "inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-violet-600 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
-                    : "min-h-[48px] shrink-0 rounded-xl bg-violet-600 px-4 text-[14px] font-bold text-white disabled:opacity-50"
-                }
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : tx("送信", "Send")}
-              </button>
-            </div>
-            {fullscreen && !keyboardOpen && keyboardInset < 8 ? (
-              <button
-                type="button"
-                onClick={() => setTabBarVisible((v) => !v)}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#374151] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#F9FAFB] active:scale-[0.98]"
-                aria-pressed={tabBarVisible}
-                aria-label={
-                  tabBarVisible
-                    ? tx("タブバーをしまう", "Hide tab bar")
-                    : tx("タブバーを出す", "Show tab bar")
-                }
-                title={
-                  tabBarVisible
-                    ? tx("タブバーをしまう", "Hide tab bar")
-                    : tx("タブバーを出す", "Show tab bar")
-                }
-              >
-                {tabBarVisible ? (
-                  <PanelBottomClose className="h-[18px] w-[18px]" aria-hidden />
-                ) : (
-                  <PanelBottom className="h-[18px] w-[18px]" aria-hidden />
-                )}
-              </button>
-            ) : null}
-          </div>
-        </form>
+        {/* Fullscreen: portal fixed dock so iOS VV tracks it with the keyboard (ChatGPT-like). */}
+        {fullscreen && portalReady ? createPortal(composerForm, document.body) : null}
+        {!fullscreen ? composerForm : null}
       </div>
 
       {historyOpen ? (
