@@ -8,13 +8,12 @@ import {
   ArrowLeft,
   Bold,
   Check,
-  ChevronDown,
-  ChevronUp,
   ImagePlus,
   Italic,
   Link2,
   List,
   ListOrdered,
+  Minus,
   Plus,
   Redo2,
   Underline,
@@ -1523,64 +1522,6 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             ) : null}
 
             <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {/* 作業スペースと同じ上下ステッパーで文字サイズを変更 */}
-              <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
-                <div className="flex flex-col">
-                  <button
-                    type="button"
-                    className="inline-flex h-4 w-5 items-center justify-center text-[#5f6368] active:bg-[#f1f3f4] disabled:opacity-25"
-                    aria-label="大きく"
-                    disabled={!editing}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      rememberSelection();
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                      startFontSizeRepeat(1);
-                    }}
-                    onPointerUp={() => {
-                      stopFontSizeRepeat();
-                      scheduleAutoSave();
-                    }}
-                    onPointerCancel={stopFontSizeRepeat}
-                    onLostPointerCapture={stopFontSizeRepeat}
-                    onClick={(e) => e.preventDefault()}
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-4 w-5 items-center justify-center text-[#5f6368] active:bg-[#f1f3f4] disabled:opacity-25"
-                    aria-label="小さく"
-                    disabled={!editing}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      rememberSelection();
-                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                      startFontSizeRepeat(-1);
-                    }}
-                    onPointerUp={() => {
-                      stopFontSizeRepeat();
-                      scheduleAutoSave();
-                    }}
-                    onPointerCancel={stopFontSizeRepeat}
-                    onLostPointerCapture={stopFontSizeRepeat}
-                    onClick={(e) => e.preventDefault()}
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </button>
-                </div>
-                <span
-                  className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-1 text-[14px] font-semibold text-[#202124]"
-                  aria-label={`文字サイズ ${activeFontSize}`}
-                >
-                  {activeFontSize}
-                </span>
-              </div>
-
-              <span className="mx-0.5 h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
-
               <ToolBtn
                 title="太字"
                 active={formatState.bold}
@@ -1637,6 +1578,61 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
                   />
                 </span>
               </ToolBtn>
+
+              {/* 作業スペースと同じ：− 数値 ＋ */}
+              <div className="mx-0.5 flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#dadce0] text-[#3c4043] active:bg-[#f1f3f4] disabled:opacity-25"
+                  aria-label="小さく"
+                  disabled={!editing}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    rememberSelection();
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    startFontSizeRepeat(-1);
+                  }}
+                  onPointerUp={() => {
+                    stopFontSizeRepeat();
+                    scheduleAutoSave();
+                  }}
+                  onPointerCancel={stopFontSizeRepeat}
+                  onLostPointerCapture={stopFontSizeRepeat}
+                  onClick={(e) => e.preventDefault()}
+                >
+                  <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+                <span
+                  className="inline-flex h-8 min-w-[1.75rem] items-center justify-center px-0.5 text-[14px] font-semibold tabular-nums text-[#202124]"
+                  aria-label={`文字サイズ ${activeFontSize}`}
+                >
+                  {activeFontSize}
+                </span>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#dadce0] text-[#3c4043] active:bg-[#f1f3f4] disabled:opacity-25"
+                  aria-label="大きく"
+                  disabled={!editing}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    rememberSelection();
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    startFontSizeRepeat(1);
+                  }}
+                  onPointerUp={() => {
+                    stopFontSizeRepeat();
+                    scheduleAutoSave();
+                  }}
+                  onPointerCancel={stopFontSizeRepeat}
+                  onLostPointerCapture={stopFontSizeRepeat}
+                  onClick={(e) => e.preventDefault()}
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+
               <ToolBtn
                 title="配置"
                 active={alignOpen}
