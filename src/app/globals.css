@@ -2936,3 +2936,19 @@ html.moni-goal-stuck .project-workspace-header {
     animation: office-card-in 0.25s ease-out both;
   }
 }
+
+/* Workspace / sheet board: kill iOS Safari long-press Copy / Search selection */
+.moni-board-no-native-select,
+.moni-board-no-native-select * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+.moni-board-no-native-select textarea,
+.moni-board-no-native-select input,
+.moni-board-no-native-select [contenteditable="true"],
+.moni-board-no-native-select [contenteditable="true"] * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default;
+}
