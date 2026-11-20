@@ -924,28 +924,59 @@ export function IssueWorkspaceCanvas({
     return () => observer.disconnect();
   }, []);
 
-  // iOS 長押しの「コピー / Google で検索」を抑止
+  // iOS 長押しの「コピー / Google で検索」・青ハンドル選択を抑止
   useEffect(() => {
-    const shell = shellRef.current;
-    const root = rootRef.current;
-    if (!shell && !root) return;
+    const editableSelector = "textarea, input, [contenteditable='true']";
+    const isEditableTarget = (node: Node | null) => {
+      const el =
+        node && node.nodeType === Node.ELEMENT_NODE
+          ? (node as Element)
+          : node?.parentElement ?? null;
+      return Boolean(el?.closest(editableSelector));
+    };
+    const inBoardChrome = (node: Node | null) => {
+      const el =
+        node && node.nodeType === Node.ELEMENT_NODE
+          ? (node as Element)
+          : node?.parentElement ?? null;
+      return Boolean(
+        el?.closest(
+          "[data-board-shell], [data-board-ui], #issue-workspace-canvas-surface, [data-sheet-card]",
+        ),
+      );
+    };
+    const shouldBlock = (node: Node | null) => {
+      if (isEditableTarget(node)) return false;
+      return fullscreen || inBoardChrome(node);
+    };
     const block = (event: Event) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("textarea, input, [contenteditable='true']")) return;
+      if (!shouldBlock(event.target as Node | null)) return;
       event.preventDefault();
     };
-    const nodes = [shell, root].filter(Boolean) as HTMLElement[];
-    for (const node of nodes) {
-      node.addEventListener("selectstart", block);
-      node.addEventListener("dragstart", block);
-    }
-    return () => {
-      for (const node of nodes) {
-        node.removeEventListener("selectstart", block);
-        node.removeEventListener("dragstart", block);
-      }
+    const clearNativeSelection = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+      if (isEditableTarget(sel.anchorNode) || isEditableTarget(sel.focusNode)) return;
+      if (!fullscreen && !inBoardChrome(sel.anchorNode) && !inBoardChrome(sel.focusNode)) return;
+      sel.removeAllRanges();
     };
-  }, []);
+
+    document.addEventListener("selectstart", block, true);
+    document.addEventListener("dragstart", block, true);
+    document.addEventListener("contextmenu", block, true);
+    document.addEventListener("selectionchange", clearNativeSelection);
+    // フルスクリーン時はページ全体の長押しコールアウトも止める
+    const html = document.documentElement;
+    if (fullscreen) html.classList.add("moni-board-no-native-select");
+
+    return () => {
+      document.removeEventListener("selectstart", block, true);
+      document.removeEventListener("dragstart", block, true);
+      document.removeEventListener("contextmenu", block, true);
+      document.removeEventListener("selectionchange", clearNativeSelection);
+      if (fullscreen) html.classList.remove("moni-board-no-native-select");
+    };
+  }, [fullscreen]);
 
   // カード編集中のシートを記憶（他サイト／他画面から戻ったとき復元）
   useEffect(() => {
@@ -2036,8 +2067,8 @@ export function IssueWorkspaceCanvas({
   }
 
   const shellClass = fullscreen
-    ? "relative h-full min-h-0 w-full overflow-hidden overscroll-none bg-zinc-100"
-    : "relative h-[min(70vh,560px)] overflow-hidden overscroll-none rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
+    ? "moni-board-no-native-select relative h-full min-h-0 w-full select-none overflow-hidden overscroll-none bg-zinc-100"
+    : "moni-board-no-native-select relative h-[min(70vh,560px)] select-none overflow-hidden overscroll-none rounded-2xl border border-zinc-200 bg-zinc-100 shadow-sm";
 
   const crosshairTool = tool === "sheet" || tool === "text" || tool === "shape" || tool === "pen" || tool === "select";
   // 点の間隔・半径をどちらも zoom に合わせる（広げたときに点だけ相対的に大きく見えない）
@@ -2047,6 +2078,7 @@ export function IssueWorkspaceCanvas({
   return (
     <div
       ref={shellRef}
+      data-board-shell
       className={shellClass}
       style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
       onContextMenu={(event) => event.preventDefault()}
@@ -2381,7 +2413,7 @@ export function IssueWorkspaceCanvas({
                             return (
                               <div
                                 key={ov.id}
-                                className="absolute overflow-hidden leading-tight"
+                                className="absolute select-none overflow-hidden leading-tight"
                                 style={{
                                   left: `${ov.x}%`,
                                   top: `${ov.y}%`,
@@ -2393,6 +2425,9 @@ export function IssueWorkspaceCanvas({
                                   fontWeight: hasRich ? undefined : ov.bold ? 700 : 400,
                                   fontStyle: hasRich ? undefined : ov.italic ? "italic" : "normal",
                                   textDecoration: hasRich ? undefined : ov.underline ? "underline" : "none",
+                                  WebkitUserSelect: "none",
+                                  WebkitTouchCallout: "none",
+                                  userSelect: "none",
                                 }}
                                 {...(hasRich
                                   ? { dangerouslySetInnerHTML: { __html: richHtmlForTextBox(ov) } }
@@ -2719,7 +2754,11 @@ export function IssueWorkspaceCanvas({
                     toolbarHidden ? "pointer-events-none opacity-0" : "opacity-100"
                   }`}
                 >
-                  <div className="pointer-events-auto" data-board-ui>
+                  <div
+                    className="moni-board-no-native-select pointer-events-auto select-none"
+                    data-board-ui
+                    style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", userSelect: "none" }}
+                  >
                     {toolbarStart}
                   </div>
                 </div>
@@ -2734,7 +2773,8 @@ export function IssueWorkspaceCanvas({
                 >
                   <div
                     data-board-ui
-                    className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                    className="moni-board-no-native-select pointer-events-auto flex select-none items-center gap-0.5 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                    style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none", userSelect: "none" }}
                   >
                     <button
                       type="button"

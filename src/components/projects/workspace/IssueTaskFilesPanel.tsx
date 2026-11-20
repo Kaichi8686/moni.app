@@ -192,8 +192,13 @@ function CanvasEditorViewport({ children }: { children: ReactNode }) {
         style={shadow}
       />
       <div
-        className="fixed left-0 right-0 top-0 z-[240] overflow-hidden overscroll-none bg-white"
-        style={shell}
+        className="moni-board-no-native-select fixed left-0 right-0 top-0 z-[240] select-none overflow-hidden overscroll-none bg-white"
+        style={{
+          ...shell,
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+          userSelect: "none",
+        }}
       >
         {children}
       </div>
