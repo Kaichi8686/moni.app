@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   Bold,
   Check,
+  ChevronDown,
+  ChevronUp,
   ImagePlus,
   Italic,
   Link2,
@@ -37,6 +39,10 @@ import { a4MinHeightForWidth } from "@/lib/projects/documents";
 const PAGE_MAX_WIDTH = 680;
 const PAGE_MIN_HEIGHT = a4MinHeightForWidth(PAGE_MAX_WIDTH);
 const AUTOSAVE_MS = 800;
+/** 本文 11pt 相当（作業スペースのサイズバーと同じ px 単位） */
+const DEFAULT_DOC_FONT_SIZE_PX = 15;
+const MIN_DOC_FONT_SIZE_PX = 8;
+const MAX_DOC_FONT_SIZE_PX = 96;
 
 const TEXT_COLORS = ["#000000", "#434343", "#666666", "#d93025", "#e37400", "#188038", "#1a73e8", "#a142f4"] as const;
 
@@ -225,6 +231,10 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
   const [insertOpen, setInsertOpen] = useState(false);
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
   const [activeTextColor, setActiveTextColor] = useState<string>("#000000");
+  const [activeFontSize, setActiveFontSize] = useState(DEFAULT_DOC_FONT_SIZE_PX);
+  const activeFontSizeRef = useRef(DEFAULT_DOC_FONT_SIZE_PX);
+  activeFontSizeRef.current = activeFontSize;
+  const fontSizeRepeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** iOS はフォーカス残留でもキーボードが閉じることがあるので VV で判定 */
   const keyboardOpen = useVirtualKeyboardOpen(120);
 
@@ -291,16 +301,33 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
     }
     try {
       const value = document.queryCommandValue("foreColor");
-      if (!value) return;
-      // rgb(r, g, b) → #rrggbb
-      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-      if (match) {
-        const hex = `#${[match[1], match[2], match[3]]
-          .map((n) => Number(n).toString(16).padStart(2, "0"))
-          .join("")}`;
-        setActiveTextColor(hex);
-      } else if (value.startsWith("#")) {
-        setActiveTextColor(value);
+      if (value) {
+        // rgb(r, g, b) → #rrggbb
+        const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        if (match) {
+          const hex = `#${[match[1], match[2], match[3]]
+            .map((n) => Number(n).toString(16).padStart(2, "0"))
+            .join("")}`;
+          setActiveTextColor(hex);
+        } else if (value.startsWith("#")) {
+          setActiveTextColor(value);
+        }
+      }
+    } catch {
+      /* noop */
+    }
+    try {
+      const sel = window.getSelection();
+      let node: Node | null = sel?.anchorNode ?? null;
+      if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+      const el =
+        node instanceof HTMLElement && editorRef.current?.contains(node)
+          ? node
+          : editorRef.current;
+      if (!el) return;
+      const px = Math.round(Number.parseFloat(getComputedStyle(el).fontSize));
+      if (Number.isFinite(px) && px > 0) {
+        setActiveFontSize(Math.min(MAX_DOC_FONT_SIZE_PX, Math.max(MIN_DOC_FONT_SIZE_PX, px)));
       }
     } catch {
       /* noop */
@@ -451,28 +478,146 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
 
   const applyFontSizePx = useCallback(
     (px: number) => {
-      restoreSelection();
-      editorRef.current?.focus();
+      const next = Math.min(MAX_DOC_FONT_SIZE_PX, Math.max(MIN_DOC_FONT_SIZE_PX, Math.round(px)));
+      ensureEditorReadyForFormat();
+      const sel = window.getSelection();
+      const collapsed = !sel || sel.rangeCount === 0 || sel.getRangeAt(0).collapsed;
+
+      const clearInnerFontSizes = (root: HTMLElement) => {
+        root.querySelectorAll<HTMLElement>("[style]").forEach((node) => {
+          if (node === root) return;
+          if (!node.style.fontSize) return;
+          node.style.fontSize = "";
+          if (!node.getAttribute("style")?.trim()) node.removeAttribute("style");
+        });
+      };
+
+      const findEditableSizeSpan = (from: Node | null): HTMLElement | null => {
+        let node: Node | null = from;
+        while (node && node !== editorRef.current) {
+          if (node instanceof HTMLElement && node.style.fontSize) return node;
+          node = node.parentNode;
+        }
+        return null;
+      };
+
       try {
-        document.execCommand("styleWithCSS", false, "true");
-        document.execCommand("fontSize", false, "7");
-        const el = editorRef.current;
-        el?.querySelectorAll('font[size="7"]').forEach((node) => {
-          const span = document.createElement("span");
-          span.style.fontSize = `${px}px`;
-          while (node.firstChild) span.appendChild(node.firstChild);
-          node.parentNode?.replaceChild(span, node);
-        });
-        el?.querySelectorAll('span[style*="xxx-large"]').forEach((node) => {
-          (node as HTMLElement).style.fontSize = `${px}px`;
-        });
+        if (collapsed) {
+          const existing = findEditableSizeSpan(sel?.anchorNode ?? null);
+          if (existing) {
+            existing.style.fontSize = `${next}px`;
+          } else {
+            wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              span.style.fontSize = `${next}px`;
+              return span;
+            });
+          }
+        } else {
+          const range = sel!.getRangeAt(0);
+          const selectedText = range.toString();
+          const existing = findEditableSizeSpan(range.commonAncestorContainer);
+          let updatedExisting = false;
+          // 選択が既存サイズ span 内の同一テキスト全体 → ネストせず上書き（連打用）
+          if (
+            existing &&
+            selectedText.length > 0 &&
+            existing.contains(range.startContainer) &&
+            existing.contains(range.endContainer) &&
+            (existing.textContent || "").replace(/\u200b/g, "") === selectedText
+          ) {
+            existing.style.fontSize = `${next}px`;
+            clearInnerFontSizes(existing);
+            sel!.removeAllRanges();
+            const nextRange = document.createRange();
+            nextRange.selectNodeContents(existing);
+            sel!.addRange(nextRange);
+            updatedExisting = true;
+          }
+          if (!updatedExisting) {
+            // 選択全体を 1 つのサイズ span に包み、内側の旧サイズを消す
+            const ok = wrapSelectionOrCaret(() => {
+              const span = document.createElement("span");
+              span.style.fontSize = `${next}px`;
+              return span;
+            });
+            if (ok) {
+              const span = sel && sel.rangeCount > 0 ? findEditableSizeSpan(sel.anchorNode) : null;
+              if (span) clearInnerFontSizes(span);
+            } else {
+              document.execCommand("styleWithCSS", false, "true");
+              document.execCommand("fontSize", false, "7");
+              const el = editorRef.current;
+              el?.querySelectorAll('font[size="7"]').forEach((node) => {
+                const span = document.createElement("span");
+                span.style.fontSize = `${next}px`;
+                while (node.firstChild) span.appendChild(node.firstChild);
+                clearInnerFontSizes(span);
+                node.parentNode?.replaceChild(span, node);
+              });
+              el?.querySelectorAll('span[style*="xxx-large"]').forEach((node) => {
+                const span = node as HTMLElement;
+                span.style.fontSize = `${next}px`;
+                clearInnerFontSizes(span);
+              });
+            }
+          }
+        }
       } catch {
-        exec("fontSize", `${px}px`);
+        wrapSelectionOrCaret(() => {
+          const span = document.createElement("span");
+          span.style.fontSize = `${next}px`;
+          return span;
+        });
       }
+
+      setActiveFontSize(next);
+      activeFontSizeRef.current = next;
       rememberSelection();
       refreshHistoryState();
+      refreshFormatState();
     },
-    [exec, rememberSelection, refreshHistoryState, restoreSelection],
+    [
+      ensureEditorReadyForFormat,
+      rememberSelection,
+      refreshFormatState,
+      refreshHistoryState,
+      wrapSelectionOrCaret,
+    ],
+  );
+
+  const bumpFontSize = useCallback(
+    (delta: number) => {
+      const next = Math.min(
+        MAX_DOC_FONT_SIZE_PX,
+        Math.max(MIN_DOC_FONT_SIZE_PX, activeFontSizeRef.current + delta),
+      );
+      applyFontSizePx(next);
+    },
+    [applyFontSizePx],
+  );
+
+  const startFontSizeRepeat = useCallback(
+    (delta: number) => {
+      if (fontSizeRepeatRef.current) clearInterval(fontSizeRepeatRef.current);
+      bumpFontSize(delta);
+      fontSizeRepeatRef.current = setInterval(() => bumpFontSize(delta), 90);
+    },
+    [bumpFontSize],
+  );
+
+  const stopFontSizeRepeat = useCallback(() => {
+    if (fontSizeRepeatRef.current) {
+      clearInterval(fontSizeRepeatRef.current);
+      fontSizeRepeatRef.current = null;
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (fontSizeRepeatRef.current) clearInterval(fontSizeRepeatRef.current);
+    },
+    [],
   );
 
   const readEditorHtml = useCallback(() => {
@@ -1378,6 +1523,64 @@ export const ProjectGoogleDocsShell = forwardRef<ProjectGoogleDocsShellHandle, P
             ) : null}
 
             <div className="flex items-center gap-0.5 overflow-x-auto px-1.5 py-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {/* 作業スペースと同じ上下ステッパーで文字サイズを変更 */}
+              <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    className="inline-flex h-4 w-5 items-center justify-center text-[#5f6368] active:bg-[#f1f3f4] disabled:opacity-25"
+                    aria-label="大きく"
+                    disabled={!editing}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      rememberSelection();
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      startFontSizeRepeat(1);
+                    }}
+                    onPointerUp={() => {
+                      stopFontSizeRepeat();
+                      scheduleAutoSave();
+                    }}
+                    onPointerCancel={stopFontSizeRepeat}
+                    onLostPointerCapture={stopFontSizeRepeat}
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-4 w-5 items-center justify-center text-[#5f6368] active:bg-[#f1f3f4] disabled:opacity-25"
+                    aria-label="小さく"
+                    disabled={!editing}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      rememberSelection();
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      startFontSizeRepeat(-1);
+                    }}
+                    onPointerUp={() => {
+                      stopFontSizeRepeat();
+                      scheduleAutoSave();
+                    }}
+                    onPointerCancel={stopFontSizeRepeat}
+                    onLostPointerCapture={stopFontSizeRepeat}
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </button>
+                </div>
+                <span
+                  className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded px-1 text-[14px] font-semibold text-[#202124]"
+                  aria-label={`文字サイズ ${activeFontSize}`}
+                >
+                  {activeFontSize}
+                </span>
+              </div>
+
+              <span className="mx-0.5 h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+
               <ToolBtn
                 title="太字"
                 active={formatState.bold}
